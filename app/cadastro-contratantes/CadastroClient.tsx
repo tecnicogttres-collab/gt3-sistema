@@ -1,23 +1,57 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Company, Field, SEGMENTS, SEGMENT_COLORS, ALL_KEY } from './types'
+import { Company, Field, SEGMENT_COLORS } from './types'
 import seedJson from './seedData.json'
 
 const SEED = seedJson as Company[]
 const STORAGE_KEY = 'gt3_cadastro_v1'
+const FAVS_KEY = 'gt3_cadastro_favs_v1'
+
+function migrateCompanies(companies: Company[]): Company[] {
+  // Detecta tabelas com headers corrompidos (dado de linha embutido no header) e repõe pelo seed
+  return companies.map(c => {
+    const seed = SEED.find(s => s.id === c.id)
+    if (!seed) return c
+    const hasBrokenTable = c.fields.some(
+      f => f.type === 'table' && f.headers.length > 6 && /^\d{3}$/.test(f.headers[2] ?? '')
+    )
+    if (!hasBrokenTable) return c
+    // Repõe campos de tabela pelo seed; mantém campos texto que o usuário possa ter editado
+    const fixedFields = c.fields.map(f => {
+      if (f.type !== 'table') return f
+      const seedField = seed.fields.find(
+        sf => sf.type === 'table' && sf.label.startsWith(f.label.split(' - ')[0])
+      )
+      return seedField ? { ...seedField } : f
+    })
+    return { ...c, fields: fixedFields }
+  })
+}
 
 function loadCompanies(): Company[] {
   if (typeof window === 'undefined') return SEED
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) return migrateCompanies(JSON.parse(raw))
   } catch {}
   return SEED.map(c => ({ ...c, fields: c.fields.map(f => ({ ...f })) }))
 }
 
+function loadFavorites(): string[] {
+  try {
+    const raw = localStorage.getItem(FAVS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return []
+}
+
 function saveCompanies(companies: Company[]) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(companies)) } catch {}
+}
+
+function saveFavorites(favs: string[]) {
+  try { localStorage.setItem(FAVS_KEY, JSON.stringify(favs)) } catch {}
 }
 
 function getContactName(c: Company) {
@@ -62,24 +96,24 @@ type NewCompanyModal = { open: true; mode: 'create' } | { open: true; mode: 'seg
 export default function CadastroClient() {
   const [hydrated, setHydrated] = useState(false)
   const [companies, setCompanies] = useState<Company[]>(SEED)
-  const [activeSegment, setActiveSegment] = useState(ALL_KEY)
+  const [favorites, setFavorites] = useState<string[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [toast, setToast] = useState<string | null>(null)
   const [editTextModal, setEditTextModal] = useState<EditTextModal>({ open: false })
   const [newCompanyModal, setNewCompanyModal] = useState<NewCompanyModal>({ open: false })
   const [newCompanyName, setNewCompanyName] = useState('')
-  const [newCompanySeg, setNewCompanySeg] = useState<string>(SEGMENTS[0])
+  const [newCompanySeg, setNewCompanySeg] = useState<string>('Bertolini')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     setCompanies(loadCompanies())
+    setFavorites(loadFavorites())
     setHydrated(true)
   }, [])
 
-  useEffect(() => {
-    if (hydrated) saveCompanies(companies)
-  }, [companies, hydrated])
+  useEffect(() => { if (hydrated) saveCompanies(companies) }, [companies, hydrated])
+  useEffect(() => { if (hydrated) saveFavorites(favorites) }, [favorites, hydrated])
 
   const showToast = useCallback((text: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -95,34 +129,32 @@ export default function CadastroClient() {
       try { document.execCommand('copy') } catch {}
       document.body.removeChild(ta)
     }
-    showToast('Copiado: ' + (text.length > 50 ? text.slice(0, 50) + '…' : text))
+    showToast('Copiado: ' + (text.length > 60 ? text.slice(0, 60) + '…' : text))
   }, [showToast])
+
+  const toggleFavorite = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setFavorites(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }, [])
 
   const updateCompany = useCallback((id: string, updater: (c: Company) => Company) => {
     setCompanies(prev => prev.map(c => c.id === id ? updater({ ...c }) : c))
   }, [])
 
   const currentCompany = companies.find(c => c.id === currentId) ?? null
-
   const term = searchTerm.trim().toLowerCase()
 
-  const countBySegment = () => {
-    const counts: Record<string, number> = { [ALL_KEY]: 0 }
-    SEGMENTS.forEach(s => { counts[s] = 0 })
-    companies.forEach(c => {
-      if (term && !companyMatches(c, term)) return
-      counts[ALL_KEY]++
-      counts[c.segment] = (counts[c.segment] ?? 0) + 1
-    })
-    return counts
-  }
-
-  const counts = countBySegment()
-
-  const visibleCompanies = companies
-    .filter(c => activeSegment === ALL_KEY ? true : c.segment === activeSegment)
+  const matchedCompanies = companies
     .filter(c => companyMatches(c, term))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+
+  const favCompanies = favorites
+    .map(id => matchedCompanies.find(c => c.id === id))
+    .filter((c): c is Company => !!c)
+
+  const otherCompanies = matchedCompanies.filter(c => !favorites.includes(c.id))
 
   // ── Field helpers ──────────────────────────────────────────────────────────
 
@@ -174,11 +206,7 @@ export default function CadastroClient() {
   const addTableCol = (idx: number) => {
     updateField(idx, f => {
       if (f.type !== 'table') return f
-      return {
-        ...f,
-        headers: [...f.headers, 'Nova col'],
-        rows: f.rows.map(r => [...r, '']),
-      }
+      return { ...f, headers: [...f.headers, 'Nova col'], rows: f.rows.map(r => [...r, '']) }
     })
   }
 
@@ -193,18 +221,14 @@ export default function CadastroClient() {
   const updateTableCell = (idx: number, ri: number, ci: number, val: string) => {
     updateField(idx, f => {
       if (f.type !== 'table') return f
-      const rows = f.rows.map((r, i) =>
-        i === ri ? r.map((c, j) => j === ci ? val : c) : r
-      )
-      return { ...f, rows }
+      return { ...f, rows: f.rows.map((r, i) => i === ri ? r.map((c, j) => j === ci ? val : c) : r) }
     })
   }
 
   const updateTableHeader = (idx: number, hi: number, val: string) => {
     updateField(idx, f => {
       if (f.type !== 'table') return f
-      const headers = f.headers.map((h, i) => i === hi ? val : h)
-      return { ...f, headers }
+      return { ...f, headers: f.headers.map((h, i) => i === hi ? val : h) }
     })
   }
 
@@ -216,7 +240,7 @@ export default function CadastroClient() {
 
   const openNewModal = () => {
     setNewCompanyName('')
-    setNewCompanySeg(SEGMENTS[0])
+    setNewCompanySeg('Bertolini')
     setNewCompanyModal({ open: true, mode: 'create' })
   }
 
@@ -246,7 +270,6 @@ export default function CadastroClient() {
         ],
       }
       setCompanies(prev => [newCo, ...prev])
-      setActiveSegment(newCompanySeg)
       setCurrentId(id)
     } else {
       if (!currentId) return
@@ -258,21 +281,20 @@ export default function CadastroClient() {
   const renameCompany = () => {
     if (!currentCompany) return
     const novo = prompt('Renomear contratante:', currentCompany.name)
-    if (novo && novo.trim()) {
-      updateCompany(currentId!, c => ({ ...c, name: novo.trim() }))
-    }
+    if (novo && novo.trim()) updateCompany(currentId!, c => ({ ...c, name: novo.trim() }))
   }
 
   const deleteCompany = () => {
     if (!currentCompany) return
     if (!confirm(`Excluir definitivamente "${currentCompany.name}"?\nEsta ação não pode ser desfeita.`)) return
+    setFavorites(prev => prev.filter(id => id !== currentId))
     setCompanies(prev => prev.filter(c => c.id !== currentId))
     setCurrentId(null)
   }
 
   if (!hydrated) return null
 
-  const dot = (seg: string) => SEGMENT_COLORS[seg] ?? '#8C6EDC'
+  const totalVisible = matchedCompanies.length
 
   return (
     <div style={{ display: 'flex', gap: 0, height: 'calc(100vh - 120px)', minHeight: 500 }}>
@@ -299,90 +321,64 @@ export default function CadastroClient() {
           />
         </div>
 
-        {/* Segment filters */}
-        <div style={{ padding: '0 10px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {[ALL_KEY, ...SEGMENTS].map(seg => {
-            const cnt = counts[seg] ?? 0
-            const isActive = activeSegment === seg
-            const color = seg === ALL_KEY ? '#D1AE6E' : (SEGMENT_COLORS[seg] ?? '#8C6EDC')
-            if (seg !== ALL_KEY && cnt === 0 && !companies.some(c => c.segment === seg)) return null
-            return (
-              <button
-                key={seg}
-                onClick={() => setActiveSegment(seg)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '6px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                  textAlign: 'left', fontSize: 13, fontWeight: isActive ? 600 : 400,
-                  background: isActive ? '#EEF2FF' : 'transparent',
-                  color: isActive ? '#2A4F96' : '#4A5568',
-                }}
-              >
-                <span style={{
-                  display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0,
-                }} />
-                <span style={{ flex: 1 }}>{seg === ALL_KEY ? 'Todas' : seg}</span>
-                <span style={{
-                  fontSize: 11, background: isActive ? '#2A4F96' : '#E2E8F0',
-                  color: isActive ? '#fff' : '#718096', borderRadius: 10, padding: '1px 6px',
-                }}>{cnt}</span>
-              </button>
-            )
-          })}
+        {/* Todas counter */}
+        <div style={{ padding: '0 10px 6px' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 10px', borderRadius: 7, fontSize: 13, fontWeight: 600,
+            background: '#EEF2FF', color: '#2A4F96',
+          }}>
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#D1AE6E', flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>Todas</span>
+            <span style={{ fontSize: 11, background: '#2A4F96', color: '#fff', borderRadius: 10, padding: '1px 6px' }}>
+              {totalVisible}
+            </span>
+          </div>
         </div>
 
         {/* Cards list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 10px' }}>
-          <div style={{ fontSize: 11, color: '#A0AEC0', padding: '4px 4px 6px', fontWeight: 500 }}>
-            {activeSegment === ALL_KEY ? 'Todas' : activeSegment} · {visibleCompanies.length} contratante{visibleCompanies.length !== 1 ? 's' : ''}
-          </div>
-          {visibleCompanies.length === 0 && (
+
+          {/* Favoritos section */}
+          {favCompanies.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#D1AE6E', padding: '8px 4px 4px', textTransform: 'uppercase' }}>
+                ★ Favoritos
+              </div>
+              {favCompanies.map(c => (
+                <CompanyCard
+                  key={c.id}
+                  company={c}
+                  isActive={c.id === currentId}
+                  isFav={true}
+                  onSelect={() => setCurrentId(c.id)}
+                  onToggleFav={e => toggleFavorite(c.id, e)}
+                />
+              ))}
+              {otherCompanies.length > 0 && (
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#A0AEC0', padding: '8px 4px 4px', textTransform: 'uppercase' }}>
+                  Todas · {otherCompanies.length}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Other companies */}
+          {otherCompanies.length === 0 && favCompanies.length === 0 && (
             <div style={{ color: '#A0AEC0', fontSize: 13, padding: '16px 4px', textAlign: 'center' }}>
-              Nenhuma contratante neste filtro.
+              Nenhuma contratante encontrada.
             </div>
           )}
-          {visibleCompanies.map(c => {
-            const isActive = c.id === currentId
-            const ct = getContactName(c)
-            const em = getEmailFirst(c)
-            const auth = getAuthTag(c)
-            return (
-              <div
-                key={c.id}
-                onClick={() => setCurrentId(c.id)}
-                style={{
-                  padding: '9px 10px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
-                  background: isActive ? '#EEF2FF' : '#F7F9FC',
-                  border: isActive ? '1px solid #BFD0FF' : '1px solid transparent',
-                  transition: 'background 0.15s',
-                }}
-              >
-                <div style={{
-                  fontWeight: 600, fontSize: 13, color: '#2D3748',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {c.name}
-                </div>
-                <div style={{
-                  fontSize: 12, color: '#718096', marginTop: 2,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                  {ct || em || c.segment}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot(c.segment), display: 'inline-block' }} />
-                  {auth && (
-                    <span style={{
-                      fontSize: 10, padding: '1px 6px', borderRadius: 10, fontWeight: 600,
-                      background: auth.warn ? '#FFF5F5' : '#F0FFF4',
-                      color: auth.warn ? '#E53E3E' : '#276749',
-                      border: `1px solid ${auth.warn ? '#FEB2B2' : '#9AE6B4'}`,
-                    }}>{auth.label}</span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+          {otherCompanies.map(c => (
+            <CompanyCard
+              key={c.id}
+              company={c}
+              isActive={c.id === currentId}
+              isFav={false}
+              onSelect={() => setCurrentId(c.id)}
+              onToggleFav={e => toggleFavorite(c.id, e)}
+            />
+          ))}
         </div>
 
         {/* Add company */}
@@ -514,7 +510,9 @@ export default function CadastroClient() {
                 border: '1px solid #CBD5E0', fontSize: 13, background: '#fff', outline: 'none',
               }}
             >
-              {SEGMENTS.map(s => <option key={s} value={s}>{s}</option>)}
+              {['Bertolini','Marcopolo','FCC','Auto/Componentes','Alimentos/Bebidas','Indústria Geral','Outros'].map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -525,6 +523,76 @@ export default function CadastroClient() {
           </div>
         </ModalOverlay>
       )}
+    </div>
+  )
+}
+
+// ── Company card ───────────────────────────────────────────────────────────
+
+function CompanyCard({
+  company: c, isActive, isFav, onSelect, onToggleFav,
+}: {
+  company: Company
+  isActive: boolean
+  isFav: boolean
+  onSelect: () => void
+  onToggleFav: (e: React.MouseEvent) => void
+}) {
+  const ct = getContactName(c)
+  const em = getEmailFirst(c)
+  const auth = getAuthTag(c)
+  const dot = SEGMENT_COLORS[c.segment] ?? '#8C6EDC'
+
+  return (
+    <div
+      onClick={onSelect}
+      style={{
+        padding: '8px 8px 8px 10px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
+        background: isActive ? '#EEF2FF' : '#F7F9FC',
+        border: isActive ? '1px solid #BFD0FF' : '1px solid transparent',
+        display: 'flex', alignItems: 'flex-start', gap: 6,
+        transition: 'background 0.15s',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontWeight: 600, fontSize: 13, color: '#2D3748',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {c.name}
+        </div>
+        <div style={{
+          fontSize: 12, color: '#718096', marginTop: 2,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {ct || em || c.segment}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, display: 'inline-block', flexShrink: 0 }} />
+          {auth && (
+            <span style={{
+              fontSize: 10, padding: '1px 6px', borderRadius: 10, fontWeight: 600,
+              background: auth.warn ? '#FFF5F5' : '#F0FFF4',
+              color: auth.warn ? '#E53E3E' : '#276749',
+              border: `1px solid ${auth.warn ? '#FEB2B2' : '#9AE6B4'}`,
+            }}>{auth.label}</span>
+          )}
+        </div>
+      </div>
+      {/* Star button */}
+      <button
+        onClick={onToggleFav}
+        title={isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer', padding: '2px 2px 0',
+          fontSize: 16, lineHeight: 1, color: isFav ? '#D1AE6E' : '#CBD5E0', flexShrink: 0,
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={e => { if (!isFav) (e.currentTarget as HTMLElement).style.color = '#D1AE6E' }}
+        onMouseLeave={e => { if (!isFav) (e.currentTarget as HTMLElement).style.color = '#CBD5E0' }}
+      >
+        {isFav ? '★' : '☆'}
+      </button>
     </div>
   )
 }
@@ -582,7 +650,6 @@ function DetailPanel({
 
   return (
     <>
-      {/* Header */}
       <div style={{
         padding: '16px 20px 12px', borderBottom: '1px solid #E2E8F0',
         background: '#fff', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
@@ -600,13 +667,12 @@ function DetailPanel({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={onRename} style={btnSmall} title="Renomear">✎ Renomear</button>
-          <button onClick={onChangeSegment} style={btnSmall} title="Mudar segmento">⇄ Segmento</button>
-          <button onClick={onDelete} style={{ ...btnSmall, color: '#E53E3E', borderColor: '#FEB2B2' }} title="Excluir">✕ Excluir</button>
+          <button onClick={onRename} style={btnSmall}>✎ Renomear</button>
+          <button onClick={onChangeSegment} style={btnSmall}>⇄ Segmento</button>
+          <button onClick={onDelete} style={{ ...btnSmall, color: '#E53E3E', borderColor: '#FEB2B2' }}>✕ Excluir</button>
         </div>
       </div>
 
-      {/* Fields */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px' }}>
         {c.fields.length === 0 && (
           <div style={{
@@ -636,7 +702,6 @@ function DetailPanel({
         ))}
       </div>
 
-      {/* Add field buttons */}
       <div style={{
         padding: '10px 20px', borderTop: '1px solid #E2E8F0', background: '#fff',
         display: 'flex', gap: 8,
@@ -678,7 +743,6 @@ function FieldCard({
       background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
       marginBottom: 10, overflow: 'hidden',
     }}>
-      {/* Label row */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 12px', borderBottom: '1px solid #EDF2F7', background: '#F7F9FC',
@@ -698,9 +762,7 @@ function FieldCard({
           {f.label}
         </div>
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-          {f.type === 'text' && (
-            <button onClick={onEditText} style={iconBtn} title="Editar valor">✎</button>
-          )}
+          {f.type === 'text' && <button onClick={onEditText} style={iconBtn} title="Editar valor">✎</button>}
           {f.type === 'table' && (
             <>
               <button onClick={onAddRow} style={iconBtn} title="Nova linha">+L</button>
@@ -713,10 +775,9 @@ function FieldCard({
         </div>
       </div>
 
-      {/* Content */}
       <div style={{ padding: f.type === 'table' ? 0 : '8px 12px' }}>
         {f.type === 'text' ? (
-          <TextFieldLines value={f.value} onCopy={onCopy} />
+          <TextFieldLines label={f.label} value={f.value} onCopy={onCopy} />
         ) : (
           <TableFieldView
             field={f}
@@ -733,7 +794,7 @@ function FieldCard({
 
 // ── Text lines ─────────────────────────────────────────────────────────────
 
-function TextFieldLines({ value, onCopy }: { value: string; onCopy: (t: string) => void }) {
+function TextFieldLines({ label, value, onCopy }: { label: string; value: string; onCopy: (t: string) => void }) {
   if (!value || value.trim() === '') {
     return (
       <span style={{ color: '#CBD5E0', fontStyle: 'italic', fontSize: 13 }}>
@@ -754,8 +815,27 @@ function TextFieldLines({ value, onCopy }: { value: string; onCopy: (t: string) 
     }
   })
 
+  const isEmailField = /E[- ]?MAIL/i.test(label)
+  const allEmails = parts.filter(p => p.isMail).map(p => p.text)
+  const showCopyAll = isEmailField && allEmails.length >= 2
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {showCopyAll && (
+        <div style={{ marginBottom: 4 }}>
+          <button
+            onClick={() => onCopy(allEmails.join('; '))}
+            title={`Copia todos para o campo Para: do Outlook\n${allEmails.join('; ')}`}
+            style={{
+              fontSize: 11, padding: '3px 9px', borderRadius: 6,
+              border: '1px solid #BEE3F8', background: '#EBF4FF',
+              color: '#2A4F96', cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            📋 Copiar todos ({allEmails.length})
+          </button>
+        </div>
+      )}
       {parts.map((p, i) => (
         <span
           key={i}
@@ -771,7 +851,7 @@ function TextFieldLines({ value, onCopy }: { value: string; onCopy: (t: string) 
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = p.isMail ? '#BEE3F8' : '#EDF2F7' }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = p.isMail ? '#EBF4FF' : 'transparent' }}
         >
-          {p.text || ' '}
+          {p.text || ' '}
         </span>
       ))}
     </div>
@@ -795,11 +875,7 @@ function TableFieldView({ field: f, onCopy, onUpdateCell, onUpdateHeader, onRemo
         <thead>
           <tr style={{ background: '#EDF2F7' }}>
             {f.headers.map((h, hi) => (
-              <EditableHeader
-                key={hi}
-                value={h}
-                onSave={val => onUpdateHeader(hi, val)}
-              />
+              <EditableHeader key={hi} value={h} onSave={val => onUpdateHeader(hi, val)} />
             ))}
             <th style={{ width: 28, padding: '4px 6px', border: '1px solid #E2E8F0' }} />
           </tr>
@@ -819,8 +895,7 @@ function TableFieldView({ field: f, onCopy, onUpdateCell, onUpdateHeader, onRemo
                 onClick={() => onRemoveRow(ri)}
                 style={{
                   width: 28, textAlign: 'center', cursor: 'pointer',
-                  color: '#FC8181', border: '1px solid #E2E8F0', padding: '4px',
-                  fontSize: 11,
+                  color: '#FC8181', border: '1px solid #E2E8F0', padding: '4px', fontSize: 11,
                 }}
                 title="Excluir linha"
               >✕</td>

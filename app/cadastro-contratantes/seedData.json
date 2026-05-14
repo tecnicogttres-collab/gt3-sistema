@@ -658,27 +658,41 @@
       },
       {
         "type": "table",
-        "label": "GT0120 - DOCUMENTAÇÃO",
+        "label": "GT0120 - DOCUMENTOS EMPRESA",
         "headers": [
           "Cód",
           "Descrição",
-          "101",
-          "CARTÃO CNPJ",
-          "Informada",
-          "X",
-          "X",
-          "X",
-          "Col 9",
-          "Col 10",
-          "Col 11"
+          "Periodicidade",
+          "Doc. Completa",
+          "Doc. Reduzida Spot",
+          "MEI s/ func. Spot"
         ],
         "rows": [
           [
-            "212",
-            "RECIBO DCTFWEB - MENSAL",
-            "",
-            "",
-            "",
+            "128",
+            "ALVARÁ DE LOCALIZAÇÃO E FUNCIONAMENTO - PERIODICO",
+            "Informada",
+            "X",
+            "Isentar *",
+            "X"
+          ],
+          [
+            "100",
+            "CONTRATO SOCIAL",
+            "Informada",
+            "X",
+            "X",
+            "X"
+          ],
+          [
+            "101",
+            "CARTÃO CNPJ",
+            "Informada",
+            "X",
+            "X",
+            "X"
+          ],
+          [
             "212",
             "RECIBO DCTFWEB - MENSAL",
             "Mensal",
@@ -689,11 +703,6 @@
           [
             "102",
             "INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO",
-            "",
-            "",
-            "",
-            "102",
-            "INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO",
             "Mensal",
             "X",
             "Isentar *",
@@ -702,22 +711,12 @@
           [
             "115",
             "FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO",
-            "",
-            "",
-            "",
-            "115",
-            "FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO",
             "Mensal",
             "X",
             "Isentar *",
             "Não se aplica"
           ],
           [
-            "103",
-            "DETALHE DA GUIA EMITIDA - RELATÓRIO DO FGTS MENSAL",
-            "",
-            "",
-            "",
             "103",
             "DETALHE DA GUIA EMITIDA - RELATÓRIO DO FGTS MENSAL",
             "Mensal",
@@ -728,11 +727,22 @@
           [
             "113",
             "CERTIDÃO TRABALHISTA CNDT (TST - TRIB SUP TRAB) - SEMESTRAL",
-            "",
-            "",
-            "",
+            "Semestral",
+            "X",
+            "X",
+            ""
+          ],
+          [
             "105",
             "CERTIDÃO DE TRIBUTOS MUNICIPAIS",
+            "Informada",
+            "X",
+            "X",
+            "Isentar*"
+          ],
+          [
+            "152",
+            "CERTIDÃO DE TRIBUTOS ESTADUAIS - INFORMADA",
             "Informada",
             "X",
             "X",
@@ -752,40 +762,65 @@
       },
       {
         "type": "table",
-        "label": "GT0120 - DOCUMENTAÇÃO",
+        "label": "GT0120 - SUBCONTRATADAS VIA ARTE",
         "headers": [
           "Cód",
           "Descrição",
-          "113",
-          "CERTIDÃO TRABALHISTA CNDT (TST - TRIB SUP TRAB) - SEMESTRAL",
-          "Semestral",
-          "X",
-          "X",
-          "Isentar*",
-          "Col 9",
-          "Col 10",
-          "Col 11"
+          "Periodicidade",
+          "Doc. Completa",
+          "Doc. Reduzida Spot",
+          "MEI s/ func. Spot"
         ],
         "rows": [
           [
+            "113",
+            "CERTIDÃO TRABALHISTA CNDT (TST - TRIB SUP TRAB) - SEMESTRAL",
+            "Semestral",
+            "X",
+            "X",
+            "Isentar*"
+          ],
+          [
+            "106",
+            "CERTIDÃO DE DEBITOS RELATIVOS TRIBUTOS FEDERAIS - SEMESTRAL",
+            "Semestral",
+            "X",
+            "X",
+            "Isentar*"
+          ],
+          [
             "612",
             "RECIBO DCTFWEB COMPLETO - MENSAL",
-            "",
-            "",
-            "",
+            "Informada",
+            "X",
+            "Isentar *",
+            "Isentar"
+          ],
+          [
+            "613",
+            "GUIA SIMPLES NACIONAL + COMP PGTO + PGDAS",
+            "Mensal",
+            "X",
+            "Isentar *",
+            "Isentar"
+          ],
+          [
+            "614",
+            "CNO - EVENTO S1020 E-SOCIAL (ANALÍTICA + RESUMO DE BASES INSS/FGTS)",
+            "Mensal",
+            "X",
+            "Isentar *",
+            "Isentar"
+          ],
+          [
             "215",
-            "PCMSO - PROGRAMA CONTROLE MÉDICO SAÚDE OCUPACIONAL- BIENAL",
+            "PCMSO - PROGRAMA CONTROLE MÉDICO SAÚDE OCUPACIONAL - BIENAL",
             "Bienal",
             "X",
             "Isentar *",
             "Isentar*"
           ],
           [
-            "613",
-            "GUIA SIMPLES NACIONAL + COMP PGTO + PGDAS",
-            "",
-            "",
-            "",
             "124",
             "PGR - PROGRAMA DE GERENCIAMENTO DE RISCO - BIENAL",
             "Bienal",
@@ -794,34 +829,14 @@
             "Isentar*"
           ],
           [
-            "614",
-            "CNO - EVENTO S1020 E-SOCIAL(ANALÍTICA + RESUMO DE BASES INSS/FGTS)",
-            "",
-            "",
-            "",
             "130",
-            "CONTRATO DE PRESTAÇÃO DE SERVIÇO no caso de subcontratada",
+            "CONTRATO DE PRESTAÇÃO DE SERVIÇO (no caso de subcontratada)",
             "Informada",
             "X",
             "X",
             "X"
           ]
         ]
-      },
-      {
-        "type": "text",
-        "label": "Solicitar",
-        "value": "612\nRECIBO DCTFWEB COMPLETO - DECLARAÇÃO + RELATÓRIOS\nInformada\nX\nIsentar *\nIsentar"
-      },
-      {
-        "type": "text",
-        "label": "102",
-        "value": "INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO\n141\nCRF - CERTIFICADO DE REGULARIDADE DE FGTS - INFORMADA\nInformada\nX\nIsentar *\nIsentar *\n387\nACORDO / DISSIDIO COLETIVO CATEGORIA\nAnual\nX\nIsentar *\nIsentar *"
-      },
-      {
-        "type": "text",
-        "label": "Ao associar a outra contratante",
-        "value": "202\nAPÓLICE SEGURO DE VIDA\nInformada\nX\nIsentar *\nIsentar\n613\nGUIA SIMPLES NACIONAL + COMP PGTO + PGDAS\nMensal\nX\nIsentar *\nIsentar"
       },
       {
         "type": "text",
