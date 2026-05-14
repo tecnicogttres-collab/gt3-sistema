@@ -1,0 +1,904 @@
+<!-- Gerenciador de Templates de E-mail - Protótipo GT3 -->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700&family=JetBrains+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #faf8f3;
+    --bg-card: #ffffff;
+    --ink: #1a1a1a;
+    --ink-soft: #555;
+    --ink-mute: #888;
+    --line: #e8e4da;
+    --line-strong: #d4cfc1;
+    --accent: #c4471c;
+    --accent-soft: #f4e4d8;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+    --shadow-hover: 0 2px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter Tight', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .brand-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    color: #fff;
+    display: grid; place-items: center;
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 18px;
+    border-radius: 4px;
+    transform: translateY(4px);
+  }
+  .brand-text h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .brand-text .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 4px;
+  }
+  .header-actions {
+    display: flex; gap: 10px;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-primary {
+    background: var(--ink);
+    color: var(--bg);
+  }
+  .btn-primary:hover { background: #000; transform: translateY(-1px); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  .btn-ghost:hover { background: #fff; }
+  .btn-accent {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-accent:hover { background: #a83a16; }
+  .btn-sm {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .btn-icon {
+    padding: 8px;
+    background: transparent;
+    border: 1px solid var(--line);
+  }
+  .btn-icon:hover { background: #fff; }
+
+  /* Search bar */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 200px 200px;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 720px) {
+    .controls { grid-template-columns: 1fr; }
+  }
+  .search {
+    position: relative;
+  }
+  .search input,
+  .controls select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    background: #fff;
+    color: var(--ink);
+    transition: border-color 0.15s;
+  }
+  .search input { padding-left: 40px; }
+  .search input:focus,
+  .controls select:focus {
+    outline: none;
+    border-color: var(--ink);
+  }
+  .search svg {
+    position: absolute;
+    left: 14px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-mute);
+  }
+
+  /* Stats */
+  .stats {
+    display: flex;
+    gap: 32px;
+    padding: 16px 0;
+    margin-bottom: 24px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .stats strong {
+    color: var(--ink);
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 500;
+    margin-right: 6px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* Templates grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 20px;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+    border-color: var(--line-strong);
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+    gap: 12px;
+  }
+  .card-client {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 4px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .card-actions-top {
+    display: flex; gap: 4px;
+  }
+  .icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-mute);
+    padding: 4px;
+    border-radius: 3px;
+    transition: all 0.15s;
+    display: grid;
+    place-items: center;
+  }
+  .icon-btn:hover {
+    background: var(--line);
+    color: var(--ink);
+  }
+  .icon-btn.danger:hover { color: #c0392b; background: #fce8e4; }
+
+  .card-title {
+    font-family: 'Fraunces', serif;
+    font-size: 19px;
+    font-weight: 500;
+    line-height: 1.25;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .card-subject {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 12px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+    margin-top: auto;
+  }
+  .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    padding: 3px 7px;
+    border-radius: 3px;
+    color: var(--ink-soft);
+  }
+  .card-footer {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .card-footer .btn { flex: 1; justify-content: center; }
+  .card-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-mute);
+    margin-top: 8px;
+  }
+
+  /* Empty state */
+  .empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--ink-mute);
+  }
+  .empty h3 {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    color: var(--ink);
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .empty p { font-size: 14px; margin-bottom: 20px; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20,20,20,0.5);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 100;
+    padding: 40px 20px;
+    overflow-y: auto;
+  }
+  .modal-backdrop.active { display: flex; }
+  .modal {
+    background: var(--bg-card);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 640px;
+    padding: 32px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    margin: auto;
+  }
+  .modal h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 26px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+  }
+  .modal .modal-sub {
+    color: var(--ink-mute);
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .field {
+    margin-bottom: 16px;
+  }
+  .field label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .field input,
+  .field textarea,
+  .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    background: #fff;
+    color: var(--ink);
+    transition: border-color 0.15s;
+  }
+  .field textarea {
+    resize: vertical;
+    min-height: 100px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--ink);
+  }
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .file-drop {
+    border: 2px dashed var(--line-strong);
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--bg);
+  }
+  .file-drop:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .file-drop.has-file {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    border-style: solid;
+  }
+  .file-drop-text {
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .file-drop-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--ink);
+    color: var(--bg);
+    padding: 14px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 200;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Loading */
+  .loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--ink-mute);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+</style>
+
+<div class="wrap">
+  <div class="header">
+    <div class="brand">
+      <div class="brand-mark">G</div>
+      <div class="brand-text">
+        <h1>Biblioteca de E-mails</h1>
+        <div class="sub">GT3 · Templates de Cadastro</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" onclick="openModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Novo Template
+      </button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="search" placeholder="Buscar por título, cliente, assunto, tag..." oninput="render()">
+    </div>
+    <select id="filterClient" onchange="render()">
+      <option value="">Todos os clientes</option>
+    </select>
+    <select id="filterCategory" onchange="render()">
+      <option value="">Todas as categorias</option>
+      <option value="Onboarding">Onboarding</option>
+      <option value="Documentação">Documentação</option>
+      <option value="Cobrança">Cobrança</option>
+      <option value="Auditoria">Auditoria</option>
+      <option value="Conformidade">Conformidade</option>
+      <option value="Outros">Outros</option>
+    </select>
+  </div>
+
+  <div class="stats">
+    <span><strong id="stat-total">0</strong>templates</span>
+    <span><strong id="stat-clients">0</strong>clientes</span>
+    <span><strong id="stat-recent">0</strong>esta semana</span>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="loading">Carregando templates...</div>
+  </div>
+</div>
+
+<!-- Modal Cadastro/Edição -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <h2 id="modal-title">Novo Template</h2>
+    <div class="modal-sub">Preencha os dados e anexe o arquivo .msg do Outlook</div>
+
+    <div class="field">
+      <label>Título do Template *</label>
+      <input type="text" id="f-title" placeholder="Ex: Onboarding inicial - documentação SST">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Cliente / Empresa *</label>
+        <input type="text" id="f-client" placeholder="Ex: Marcopolo, CSG, Genérico">
+      </div>
+      <div class="field">
+        <label>Categoria</label>
+        <select id="f-category">
+          <option value="Onboarding">Onboarding</option>
+          <option value="Documentação">Documentação</option>
+          <option value="Cobrança">Cobrança</option>
+          <option value="Auditoria">Auditoria</option>
+          <option value="Conformidade">Conformidade</option>
+          <option value="Outros">Outros</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Assunto do E-mail</label>
+      <input type="text" id="f-subject" placeholder="Ex: Informações para Novas Empresas - 2026">
+    </div>
+
+    <div class="field">
+      <label>Tags (separadas por vírgula)</label>
+      <input type="text" id="f-tags" placeholder="Ex: portal-terceiros, primeiro-contato, sst">
+    </div>
+
+    <div class="field">
+      <label>Notas / Quando usar</label>
+      <textarea id="f-notes" placeholder="Ex: Enviar quando uma nova empresa terceirizada for cadastrada no portal. Personalizar campos: [NOME_EMPRESA], [CNPJ], [CONTATO]."></textarea>
+    </div>
+
+    <div class="field">
+      <label>Arquivo .msg do Outlook *</label>
+      <div class="file-drop" id="file-drop" onclick="document.getElementById('f-file').click()">
+        <input type="file" id="f-file" accept=".msg,.eml,.oft" style="display:none" onchange="handleFile(event)">
+        <div class="file-drop-text" id="file-drop-text">
+          Clique para selecionar ou arraste o arquivo .msg aqui
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveTemplate()">Salvar Template</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let templates = [];
+  let editingId = null;
+  let currentFile = null;
+
+  // ========== Storage ==========
+  async function loadTemplates() {
+    try {
+      const result = await window.storage.list('tpl:');
+      if (!result || !result.keys) {
+        templates = [];
+        return;
+      }
+      const loaded = [];
+      for (const key of result.keys) {
+        try {
+          const item = await window.storage.get(key);
+          if (item && item.value) {
+            loaded.push(JSON.parse(item.value));
+          }
+        } catch (e) {
+          console.error('Failed to load', key, e);
+        }
+      }
+      templates = loaded.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+    } catch (e) {
+      console.error('Storage list failed:', e);
+      templates = [];
+    }
+  }
+
+  async function saveTemplateToStorage(tpl) {
+    try {
+      await window.storage.set('tpl:' + tpl.id, JSON.stringify(tpl));
+      return true;
+    } catch (e) {
+      console.error('Save failed:', e);
+      return false;
+    }
+  }
+
+  async function deleteTemplateFromStorage(id) {
+    try {
+      await window.storage.delete('tpl:' + id);
+      return true;
+    } catch (e) {
+      console.error('Delete failed:', e);
+      return false;
+    }
+  }
+
+  // ========== File Handling ==========
+  function handleFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      currentFile = {
+        name: file.name,
+        type: file.type || 'application/vnd.ms-outlook',
+        size: file.size,
+        data: e.target.result // base64 data URL
+      };
+      const drop = document.getElementById('file-drop');
+      drop.classList.add('has-file');
+      document.getElementById('file-drop-text').innerHTML =
+        '<div class="file-drop-name">📎 ' + file.name + '</div>' +
+        '<div style="margin-top:4px;font-size:11px;color:var(--ink-mute)">' +
+        (file.size / 1024).toFixed(1) + ' KB · clique para trocar</div>';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Drag and drop
+  function setupDragDrop() {
+    const drop = document.getElementById('file-drop');
+    drop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      drop.style.borderColor = 'var(--accent)';
+      drop.style.background = 'var(--accent-soft)';
+    });
+    drop.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      if (!currentFile) {
+        drop.style.borderColor = '';
+        drop.style.background = '';
+      }
+    });
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        document.getElementById('f-file').files = e.dataTransfer.files;
+        handleFile({ target: { files: [file] } });
+      }
+    });
+  }
+
+  // ========== Modal ==========
+  function openModal(id = null) {
+    editingId = id;
+    currentFile = null;
+    document.getElementById('file-drop').classList.remove('has-file');
+    document.getElementById('file-drop-text').textContent = 'Clique para selecionar ou arraste o arquivo .msg aqui';
+    document.getElementById('f-file').value = '';
+
+    if (id) {
+      const t = templates.find(x => x.id === id);
+      if (!t) return;
+      document.getElementById('modal-title').textContent = 'Editar Template';
+      document.getElementById('f-title').value = t.title || '';
+      document.getElementById('f-client').value = t.client || '';
+      document.getElementById('f-category').value = t.category || 'Outros';
+      document.getElementById('f-subject').value = t.subject || '';
+      document.getElementById('f-tags').value = (t.tags || []).join(', ');
+      document.getElementById('f-notes').value = t.notes || '';
+      if (t.file) {
+        currentFile = t.file;
+        document.getElementById('file-drop').classList.add('has-file');
+        document.getElementById('file-drop-text').innerHTML =
+          '<div class="file-drop-name">📎 ' + t.file.name + '</div>' +
+          '<div style="margin-top:4px;font-size:11px;color:var(--ink-mute)">arquivo já anexado · clique para substituir</div>';
+      }
+    } else {
+      document.getElementById('modal-title').textContent = 'Novo Template';
+      ['f-title','f-client','f-subject','f-tags','f-notes'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      document.getElementById('f-category').value = 'Onboarding';
+    }
+    document.getElementById('modal').classList.add('active');
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.remove('active');
+    editingId = null;
+    currentFile = null;
+  }
+
+  async function saveTemplate() {
+    const title = document.getElementById('f-title').value.trim();
+    const client = document.getElementById('f-client').value.trim();
+
+    if (!title || !client) {
+      toast('Preencha título e cliente');
+      return;
+    }
+    if (!currentFile && !editingId) {
+      toast('Anexe o arquivo .msg');
+      return;
+    }
+
+    const tpl = {
+      id: editingId || ('t_' + Date.now() + '_' + Math.random().toString(36).slice(2,7)),
+      title,
+      client,
+      category: document.getElementById('f-category').value,
+      subject: document.getElementById('f-subject').value.trim(),
+      tags: document.getElementById('f-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+      notes: document.getElementById('f-notes').value.trim(),
+      file: currentFile,
+      createdAt: editingId ? (templates.find(x => x.id === editingId)?.createdAt || Date.now()) : Date.now(),
+      updatedAt: Date.now()
+    };
+
+    const ok = await saveTemplateToStorage(tpl);
+    if (!ok) {
+      toast('Erro ao salvar. Tente novamente.');
+      return;
+    }
+
+    await loadTemplates();
+    render();
+    closeModal();
+    toast(editingId ? 'Template atualizado' : 'Template salvo');
+  }
+
+  async function deleteTemplate(id) {
+    if (!confirm('Excluir este template? Esta ação não pode ser desfeita.')) return;
+    const ok = await deleteTemplateFromStorage(id);
+    if (!ok) { toast('Erro ao excluir'); return; }
+    await loadTemplates();
+    render();
+    toast('Template excluído');
+  }
+
+  function downloadTemplate(id) {
+    const t = templates.find(x => x.id === id);
+    if (!t || !t.file) { toast('Arquivo não encontrado'); return; }
+
+    // Convert base64 data URL to blob and trigger download
+    const link = document.createElement('a');
+    link.href = t.file.data;
+    link.download = t.file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast('Download iniciado');
+  }
+
+  function openInOutlook(id) {
+    // .msg files don't open via mailto. Best UX is to download — Windows opens
+    // .msg in Outlook by default on double-click.
+    downloadTemplate(id);
+    setTimeout(() => {
+      toast('Arquivo baixado · clique 2x para abrir no Outlook');
+    }, 500);
+  }
+
+  // ========== Render ==========
+  function getFilteredTemplates() {
+    const q = document.getElementById('search').value.toLowerCase().trim();
+    const fc = document.getElementById('filterClient').value;
+    const fcat = document.getElementById('filterCategory').value;
+
+    return templates.filter(t => {
+      if (fc && t.client !== fc) return false;
+      if (fcat && t.category !== fcat) return false;
+      if (!q) return true;
+      const hay = [
+        t.title, t.client, t.subject, t.notes, t.category,
+        ...(t.tags || [])
+      ].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  function updateFilters() {
+    const clients = [...new Set(templates.map(t => t.client))].sort();
+    const sel = document.getElementById('filterClient');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Todos os clientes</option>' +
+      clients.map(c => `<option value="${escapeHtml(c)}" ${c === current ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  }
+
+  function updateStats() {
+    document.getElementById('stat-total').textContent = templates.length;
+    document.getElementById('stat-clients').textContent = new Set(templates.map(t => t.client)).size;
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    document.getElementById('stat-recent').textContent = templates.filter(t => (t.createdAt || 0) > weekAgo).length;
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatDate(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function render() {
+    updateFilters();
+    updateStats();
+    const grid = document.getElementById('grid');
+    const filtered = getFilteredTemplates();
+
+    if (templates.length === 0) {
+      grid.innerHTML = `
+        <div class="empty">
+          <h3>Nenhum template ainda</h3>
+          <p>Comece adicionando seu primeiro modelo de e-mail.</p>
+          <button class="btn btn-primary" onclick="openModal()">+ Adicionar primeiro template</button>
+        </div>`;
+      return;
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div class="empty">
+          <h3>Nada encontrado</h3>
+          <p>Tente ajustar a busca ou os filtros.</p>
+        </div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map(t => `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-client">${escapeHtml(t.client)}</span>
+          <div class="card-actions-top">
+            <button class="icon-btn" onclick="openModal('${t.id}')" title="Editar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="icon-btn danger" onclick="deleteTemplate('${t.id}')" title="Excluir">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="card-title">${escapeHtml(t.title)}</div>
+        ${t.subject ? `<div class="card-subject">📧 ${escapeHtml(t.subject)}</div>` : ''}
+        <div class="card-tags">
+          <span class="tag">${escapeHtml(t.category)}</span>
+          ${(t.tags || []).slice(0,4).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+        </div>
+        <div class="card-meta">
+          ${t.file ? `📎 ${escapeHtml(t.file.name)}` : ''}
+          ${t.createdAt ? ` · ${formatDate(t.createdAt)}` : ''}
+        </div>
+        <div class="card-footer">
+          <button class="btn btn-ghost btn-sm" onclick="downloadTemplate('${t.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Baixar
+          </button>
+          <button class="btn btn-accent btn-sm" onclick="openInOutlook('${t.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
+            Abrir no Outlook
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ========== Toast ==========
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2400);
+  }
+
+  // ========== Init ==========
+  (async function init() {
+    setupDragDrop();
+    await loadTemplates();
+    render();
+    // Close modal on backdrop click
+    document.getElementById('modal').addEventListener('click', (e) => {
+      if (e.target.id === 'modal') closeModal();
+    });
+    // Close modal on Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('modal').classList.contains('active')) {
+        closeModal();
+      }
+    });
+  })();
+</script>

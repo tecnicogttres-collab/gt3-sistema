@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Revisão — GT3</title>
+<style>
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f4ef;
+    --bg-tertiary: #faf9f5;
+    --bg-info: #E6F1FB;
+    --bg-danger: #FCEBEB;
+    --bg-success: #E8F4EC;
+    --text-primary: #1a1a1a;
+    --text-secondary: #6b6b6b;
+    --text-tertiary: #9b9b9b;
+    --text-info: #0C447C;
+    --text-danger: #791F1F;
+    --text-success: #1F5132;
+    --border-tertiary: rgba(0,0,0,0.10);
+    --border-secondary: rgba(0,0,0,0.20);
+    --border-info: #378ADD;
+    --border-danger: #E24B4A;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --weekend-bg: #B5D4F4;
+    --weekend-text: #042C53;
+    --holiday-bg: #D3D1C7;
+    --holiday-text: #2C2C2A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 2rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    border: 0.5px solid var(--border-tertiary);
+    padding: 1.5rem;
+  }
+
+  .rv-header { margin-bottom: 1.25rem; }
+  .rv-header h1 { margin: 0 0 0.25rem; font-size: 18px; font-weight: 500; }
+  .rv-header p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+  .rv-tabs {
+    display: inline-flex;
+    padding: 4px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    gap: 4px;
+    margin-bottom: 1.25rem;
+  }
+  .rv-tab {
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .rv-tab.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 0.5px var(--border-tertiary);
+  }
+
+  button {
+    border: 0.5px solid var(--border-secondary);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  button:hover { background: var(--bg-secondary); }
+  button:active { transform: scale(0.98); }
+
+  .rv-btn-primary {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+    border: none;
+    font-weight: 500;
+  }
+  .rv-btn-primary:hover { opacity: 0.85; background: var(--text-primary); }
+
+  .rv-section-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 1.5rem 0 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rv-section-title:first-child { margin-top: 0; }
+
+  /* Tabela de revisões */
+  .rv-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+  }
+  .rv-table thead th {
+    background: var(--bg-info);
+    color: var(--text-info);
+    font-weight: 500;
+    padding: 10px;
+    text-align: left;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .rv-table thead th:first-child { border-top-left-radius: var(--radius-md); }
+  .rv-table thead th:last-child { border-top-right-radius: var(--radius-md); text-align: center; width: 80px; }
+  .rv-table td {
+    padding: 0;
+    border: 0.5px solid var(--border-tertiary);
+    background: var(--bg-primary);
+  }
+  .rv-table td input, .rv-table td select {
+    width: 100%;
+    height: 36px;
+    border: none;
+    background: transparent;
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: inherit;
+  }
+  .rv-table td input:focus, .rv-table td select:focus {
+    outline: 2px solid var(--border-info);
+    outline-offset: -2px;
+    background: var(--bg-tertiary);
+  }
+  .rv-table td.rv-actions {
+    text-align: center;
+    padding: 4px;
+  }
+  .rv-table td.rv-actions button {
+    border: none;
+    background: transparent;
+    padding: 6px 8px;
+    font-size: 14px;
+    color: var(--text-tertiary);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .rv-table td.rv-actions button:hover {
+    background: var(--bg-danger);
+    color: var(--text-danger);
+  }
+
+  /* Datalist hint - browser nativo */
+  .rv-table td.has-suggest::after {
+    content: '';
+  }
+
+  .rv-empty-row td {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    font-size: 13px;
+  }
+
+  /* Tabela escala diária */
+  .rv-schedule-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+  }
+  .rv-schedule-table thead th {
+    background: var(--bg-info);
+    color: var(--text-info);
+    font-weight: 500;
+    padding: 10px;
+    text-align: center;
+    font-size: 13px;
+  }
+  .rv-schedule-table thead th:first-child { border-top-left-radius: var(--radius-md); }
+  .rv-schedule-table thead th:last-child { border-top-right-radius: var(--radius-md); }
+  .rv-schedule-table td {
+    padding: 0;
+    border: 0.5px solid var(--border-tertiary);
+    height: 32px;
+  }
+  .rv-day {
+    padding: 6px 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    width: 90px;
+    text-align: center;
+  }
+  .rv-cell select, .rv-cell input {
+    width: 100%;
+    height: 32px;
+    border: none;
+    background: transparent;
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .rv-cell select:focus, .rv-cell input:focus {
+    outline: 2px solid var(--border-info);
+    outline-offset: -2px;
+  }
+  .rv-row-weekend td { background: var(--weekend-bg); }
+  .rv-row-weekend .rv-day { color: var(--weekend-text); }
+  .rv-row-weekend .rv-cell {
+    text-align: center;
+    font-weight: 500;
+    color: var(--weekend-text);
+    padding: 6px 10px;
+  }
+  .rv-row-holiday td { background: var(--holiday-bg); }
+  .rv-row-holiday .rv-day { color: var(--holiday-text); }
+  .rv-row-holiday .rv-cell {
+    text-align: center;
+    font-weight: 500;
+    color: var(--holiday-text);
+    padding: 6px 10px;
+  }
+
+  .rv-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+  }
+
+  .rv-folder {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 6px;
+    font-size: 14px;
+    user-select: none;
+  }
+  .rv-folder:hover { background: var(--bg-secondary); }
+  .rv-folder.year { font-weight: 500; }
+  .rv-folder.month { margin-left: 24px; }
+  .rv-folder-icon {
+    font-size: 18px;
+    width: 20px;
+    text-align: center;
+  }
+
+  .rv-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+  }
+  .rv-breadcrumb button {
+    border: none;
+    background: none;
+    color: var(--text-info);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .rv-breadcrumb button:hover { background: var(--bg-secondary); }
+
+  .rv-month-title {
+    font-size: 18px;
+    font-weight: 500;
+    margin: 0 0 1rem;
+    text-transform: capitalize;
+  }
+
+  .rv-action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .rv-people-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    font-size: 13px;
+  }
+  .rv-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-primary);
+    padding: 4px 4px 4px 10px;
+    border-radius: 999px;
+    border: 0.5px solid var(--border-tertiary);
+  }
+  .rv-pill button {
+    border: none;
+    background: none;
+    padding: 2px 6px;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .rv-pill button:hover {
+    color: var(--text-danger);
+    background: var(--bg-danger);
+  }
+  .rv-people-bar input {
+    border: none;
+    background: transparent;
+    padding: 4px 8px;
+    font-size: 13px;
+    outline: none;
+    min-width: 140px;
+    font-family: inherit;
+  }
+
+  .rv-modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    z-index: 100;
+  }
+  .rv-modal {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    max-width: 380px;
+    width: 100%;
+  }
+  .rv-modal h3 { margin: 0 0 0.5rem; font-size: 16px; font-weight: 500; }
+  .rv-modal p { margin: 0 0 1rem; font-size: 14px; color: var(--text-secondary); }
+  .rv-modal label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    margin-top: 8px;
+  }
+  .rv-modal select, .rv-modal input {
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 14px;
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    margin-bottom: 4px;
+    font-family: inherit;
+    color: var(--text-primary);
+  }
+  .rv-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  .rv-stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .rv-stat {
+    background: var(--bg-secondary);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    flex: 1;
+    min-width: 130px;
+  }
+  .rv-stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .rv-stat-value {
+    font-size: 18px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .rv-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .rv-search {
+    flex: 1;
+    min-width: 200px;
+    height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    font-family: inherit;
+    color: var(--text-primary);
+  }
+  .rv-search:focus {
+    outline: 2px solid var(--border-info);
+    outline-offset: -2px;
+  }
+
+  .rv-export-menu {
+    position: relative;
+    display: inline-block;
+  }
+  .rv-export-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    min-width: 180px;
+    z-index: 10;
+    overflow: hidden;
+  }
+  .rv-export-dropdown button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-radius: 0;
+    padding: 10px 14px;
+    background: transparent;
+  }
+  .rv-export-dropdown button:hover { background: var(--bg-secondary); }
+
+  .icon { font-style: normal; }
+
+  @media (max-width: 720px) {
+    body { padding: 1rem; }
+    .container { padding: 1rem; }
+    .rv-table { font-size: 12px; }
+    .rv-table td input, .rv-table td select { font-size: 12px; padding: 0 6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="rv-header">
+    <h1>Controle de revisão</h1>
+    <p>Registro de inconsistências em documentos + escala diária de revisores</p>
+  </div>
+
+  <div class="rv-tabs" role="tablist">
+    <button class="rv-tab active" data-view="current" role="tab"><span class="icon">📋</span> Mês vigente</button>
+    <button class="rv-tab" data-view="history" role="tab"><span class="icon">📁</span> Histórico</button>
+  </div>
+
+  <div id="rv-content"></div>
+</div>
+
+<!-- Datalists ficam aqui pra alimentar autocomplete -->
+<datalist id="dl-empresas"></datalist>
+<datalist id="dl-documentos"></datalist>
+<datalist id="dl-motivos"></datalist>
+<datalist id="dl-revisores"></datalist>
+
+<script>
+(function() {
+  const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const DEFAULT_PEOPLE = ['Marcio Z','Luciane','Rodrigo Balem','Camila'];
+  const STORAGE_KEY = 'gt3_controle_revisao_v1';
+
+  const state = {
+    view: 'current',
+    current: null,        // { year, monthIdx, name, revisions:[], schedule:[] }
+    history: {},          // history[year][monthIdx] = sheet
+    people: [...DEFAULT_PEOPLE],
+    historyPath: { year: null, month: null },
+    search: ''
+  };
+
+  function pad(n) { return String(n).padStart(2,'0'); }
+  function monthKey(year, monthIdx) { return MONTHS_SHORT[monthIdx] + '/' + String(year).slice(-2); }
+  function daysInMonth(year, monthIdx) { return new Date(year, monthIdx+1, 0).getDate(); }
+  function dayOfWeek(year, monthIdx, day) { return new Date(year, monthIdx, day).getDay(); }
+
+  function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        current: state.current,
+        history: state.history,
+        people: state.people
+      }));
+    } catch(e) { console.warn('localStorage indisponível', e); }
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      state.current = data.current || null;
+      state.history = data.history || {};
+      state.people = data.people || [...DEFAULT_PEOPLE];
+      return true;
+    } catch(e) { return false; }
+  }
+
+  function buildSchedule(year, monthIdx) {
+    const total = daysInMonth(year, monthIdx);
+    const rows = [];
+    for (let d=1; d<=total; d++) {
+      const dow = dayOfWeek(year, monthIdx, d);
+      let type = 'normal';
+      let label = '';
+      if (dow === 6) { type = 'weekend'; label = 'SAB'; }
+      else if (dow === 0) { type = 'weekend'; label = 'DOM'; }
+      rows.push({ day: d, type, label, person: '' });
+    }
+    return rows;
+  }
+
+  function buildSheet(year, monthIdx) {
+    return {
+      year,
+      monthIdx,
+      name: monthKey(year, monthIdx),
+      revisions: [],
+      schedule: buildSchedule(year, monthIdx)
+    };
+  }
+
+  function newRevision() {
+    const today = new Date();
+    return {
+      id: uid(),
+      data: pad(today.getDate()) + '/' + pad(today.getMonth()+1) + '/' + today.getFullYear(),
+      empresa: '',
+      colaborador: '',
+      documento: '',
+      motivo: '',
+      revisor: ''
+    };
+  }
+
+  function nextMonth(year, monthIdx) {
+    if (monthIdx === 11) return { year: year+1, monthIdx: 0 };
+    return { year, monthIdx: monthIdx+1 };
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  // Coleta sugestões do histórico + mês vigente para autocomplete
+  function collectSuggestions() {
+    const buckets = { empresa: new Set(), documento: new Set(), motivo: new Set(), revisor: new Set() };
+    const allSheets = [];
+    if (state.current) allSheets.push(state.current);
+    Object.values(state.history).forEach(yearObj => {
+      Object.values(yearObj).forEach(s => allSheets.push(s));
+    });
+    allSheets.forEach(s => (s.revisions || []).forEach(r => {
+      if (r.empresa) buckets.empresa.add(r.empresa);
+      if (r.documento) buckets.documento.add(r.documento);
+      if (r.motivo) buckets.motivo.add(r.motivo);
+      if (r.revisor) buckets.revisor.add(r.revisor);
+    }));
+    state.people.forEach(p => buckets.revisor.add(p));
+    return {
+      empresa: [...buckets.empresa].sort((a,b) => a.localeCompare(b,'pt-BR')),
+      documento: [...buckets.documento].sort((a,b) => a.localeCompare(b,'pt-BR')),
+      motivo: [...buckets.motivo].sort((a,b) => a.localeCompare(b,'pt-BR')),
+      revisor: [...buckets.revisor].sort((a,b) => a.localeCompare(b,'pt-BR'))
+    };
+  }
+
+  function refreshDatalists() {
+    const sug = collectSuggestions();
+    const fillDL = (id, items) => {
+      const dl = document.getElementById(id);
+      dl.innerHTML = items.map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+    };
+    fillDL('dl-empresas', sug.empresa);
+    fillDL('dl-documentos', sug.documento);
+    fillDL('dl-motivos', sug.motivo);
+    fillDL('dl-revisores', sug.revisor);
+  }
+
+  function render() {
+    const root = document.getElementById('rv-content');
+    document.querySelectorAll('.rv-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.view === state.view);
+    });
+    refreshDatalists();
+    if (state.view === 'current') renderCurrent(root);
+    else renderHistory(root);
+  }
+
+  function renderRevisionsTable(revisions, search, readOnly) {
+    const filtered = search
+      ? revisions.filter(r => {
+          const hay = `${r.data} ${r.empresa} ${r.colaborador} ${r.documento} ${r.motivo} ${r.revisor}`.toLowerCase();
+          return hay.includes(search.toLowerCase());
+        })
+      : revisions;
+
+    const headerCols = readOnly
+      ? `<th>Data</th><th>Empresa</th><th>Colaborador</th><th>Documento</th><th>Motivo</th><th>Revisor</th>`
+      : `<th>Data</th><th>Empresa</th><th>Colaborador</th><th>Documento</th><th>Motivo</th><th>Revisor</th><th>Ações</th>`;
+
+    const bodyHtml = filtered.length === 0
+      ? `<tr class="rv-empty-row"><td colspan="${readOnly?6:7}">${search ? 'Nenhum registro encontrado para a busca.' : 'Nenhuma revisão registrada ainda. Clique em "+ Adicionar revisão" para começar.'}</td></tr>`
+      : filtered.map(r => {
+          if (readOnly) {
+            return `<tr>
+              <td style="padding:8px 10px;">${escapeHtml(r.data)}</td>
+              <td style="padding:8px 10px;">${escapeHtml(r.empresa)}</td>
+              <td style="padding:8px 10px;">${escapeHtml(r.colaborador)}</td>
+              <td style="padding:8px 10px;">${escapeHtml(r.documento)}</td>
+              <td style="padding:8px 10px;">${escapeHtml(r.motivo)}</td>
+              <td style="padding:8px 10px;">${escapeHtml(r.revisor)}</td>
+            </tr>`;
+          }
+          return `<tr data-rev-id="${r.id}">
+            <td><input type="text" data-field="data" value="${escapeHtml(r.data)}" placeholder="dd/mm/aaaa" /></td>
+            <td><input type="text" data-field="empresa" list="dl-empresas" value="${escapeHtml(r.empresa)}" placeholder="—" /></td>
+            <td><input type="text" data-field="colaborador" value="${escapeHtml(r.colaborador)}" placeholder="—" /></td>
+            <td><input type="text" data-field="documento" list="dl-documentos" value="${escapeHtml(r.documento)}" placeholder="—" /></td>
+            <td><input type="text" data-field="motivo" list="dl-motivos" value="${escapeHtml(r.motivo)}" placeholder="—" /></td>
+            <td><input type="text" data-field="revisor" list="dl-revisores" value="${escapeHtml(r.revisor)}" placeholder="—" /></td>
+            <td class="rv-actions"><button data-del="${r.id}" title="Excluir linha" aria-label="Excluir">🗑</button></td>
+          </tr>`;
+        }).join('');
+
+    return `<table class="rv-table">
+      <thead><tr>${headerCols}</tr></thead>
+      <tbody>${bodyHtml}</tbody>
+    </table>`;
+  }
+
+  function renderScheduleTable(sheet, readOnly) {
+    return `<table class="rv-schedule-table">
+      <thead><tr><th style="width:90px;">DIA</th><th>PESSOA</th></tr></thead>
+      <tbody>
+        ${sheet.schedule.map(r => {
+          const dateStr = pad(r.day) + '/' + MONTHS_SHORT[sheet.monthIdx];
+          let cellContent;
+          if (r.type === 'weekend') cellContent = `<div class="rv-cell">${r.label}</div>`;
+          else if (r.type === 'holiday') cellContent = `<div class="rv-cell">${escapeHtml(r.label || 'FERIADO')}</div>`;
+          else if (readOnly) cellContent = `<div class="rv-cell" style="text-align:center;">${escapeHtml(r.person || '')}</div>`;
+          else {
+            const opts = ['<option value="">—</option>', ...state.people.map(p => `<option value="${escapeHtml(p)}" ${r.person===p?'selected':''}>${escapeHtml(p)}</option>`)].join('');
+            cellContent = `<div class="rv-cell"><select data-day="${r.day}">${opts}</select></div>`;
+          }
+          const cls = r.type === 'weekend' ? 'rv-row-weekend' : (r.type === 'holiday' ? 'rv-row-holiday' : '');
+          return `<tr class="${cls}"><td class="rv-day">${dateStr}</td><td>${cellContent}</td></tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  function renderCurrent(root) {
+    if (!state.current) {
+      root.innerHTML = `
+        <div class="rv-empty">
+          <p style="margin:0 0 1rem;">Nenhuma planilha ativa.</p>
+          <button class="rv-btn-primary" id="rv-generate">+ Gerar nova planilha</button>
+        </div>`;
+      document.getElementById('rv-generate').onclick = openGenerateModal;
+      return;
+    }
+
+    const sheet = state.current;
+    const totalRevs = sheet.revisions.length;
+    const empresasUnicas = new Set(sheet.revisions.map(r => (r.empresa || '').trim()).filter(Boolean)).size;
+    const filledSchedule = sheet.schedule.filter(r => r.type === 'normal' && r.person).length;
+    const totalNormalSchedule = sheet.schedule.filter(r => r.type === 'normal').length;
+
+    root.innerHTML = `
+      <h3 class="rv-month-title">${MONTHS_PT[sheet.monthIdx]} de ${sheet.year}</h3>
+
+      <div class="rv-stats">
+        <div class="rv-stat"><div class="rv-stat-label">Revisões registradas</div><div class="rv-stat-value">${totalRevs}</div></div>
+        <div class="rv-stat"><div class="rv-stat-label">Empresas distintas</div><div class="rv-stat-value">${empresasUnicas}</div></div>
+        <div class="rv-stat"><div class="rv-stat-label">Escala preenchida</div><div class="rv-stat-value">${filledSchedule}/${totalNormalSchedule}</div></div>
+      </div>
+
+      <div class="rv-section-title">📋 Revisões e inconsistências</div>
+
+      <div class="rv-toolbar">
+        <input type="text" id="rv-search" class="rv-search" placeholder="🔍 Buscar (empresa, colaborador, documento, motivo...)" value="${escapeHtml(state.search)}" />
+        <button id="rv-add-rev" class="rv-btn-primary">+ Adicionar revisão</button>
+        <div class="rv-export-menu">
+          <button id="rv-export-toggle">↓ Exportar ▾</button>
+        </div>
+      </div>
+
+      <div id="rv-rev-table-wrap">
+        ${renderRevisionsTable(sheet.revisions, state.search, false)}
+      </div>
+
+      <div class="rv-section-title" style="margin-top:2rem;">📅 Escala diária do mês</div>
+
+      <div class="rv-people-bar">
+        <span style="color:var(--text-secondary);">👥 Equipe:</span>
+        ${state.people.map((p,i) => `<span class="rv-pill">${escapeHtml(p)}<button data-rm="${i}" aria-label="Remover ${escapeHtml(p)}" title="Remover">×</button></span>`).join('')}
+        <input type="text" id="rv-add-person" placeholder="+ adicionar pessoa (Enter)" />
+      </div>
+
+      ${renderScheduleTable(sheet, false)}
+
+      <div class="rv-action-row">
+        <button id="rv-mark-holiday">⭐ Marcar feriado</button>
+        <button id="rv-unmark-holiday">↺ Desmarcar feriado</button>
+        <button id="rv-reset" style="color:var(--text-danger);">🗑 Limpar mês</button>
+        <button id="rv-finalize" style="margin-left:auto;" class="rv-btn-primary">✓ Finalizar mês e salvar no histórico</button>
+      </div>
+    `;
+
+    bindCurrentEvents(sheet);
+  }
+
+  function bindCurrentEvents(sheet) {
+    // Busca
+    const searchEl = document.getElementById('rv-search');
+    if (searchEl) {
+      searchEl.oninput = e => {
+        state.search = e.target.value;
+        const wrap = document.getElementById('rv-rev-table-wrap');
+        wrap.innerHTML = renderRevisionsTable(sheet.revisions, state.search, false);
+        bindRevisionsEvents(sheet);
+      };
+    }
+
+    // Adicionar revisão
+    document.getElementById('rv-add-rev').onclick = () => {
+      sheet.revisions.unshift(newRevision());
+      state.search = '';
+      save(); render();
+      // foca no primeiro campo da nova linha
+      setTimeout(() => {
+        const first = document.querySelector('tr[data-rev-id] input[data-field="data"]');
+        if (first) first.focus();
+      }, 50);
+    };
+
+    // Exportar
+    const exportBtn = document.getElementById('rv-export-toggle');
+    exportBtn.onclick = () => {
+      const existing = document.getElementById('rv-export-dd');
+      if (existing) { existing.remove(); return; }
+      const dd = document.createElement('div');
+      dd.id = 'rv-export-dd';
+      dd.className = 'rv-export-dropdown';
+      dd.innerHTML = `
+        <button data-exp="csv-rev">CSV — Revisões</button>
+        <button data-exp="csv-sched">CSV — Escala</button>
+        <button data-exp="json">JSON (backup)</button>
+      `;
+      exportBtn.parentElement.appendChild(dd);
+      dd.querySelector('[data-exp="csv-rev"]').onclick = () => { exportRevisionsCSV(sheet); dd.remove(); };
+      dd.querySelector('[data-exp="csv-sched"]').onclick = () => { exportScheduleCSV(sheet); dd.remove(); };
+      dd.querySelector('[data-exp="json"]').onclick = () => { exportJSON(); dd.remove(); };
+    };
+    document.addEventListener('click', e => {
+      const dd = document.getElementById('rv-export-dd');
+      if (dd && !dd.contains(e.target) && e.target.id !== 'rv-export-toggle') dd.remove();
+    }, { once: true });
+
+    bindRevisionsEvents(sheet);
+
+    // Escala — dropdowns
+    document.querySelectorAll('select[data-day]').forEach(sel => {
+      sel.onchange = e => {
+        const day = parseInt(e.target.dataset.day);
+        const row = sheet.schedule.find(r => r.day === day);
+        row.person = e.target.value;
+        save();
+      };
+    });
+
+    // Equipe
+    document.querySelectorAll('[data-rm]').forEach(btn => {
+      btn.onclick = e => {
+        const i = parseInt(e.currentTarget.dataset.rm);
+        state.people.splice(i,1);
+        save(); render();
+      };
+    });
+    document.getElementById('rv-add-person').onkeydown = e => {
+      if (e.key === 'Enter' && e.target.value.trim()) {
+        const name = e.target.value.trim();
+        if (!state.people.includes(name)) state.people.push(name);
+        e.target.value = '';
+        save(); render();
+      }
+    };
+
+    // Feriados
+    document.getElementById('rv-mark-holiday').onclick = () => {
+      const day = prompt('Qual dia marcar como feriado? (1-' + daysInMonth(sheet.year, sheet.monthIdx) + ')');
+      const d = parseInt(day);
+      if (!d || d < 1 || d > sheet.schedule.length) return;
+      const row = sheet.schedule.find(r => r.day === d);
+      const name = prompt('Nome do feriado (ex: Caravaggio):', '');
+      row.type = 'holiday';
+      row.label = (name || 'FERIADO').toUpperCase();
+      row.person = '';
+      save(); render();
+    };
+    document.getElementById('rv-unmark-holiday').onclick = () => {
+      const day = prompt('Qual dia desmarcar?');
+      const d = parseInt(day);
+      if (!d) return;
+      const row = sheet.schedule.find(r => r.day === d);
+      if (!row) return;
+      const dow = dayOfWeek(sheet.year, sheet.monthIdx, d);
+      if (dow === 6) { row.type = 'weekend'; row.label = 'SAB'; }
+      else if (dow === 0) { row.type = 'weekend'; row.label = 'DOM'; }
+      else { row.type = 'normal'; row.label = ''; }
+      save(); render();
+    };
+    document.getElementById('rv-reset').onclick = () => {
+      if (!confirm('Limpar TODAS as revisões e a escala do mês vigente?\n\nEsta ação não pode ser desfeita.')) return;
+      state.current = buildSheet(sheet.year, sheet.monthIdx);
+      save(); render();
+    };
+    document.getElementById('rv-finalize').onclick = () => {
+      if (!confirm(`Finalizar ${sheet.name} e mover para o histórico?\n\n• ${sheet.revisions.length} revisão(ões) e a escala diária serão arquivadas.\n• O próximo mês será gerado automaticamente.`)) return;
+      if (!state.history[sheet.year]) state.history[sheet.year] = {};
+      state.history[sheet.year][sheet.monthIdx] = JSON.parse(JSON.stringify(sheet));
+      const nxt = nextMonth(sheet.year, sheet.monthIdx);
+      state.current = buildSheet(nxt.year, nxt.monthIdx);
+      save(); render();
+    };
+  }
+
+  function bindRevisionsEvents(sheet) {
+    document.querySelectorAll('tr[data-rev-id]').forEach(tr => {
+      const id = tr.dataset.revId;
+      const rev = sheet.revisions.find(r => r.id === id);
+      if (!rev) return;
+      tr.querySelectorAll('input[data-field]').forEach(inp => {
+        inp.oninput = e => {
+          rev[e.target.dataset.field] = e.target.value;
+          save();
+        };
+        inp.onblur = () => { refreshDatalists(); };
+      });
+      const delBtn = tr.querySelector('[data-del]');
+      if (delBtn) {
+        delBtn.onclick = () => {
+          const desc = rev.empresa || rev.colaborador || 'esta linha';
+          if (!confirm(`Excluir registro: ${desc}?`)) return;
+          const idx = sheet.revisions.findIndex(r => r.id === id);
+          sheet.revisions.splice(idx, 1);
+          save(); render();
+        };
+      }
+    });
+  }
+
+  // Exportações
+  function downloadFile(name, content, mime) {
+    const blob = new Blob(['\ufeff' + content], { type: mime + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+  }
+
+  function csvEscape(v) {
+    const s = String(v ?? '');
+    if (/[",;\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+
+  function exportRevisionsCSV(sheet) {
+    const headers = ['Data','Empresa','Colaborador','Documento','Motivo','Revisor'];
+    const rows = sheet.revisions.map(r => [r.data, r.empresa, r.colaborador, r.documento, r.motivo, r.revisor]);
+    const csv = [headers, ...rows].map(row => row.map(csvEscape).join(';')).join('\n');
+    downloadFile(`revisoes_${sheet.name.replace('/','-')}.csv`, csv, 'text/csv');
+  }
+
+  function exportScheduleCSV(sheet) {
+    const headers = ['DIA','PESSOA'];
+    const rows = sheet.schedule.map(r => {
+      const dateStr = pad(r.day) + '/' + MONTHS_SHORT[sheet.monthIdx];
+      const val = r.type === 'normal' ? r.person : r.label;
+      return [dateStr, val];
+    });
+    const csv = [headers, ...rows].map(row => row.map(csvEscape).join(';')).join('\n');
+    downloadFile(`escala_${sheet.name.replace('/','-')}.csv`, csv, 'text/csv');
+  }
+
+  function exportJSON() {
+    const payload = JSON.stringify({ current: state.current, history: state.history, people: state.people }, null, 2);
+    downloadFile(`backup_revisao_${new Date().toISOString().slice(0,10)}.json`, payload, 'application/json');
+  }
+
+  function renderHistory(root) {
+    const { year, month } = state.historyPath;
+
+    // Vista de mês arquivado
+    if (year !== null && month !== null) {
+      const sheet = state.history[year]?.[month];
+      if (!sheet) {
+        state.historyPath = { year, month: null };
+        return renderHistory(root);
+      }
+      root.innerHTML = `
+        <div class="rv-breadcrumb">
+          <button data-bc="root">Histórico</button> <span>/</span>
+          <button data-bc="year">${year}</button> <span>/</span>
+          <span>${sheet.name}</span>
+        </div>
+        <h3 class="rv-month-title">${MONTHS_PT[sheet.monthIdx]} de ${sheet.year} <span style="font-size:12px;color:var(--text-secondary);font-weight:400;margin-left:8px;">(arquivado, somente leitura)</span></h3>
+
+        <div class="rv-stats">
+          <div class="rv-stat"><div class="rv-stat-label">Revisões registradas</div><div class="rv-stat-value">${sheet.revisions.length}</div></div>
+          <div class="rv-stat"><div class="rv-stat-label">Empresas distintas</div><div class="rv-stat-value">${new Set(sheet.revisions.map(r => (r.empresa||'').trim()).filter(Boolean)).size}</div></div>
+        </div>
+
+        <div class="rv-section-title">📋 Revisões e inconsistências</div>
+        ${renderRevisionsTable(sheet.revisions, '', true)}
+
+        <div class="rv-section-title" style="margin-top:2rem;">📅 Escala diária do mês</div>
+        ${renderScheduleTable(sheet, true)}
+
+        <div class="rv-action-row">
+          <button data-bc="year">← Voltar para ${year}</button>
+          <button id="rv-export-archived">↓ Exportar CSV (revisões)</button>
+          <button id="rv-delete-archived" style="color:var(--text-danger);margin-left:auto;">🗑 Excluir do histórico</button>
+        </div>
+      `;
+      root.querySelector('[data-bc="root"]').onclick = () => { state.historyPath = { year: null, month: null }; render(); };
+      root.querySelectorAll('[data-bc="year"]').forEach(b => {
+        b.onclick = () => { state.historyPath = { year, month: null }; render(); };
+      });
+      document.getElementById('rv-export-archived').onclick = () => exportRevisionsCSV(sheet);
+      document.getElementById('rv-delete-archived').onclick = () => {
+        if (!confirm(`Excluir ${sheet.name} permanentemente do histórico?\n\nIsso apagará ${sheet.revisions.length} revisão(ões) e a escala arquivada.`)) return;
+        delete state.history[year][month];
+        if (Object.keys(state.history[year]).length === 0) delete state.history[year];
+        state.historyPath = { year: null, month: null };
+        save(); render();
+      };
+      return;
+    }
+
+    // Vista de ano (lista de meses)
+    if (year !== null) {
+      const months = state.history[year] || {};
+      const monthList = Object.keys(months).map(Number).sort((a,b) => a-b);
+      root.innerHTML = `
+        <div class="rv-breadcrumb">
+          <button data-bc="root">Histórico</button> <span>/</span>
+          <span>${year}</span>
+        </div>
+        ${monthList.length === 0
+          ? `<div class="rv-empty">Nenhum mês arquivado em ${year}.</div>`
+          : monthList.map(m => `
+            <div class="rv-folder month" data-month="${m}">
+              <span class="rv-folder-icon" style="color:var(--text-secondary);">📄</span>
+              <span>${months[m].name}</span>
+              <span style="margin-left:auto;font-size:12px;color:var(--text-secondary);">${months[m].revisions.length} revisão(ões) · ${MONTHS_PT[m]}</span>
+            </div>
+          `).join('')
+        }
+      `;
+      root.querySelector('[data-bc="root"]').onclick = () => { state.historyPath = { year: null, month: null }; render(); };
+      root.querySelectorAll('[data-month]').forEach(el => {
+        el.onclick = () => { state.historyPath = { year, month: parseInt(el.dataset.month) }; render(); };
+      });
+      return;
+    }
+
+    // Vista raiz (lista de anos)
+    const years = Object.keys(state.history).map(Number).sort((a,b) => b-a);
+    if (years.length === 0) {
+      root.innerHTML = `<div class="rv-empty">Histórico vazio.<br><small>Finalize um mês na guia "Mês vigente" para arquivá-lo aqui.</small></div>`;
+      return;
+    }
+    root.innerHTML = years.map(y => {
+      const count = Object.keys(state.history[y]).length;
+      const totalRev = Object.values(state.history[y]).reduce((s,sh) => s + sh.revisions.length, 0);
+      return `
+        <div class="rv-folder year" data-year="${y}">
+          <span class="rv-folder-icon" style="color:var(--text-info);">📁</span>
+          <span>${y}</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--text-secondary);">${count} ${count===1?'mês':'meses'} · ${totalRev} revisão(ões)</span>
+        </div>
+      `;
+    }).join('');
+    root.querySelectorAll('[data-year]').forEach(el => {
+      el.onclick = () => { state.historyPath = { year: parseInt(el.dataset.year), month: null }; render(); };
+    });
+  }
+
+  function openGenerateModal() {
+    const wrap = document.createElement('div');
+    wrap.className = 'rv-modal-bg';
+    wrap.id = 'rv-modal-wrap';
+    const now = new Date();
+    const yOpts = [];
+    for (let y = now.getFullYear()-1; y <= now.getFullYear()+2; y++) {
+      yOpts.push(`<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`);
+    }
+    const mOpts = MONTHS_PT.map((m,i) => `<option value="${i}" ${i===now.getMonth()?'selected':''}>${m}</option>`).join('');
+    wrap.innerHTML = `
+      <div class="rv-modal">
+        <h3>Gerar nova planilha</h3>
+        <p>Sábados e domingos serão marcados automaticamente na escala. Você pode adicionar feriados depois.</p>
+        <label>Mês</label>
+        <select id="rv-modal-month">${mOpts}</select>
+        <label>Ano</label>
+        <select id="rv-modal-year">${yOpts.join('')}</select>
+        <div class="rv-modal-actions">
+          <button id="rv-modal-cancel">Cancelar</button>
+          <button id="rv-modal-ok" class="rv-btn-primary">Gerar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+    document.getElementById('rv-modal-cancel').onclick = () => wrap.remove();
+    wrap.onclick = e => { if (e.target === wrap) wrap.remove(); };
+    document.getElementById('rv-modal-ok').onclick = () => {
+      const m = parseInt(document.getElementById('rv-modal-month').value);
+      const y = parseInt(document.getElementById('rv-modal-year').value);
+      state.current = buildSheet(y, m);
+      wrap.remove();
+      save(); render();
+    };
+  }
+
+  document.querySelectorAll('.rv-tab').forEach(t => {
+    t.onclick = () => { state.view = t.dataset.view; state.search = ''; render(); };
+  });
+
+  // Inicialização
+  if (!load()) {
+    // Seed: maio/26 com algumas revisões da planilha original como exemplo
+    const seed = buildSheet(2026, 4);
+    seed.revisions = [
+      { id: uid(), data: '01/05/2026', empresa: 'BMC INSTALACOES', colaborador: 'CESAR CAMARGO AMARAL', documento: 'ASO', motivo: 'Exames complement.', revisor: 'Marcio Z' },
+      { id: uid(), data: '01/05/2026', empresa: 'MARIANI ESCALANTE', colaborador: 'GIAN RIBEIRO MARTINS', documento: 'Ficha Registro', motivo: 'Função', revisor: 'Marcio Z' },
+      { id: uid(), data: '01/05/2026', empresa: 'SOUZA MONTAGEM', colaborador: 'CICERO DE SOUZA', documento: 'Contrato', motivo: 'Outro funcionário', revisor: 'Marcio Z' }
+    ];
+    seed.schedule.forEach(r => {
+      if (r.day === 4) { r.person = 'Marcio Z'; }
+      if (r.day === 5) { r.person = 'Rodrigo Balem'; }
+      if (r.day === 6) { r.person = 'Luciane'; }
+      if (r.day === 7) { r.person = 'Camila'; }
+      if (r.day === 26) { r.type='holiday'; r.label='CARAVAGGIO'; r.person=''; }
+    });
+    state.current = seed;
+    save();
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle Home Office — GT3</title>
+<style>
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f4ef;
+    --bg-tertiary: #faf9f5;
+    --bg-info: #E6F1FB;
+    --bg-danger: #FCEBEB;
+    --text-primary: #1a1a1a;
+    --text-secondary: #6b6b6b;
+    --text-tertiary: #9b9b9b;
+    --text-info: #0C447C;
+    --text-danger: #791F1F;
+    --border-tertiary: rgba(0,0,0,0.10);
+    --border-secondary: rgba(0,0,0,0.20);
+    --border-info: #378ADD;
+    --border-danger: #E24B4A;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --weekend-bg: #B5D4F4;
+    --weekend-text: #042C53;
+    --holiday-bg: #D3D1C7;
+    --holiday-text: #2C2C2A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 2rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    border: 0.5px solid var(--border-tertiary);
+    padding: 1.5rem;
+  }
+
+  .ho-header { margin-bottom: 1.25rem; }
+  .ho-header h1 { margin: 0 0 0.25rem; font-size: 18px; font-weight: 500; }
+  .ho-header p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+  .ho-tabs {
+    display: inline-flex;
+    padding: 4px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    gap: 4px;
+    margin-bottom: 1.25rem;
+  }
+  .ho-tab {
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .ho-tab.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 0.5px var(--border-tertiary);
+  }
+
+  button {
+    border: 0.5px solid var(--border-secondary);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  button:hover { background: var(--bg-secondary); }
+  button:active { transform: scale(0.98); }
+
+  .ho-btn-primary {
+    background: var(--text-primary);
+    color: var(--bg-primary);
+    border: none;
+    font-weight: 500;
+  }
+  .ho-btn-primary:hover { opacity: 0.85; background: var(--text-primary); }
+
+  .ho-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+  }
+  .ho-table thead th {
+    background: var(--bg-info);
+    color: var(--text-info);
+    font-weight: 500;
+    padding: 10px;
+    text-align: center;
+    font-size: 13px;
+  }
+  .ho-table thead th:first-child { border-top-left-radius: var(--radius-md); }
+  .ho-table thead th:last-child { border-top-right-radius: var(--radius-md); }
+  .ho-table td {
+    padding: 0;
+    border: 0.5px solid var(--border-tertiary);
+    height: 32px;
+  }
+  .ho-day {
+    padding: 6px 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    width: 90px;
+    text-align: center;
+  }
+  .ho-cell select, .ho-cell input {
+    width: 100%;
+    height: 32px;
+    border: none;
+    background: transparent;
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .ho-cell select:focus, .ho-cell input:focus {
+    outline: 2px solid var(--border-info);
+    outline-offset: -2px;
+  }
+  .ho-row-weekend td { background: var(--weekend-bg); }
+  .ho-row-weekend .ho-day { color: var(--weekend-text); }
+  .ho-row-weekend .ho-cell {
+    text-align: center;
+    font-weight: 500;
+    color: var(--weekend-text);
+    padding: 6px 10px;
+  }
+  .ho-row-holiday td { background: var(--holiday-bg); }
+  .ho-row-holiday .ho-day { color: var(--holiday-text); }
+  .ho-row-holiday .ho-cell {
+    text-align: center;
+    font-weight: 500;
+    color: var(--holiday-text);
+    padding: 6px 10px;
+  }
+
+  .ho-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+  }
+
+  .ho-folder {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 6px;
+    font-size: 14px;
+    user-select: none;
+  }
+  .ho-folder:hover { background: var(--bg-secondary); }
+  .ho-folder.year { font-weight: 500; }
+  .ho-folder.month { margin-left: 24px; }
+  .ho-folder-icon {
+    font-size: 18px;
+    width: 20px;
+    text-align: center;
+  }
+
+  .ho-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+  }
+  .ho-breadcrumb button {
+    border: none;
+    background: none;
+    color: var(--text-info);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .ho-breadcrumb button:hover { background: var(--bg-secondary); }
+
+  .ho-month-title {
+    font-size: 18px;
+    font-weight: 500;
+    margin: 0 0 1rem;
+    text-transform: capitalize;
+  }
+
+  .ho-action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .ho-people-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    font-size: 13px;
+  }
+  .ho-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-primary);
+    padding: 4px 4px 4px 10px;
+    border-radius: 999px;
+    border: 0.5px solid var(--border-tertiary);
+  }
+  .ho-pill button {
+    border: none;
+    background: none;
+    padding: 2px 6px;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .ho-pill button:hover {
+    color: var(--text-danger);
+    background: var(--bg-danger);
+  }
+  .ho-people-bar input {
+    border: none;
+    background: transparent;
+    padding: 4px 8px;
+    font-size: 13px;
+    outline: none;
+    min-width: 140px;
+    font-family: inherit;
+  }
+
+  .ho-modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    z-index: 100;
+  }
+  .ho-modal {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    max-width: 380px;
+    width: 100%;
+  }
+  .ho-modal h3 { margin: 0 0 0.5rem; font-size: 16px; font-weight: 500; }
+  .ho-modal p { margin: 0 0 1rem; font-size: 14px; color: var(--text-secondary); }
+  .ho-modal label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    margin-top: 8px;
+  }
+  .ho-modal select, .ho-modal input {
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 14px;
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    margin-bottom: 4px;
+    font-family: inherit;
+    color: var(--text-primary);
+  }
+  .ho-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  .ho-stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 1rem;
+  }
+  .ho-stat {
+    background: var(--bg-secondary);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    flex: 1;
+  }
+  .ho-stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .ho-stat-value {
+    font-size: 18px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .icon { font-style: normal; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="ho-header">
+    <h1>Controle de home office</h1>
+    <p>Gestão mensal com arquivamento automático no histórico</p>
+  </div>
+
+  <div class="ho-tabs" role="tablist">
+    <button class="ho-tab active" data-view="current" role="tab"><span class="icon">📅</span> Mês vigente</button>
+    <button class="ho-tab" data-view="history" role="tab"><span class="icon">📁</span> Histórico</button>
+  </div>
+
+  <div id="ho-content"></div>
+</div>
+
+<script>
+(function() {
+  const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const DEFAULT_PEOPLE = ['Marcio Z','Luciane','Rodrigo Balem'];
+  const STORAGE_KEY = 'gt3_home_office_v1';
+
+  const state = {
+    view: 'current',
+    current: null,
+    history: {},
+    people: [...DEFAULT_PEOPLE],
+    historyPath: { year: null, month: null }
+  };
+
+  function pad(n) { return String(n).padStart(2,'0'); }
+  function monthKey(year, monthIdx) { return MONTHS_SHORT[monthIdx] + '/' + String(year).slice(-2); }
+  function daysInMonth(year, monthIdx) { return new Date(year, monthIdx+1, 0).getDate(); }
+  function dayOfWeek(year, monthIdx, day) { return new Date(year, monthIdx, day).getDay(); }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        current: state.current,
+        history: state.history,
+        people: state.people
+      }));
+    } catch(e) { console.warn('localStorage indisponível', e); }
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      state.current = data.current || null;
+      state.history = data.history || {};
+      state.people = data.people || [...DEFAULT_PEOPLE];
+      return true;
+    } catch(e) { return false; }
+  }
+
+  function buildSheet(year, monthIdx) {
+    const total = daysInMonth(year, monthIdx);
+    const rows = [];
+    for (let d=1; d<=total; d++) {
+      const dow = dayOfWeek(year, monthIdx, d);
+      let type = 'normal';
+      let label = '';
+      if (dow === 6) { type = 'weekend'; label = 'SAB'; }
+      else if (dow === 0) { type = 'weekend'; label = 'DOM'; }
+      rows.push({ day: d, type, label, person: '' });
+    }
+    return { year, monthIdx, name: monthKey(year, monthIdx), rows };
+  }
+
+  function nextMonth(year, monthIdx) {
+    if (monthIdx === 11) return { year: year+1, monthIdx: 0 };
+    return { year, monthIdx: monthIdx+1 };
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  function render() {
+    const root = document.getElementById('ho-content');
+    document.querySelectorAll('.ho-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.view === state.view);
+    });
+    if (state.view === 'current') renderCurrent(root);
+    else renderHistory(root);
+  }
+
+  function renderCurrent(root) {
+    if (!state.current) {
+      root.innerHTML = `
+        <div class="ho-empty">
+          <p style="margin:0 0 1rem;">Nenhuma planilha ativa.</p>
+          <button class="ho-btn-primary" id="ho-generate">+ Gerar nova planilha</button>
+        </div>`;
+      document.getElementById('ho-generate').onclick = openGenerateModal;
+      return;
+    }
+    const sheet = state.current;
+    const filled = sheet.rows.filter(r => r.type === 'normal' && r.person).length;
+    const totalNormal = sheet.rows.filter(r => r.type === 'normal').length;
+    const holidays = sheet.rows.filter(r => r.type==='holiday').length;
+
+    root.innerHTML = `
+      <h3 class="ho-month-title">${MONTHS_PT[sheet.monthIdx]} de ${sheet.year}</h3>
+      <div class="ho-stats">
+        <div class="ho-stat"><div class="ho-stat-label">Dias úteis</div><div class="ho-stat-value">${totalNormal}</div></div>
+        <div class="ho-stat"><div class="ho-stat-label">Preenchidos</div><div class="ho-stat-value">${filled}</div></div>
+        <div class="ho-stat"><div class="ho-stat-label">Feriados</div><div class="ho-stat-value">${holidays}</div></div>
+      </div>
+      <div class="ho-people-bar">
+        <span style="color:var(--text-secondary);">👥 Equipe:</span>
+        ${state.people.map((p,i) => `<span class="ho-pill">${escapeHtml(p)}<button data-rm="${i}" aria-label="Remover ${escapeHtml(p)}" title="Remover">×</button></span>`).join('')}
+        <input type="text" id="ho-add-person" placeholder="+ adicionar pessoa (Enter)" />
+      </div>
+      <table class="ho-table">
+        <thead><tr><th style="width:90px;">DIA</th><th>PESSOA</th></tr></thead>
+        <tbody>
+          ${sheet.rows.map(r => {
+            const dateStr = pad(r.day) + '/' + MONTHS_SHORT[sheet.monthIdx];
+            let cellContent;
+            if (r.type === 'weekend') cellContent = `<div class="ho-cell">${r.label}</div>`;
+            else if (r.type === 'holiday') cellContent = `<div class="ho-cell">${escapeHtml(r.label || 'FERIADO')}</div>`;
+            else {
+              const opts = ['<option value="">—</option>', ...state.people.map(p => `<option value="${escapeHtml(p)}" ${r.person===p?'selected':''}>${escapeHtml(p)}</option>`)].join('');
+              cellContent = `<div class="ho-cell"><select data-day="${r.day}">${opts}</select></div>`;
+            }
+            const cls = r.type === 'weekend' ? 'ho-row-weekend' : (r.type === 'holiday' ? 'ho-row-holiday' : '');
+            return `<tr class="${cls}"><td class="ho-day">${dateStr}</td><td>${cellContent}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <div class="ho-action-row">
+        <button id="ho-mark-holiday">⭐ Marcar feriado</button>
+        <button id="ho-unmark-holiday">↺ Desmarcar feriado</button>
+        <button id="ho-reset" style="color:var(--text-danger);">🗑 Limpar mês</button>
+        <button id="ho-finalize" style="margin-left:auto;" class="ho-btn-primary">✓ Finalizar mês e salvar no histórico</button>
+      </div>
+    `;
+
+    root.querySelectorAll('select[data-day]').forEach(sel => {
+      sel.onchange = e => {
+        const day = parseInt(e.target.dataset.day);
+        const row = sheet.rows.find(r => r.day === day);
+        row.person = e.target.value;
+        save();
+      };
+    });
+    root.querySelectorAll('[data-rm]').forEach(btn => {
+      btn.onclick = e => {
+        const i = parseInt(e.currentTarget.dataset.rm);
+        state.people.splice(i,1);
+        save(); render();
+      };
+    });
+    document.getElementById('ho-add-person').onkeydown = e => {
+      if (e.key === 'Enter' && e.target.value.trim()) {
+        const name = e.target.value.trim();
+        if (!state.people.includes(name)) state.people.push(name);
+        e.target.value = '';
+        save(); render();
+      }
+    };
+    document.getElementById('ho-mark-holiday').onclick = () => {
+      const day = prompt('Qual dia marcar como feriado? (1-' + daysInMonth(sheet.year, sheet.monthIdx) + ')');
+      const d = parseInt(day);
+      if (!d || d < 1 || d > sheet.rows.length) return;
+      const row = sheet.rows.find(r => r.day === d);
+      const name = prompt('Nome do feriado (ex: Caravaggio):', '');
+      row.type = 'holiday';
+      row.label = (name || 'FERIADO').toUpperCase();
+      row.person = '';
+      save(); render();
+    };
+    document.getElementById('ho-unmark-holiday').onclick = () => {
+      const day = prompt('Qual dia desmarcar?');
+      const d = parseInt(day);
+      if (!d) return;
+      const row = sheet.rows.find(r => r.day === d);
+      if (!row) return;
+      const dow = dayOfWeek(sheet.year, sheet.monthIdx, d);
+      if (dow === 6) { row.type = 'weekend'; row.label = 'SAB'; }
+      else if (dow === 0) { row.type = 'weekend'; row.label = 'DOM'; }
+      else { row.type = 'normal'; row.label = ''; }
+      save(); render();
+    };
+    document.getElementById('ho-reset').onclick = () => {
+      if (!confirm('Limpar todos os preenchimentos do mês vigente?')) return;
+      state.current = buildSheet(sheet.year, sheet.monthIdx);
+      save(); render();
+    };
+    document.getElementById('ho-finalize').onclick = () => {
+      if (!confirm(`Finalizar ${sheet.name} e mover para o histórico?\n\nO próximo mês será gerado automaticamente.`)) return;
+      if (!state.history[sheet.year]) state.history[sheet.year] = {};
+      state.history[sheet.year][sheet.monthIdx] = JSON.parse(JSON.stringify(sheet));
+      const nxt = nextMonth(sheet.year, sheet.monthIdx);
+      state.current = buildSheet(nxt.year, nxt.monthIdx);
+      save(); render();
+    };
+  }
+
+  function renderHistory(root) {
+    const { year, month } = state.historyPath;
+
+    if (year !== null && month !== null) {
+      const sheet = state.history[year]?.[month];
+      if (!sheet) {
+        state.historyPath = { year, month: null };
+        return renderHistory(root);
+      }
+      root.innerHTML = `
+        <div class="ho-breadcrumb">
+          <button data-bc="root">Histórico</button> <span>/</span>
+          <button data-bc="year">${year}</button> <span>/</span>
+          <span>${sheet.name}</span>
+        </div>
+        <h3 class="ho-month-title">${MONTHS_PT[sheet.monthIdx]} de ${sheet.year} <span style="font-size:12px;color:var(--text-secondary);font-weight:400;margin-left:8px;">(arquivado, somente leitura)</span></h3>
+        <table class="ho-table">
+          <thead><tr><th style="width:90px;">DIA</th><th>PESSOA</th></tr></thead>
+          <tbody>
+            ${sheet.rows.map(r => {
+              const dateStr = pad(r.day) + '/' + MONTHS_SHORT[sheet.monthIdx];
+              let content;
+              if (r.type === 'weekend') content = `<div class="ho-cell">${r.label}</div>`;
+              else if (r.type === 'holiday') content = `<div class="ho-cell">${escapeHtml(r.label)}</div>`;
+              else content = `<div class="ho-cell" style="text-align:center;">${escapeHtml(r.person || '')}</div>`;
+              const cls = r.type === 'weekend' ? 'ho-row-weekend' : (r.type === 'holiday' ? 'ho-row-holiday' : '');
+              return `<tr class="${cls}"><td class="ho-day">${dateStr}</td><td>${content}</td></tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div class="ho-action-row">
+          <button data-bc="year">← Voltar para ${year}</button>
+          <button id="ho-delete-archived" style="color:var(--text-danger);margin-left:auto;">🗑 Excluir do histórico</button>
+        </div>
+      `;
+      root.querySelector('[data-bc="root"]').onclick = () => { state.historyPath = { year: null, month: null }; render(); };
+      root.querySelectorAll('[data-bc="year"]').forEach(b => {
+        b.onclick = () => { state.historyPath = { year, month: null }; render(); };
+      });
+      document.getElementById('ho-delete-archived').onclick = () => {
+        if (!confirm(`Excluir ${sheet.name} permanentemente do histórico?`)) return;
+        delete state.history[year][month];
+        if (Object.keys(state.history[year]).length === 0) delete state.history[year];
+        state.historyPath = { year: null, month: null };
+        save(); render();
+      };
+      return;
+    }
+
+    if (year !== null) {
+      const months = state.history[year] || {};
+      const monthList = Object.keys(months).map(Number).sort((a,b) => a-b);
+      root.innerHTML = `
+        <div class="ho-breadcrumb">
+          <button data-bc="root">Histórico</button> <span>/</span>
+          <span>${year}</span>
+        </div>
+        ${monthList.length === 0
+          ? `<div class="ho-empty">Nenhum mês arquivado em ${year}.</div>`
+          : monthList.map(m => `
+            <div class="ho-folder month" data-month="${m}">
+              <span class="ho-folder-icon" style="color:var(--text-secondary);">📄</span>
+              <span>${months[m].name}</span>
+              <span style="margin-left:auto;font-size:12px;color:var(--text-secondary);">${MONTHS_PT[m]}</span>
+            </div>
+          `).join('')
+        }
+      `;
+      root.querySelector('[data-bc="root"]').onclick = () => { state.historyPath = { year: null, month: null }; render(); };
+      root.querySelectorAll('[data-month]').forEach(el => {
+        el.onclick = () => { state.historyPath = { year, month: parseInt(el.dataset.month) }; render(); };
+      });
+      return;
+    }
+
+    const years = Object.keys(state.history).map(Number).sort((a,b) => b-a);
+    if (years.length === 0) {
+      root.innerHTML = `<div class="ho-empty">Histórico vazio.<br><small>Finalize um mês na guia "Mês vigente" para arquivá-lo aqui.</small></div>`;
+      return;
+    }
+    root.innerHTML = years.map(y => {
+      const count = Object.keys(state.history[y]).length;
+      return `
+        <div class="ho-folder year" data-year="${y}">
+          <span class="ho-folder-icon" style="color:var(--text-info);">📁</span>
+          <span>${y}</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--text-secondary);">${count} ${count===1?'mês':'meses'}</span>
+        </div>
+      `;
+    }).join('');
+    root.querySelectorAll('[data-year]').forEach(el => {
+      el.onclick = () => { state.historyPath = { year: parseInt(el.dataset.year), month: null }; render(); };
+    });
+  }
+
+  function openGenerateModal() {
+    const wrap = document.createElement('div');
+    wrap.className = 'ho-modal-bg';
+    wrap.id = 'ho-modal-wrap';
+    const now = new Date();
+    const yOpts = [];
+    for (let y = now.getFullYear()-1; y <= now.getFullYear()+2; y++) {
+      yOpts.push(`<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`);
+    }
+    const mOpts = MONTHS_PT.map((m,i) => `<option value="${i}" ${i===now.getMonth()?'selected':''}>${m}</option>`).join('');
+    wrap.innerHTML = `
+      <div class="ho-modal">
+        <h3>Gerar nova planilha</h3>
+        <p>Sábados e domingos serão marcados automaticamente. Você pode adicionar feriados depois.</p>
+        <label>Mês</label>
+        <select id="ho-modal-month">${mOpts}</select>
+        <label>Ano</label>
+        <select id="ho-modal-year">${yOpts.join('')}</select>
+        <div class="ho-modal-actions">
+          <button id="ho-modal-cancel">Cancelar</button>
+          <button id="ho-modal-ok" class="ho-btn-primary">Gerar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+    document.getElementById('ho-modal-cancel').onclick = () => wrap.remove();
+    wrap.onclick = e => { if (e.target === wrap) wrap.remove(); };
+    document.getElementById('ho-modal-ok').onclick = () => {
+      const m = parseInt(document.getElementById('ho-modal-month').value);
+      const y = parseInt(document.getElementById('ho-modal-year').value);
+      state.current = buildSheet(y, m);
+      wrap.remove();
+      save(); render();
+    };
+  }
+
+  document.querySelectorAll('.ho-tab').forEach(t => {
+    t.onclick = () => { state.view = t.dataset.view; render(); };
+  });
+
+  // Inicialização: carrega do localStorage ou cria estado-exemplo
+  if (!load()) {
+    // Seed inicial: maio/26 arquivado conforme planilha original
+    const seedMay = buildSheet(2026, 4);
+    seedMay.rows.forEach(r => {
+      if (r.day === 4) { r.type='normal'; r.person='Marcio Z'; }
+      if (r.day === 6) { r.type='normal'; r.person='Luciane'; }
+      if (r.day === 7) { r.type='normal'; r.person='Rodrigo Balem'; }
+      if (r.day === 26) { r.type='holiday'; r.label='CARAVAGGIO'; r.person=''; }
+    });
+    state.history[2026] = { 4: seedMay };
+    state.current = buildSheet(2026, 5); // junho/26 ativo
+    save();
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Módulo PDI — GT3</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  [data-tab-content] { display: none; }
+  [data-tab-content].active { display: block; }
+  [data-tab-btn].active {
+    border-color: #2563eb;
+    color: #2563eb;
+    background-color: rgba(239, 246, 255, 0.5);
+  }
+  /* Esconde scrollbar horizontal mas mantém funcional */
+  .tabs-scroll::-webkit-scrollbar { height: 0; }
+  /* Borda azul nos cards brancos */
+  .card-azul { border-left: 4px solid #3b82f6 !important; }
+</style>
+</head>
+<body class="bg-slate-50">
+
+<!-- HEADER -->
+<div class="bg-white border-b border-slate-200">
+  <div class="max-w-7xl mx-auto px-6 py-5">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <div class="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider mb-1">
+          <span>GT3 / Módulo PDI</span>
+        </div>
+        <h1 class="text-xl font-bold text-slate-900">Plano de Desenvolvimento Individual</h1>
+      </div>
+      <div class="flex items-center gap-6 text-sm flex-wrap">
+        <div class="flex items-center gap-2">
+          <i data-lucide="user" class="w-4 h-4 text-slate-400"></i>
+          <div>
+            <div class="text-xs text-slate-500">Colaborador</div>
+            <div class="font-semibold text-slate-900">MARINA MAGNAGUAGNO ZANELLA</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <i data-lucide="briefcase" class="w-4 h-4 text-slate-400"></i>
+          <div>
+            <div class="text-xs text-slate-500">Função</div>
+            <div class="font-semibold text-slate-900">Analista de Serviços</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i>
+          <div>
+            <div class="text-xs text-slate-500">Período</div>
+            <div class="font-semibold text-slate-900">05/09/2022 - 04/03/2026</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SWITCH DE ABAS - STICKY -->
+<div class="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="flex gap-1 overflow-x-auto tabs-scroll">
+      <button data-tab-btn="acoes" class="active flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all whitespace-nowrap">
+        <i data-lucide="target" class="w-4 h-4"></i> Ações
+      </button>
+      <button data-tab-btn="pdi" class="flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all whitespace-nowrap">
+        <i data-lucide="bar-chart-3" class="w-4 h-4"></i> Avaliações PDI
+      </button>
+      <button data-tab-btn="eneagrama" class="flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all whitespace-nowrap">
+        <i data-lucide="sparkles" class="w-4 h-4"></i> Eneagrama
+      </button>
+      <button data-tab-btn="mbti" class="flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all whitespace-nowrap">
+        <i data-lucide="brain" class="w-4 h-4"></i> MBTI
+      </button>
+      <button data-tab-btn="conclusoes" class="flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all whitespace-nowrap">
+        <i data-lucide="clipboard-check" class="w-4 h-4"></i> Conclusões
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTEÚDO -->
+<div class="max-w-7xl mx-auto px-6 py-8">
+
+<!-- ============================================================ -->
+<!-- ABA 1: AÇÕES -->
+<!-- ============================================================ -->
+<div data-tab-content="acoes" class="active">
+  <div class="mb-6">
+    <h2 class="text-2xl font-bold text-slate-900 mb-2">Plano de Ações</h2>
+    <p class="text-slate-600">Competências em desenvolvimento e ações estruturadas para evolução profissional.</p>
+  </div>
+
+  <!-- RESUMO -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-4">
+      <div class="flex items-center gap-2 text-slate-500 text-sm mb-1">
+        <i data-lucide="target" class="w-3.5 h-3.5"></i>
+        <span>Total de ações</span>
+      </div>
+      <div class="text-2xl font-bold text-slate-900">6</div>
+    </div>
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-4">
+      <div class="flex items-center gap-2 text-blue-600 text-sm mb-1">
+        <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+        <span>Em andamento</span>
+      </div>
+      <div class="text-2xl font-bold text-slate-900">5</div>
+    </div>
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-4">
+      <div class="flex items-center gap-2 text-amber-600 text-sm mb-1">
+        <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+        <span>Em evolução</span>
+      </div>
+      <div class="text-2xl font-bold text-slate-900">1</div>
+    </div>
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-4">
+      <div class="flex items-center gap-2 text-emerald-600 text-sm mb-1">
+        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+        <span>Concluídas</span>
+      </div>
+      <div class="text-2xl font-bold text-slate-900">0</div>
+    </div>
+  </div>
+
+  <!-- LISTA DE AÇÕES -->
+  <div class="space-y-4" id="lista-acoes"></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ABA 2: AVALIAÇÕES PDI -->
+<!-- ============================================================ -->
+<div data-tab-content="pdi">
+  <div class="mb-6">
+    <h2 class="text-2xl font-bold text-slate-900 mb-2">Avaliações PDI</h2>
+    <p class="text-slate-600">Matriz de desenvolvimento com três perspectivas de avaliação.</p>
+  </div>
+
+  <!-- PLACAR -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8" id="placar-pdi"></div>
+
+  <!-- TABELA + LEGENDA LADO A LADO -->
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 mb-6">
+    <!-- TABELA -->
+    <div class="bg-white rounded-lg border border-slate-200 card-azul overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th class="text-left px-4 py-3 font-semibold text-slate-700">Critério</th>
+              <th class="px-4 py-3 font-semibold text-blue-700">Diretiva</th>
+              <th class="px-4 py-3 font-semibold text-purple-700">Autoavaliação</th>
+              <th class="px-4 py-3 font-semibold text-emerald-700">Ambição</th>
+            </tr>
+          </thead>
+          <tbody id="tabela-pdi"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LEGENDA COMPACTA FIXA -->
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-4 lg:sticky lg:top-20 lg:self-start">
+      <h3 class="font-semibold text-slate-900 mb-3 text-sm flex items-center gap-2">
+        <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+        Pontuação
+      </h3>
+      <div class="space-y-2" id="legenda-pdi"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ABA 3: ENEAGRAMA -->
+<!-- ============================================================ -->
+<div data-tab-content="eneagrama">
+  <div class="mb-6">
+    <h2 class="text-2xl font-bold text-slate-900 mb-2">Eneagrama e Perfil Comportamental</h2>
+    <p class="text-slate-600">Tipos predominantes do eneagrama e leitura comportamental por animais.</p>
+  </div>
+
+  <!-- RANKING ENEAGRAMA -->
+  <div class="mb-8">
+    <h3 class="text-lg font-semibold text-slate-900 mb-4">Ranking Eneagrama</h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="tipos-eneagrama"></div>
+  </div>
+
+  <!-- PONTOS FORTES E ATENÇÃO -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
+      <h3 class="font-semibold text-emerald-900 mb-3 flex items-center gap-2">
+        <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+        Pontos Fortes
+      </h3>
+      <ul class="space-y-2 text-sm text-emerald-900">
+        <li class="flex gap-2"><span>✓</span><span>Confiabilidade operacional muito alta</span></li>
+        <li class="flex gap-2"><span>✓</span><span>Postura firme quando identifica inconsistência</span></li>
+        <li class="flex gap-2"><span>✓</span><span>Clima positivo no time</span></li>
+        <li class="flex gap-2"><span>✓</span><span>Aderência a processos e regras</span></li>
+      </ul>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-5">
+      <h3 class="font-semibold text-amber-900 mb-3 flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+        Pontos de Atenção
+      </h3>
+      <ul class="space-y-2 text-sm text-amber-900">
+        <li class="flex gap-2"><span>⚠</span><span>Tendência à rigidez excessiva</span></li>
+        <li class="flex gap-2"><span>⚠</span><span>Possível inflexibilidade decisória</span></li>
+        <li class="flex gap-2"><span>⚠</span><span>Pode assumir papel de "fiscal" em vez de "facilitadora"</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- COMO DESENVOLVER -->
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-5 mb-8">
+    <h3 class="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+      <i data-lucide="target" class="w-4 h-4"></i>
+      Como Desenvolver
+    </h3>
+    <ul class="space-y-2 text-sm text-blue-900">
+      <li class="flex gap-2"><span>→</span><span>Reuniões rápidas de calibragem</span></li>
+      <li class="flex gap-2"><span>→</span><span>Acompanhamento de casos reais</span></li>
+    </ul>
+  </div>
+
+  <!-- ANIMAIS -->
+  <div>
+    <h3 class="text-lg font-semibold text-slate-900 mb-4">Perfil Comportamental — Animais</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="animais"></div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ABA 4: MBTI -->
+<!-- ============================================================ -->
+<div data-tab-content="mbti">
+  <div class="mb-6">
+    <h2 class="text-2xl font-bold text-slate-900 mb-2">MBTI — Análise de Perfil</h2>
+    <p class="text-slate-600">Núcleo do funcionamento profissional baseado no tipo ESTJ.</p>
+  </div>
+
+  <!-- TIPO IDENTIFICADO -->
+  <div class="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg p-6 text-white mb-8">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <div class="text-sm text-indigo-200 uppercase tracking-wider">Tipo MBTI identificado</div>
+        <div class="text-4xl font-bold mt-1">ESTJ</div>
+        <div class="text-indigo-100 mt-1">Extroversão · Sensação · Pensamento · Julgamento</div>
+      </div>
+      <div class="text-right">
+        <div class="text-sm text-indigo-200">Combinação reforçada por</div>
+        <div class="font-semibold mt-1">Eneagrama Tipo 1 + Lobo Alto</div>
+        <div class="text-xs text-indigo-200 mt-1">= "Guardiã do Sistema"</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRÊS COLUNAS -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-2xl">🧭</span>
+        <h3 class="font-bold text-slate-900">Núcleo Profissional</h3>
+      </div>
+      <div class="text-sm text-slate-700 mb-3 font-medium">Segurança → regra → execução correta</div>
+      <ul class="space-y-1.5 text-sm text-slate-600">
+        <li>• Forte necessidade de estrutura previsível</li>
+        <li>• Alto senso de responsabilidade pessoal</li>
+        <li>• Orientação natural para manter o sistema funcionando</li>
+      </ul>
+    </div>
+
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-2xl">🧩</span>
+        <h3 class="font-bold text-slate-900">Tomada de Decisão</h3>
+      </div>
+      <div class="text-sm text-slate-700 mb-3 font-medium">Padrão lógico–normativo</div>
+      <ul class="space-y-1.5 text-sm text-slate-600">
+        <li>1. "O que a regra diz?"</li>
+        <li>2. "O documento está correto?"</li>
+        <li>3. Só por último: "qual o impacto relacional?"</li>
+      </ul>
+    </div>
+
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-2xl">🎯</span>
+        <h3 class="font-bold text-slate-900">Autoridade e Processo</h3>
+      </div>
+      <ul class="space-y-1.5 text-sm text-slate-600">
+        <li>• Respeita hierarquia formal</li>
+        <li>• Defende processos estabelecidos</li>
+        <li>• Sente desconforto com zonas cinzentas</li>
+        <li>• Assume responsabilidade além do cargo</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PONTOS FORTES E ATENÇÃO -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+    <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
+      <h3 class="font-semibold text-emerald-900 mb-3 flex items-center gap-2">
+        <i data-lucide="shield" class="w-4 h-4"></i>
+        Pontos Fortes
+      </h3>
+      <ul class="space-y-2 text-sm text-emerald-900">
+        <li>• Baixíssima tolerância a erro técnico</li>
+        <li>• Alta confiabilidade em ambientes regulados</li>
+        <li>• Protege a GT3 de riscos formais</li>
+      </ul>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-5">
+      <h3 class="font-semibold text-amber-900 mb-3 flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+        Pontos de Atenção
+      </h3>
+      <ul class="space-y-2 text-sm text-amber-900">
+        <li>• Pode supervalorizar o critério técnico isolado</li>
+        <li>• Risco de perder a visão de proporcionalidade</li>
+        <li>• Tendência a interpretar flexibilização como "erro"</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CURVA + IMPACTO + RISCO -->
+  <div class="space-y-4 mb-8">
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+        <i data-lucide="trending-up" class="w-4 h-4 text-blue-600"></i>
+        Curva de Aprendizado e Desenvolvimento
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-2">Como aprende melhor</div>
+          <ul class="text-sm text-slate-700 space-y-1">
+            <li>• Pela prática repetida</li>
+            <li>• Pela clareza de procedimento</li>
+            <li>• Pelo erro corrigido rapidamente</li>
+            <li>• Menos por estudo teórico espontâneo</li>
+          </ul>
+        </div>
+        <div>
+          <div class="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">Implicação gerencial</div>
+          <p class="text-sm text-slate-700">Não é naturalmente autodidata exploratória. Evolui melhor com <strong>trilhas guiadas, feedback estruturado, exemplos concretos e explicação do "porquê do ajuste"</strong>.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+        <i data-lucide="award" class="w-4 h-4 text-purple-600"></i>
+        Impacto no Clima e no Time
+      </h3>
+      <p class="text-sm text-slate-700 mb-2">Mesmo com o perfil mais "firme", sempre é respeitosa. O lado relacional (influenciado pelo <strong>Gato 24%</strong>) funciona como amortecedor social. Excelente sinal de maturidade.</p>
+      <div class="mt-3 p-3 bg-slate-50 rounded-md text-sm text-slate-600">
+        <strong class="text-slate-800">Risco futuro</strong> (se pressionada demais): pode endurecer comunicação, ficar excessivamente normativa, entrar em modo "certo é certo".
+      </div>
+    </div>
+
+    <div class="bg-red-50 border border-red-200 rounded-lg p-5">
+      <h3 class="font-bold text-red-900 mb-3 flex items-center gap-2">
+        <i data-lucide="eye" class="w-4 h-4"></i>
+        Zona de Risco Comportamental
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-red-900">
+        <div class="flex gap-2"><span class="font-bold">1.</span><span><strong>Rigidez bem-intencionada</strong> — se for inflexível, não é por ego, é por senso de dever.</span></div>
+        <div class="flex gap-2"><span class="font-bold">2.</span><span><strong>Justiça técnica &gt; experiência do cliente</strong> — clássico do combo ESTJ + Tipo 1.</span></div>
+        <div class="flex gap-2"><span class="font-bold">3.</span><span><strong>Baixa leitura de nuance de risco</strong> — quando a regra não é preta no branco.</span></div>
+        <div class="flex gap-2"><span class="font-bold">4.</span><span><strong>Possível saturação silenciosa</strong> — perfis responsáveis sobrecarregam sem avisar.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VEREDITO -->
+  <div class="bg-gradient-to-br from-slate-900 to-slate-700 rounded-lg p-6 text-white">
+    <h3 class="font-bold mb-3 flex items-center gap-2 text-lg">
+      <span class="text-2xl">🧠</span>
+      Veredito Organizacional
+    </h3>
+    <p class="text-slate-100 mb-3">A Marina é um <strong>ativo operacional muito consistente para a GT3</strong>. Já entrega o mais difícil de formar:</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white/10 backdrop-blur rounded-md px-3 py-2 text-center text-sm font-medium">Confiabilidade</div>
+      <div class="bg-white/10 backdrop-blur rounded-md px-3 py-2 text-center text-sm font-medium">Responsabilidade</div>
+      <div class="bg-white/10 backdrop-blur rounded-md px-3 py-2 text-center text-sm font-medium">Disciplina</div>
+      <div class="bg-white/10 backdrop-blur rounded-md px-3 py-2 text-center text-sm font-medium">Estabilidade</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ABA 5: CONCLUSÕES -->
+<!-- ============================================================ -->
+<div data-tab-content="conclusoes">
+  <div class="mb-6">
+    <h2 class="text-2xl font-bold text-slate-900 mb-2">Conclusões do Perfil</h2>
+    <p class="text-slate-600">Síntese estratégica para alocação, desenvolvimento e gestão.</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+        Forças Visíveis
+      </h3>
+      <ul class="space-y-2 text-sm text-slate-700">
+        <li class="flex gap-2"><span class="text-emerald-500 font-bold">✓</span><span>Comprometimento muito alto</span></li>
+        <li class="flex gap-2"><span class="text-emerald-500 font-bold">✓</span><span>Confiabilidade operacional</span></li>
+        <li class="flex gap-2"><span class="text-emerald-500 font-bold">✓</span><span>Persistência diante de dificuldades</span></li>
+        <li class="flex gap-2"><span class="text-emerald-500 font-bold">✓</span><span>Forte aderência a processos</span></li>
+      </ul>
+    </div>
+
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600"></i>
+        Pontos de Atenção
+      </h3>
+      <ul class="space-y-2 text-sm text-slate-700">
+        <li class="flex gap-2"><span class="text-amber-500 font-bold">⚠</span><span>Tendência a aplicar a regra de forma muito literal</span></li>
+        <li class="flex gap-2"><span class="text-amber-500 font-bold">⚠</span><span>Resistência a mudanças de procedimento</span></li>
+        <li class="flex gap-2"><span class="text-amber-500 font-bold">⚠</span><span>Dificuldade em análises mais interpretativas</span></li>
+        <li class="flex gap-2"><span class="text-amber-500 font-bold">⚠</span><span>Rigidez excessiva com clientes</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg border border-slate-200 card-azul p-5 mb-6">
+    <h3 class="font-bold text-slate-900 mb-4 flex items-center gap-2">
+      <i data-lucide="target" class="w-4 h-4 text-blue-600"></i>
+      Onde Esse Perfil Agrega Mais na GT3
+    </h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+        <div class="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">📌 Melhores frentes</div>
+        <ul class="space-y-1.5 text-sm text-slate-700">
+          <li>• Atividades que exigem padronização</li>
+          <li>• Análise documental rotineira</li>
+          <li>• Funções com regras claras e pouco grau de ambiguidade</li>
+        </ul>
+      </div>
+      <div>
+        <div class="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-2">📌 Pode apoiar bem</div>
+        <ul class="space-y-1.5 text-sm text-slate-700">
+          <li>• Padronização de processos</li>
+          <li>• Controle de conformidade</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5 mb-6">
+    <h3 class="font-bold text-blue-900 mb-4 flex items-center gap-2">
+      <i data-lucide="trending-up" class="w-4 h-4"></i>
+      Sugestões para PDI
+    </h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="bg-white rounded-md p-3 border border-blue-100">
+        <div class="text-sm font-semibold text-blue-900 mb-1">Pensamento de impacto</div>
+        <div class="text-xs text-slate-600">Desenvolvimento de pensamento de impacto da decisão</div>
+      </div>
+      <div class="bg-white rounded-md p-3 border border-blue-100">
+        <div class="text-sm font-semibold text-blue-900 mb-1">Flexibilidade decisória</div>
+        <div class="text-xs text-slate-600">Trabalhar flexibilidade decisória com critérios objetivos</div>
+      </div>
+      <div class="bg-white rounded-md p-3 border border-blue-100">
+        <div class="text-sm font-semibold text-blue-900 mb-1">Aprendizado guiado</div>
+        <div class="text-xs text-slate-600">Estímulo a aprendizado contínuo guiado (não espontâneo)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+    <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+      <i data-lucide="award" class="w-4 h-4 text-purple-600"></i>
+      Como Liderar Alguém com Este Perfil
+    </h3>
+    <div class="space-y-3" id="como-liderar"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ===========================
+// DADOS
+// ===========================
+const ACOES = [
+  { competencia: 'Mudança de mentalidade', desenvolver: 'Competências maiores dentro de sua área e de pessoas, maior autonomia de decisões técnicas, visando ampliar atividades', acoes: 'Buscar estar mais envolvida nas soluções de itens que não pertencem apenas à sua área, ampliar competências na sua área.', resultados: 'Abertura para se desenvolver mais em outras documentações e cenários. Desenvolver autonomia e capacidade de passar conhecimento e conduzir assuntos (reuniões com clientes)', inicio: '05/03/2026', termino: '', status: 'Em andamento' },
+  { competencia: 'Desacelerar o ritmo', desenvolver: 'Buscar não tentar resolver tudo/zerar tudo incessantemente', acoes: 'Identificar principalmente aquilo que é prioridade a partir do meio da tarde nos dias mais corridos.', resultados: 'Chegar em um nível de fluxo de processos que não seja mais necessário a revisão completa, mas sim por amostragem', inicio: '05/03/2026', termino: '', status: 'Em andamento' },
+  { competencia: 'Conhecer mais documentos', desenvolver: 'Ter maior acervo de documentos que domina', acoes: 'Em épocas de baixa, buscar conhecer aos poucos novas documentações, como funcionários', resultados: 'Poder realizar, ao menos, avaliações de documentos de pessoas administrativos e alguns de Segurança do Trabalho mais simples', inicio: '05/03/2026', termino: '', status: 'Em andamento' },
+  { competencia: 'Rotinas do sistema', desenvolver: 'Ampliar conhecimento das rotinas do sistema.', acoes: 'Desenvolver ampla capacidade de operação em todos os processos no sistema, desde o cadastro até a liberação do funcionário terceiro para acessar ao cliente.', resultados: 'Dominar as rotinas de processo de sistema no portal', inicio: '05/03/2026', termino: '', status: 'Em andamento' },
+  { competencia: 'Flexibilização de critérios quando oportuno', desenvolver: 'Compreender cada vez mais o papel da GT3 - Propósito da análise de documentos: Auxiliar o terceiro para liberação no sistema, para que ele execute sua atividade no cliente com os docs em dia, atendendo aos requisitos com agilidade e assertividade legal.', acoes: 'Entender o impacto de flexibilizar em alguns itens, entendendo que o papel de fiscalizador não cabe à GT3', resultados: 'Item a evoluir; últimos meses com debates e conversas já melhorou. Chegar em um nível de sobriedade técnica cada vez maior para entender impacto de decisões', inicio: '02/03/2026', termino: '', status: 'Em evolução' },
+  { competencia: 'Agilizar processos', desenvolver: 'Identificar processos que podem ser melhorados para tornar mais fluído', acoes: 'Copiar o prestador em e-mails direcionados à contratante, evitando e-mails paralelos e centralizando a comunicação, salvo contratantes que não aceitem', resultados: 'Fluidez maior de processo, visto que a maioria dos e-mails ocorrem na época do mês mais corrida para o setor', inicio: '02/03/2026', termino: '', status: 'Em andamento' }
+];
+
+const STATUS_COLORS = {
+  'Em andamento': 'bg-blue-100 text-blue-800 border-blue-200',
+  'Em evolução': 'bg-amber-100 text-amber-800 border-amber-200',
+  'Concluído': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'Não iniciado': 'bg-slate-100 text-slate-700 border-slate-200'
+};
+
+const CRITERIOS = ['Relacionamento Interpessoal','Inteligência Emocional no Trabalho','E-mail','WhatsApp','Comprometimento','Doc funcionário','Doc empresa','PGR/PCMSO/LTCAT','Cadastro e itens relacionados','Doc veículo','Atendimento ao cliente'];
+
+const AVALIACOES = [
+  { tipo: 'Avaliação Diretiva', cor: 'blue', notas: [3,3,4,4,5,3,4,1,2,1,3] },
+  { tipo: 'Autoavaliação', cor: 'purple', notas: [4,3,4,4,5,3,5,2,3,2,4] },
+  { tipo: 'Ambição Realista', cor: 'emerald', notas: [4,4,5,5,5,3,5,3,4,2,5] }
+];
+
+const LEGENDA = [
+  { nivel: 1, label: 'Não possui / Muito ruim' },
+  { nivel: 2, label: 'Básico / Ruim' },
+  { nivel: 3, label: 'Com assistência / Regular' },
+  { nivel: 4, label: 'Autônomo / Bom' },
+  { nivel: 5, label: 'Domina e compartilha / Muito bom' }
+];
+
+const TIPOS_ENEAGRAMA = [
+  { medalha: '🥇', tipo: 'Tipo 1 – Perfeccionista', pontuacao: '17/25', caracteristicas: ['Forte senso de certo vs. errado; busca fazer "do jeito correto"', 'Alto padrão de qualidade e atenção a regras e conformidade'] },
+  { medalha: '🥈', tipo: 'Tipo 8 – Poderoso', pontuacao: '17/25', caracteristicas: ['Postura firme ao defender seu posicionamento', 'Franqueza e objetividade ao apontar problemas', 'Lealdade elevada à empresa e ao time'] },
+  { medalha: '🥉', tipo: 'Tipo 6 – Precavido', pontuacao: '15/25', caracteristicas: ['Forte preocupação com riscos e possíveis falhas'] }
+];
+
+const ANIMAIS = [
+  { emoji: '🐺', nome: 'Lobo', percentual: 36, forte: 'Lealdade elevada à empresa e ao time', tendencia: 'Alta responsabilidade, constância e confiabilidade operacional. Excelente para rotinas mensais e controle documental.', destaque: true },
+  { emoji: '🐱', nome: 'Gato', percentual: 24, forte: 'Bom relacionamento interpessoal e clima leve', tendencia: 'Mantém bom humor e integração com o time.', destaque: false },
+  { emoji: '🦅', nome: 'Águia', percentual: 22, forte: 'Certa capacidade de visão técnica', tendencia: 'Menor inclinação natural para visão estratégica ampla.', destaque: false },
+  { emoji: '🦈', nome: 'Tubarão', percentual: 18, forte: 'Firmeza pontual quando necessário', tendencia: 'Não é naturalmente agressiva ou orientada a confronto. Firme, mas não dominante.', destaque: false }
+];
+
+const COMO_LIDERAR = [
+  { txt: '<strong>Definir critérios objetivos</strong> de flexibilização.' },
+  { txt: '<strong>Explicar sempre o porquê de negócio</strong>, não só o procedimento.' },
+  { txt: '<strong>Evitar mudanças bruscas</strong> sem contexto.' },
+  { txt: '<strong>Usar exemplos práticos</strong> de impacto no cliente.' },
+  { txt: 'Prefere <strong>orientações claras e objetivas</strong>; responde bem a regras bem definidas.' }
+];
+
+// ===========================
+// HELPERS
+// ===========================
+function getCor(nota) {
+  if (nota <= 1) return 'bg-red-500 text-white';
+  if (nota <= 2) return 'bg-orange-400 text-white';
+  if (nota <= 3) return 'bg-amber-400 text-slate-900';
+  if (nota <= 4) return 'bg-lime-500 text-white';
+  return 'bg-emerald-500 text-white';
+}
+
+// ===========================
+// RENDER: AÇÕES
+// ===========================
+function renderAcoes() {
+  const container = document.getElementById('lista-acoes');
+  container.innerHTML = ACOES.map((acao, idx) => `
+    <div class="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
+      <div class="border-l-4 border-blue-500 p-5">
+        <div class="flex items-start justify-between mb-3 gap-4">
+          <div class="flex items-start gap-3">
+            <div class="bg-blue-50 text-blue-700 rounded-md w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">${idx + 1}</div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-lg">${acao.competencia}</h3>
+              <p class="text-sm text-slate-600 mt-0.5">${acao.desenvolver}</p>
+            </div>
+          </div>
+          <span class="text-xs font-medium px-3 py-1 rounded-full border whitespace-nowrap ${STATUS_COLORS[acao.status]}">${acao.status}</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pl-11">
+          <div>
+            <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Ações para desenvolvimento</div>
+            <p class="text-sm text-slate-700">${acao.acoes}</p>
+          </div>
+          <div>
+            <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Resultados esperados</div>
+            <p class="text-sm text-slate-700">${acao.resultados}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-6 mt-4 pt-4 pl-11 border-t border-slate-100 text-xs text-slate-500">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="w-3 h-3"></i>
+            <span>Início: <span class="font-medium text-slate-700">${acao.inicio || '—'}</span></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="calendar" class="w-3 h-3"></i>
+            <span>Término: <span class="font-medium text-slate-700">${acao.termino || '—'}</span></span>
+          </div>
+        </div>
+
+        <!-- CAIXA DE OBSERVAÇÃO -->
+        <div class="mt-4 pl-11">
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="message-square" class="w-3 h-3"></i>
+              Observação do colaborador
+            </label>
+            <span class="text-xs text-slate-400" id="contador-${idx}">0/100</span>
+          </div>
+          <textarea
+            id="obs-${idx}"
+            maxlength="100"
+            rows="2"
+            placeholder="Adicione uma observação (máx. 100 caracteres)..."
+            class="w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+            oninput="atualizarContador(${idx})"
+          ></textarea>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Atualiza contador de caracteres da observação
+function atualizarContador(idx) {
+  const textarea = document.getElementById(`obs-${idx}`);
+  const contador = document.getElementById(`contador-${idx}`);
+  const tamanho = textarea.value.length;
+  contador.textContent = `${tamanho}/100`;
+  // Muda cor conforme aproxima do limite
+  if (tamanho >= 100) {
+    contador.className = 'text-xs text-red-600 font-semibold';
+  } else if (tamanho >= 80) {
+    contador.className = 'text-xs text-amber-600';
+  } else {
+    contador.className = 'text-xs text-slate-400';
+  }
+}
+
+// ===========================
+// RENDER: PDI
+// ===========================
+function renderPDI() {
+  const max = 11 * 5;
+  const totais = AVALIACOES.map(a => a.notas.reduce((s, n) => s + n, 0));
+  const corBar = { blue: 'bg-blue-500', purple: 'bg-purple-500', emerald: 'bg-emerald-500' };
+
+  document.getElementById('placar-pdi').innerHTML = AVALIACOES.map((av, idx) => `
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <div class="text-sm text-slate-500 mb-1">${av.tipo}</div>
+      <div class="flex items-baseline gap-2">
+        <span class="text-3xl font-bold text-slate-900">${totais[idx]}</span>
+        <span class="text-slate-400">/ ${max}</span>
+      </div>
+      <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div class="h-full ${corBar[av.cor]}" style="width: ${(totais[idx] / max) * 100}%"></div>
+      </div>
+      <div class="text-xs text-slate-500 mt-2">${Math.round((totais[idx] / max) * 100)}% de aderência</div>
+    </div>
+  `).join('');
+
+  document.getElementById('tabela-pdi').innerHTML = CRITERIOS.map((crit, idx) => {
+    return `
+      <tr class="border-b border-slate-100 hover:bg-slate-50">
+        <td class="px-4 py-3 font-medium text-slate-900">${crit}</td>
+        <td class="px-4 py-3 text-center"><span class="inline-flex w-8 h-8 items-center justify-center rounded-md font-bold ${getCor(AVALIACOES[0].notas[idx])}">${AVALIACOES[0].notas[idx]}</span></td>
+        <td class="px-4 py-3 text-center"><span class="inline-flex w-8 h-8 items-center justify-center rounded-md font-bold ${getCor(AVALIACOES[1].notas[idx])}">${AVALIACOES[1].notas[idx]}</span></td>
+        <td class="px-4 py-3 text-center"><span class="inline-flex w-8 h-8 items-center justify-center rounded-md font-bold ${getCor(AVALIACOES[2].notas[idx])}">${AVALIACOES[2].notas[idx]}</span></td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('legenda-pdi').innerHTML = LEGENDA.map(l => `
+    <div class="flex items-start gap-2 text-xs">
+      <span class="inline-flex w-6 h-6 items-center justify-center rounded font-bold flex-shrink-0 text-xs ${getCor(l.nivel)}">${l.nivel}</span>
+      <span class="text-slate-700 pt-1">${l.label}</span>
+    </div>
+  `).join('');
+}
+
+// ===========================
+// RENDER: ENEAGRAMA
+// ===========================
+function renderEneagrama() {
+  document.getElementById('tipos-eneagrama').innerHTML = TIPOS_ENEAGRAMA.map(t => `
+    <div class="bg-white rounded-lg border border-slate-200 card-azul p-5">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="text-3xl">${t.medalha}</span>
+        <div>
+          <div class="font-bold text-slate-900">${t.tipo}</div>
+          <div class="text-sm text-slate-500">${t.pontuacao}</div>
+        </div>
+      </div>
+      <ul class="space-y-2 text-sm text-slate-700">
+        ${t.caracteristicas.map(c => `<li class="flex gap-2"><span class="text-blue-500 mt-1">•</span><span>${c}</span></li>`).join('')}
+      </ul>
+    </div>
+  `).join('');
+
+  document.getElementById('animais').innerHTML = ANIMAIS.map(a => `
+    <div class="rounded-lg border p-5 ${a.destaque ? 'bg-gradient-to-br from-slate-900 to-slate-700 border-slate-700 text-white' : 'bg-white border-slate-200 card-azul'}">
+      <div class="flex items-start gap-4">
+        <span class="text-4xl">${a.emoji}</span>
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-2 flex-wrap">
+            <h4 class="text-lg font-bold ${a.destaque ? 'text-white' : 'text-slate-900'}">${a.nome}</h4>
+            ${a.destaque
+              ? `<span class="text-xs bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full font-semibold">Predominante (${a.percentual}%)</span>`
+              : `<span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold">${a.percentual}%</span>`
+            }
+          </div>
+          <div class="mb-2">
+            <div class="text-xs font-semibold uppercase tracking-wider mb-1 ${a.destaque ? 'text-slate-300' : 'text-slate-500'}">Ponto forte</div>
+            <div class="text-sm ${a.destaque ? 'text-white' : 'text-slate-700'}">${a.forte}</div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wider mb-1 ${a.destaque ? 'text-slate-300' : 'text-slate-500'}">Tendência</div>
+            <div class="text-sm ${a.destaque ? 'text-slate-100' : 'text-slate-700'}">${a.tendencia}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ===========================
+// RENDER: CONCLUSÕES
+// ===========================
+function renderConclusoes() {
+  document.getElementById('como-liderar').innerHTML = COMO_LIDERAR.map((item, idx) => `
+    <div class="flex gap-3 p-3 bg-slate-50 rounded-md">
+      <div class="bg-purple-100 text-purple-700 rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm flex-shrink-0">${idx + 1}</div>
+      <div class="text-sm text-slate-700">${item.txt}</div>
+    </div>
+  `).join('');
+}
+
+// ===========================
+// SWITCH DE ABAS
+// ===========================
+function setupTabs() {
+  document.querySelectorAll('[data-tab-btn]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-tab-btn');
+      document.querySelectorAll('[data-tab-btn]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('[data-tab-content]').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelector(`[data-tab-content="${tab}"]`).classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Re-renderiza ícones que possam estar em conteúdo dinâmico
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+  });
+}
+
+// ===========================
+// INIT
+// ===========================
+document.addEventListener('DOMContentLoaded', () => {
+  renderAcoes();
+  renderPDI();
+  renderEneagrama();
+  renderConclusoes();
+  setupTabs();
+  // Renderiza ícones com proteção (caso o CDN do lucide demore)
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  } else {
+    // Tenta novamente após 500ms se o lucide ainda não carregou
+    setTimeout(() => {
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }, 500);
+  }
+});
+</script>
+</body>
+</html>

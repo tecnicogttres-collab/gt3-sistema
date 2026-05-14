@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT3 — Módulo de Manuais</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css" rel="stylesheet">
+<style>
+  :root {
+    --bg-app: #fafaf7;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f4f3ee;
+    --bg-tertiary: #ecebe4;
+    --text-primary: #1a1a17;
+    --text-secondary: #5a594f;
+    --text-tertiary: #8a897d;
+    --border-tertiary: rgba(26, 26, 23, 0.10);
+    --border-secondary: rgba(26, 26, 23, 0.18);
+    --border-primary: rgba(26, 26, 23, 0.28);
+    --accent: #2a6f4e;
+    --accent-bg: #e1f0e6;
+    --accent-text: #0f4d2e;
+    --danger: #a32d2d;
+    --danger-bg: #fcebeb;
+    --info: #185fa5;
+    --info-bg: #e6f1fb;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-app);
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .app { display: flex; height: 100vh; width: 100vw; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-right: 0.5px solid var(--border-tertiary);
+    padding: 1.25rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 0.5rem 1.5rem;
+    border-bottom: 0.5px solid var(--border-tertiary);
+    margin-bottom: 1rem;
+  }
+  .brand-logo {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    color: white;
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 13px;
+    letter-spacing: 0.5px;
+  }
+  .brand-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+  .brand-sub { font-size: 11px; color: var(--text-tertiary); }
+  .nav-section { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.8px; padding: 0.5rem 0.5rem 0.25rem; font-weight: 500; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    font-size: 13px; color: var(--text-secondary);
+    cursor: pointer; margin-bottom: 2px;
+    transition: background 0.12s;
+  }
+  .nav-item:hover { background: var(--bg-primary); }
+  .nav-item.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-weight: 500;
+    border: 0.5px solid var(--border-tertiary);
+  }
+  .nav-item i { font-size: 16px; }
+
+  /* MAIN */
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .main-header {
+    padding: 1.25rem 2rem 1rem;
+    border-bottom: 0.5px solid var(--border-tertiary);
+    background: var(--bg-primary);
+    flex-shrink: 0;
+  }
+  .main-title { font-size: 20px; font-weight: 500; margin: 0; }
+  .main-subtitle { font-size: 13px; color: var(--text-secondary); margin: 4px 0 0; }
+  .main-content { flex: 1; overflow-y: auto; padding: 1.5rem 2rem 3rem; }
+
+  /* SWITCH */
+  .switch {
+    display: flex; gap: 4px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 3px;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .switch button {
+    flex: 1; min-width: 90px;
+    padding: 8px 12px;
+    border: none; background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .switch button:hover { color: var(--text-primary); }
+  .switch button.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-weight: 500;
+    border: 0.5px solid var(--border-tertiary);
+  }
+
+  /* DOC GRID */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .doc-card {
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    padding: 14px 14px 12px;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+    min-height: 88px;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .doc-card:hover {
+    border-color: var(--border-secondary);
+    background: var(--bg-secondary);
+  }
+  .doc-name {
+    font-size: 13px; font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+  .doc-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 6px; font-size: 11px; color: var(--text-tertiary);
+  }
+  .pill {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 500;
+  }
+  .pill-anual { background: #e6f1fb; color: #0c447c; }
+  .pill-unica { background: #e1f0e6; color: #0f4d2e; }
+  .pill-bienal { background: #eeedfe; color: #3c3489; }
+  .pill-cond { background: #f1efe8; color: #444441; }
+  .add-card {
+    border: 0.5px dashed var(--border-secondary);
+    background: transparent;
+    color: var(--text-tertiary);
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    min-height: 88px;
+    border-radius: var(--radius-md);
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .add-card:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-secondary);
+  }
+
+  /* MODAL */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: flex-start; justify-content: center;
+    padding: 3rem 1rem;
+    z-index: 100;
+    overflow-y: auto;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    width: 100%; max-width: 620px;
+    border: 0.5px solid var(--border-tertiary);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+  }
+  .modal-head {
+    padding: 1.25rem 1.5rem 1rem;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 1rem;
+    border-bottom: 0.5px solid var(--border-tertiary);
+  }
+  .modal-title {
+    font-size: 17px; font-weight: 500;
+    margin: 0 0 4px;
+    outline: none;
+  }
+  .modal-title[contenteditable="true"]:focus {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    padding: 2px 6px; margin: -2px -6px 4px;
+  }
+  .modal-sub { font-size: 12px; color: var(--text-secondary); margin: 0; }
+  .modal-close {
+    background: transparent; border: none;
+    cursor: pointer; padding: 4px;
+    color: var(--text-secondary);
+    font-size: 18px; line-height: 1;
+  }
+  .modal-close:hover { color: var(--text-primary); }
+  .modal-body {
+    padding: 1.25rem 1.5rem;
+    max-height: 65vh; overflow-y: auto;
+  }
+  .meta-row {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; margin-bottom: 1.25rem;
+  }
+  .meta-field { display: flex; flex-direction: column; gap: 4px; }
+  .meta-field label {
+    font-size: 10px; font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .section-label {
+    font-size: 11px; font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin: 0;
+    outline: none;
+  }
+  .section-label[contenteditable="true"]:focus {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    padding: 2px 6px; margin: -2px -6px;
+  }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 1.25rem; margin-bottom: 0.5rem;
+  }
+  .section-head:first-child { margin-top: 0; }
+  .item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 0;
+    font-size: 13px; line-height: 1.55;
+    color: var(--text-primary);
+    border-bottom: 0.5px solid var(--border-tertiary);
+  }
+  .item:last-child { border-bottom: none; }
+  .item .bullet {
+    color: var(--text-tertiary);
+    flex-shrink: 0; padding-top: 2px;
+  }
+  .item .item-text { flex: 1; outline: none; }
+  .item .item-text[contenteditable="true"]:focus {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    padding: 2px 6px; margin: -2px -6px;
+  }
+  .item .item-del {
+    background: transparent; border: none;
+    cursor: pointer; color: var(--text-tertiary);
+    opacity: 0; padding: 0 4px; font-size: 14px;
+    transition: opacity 0.12s, color 0.12s;
+  }
+  .item:hover .item-del { opacity: 1; }
+  .item .item-del:hover { color: var(--danger); }
+  .add-line {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 0; font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    background: transparent; border: none;
+    font-family: inherit;
+    margin-top: 4px;
+    transition: color 0.12s;
+  }
+  .add-line:hover { color: var(--text-primary); }
+  .add-line i { font-size: 14px; }
+  .modal-foot {
+    padding: 0.75rem 1.5rem 1rem;
+    border-top: 0.5px solid var(--border-tertiary);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 0.5rem;
+  }
+  .foot-left, .foot-right { display: flex; gap: 8px; }
+
+  /* INPUTS / BUTTONS */
+  input[type="text"], select {
+    font-family: inherit; font-size: 13px;
+    padding: 7px 10px;
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-secondary);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.12s, box-shadow 0.12s;
+  }
+  input[type="text"]:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(42, 111, 78, 0.15);
+  }
+  button {
+    font-family: inherit; font-size: 13px;
+    padding: 7px 12px;
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-secondary);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  button:hover { background: var(--bg-secondary); }
+  button:active { transform: scale(0.98); }
+  button.btn-danger { color: var(--danger); }
+  button.btn-danger:hover { background: var(--danger-bg); }
+  button.btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  button.btn-primary:hover { background: var(--accent-text); }
+
+  /* NRs TABLE */
+  .nrs-toolbar {
+    display: flex; gap: 8px;
+    margin-bottom: 1rem;
+    align-items: center; flex-wrap: wrap;
+  }
+  .nrs-toolbar input[type="text"] { flex: 1; min-width: 200px; max-width: 320px; }
+  .table-wrap {
+    border: 0.5px solid var(--border-tertiary);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-primary);
+  }
+  .table-scroll {
+    overflow-x: auto;
+    max-height: 56vh; overflow-y: auto;
+  }
+  table.nrs-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; min-width: 920px;
+  }
+  table.nrs-table th {
+    background: var(--bg-secondary);
+    position: sticky; top: 0; z-index: 1;
+    text-align: left; font-weight: 500;
+    padding: 10px 12px;
+    border-bottom: 0.5px solid var(--border-tertiary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+  }
+  table.nrs-table td {
+    padding: 9px 12px;
+    border-bottom: 0.5px solid var(--border-tertiary);
+    vertical-align: top;
+    color: var(--text-primary);
+    outline: none;
+  }
+  table.nrs-table tr:last-child td { border-bottom: none; }
+  table.nrs-table tr:hover td { background: var(--bg-secondary); }
+  table.nrs-table td[contenteditable="true"]:focus {
+    background: var(--info-bg);
+    outline: 1px solid var(--info);
+    outline-offset: -1px;
+  }
+  .origem-tag {
+    font-weight: 500; font-size: 11px;
+    padding: 2px 8px; border-radius: 10px;
+    display: inline-block; white-space: nowrap;
+    outline: none;
+  }
+  .o-NR { background: #e6f1fb; color: #0c447c; }
+  .o-PF { background: #eeedfe; color: #3c3489; }
+  .o-OUT { background: #f1efe8; color: #444441; }
+  .resp-yes { color: #0f4d2e; font-weight: 500; }
+  .resp-no { color: var(--text-tertiary); }
+  .nrs-foot {
+    margin-top: 1.25rem;
+    padding: 1rem 1.25rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+  }
+  .foot-title {
+    font-size: 11px; font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin: 0 0 10px;
+  }
+  .foot-item {
+    font-size: 12px; line-height: 1.6;
+    padding: 6px 0;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .foot-item .foot-tag {
+    font-weight: 500;
+    color: var(--text-primary);
+    flex-shrink: 0;
+    outline: none;
+  }
+  .foot-item .foot-text {
+    color: var(--text-secondary);
+    flex: 1;
+    outline: none;
+  }
+  .foot-item [contenteditable="true"]:focus {
+    background: var(--bg-primary);
+    border-radius: 4px;
+    padding: 1px 5px; margin: -1px -5px;
+  }
+  .row-del {
+    background: transparent; border: none;
+    cursor: pointer; color: var(--text-tertiary);
+    padding: 2px 4px; font-size: 13px;
+    transition: color 0.12s;
+  }
+  .row-del:hover { color: var(--danger); }
+  .empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+
+  /* SCROLLBARS */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-tertiary); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-secondary); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">GT3</div>
+      <div>
+        <div class="brand-name">GT3 Sistema</div>
+        <div class="brand-sub">Gestão Interna</div>
+      </div>
+    </div>
+    <div class="nav-section">Operações</div>
+    <div class="nav-item"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+    <div class="nav-item"><i class="ti ti-file-text"></i>Atas</div>
+    <div class="nav-item active"><i class="ti ti-book-2"></i>Manuais</div>
+    <div class="nav-item"><i class="ti ti-users"></i>Colaboradores</div>
+    <div class="nav-section">Gestão</div>
+    <div class="nav-item"><i class="ti ti-shield-check"></i>Compliance</div>
+    <div class="nav-item"><i class="ti ti-chart-bar"></i>Relatórios</div>
+    <div class="nav-item"><i class="ti ti-settings"></i>Configurações</div>
+  </aside>
+
+  <main class="main">
+    <div class="main-header">
+      <h1 class="main-title" id="mainTitle">Manuais de validação</h1>
+      <p class="main-subtitle" id="mainSubtitle">Critérios padronizados para análise de documentos</p>
+    </div>
+    <div class="main-content">
+      <div class="switch" id="switch">
+        <button data-tab="funcionarios" class="active">Funcionários</button>
+        <button data-tab="nrs">NRs</button>
+        <button data-tab="empresas">Empresas</button>
+        <button data-tab="veiculos">Veículos</button>
+        <button data-tab="alimentar">Alimentar</button>
+        <button data-tab="bsa">BSA</button>
+      </div>
+      <div id="content"></div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal" id="modalInner"></div>
+</div>
+
+<script>
+(function(){
+  const PILL_CLASS = { 'Anual': 'pill-anual', 'Única': 'pill-unica', 'Bienal': 'pill-bienal', 'Condicional': 'pill-cond', '': 'pill-cond' };
+
+  const STORAGE_KEY = 'gt3_manuais_v1';
+
+  const DEFAULT_DATA = {
+    funcionarios: [
+      {
+        id: 'foto3x4',
+        nome: 'Foto 3x4',
+        periodicidade: 'Única',
+        sections: [
+          { label: 'Verificação', items: [
+            'Foto legível com possibilidade de identificação da pessoa',
+            'Formato aceito: JPEG, GIF, PNG ou PDF (para confecção de crachá)',
+            'Fundo da foto liso, de preferência branco (para eventual emissão de crachás)',
+            'Se possível, comparar com a foto da ficha registro'
+          ]},
+          { label: 'Observações', items: [
+            'Periodicidade: única'
+          ]}
+        ]
+      },
+      {
+        id: 'ficha_registro',
+        nome: 'Ficha Registro do Empregado',
+        periodicidade: 'Única',
+        sections: [
+          { label: 'Verificação', items: [
+            'Função do funcionário descrita no PGR e condizente com a função cadastrada no portal de terceiros',
+            'Razão social e CNPJ (deve ser o mesmo número cadastrado no portal)',
+            'Conferir nome do funcionário',
+            'Atentar para data de admissão (GT0130)',
+            'Sempre que possível, antes de aprovar, verificar a função no ASO (geralmente está atualizada)'
+          ]},
+          { label: 'Casos especiais', items: [
+            'No caso de sócio proprietário, aceita-se contrato social ou CCMEI',
+            'Postar ficha registro original mais a atualização quando houver mudança de função ou estabelecimento',
+            'Se cadastrado como temporário sendo efetivo (ou vice-versa), alterar o vínculo no GT0130',
+            'Contrato temporário pode ser aceito com assinatura digital'
+          ]},
+          { label: 'Observações', items: [
+            'Periodicidade: única'
+          ]}
+        ]
+      },
+      {
+        id: 'ficha_temp',
+        nome: 'Ficha Registro Temporária',
+        periodicidade: 'Condicional',
+        sections: [
+          { label: 'Verificação', items: [
+            'Nome',
+            'Assinatura',
+            'Aprovar conforme validade do contrato temporário'
+          ]},
+          { label: 'Observações', items: [
+            'Se cadastrado como temporário sendo efetivo (ou vice-versa), alterar o vínculo no GT0130'
+          ]}
+        ]
+      },
+      {
+        id: 'contrato_temp',
+        nome: 'Contrato de Trabalho Temporário',
+        periodicidade: 'Condicional',
+        sections: [
+          { label: 'Verificação', items: [
+            'Nome',
+            'Validade do contrato',
+            'Assinatura'
+          ]}
+        ]
+      },
+      {
+        id: 'aso',
+        nome: 'ASO - Atestado de Saúde Ocupacional',
+        periodicidade: 'Anual',
+        sections: [
+          { label: 'Conteúdo do arquivo', items: [
+            'O arquivo deve conter somente o ASO, sem exames complementares'
+          ]},
+          { label: 'Verificação', items: [
+            'CNPJ e razão social',
+            'Nome do funcionário',
+            'Função: corresponde à ficha registro, condiz com a cadastrada no portal e consta no PCMSO',
+            'PCMSO x ASO (relação Riscos x Exames) — de forma ampla, não específica',
+            'Funcionário com APTIDÃO para a função',
+            'Documento assinado pelo médico examinador e pelo funcionário',
+            'Médico responsável do PCMSO vigente'
+          ]},
+          { label: 'Regra de data', items: [
+            'Data no portal = data do exame clínico ou data de liberação no campo "emitido em"',
+            'Em caso de duas datas ou dúvida, optar pela menor interpretação de data'
+          ]},
+          { label: 'ASOs periódicos', items: [
+            'Se já existe NR 35 para o funcionário, o ASO periódico deve indicar apto para trabalho em altura',
+            'Para remoção da NR 35, ter ciência do cliente antes',
+            'Sempre que função executa altura no cliente, confirmar com prestador e inserir NR 35 (item legal), mesmo para sócio',
+            'ASOs bienais: validados inicialmente por um ano; comprovada periodicidade bienal no PCMSO, anexar novamente para mais um ano'
+          ]},
+          { label: 'Riscos operacionais', items: [
+            'Função operacional no cliente: confirmar com prestador e manter ASO, mesmo para sócio',
+            'Exclusão do requisito: certificar com prestador e cliente que não há exposição; sócio pode ser excluído mediante comunicação por e-mail e, em dúvida, aprovação do cliente final'
+          ]},
+          { label: 'Observações', items: [
+            'Periodicidade: anual'
+          ]}
+        ]
+      },
+      {
+        id: 'epi',
+        nome: 'EPI - Ficha de Entrega',
+        periodicidade: 'Anual',
+        sections: [
+          { label: 'Verificação', items: [
+            'Razão social',
+            'Nome',
+            'Data de entrega dos EPIs no formato dia/mês/ano',
+            'Assinatura na declaração de obrigações e sanções (cf. NR 6), quando houver campo',
+            'Assinatura em cada uma das entregas de EPI (obrigatório)',
+            'Número do CA de cada equipamento (obrigatório para EPI; itens não-EPI dispensam CA)',
+            'Descrição do equipamento'
+          ]},
+          { label: 'Regra de data', items: [
+            'Data de "Emitido Em" no portal = data da última entrega de EPI com CA assinada pelo funcionário'
+          ]},
+          { label: 'Inclusão e exclusão', items: [
+            'Função operacional no cliente: confirmar com prestador e inserir o requisito, mesmo para sócio',
+            'Exclusão: certificar com prestador (ver função no PGR) e cliente que não há exposição a riscos operacionais'
+          ]},
+          { label: 'NR 35', items: [
+            'Verificar se há equipamentos para trabalho em altura na ficha (ex: cinto de segurança, talabarte, capacete com jugular)'
+          ]},
+          { label: 'Observações', items: [
+            'Periodicidade: anual'
+          ]}
+        ]
+      },
+      {
+        id: 'cnh',
+        nome: 'CNH - Carteira Nacional de Habilitação',
+        periodicidade: 'Condicional',
+        sections: [
+          { label: 'Verificação', items: [
+            'Nome do funcionário',
+            'Categoria (no caso de motoristas, condizente com a função cadastrada no portal)',
+            'CNH válida'
+          ]},
+          { label: 'Casos especiais', items: [
+            'CNH provisória: verificar com a contratante a possibilidade',
+            'Validade pode ser prorrogada por 30 dias (Detran) quando solicitado pelo prestador ou cliente',
+            'Função que executa direção: confirmar com prestador e inserir o requisito, mesmo para sócio'
+          ]}
+        ]
+      },
+      {
+        id: 'cert_tec',
+        nome: 'Certificado de Formação Técnica/Superior',
+        periodicidade: 'Única',
+        sections: [
+          { label: 'Verificação', items: [
+            'Certificação faz referência à função/atividade cadastrada no portal (ficha registro, ASO ou atividade da empresa)',
+            'Assinaturas dos envolvidos',
+            'Carga horária e conteúdo programático com relação à função ou atividade'
+          ]},
+          { label: 'Validação de origem', items: [
+            'Qualificação pode ser realizada pela própria empresa terceira',
+            'Sugerir execução por escola ou centro de treinamento com curso reconhecido pelo MEC',
+            'Em caso de dúvida, consultar a escola na internet; persistindo dúvida, questionar o cliente'
+          ]},
+          { label: 'Observações', items: [
+            'Periodicidade: única'
+          ]}
+        ]
+      },
+      {
+        id: 'aut_veiculos',
+        nome: 'Autorização para Movimentar Veículos',
+        periodicidade: 'Única',
+        sections: [
+          { label: 'Aplicação', items: [
+            'Clientes: Marcopolo, Ciferal e Volare',
+            'Inserir o requisito somente se prestador ou cliente solicitar (não automático)',
+            'O terceiro deve ter a autorização em mãos antes da abertura do requisito, para evitar bloqueio'
+          ]},
+          { label: 'Verificação', items: [
+            'Documento com o nome do funcionário corretamente preenchido',
+            'Documento devidamente preenchido e assinado pelos responsáveis do cliente',
+            'Aprovação com assinatura do SESSMT do cliente'
+          ]},
+          { label: 'Observações', items: [
+            'Periodicidade: única',
+            'Download do documento pode ser feito pelo portal'
+          ]}
+        ]
+      },
+      {
+        id: 'cert_vigilante',
+        nome: 'Certificado Formação/Reciclagem Vigilante',
+        periodicidade: 'Bienal',
+        sections: [
+          { label: 'Verificação', items: [
+            'Nome',
+            'Data (último dia de treinamento = data inicial no Portal)',
+            'QR Code ou carimbo da Polícia Federal'
+          ]},
+          { label: 'Validação online', items: [
+            'Consultar situação em servicos.dpf.gov.br/pgdwebcertificado/public/pages/pessoa/consultarSituacaoPessoa.jsf',
+            'Conferir nome',
+            'Data de validade da formação/reciclagem = mesma validade no Portal (data inicial dois anos antes da data descrita no documento)'
+          ]},
+          { label: 'Observações', items: [
+            'Carga horária: 200h',
+            'Periodicidade: bienal'
+          ]}
+        ]
+      }
+    ],
+    empresas: [],
+    veiculos: [],
+    alimentar: [],
+    bsa: [],
+    nrs: [
+      { origem:'NR 05', treinamento:'CIPA', ch:'16h', periodicidade:'Bienal', reciclagem:'NA', instrutor:'Técnico em Segurança / Enfermeiro do trabalho', resp:'Não' },
+      { origem:'NR 06', treinamento:'EPI', ch:'1h', periodicidade:'Bienal', reciclagem:'NA', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 10', treinamento:'Básico', ch:'40h', periodicidade:'Bienal', reciclagem:'8h', instrutor:'Técnico', resp:'Sim — Profissional Habilitado Elétrica' },
+      { origem:'NR 10', treinamento:'SEP', ch:'40h', periodicidade:'Bienal', reciclagem:'8h', instrutor:'Técnico', resp:'Sim — Profissional Habilitado Elétrica' },
+      { origem:'NR 11', treinamento:'OP guincho/munck/guindaste (todos com CNH)', ch:'8h', periodicidade:'Bienal', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 11', treinamento:'Ponte rolante (sem CNH)', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 11', treinamento:'Talha (sem CNH)', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 11', treinamento:'Empilhadeira (com CNH)', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 11', treinamento:'Paleteira elétrica (sem CNH) / Varredeira (com CNH)', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 11', treinamento:'Escavadeira / Retroescavadeira (com CNH)', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 11', treinamento:'Motosserras (sem CNH)', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 11', treinamento:'Trator (com CNH)', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 12', treinamento:'Máquinas autopropelidas com força motriz (sem CNH) / Máquinas agrícolas ou florestais (com CNH) / Motosserras (sem CNH) / Cesto aéreo (laudo)', ch:'8h', periodicidade:'Anual', reciclagem:'6h', instrutor:'Técnico', resp:'Sim — Profissional Habilitado em Mecânica ou Eng. Segurança (com registro no CREA é suficiente, não precisa ser engenheiro)' },
+      { origem:'NR 13', treinamento:'Operador de caldeira (+ comprovação de estágio)', ch:'40h — Anexo IA', periodicidade:'NA', reciclagem:'Permanente', instrutor:'Capacitados', resp:'Sim — Profissional Habilitado' },
+      { origem:'NR 18', treinamento:'PEMT/PTA', ch:'4h', periodicidade:'Bienal', reciclagem:'4h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 18', treinamento:'Integração', ch:'6h', periodicidade:'Bienal', reciclagem:'6h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 20', treinamento:'Intermediário Classe I', ch:'12h', periodicidade:'Trienal', reciclagem:'4h', instrutor:'Técnico', resp:'Não — o mesmo instrutor' },
+      { origem:'NR 20', treinamento:'Intermediário Classe II', ch:'14h', periodicidade:'Bienal', reciclagem:'4h', instrutor:'Técnico', resp:'Não — o mesmo instrutor' },
+      { origem:'NR 20', treinamento:'Intermediário Classe III', ch:'16h', periodicidade:'Bienal', reciclagem:'4h', instrutor:'Técnico', resp:'Não — o mesmo instrutor' },
+      { origem:'NR 20', treinamento:'Avançado I', ch:'20h', periodicidade:'Bienal', reciclagem:'4h', instrutor:'Técnico', resp:'Sim — profissional habilitado' },
+      { origem:'NR 20', treinamento:'Avançado II', ch:'32h', periodicidade:'Bienal', reciclagem:'4h', instrutor:'Técnico', resp:'Sim — profissional habilitado' },
+      { origem:'NR 20', treinamento:'Básico', ch:'4h', periodicidade:'Trienal', reciclagem:'4h', instrutor:'Técnico', resp:'Não — o mesmo instrutor' },
+      { origem:'NR 32', treinamento:'Segurança na área da saúde — deve ser comprovado à fiscalização', ch:'Não específica', periodicidade:'Não específica', reciclagem:'Continuada', instrutor:'Capacitado conforme NR 32', resp:'Não específica' },
+      { origem:'NR 33', treinamento:'Básico (vigia/operador de espaço confinado)', ch:'16h', periodicidade:'Anual', reciclagem:'8h', instrutor:'Técnico', resp:'Sim — Profissional Habilitado (não obrigatório registro CREA)' },
+      { origem:'NR 33', treinamento:'Supervisor de espaço confinado', ch:'40h', periodicidade:'Anual', reciclagem:'8h', instrutor:'Técnico', resp:'Sim — Profissional Habilitado (não obrigatório registro CREA)' },
+      { origem:'NR 34', treinamento:'Trabalhos a quente', ch:'8h', periodicidade:'Anual', reciclagem:'4h', instrutor:'Técnico', resp:'Sim — Profissional Habilitado, Eng. Segurança do Trabalho ou Metalúrgico, TST com registro no CREA é suficiente, não precisa ser engenheiro' },
+      { origem:'NR 35', treinamento:'Básico', ch:'8h', periodicidade:'Bienal', reciclagem:'8h', instrutor:'Técnico', resp:'Não' },
+      { origem:'NR 35', treinamento:'Acesso por corda — Nível 1', ch:'40h', periodicidade:'Trianual', reciclagem:'40h', instrutor:'Instrutor Nível 2 ou 3', resp:'Não' },
+      { origem:'NR 35', treinamento:'Acesso por corda — Nível 2', ch:'40h', periodicidade:'Trianual', reciclagem:'40h', instrutor:'Instrutor Nível 3', resp:'Não' },
+      { origem:'NR 35', treinamento:'Acesso por corda — Nível 3', ch:'48h', periodicidade:'Trianual', reciclagem:'48h', instrutor:'Instrutor Nível 3', resp:'Não' },
+      { origem:'Outros', treinamento:'Carta Blaster', ch:'Informada / Varia', periodicidade:'—', reciclagem:'—', instrutor:'—', resp:'—' },
+      { origem:'Outros', treinamento:'Curso de operador de grua', ch:'40h', periodicidade:'Anual', reciclagem:'—', instrutor:'—', resp:'Sim' },
+      { origem:'Outros', treinamento:'Certificado de operador de bate-estaca', ch:'—', periodicidade:'Único', reciclagem:'—', instrutor:'—', resp:'—' },
+      { origem:'PF — Port 3233/12', treinamento:'Certificado de Formação / Reciclagem de Vigilante', ch:'200h', periodicidade:'Bienal', reciclagem:'50h', instrutor:'Escola autorizada pela PF', resp:'Não' }
+    ],
+    nrsObs: [
+      { tag: 'NR 10, NR 12, NR 19, NR 34', texto: 'Consultar CREA do responsável técnico' },
+      { tag: 'NR 33', texto: 'Verificar no ASO se possui aptidão para espaço confinado' },
+      { tag: 'NR 35', texto: 'Verificar no ASO aptidão para altura e conferir ficha de EPI (cinto de segurança, talabarte, capacete com jugular)' }
+    ]
+  };
+
+  // LOAD / SAVE
+  function loadData() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return JSON.parse(JSON.stringify(DEFAULT_DATA));
+  }
+  function saveData() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+  }
+
+  let data = loadData();
+  let activeTab = 'funcionarios';
+  let openDocId = null;
+  let nrsFilter = { text: '', origem: 'todas' };
+
+  const TAB_TITLES = {
+    funcionarios: { title: 'Manuais — Funcionários', sub: 'Documentos relacionados aos colaboradores' },
+    nrs: { title: 'Manuais — NRs', sub: 'Tabela de treinamentos normativos' },
+    empresas: { title: 'Manuais — Empresas', sub: 'Documentos relacionados às empresas' },
+    veiculos: { title: 'Manuais — Veículos', sub: 'Documentos relacionados aos veículos' },
+    alimentar: { title: 'Manuais — Alimentar', sub: 'Documentos do setor alimentar' },
+    bsa: { title: 'Manuais — BSA', sub: 'Documentos BSA' }
+  };
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function render() {
+    document.querySelectorAll('#switch button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === activeTab);
+    });
+    document.getElementById('mainTitle').textContent = TAB_TITLES[activeTab].title;
+    document.getElementById('mainSubtitle').textContent = TAB_TITLES[activeTab].sub;
+
+    const content = document.getElementById('content');
+    if (activeTab === 'nrs') {
+      content.innerHTML = renderNRs();
+      attachNRsHandlers();
+    } else {
+      content.innerHTML = renderDocGrid(activeTab);
+      attachGridHandlers(activeTab);
+    }
+  }
+
+  function renderDocGrid(tab) {
+    const docs = data[tab] || [];
+    let html = '<div class="grid">';
+    docs.forEach(d => {
+      const pillClass = PILL_CLASS[d.periodicidade] || 'pill-cond';
+      html += `<div class="doc-card" data-doc-id="${escapeHtml(d.id)}">
+        <div class="doc-name">${escapeHtml(d.nome)}</div>
+        <div class="doc-meta">
+          <span class="pill ${pillClass}">${escapeHtml(d.periodicidade || '—')}</span>
+          <i class="ti ti-chevron-right" style="font-size:14px"></i>
+        </div>
+      </div>`;
+    });
+    html += `<button class="add-card" data-action="add-doc"><i class="ti ti-plus"></i> Adicionar documento</button>`;
+    html += '</div>';
+    if (docs.length === 0) {
+      html += `<p class="empty">Nenhum documento cadastrado nesta categoria. Use o botão acima para começar.</p>`;
+    }
+    return html;
+  }
+
+  function renderNRs() {
+    const origens = ['todas', ...Array.from(new Set(data.nrs.map(r => r.origem)))];
+    const filtered = data.nrs.filter(r => {
+      const t = nrsFilter.text.toLowerCase();
+      const matchText = !t || r.treinamento.toLowerCase().includes(t) || r.origem.toLowerCase().includes(t);
+      const matchOrigem = nrsFilter.origem === 'todas' || r.origem === nrsFilter.origem;
+      return matchText && matchOrigem;
+    });
+
+    let html = `
+      <div class="nrs-toolbar">
+        <input type="text" id="nrsSearch" placeholder="Buscar por treinamento ou origem..." value="${escapeHtml(nrsFilter.text)}" />
+        <select id="nrsOrigem">
+          ${origens.map(o => `<option value="${escapeHtml(o)}" ${o === nrsFilter.origem ? 'selected' : ''}>${o === 'todas' ? 'Todas as origens' : escapeHtml(o)}</option>`).join('')}
+        </select>
+        <button id="nrsAdd"><i class="ti ti-plus" style="font-size:14px; vertical-align:-2px"></i> Adicionar linha</button>
+      </div>
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table class="nrs-table">
+            <thead>
+              <tr>
+                <th style="width:100px">Origem</th>
+                <th>Treinamento</th>
+                <th style="width:110px">CH formação</th>
+                <th style="width:120px">Periodicidade</th>
+                <th style="width:110px">CH reciclagem</th>
+                <th style="width:200px">Qualificação do instrutor</th>
+                <th style="width:220px">Resp. técnico</th>
+                <th style="width:34px"></th>
+              </tr>
+            </thead>
+            <tbody>`;
+    if (filtered.length === 0) {
+      html += `<tr><td colspan="8" class="empty">Nenhum treinamento encontrado.</td></tr>`;
+    } else {
+      filtered.forEach((r) => {
+        const realIdx = data.nrs.indexOf(r);
+        const origemClass = r.origem.startsWith('NR') ? 'o-NR' : (r.origem.startsWith('PF') ? 'o-PF' : 'o-OUT');
+        const respClass = r.resp.startsWith('Sim') ? 'resp-yes' : 'resp-no';
+        html += `<tr data-row="${realIdx}">
+          <td><span class="origem-tag ${origemClass}" contenteditable="true" data-field="origem">${escapeHtml(r.origem)}</span></td>
+          <td contenteditable="true" data-field="treinamento">${escapeHtml(r.treinamento)}</td>
+          <td contenteditable="true" data-field="ch">${escapeHtml(r.ch)}</td>
+          <td contenteditable="true" data-field="periodicidade">${escapeHtml(r.periodicidade)}</td>
+          <td contenteditable="true" data-field="reciclagem">${escapeHtml(r.reciclagem)}</td>
+          <td contenteditable="true" data-field="instrutor">${escapeHtml(r.instrutor)}</td>
+          <td contenteditable="true" data-field="resp" class="${respClass}">${escapeHtml(r.resp)}</td>
+          <td><button class="row-del" data-del-row="${realIdx}" aria-label="Remover linha"><i class="ti ti-trash"></i></button></td>
+        </tr>`;
+      });
+    }
+    html += `</tbody></table></div></div>
+      <div class="nrs-foot">
+        <p class="foot-title">Orientações complementares</p>
+        <div id="nrsObsList">
+          ${data.nrsObs.map((o, i) => `
+            <div class="foot-item" data-obs="${i}">
+              <span class="foot-tag" contenteditable="true" data-obs-field="tag">${escapeHtml(o.tag)}:</span>
+              <span class="foot-text" contenteditable="true" data-obs-field="texto">${escapeHtml(o.texto)}</span>
+              <button class="row-del" data-del-obs="${i}" aria-label="Remover orientação"><i class="ti ti-x"></i></button>
+            </div>
+          `).join('')}
+        </div>
+        <button class="add-line" id="nrsAddObs"><i class="ti ti-plus"></i> Adicionar orientação</button>
+      </div>`;
+    return html;
+  }
+
+  function renderModal(tab, docId) {
+    const doc = data[tab].find(d => d.id === docId);
+    if (!doc) return '';
+    let html = `
+      <div class="modal-head">
+        <div>
+          <h3 class="modal-title" contenteditable="true" data-edit="nome">${escapeHtml(doc.nome)}</h3>
+          <p class="modal-sub">Critérios para validação · clique em qualquer texto para editar</p>
+        </div>
+        <button class="modal-close" id="modalClose" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="meta-row">
+          <div class="meta-field">
+            <label>Periodicidade</label>
+            <select data-edit="periodicidade">
+              ${['Única','Anual','Bienal','Condicional'].map(p => `<option value="${p}" ${p === doc.periodicidade ? 'selected' : ''}>${p}</option>`).join('')}
+            </select>
+          </div>
+          <div class="meta-field">
+            <label>Identificador</label>
+            <input type="text" value="${escapeHtml(doc.id)}" disabled style="opacity:0.5" />
+          </div>
+        </div>`;
+    doc.sections.forEach((s, si) => {
+      html += `<div data-section="${si}">
+        <div class="section-head">
+          <p class="section-label" contenteditable="true" data-edit-section="${si}">${escapeHtml(s.label)}</p>
+          <button class="row-del" data-del-section="${si}" aria-label="Remover seção"><i class="ti ti-trash" style="font-size:12px"></i></button>
+        </div>`;
+      s.items.forEach((it, ii) => {
+        html += `<div class="item">
+          <span class="bullet">•</span>
+          <span class="item-text" contenteditable="true" data-item="${si}-${ii}">${escapeHtml(it)}</span>
+          <button class="item-del" data-del-item="${si}-${ii}" aria-label="Remover item"><i class="ti ti-x"></i></button>
+        </div>`;
+      });
+      html += `<button class="add-line" data-add-item="${si}"><i class="ti ti-plus"></i> Adicionar item</button>
+      </div>`;
+    });
+    html += `<button class="add-line" id="addSection" style="margin-top:1.25rem; font-weight:500; color:var(--info)"><i class="ti ti-plus"></i> Adicionar seção</button>`;
+    html += `</div>
+      <div class="modal-foot">
+        <div class="foot-left">
+          <button class="btn-danger" id="modalDelete"><i class="ti ti-trash" style="font-size:13px; vertical-align:-2px"></i> Excluir documento</button>
+        </div>
+        <div class="foot-right">
+          <button id="modalCancel">Fechar</button>
+        </div>
+      </div>`;
+    return html;
+  }
+
+  function attachGridHandlers(tab) {
+    document.querySelectorAll('.doc-card[data-doc-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        openModal(tab, card.dataset.docId);
+      });
+    });
+    const addBtn = document.querySelector('.add-card[data-action="add-doc"]');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => {
+        const name = window.prompt('Nome do novo documento:');
+        if (!name) return;
+        const id = 'doc_' + Date.now();
+        data[tab].push({
+          id, nome: name, periodicidade: 'Única',
+          sections: [{ label: 'Verificação', items: ['Novo item'] }]
+        });
+        saveData();
+        render();
+        openModal(tab, id);
+      });
+    }
+  }
+
+  function openModal(tab, docId) {
+    openDocId = docId;
+    const modal = document.getElementById('modal');
+    const inner = document.getElementById('modalInner');
+    inner.innerHTML = renderModal(tab, docId);
+    modal.classList.add('open');
+    attachModalHandlers(tab, docId);
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+    openDocId = null;
+    saveData();
+    render();
+  }
+
+  function attachModalHandlers(tab, docId) {
+    const doc = data[tab].find(d => d.id === docId);
+    if (!doc) return;
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('modalCancel').addEventListener('click', closeModal);
+    document.getElementById('modal').addEventListener('click', (e) => {
+      if (e.target.id === 'modal') closeModal();
+    });
+
+    document.querySelectorAll('[data-edit]').forEach(el => {
+      const ev = el.tagName === 'SELECT' ? 'change' : 'blur';
+      el.addEventListener(ev, () => {
+        const field = el.dataset.edit;
+        doc[field] = el.tagName === 'SELECT' ? el.value : el.textContent.trim();
+        saveData();
+      });
+    });
+
+    document.querySelectorAll('[data-edit-section]').forEach(el => {
+      el.addEventListener('blur', () => {
+        const si = +el.dataset.editSection;
+        doc.sections[si].label = el.textContent.trim();
+        saveData();
+      });
+    });
+
+    document.querySelectorAll('[data-item]').forEach(el => {
+      el.addEventListener('blur', () => {
+        const [si, ii] = el.dataset.item.split('-').map(Number);
+        doc.sections[si].items[ii] = el.textContent.trim();
+        saveData();
+      });
+    });
+
+    document.querySelectorAll('[data-del-item]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const [si, ii] = btn.dataset.delItem.split('-').map(Number);
+        doc.sections[si].items.splice(ii, 1);
+        saveData();
+        openModal(tab, docId);
+      });
+    });
+
+    document.querySelectorAll('[data-add-item]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const si = +btn.dataset.addItem;
+        doc.sections[si].items.push('Novo item');
+        saveData();
+        openModal(tab, docId);
+        setTimeout(() => {
+          const items = document.querySelectorAll(`[data-item^="${si}-"]`);
+          const last = items[items.length - 1];
+          if (last) {
+            last.focus();
+            const range = document.createRange();
+            range.selectNodeContents(last);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        }, 30);
+      });
+    });
+
+    document.querySelectorAll('[data-del-section]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!confirm('Remover esta seção e todos seus itens?')) return;
+        const si = +btn.dataset.delSection;
+        doc.sections.splice(si, 1);
+        saveData();
+        openModal(tab, docId);
+      });
+    });
+
+    document.getElementById('addSection').addEventListener('click', () => {
+      doc.sections.push({ label: 'Nova seção', items: ['Novo item'] });
+      saveData();
+      openModal(tab, docId);
+    });
+
+    document.getElementById('modalDelete').addEventListener('click', () => {
+      if (!confirm(`Excluir o documento "${doc.nome}"? Esta ação não pode ser desfeita.`)) return;
+      const idx = data[tab].findIndex(d => d.id === docId);
+      data[tab].splice(idx, 1);
+      saveData();
+      closeModal();
+    });
+  }
+
+  function attachNRsHandlers() {
+    const search = document.getElementById('nrsSearch');
+    if (search) {
+      search.addEventListener('input', (e) => {
+        nrsFilter.text = e.target.value;
+        render();
+        setTimeout(() => {
+          const s = document.getElementById('nrsSearch');
+          if (s) {
+            s.focus();
+            s.setSelectionRange(s.value.length, s.value.length);
+          }
+        }, 0);
+      });
+    }
+    const origem = document.getElementById('nrsOrigem');
+    if (origem) {
+      origem.addEventListener('change', (e) => {
+        nrsFilter.origem = e.target.value;
+        render();
+      });
+    }
+    document.getElementById('nrsAdd').addEventListener('click', () => {
+      data.nrs.push({ origem:'NR ?', treinamento:'Novo treinamento', ch:'—', periodicidade:'—', reciclagem:'—', instrutor:'—', resp:'—' });
+      saveData();
+      render();
+    });
+    document.querySelectorAll('[data-field]').forEach(cell => {
+      cell.addEventListener('blur', () => {
+        const row = cell.closest('tr');
+        const idx = +row.dataset.row;
+        const field = cell.dataset.field;
+        data.nrs[idx][field] = cell.textContent.trim();
+        saveData();
+      });
+    });
+    document.querySelectorAll('[data-del-row]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!confirm('Remover esta linha?')) return;
+        const idx = +btn.dataset.delRow;
+        data.nrs.splice(idx, 1);
+        saveData();
+        render();
+      });
+    });
+    document.querySelectorAll('[data-obs-field]').forEach(cell => {
+      cell.addEventListener('blur', () => {
+        const wrap = cell.closest('[data-obs]');
+        const idx = +wrap.dataset.obs;
+        const field = cell.dataset.obsField;
+        let val = cell.textContent.trim();
+        if (field === 'tag') val = val.replace(/:$/, '');
+        data.nrsObs[idx][field] = val;
+        saveData();
+      });
+    });
+    document.querySelectorAll('[data-del-obs]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = +btn.dataset.delObs;
+        data.nrsObs.splice(idx, 1);
+        saveData();
+        render();
+      });
+    });
+    document.getElementById('nrsAddObs').addEventListener('click', () => {
+      data.nrsObs.push({ tag: 'Nova orientação', texto: 'Descrição da orientação' });
+      saveData();
+      render();
+    });
+  }
+
+  document.querySelectorAll('#switch button').forEach(b => {
+    b.addEventListener('click', () => {
+      activeTab = b.dataset.tab;
+      render();
+    });
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
