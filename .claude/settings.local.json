@@ -14,7 +14,8 @@
       "PowerShell(Remove-Item *)",
       "Bash(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\home-office\" -Force)",
       "Bash(Out-Null)",
-      "Bash(Write-Host \"ok\")"
+      "Bash(Write-Host \"ok\")",
+      "Bash(npm run *)"
     ]
   }
 }

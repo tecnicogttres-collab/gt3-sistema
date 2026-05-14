@@ -46,7 +46,7 @@ export const MODULES: Module[] = [
     id: 'revisao',
     label: 'Controle de Revisão',
     color: '#E74C3C',
-    path: '/revisao',
+    path: '/controle-revisao',
     description: 'Registro de inconsistências e escala de revisores',
   },
   {
