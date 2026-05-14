@@ -1,26 +1,113 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-primary: #2A4F96;
+  --color-accent: #D1AE6E;
+  --color-sidebar: #1E3A6E;
+  --color-surface: #F4F6FA;
+  --color-ink: #1E253D;
+  --color-muted: #6B7A99;
+  --font-sans: var(--font-geist-sans, system-ui, sans-serif);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #F4F6FA;
+  color: #1E253D;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Dashboard grid */
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.module-card-link,
+.pdi-card-link {
+  display: block;
+}
+
+.module-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #E8EDF5;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(30,37,61,0.06);
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.module-card:hover {
+  box-shadow: 0 4px 16px rgba(30,37,61,0.10);
+  transform: translateY(-1px);
+}
+
+.module-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.module-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1E253D;
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.module-card-desc {
+  font-size: 12px;
+  color: #6B7A99;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* PDI card */
+.pdi-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #E8D9B8;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(209,174,110,0.12);
+  transition: box-shadow 0.2s;
+}
+
+.pdi-card:hover {
+  box-shadow: 0 6px 20px rgba(209,174,110,0.22);
+}
+
+.pdi-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background-color: #D1AE6E1A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pdi-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background-color: #D1AE6E1A;
+  color: #B8922A;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
