@@ -18,7 +18,7 @@ export const MODULES: Module[] = [
     id: 'cadastro',
     label: 'Cadastro Contratantes',
     color: '#27AE60',
-    path: '/cadastro',
+    path: '/cadastro-contratantes',
     description: 'Tabela e ficha com campos editáveis inline',
   },
   {
