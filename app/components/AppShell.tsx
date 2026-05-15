@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Tabbar from './Tabbar'
 import { MODULES } from '../lib/modules'
+import { useUser } from './UserContext'
 
 function useBreadcrumb(pathname: string): string {
   if (pathname === '/') return 'Dashboard'
@@ -12,20 +13,33 @@ function useBreadcrumb(pathname: string): string {
   return mod ? `GT3 Sistema › ${mod.label}` : 'GT3 Sistema'
 }
 
+const PAPEL_LABELS: Record<string, string> = {
+  admin: 'Admin',
+  gestor: 'Gestor',
+  colaborador: 'Colaborador',
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const breadcrumb = useBreadcrumb(pathname)
+  const { profile, loading } = useUser()
+
+  if (pathname === '/login') {
+    return <>{children}</>
+  }
+
+  const papelLabel = loading
+    ? '...'
+    : profile?.papel
+    ? PAPEL_LABELS[profile.papel] ?? profile.papel
+    : '—'
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
-      />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
 
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-        {/* Topbar */}
         <header
           style={{
             backgroundColor: '#fff',
@@ -37,37 +51,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: 13, color: '#6B7A99' }}>
-            {breadcrumb}
-          </span>
-
-          {/* Role pill */}
+          <span style={{ fontSize: 13, color: '#6B7A99' }}>{breadcrumb}</span>
           <span
             style={{
-              fontSize: 12,
-              fontWeight: 500,
-              padding: '3px 12px',
-              borderRadius: 999,
-              backgroundColor: '#EBF0FB',
-              color: '#2A4F96',
+              fontSize: 12, fontWeight: 500, padding: '3px 12px',
+              borderRadius: 999, backgroundColor: '#EBF0FB', color: '#2A4F96',
             }}
           >
-            Admin
+            {papelLabel}
           </span>
         </header>
 
-        {/* Tabbar */}
         <Tabbar />
 
-        {/* Content area */}
-        <main
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            backgroundColor: '#F4F6FA',
-            padding: 24,
-          }}
-        >
+        <main style={{ flex: 1, overflow: 'auto', backgroundColor: '#F4F6FA', padding: 24 }}>
           {children}
         </main>
       </div>

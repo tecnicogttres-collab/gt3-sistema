@@ -15,7 +15,16 @@
       "Bash(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\home-office\" -Force)",
       "Bash(Out-Null)",
       "Bash(Write-Host \"ok\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "PowerShell(Copy-Item *)",
+      "Bash(Start-Sleep -Seconds 4)",
+      "Bash(Get-Content \"C:\\\\Users\\\\rodri\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-rodri-gt3-sistema\\\\8f4f7f2d-9618-4977-aa32-40cbb1f68ec6\\\\tasks\\\\boay56pi1.output\" -Tail 10)",
+      "Bash(copy NUL .env.local)",
+      "Bash(npm install *)",
+      "PowerShell(New-Item *)",
+      "Bash(curl *)",
+      "PowerShell(head *)",
+      "PowerShell(node -e \"require\\('xlsx'\\)\" 2>&1)"
     ]
   }
 }

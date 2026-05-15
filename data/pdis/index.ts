@@ -1,0 +1,8 @@
+export { default as alexandraOtobelliTrentin } from './alexandra-otobelli-trentin'
+export { default as camilaAguiarPossamai } from './camila-aguiar-possamai'
+export { default as daianaTattoZorzo } from './daiana-tatto-zorzo'
+export { default as lucianePastore } from './luciane-pastore'
+export { default as marcioRobertoZim } from './marcio-roberto-zim'
+export { default as marianeBorges } from './mariane-borges'
+export { default as marinaMagnaguagnoZanella } from './marina-magnaguagno-zanella'
+export { default as nataliaFumagaliChaxim } from './natalia-fumagali-chaxim'
