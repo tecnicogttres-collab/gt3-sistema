@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT3 · Revisão Diária de Trainees</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --bg-card: #fffefb;
+    --bg-elevated: #ffffff;
+    --ink: #1a1a17;
+    --ink-soft: #4a4a45;
+    --ink-mute: #8a8a82;
+    --line: #e5e2d8;
+    --line-strong: #c9c5b7;
+    --accent: #1a1a17;
+    --red: #c8392f;
+    --red-bg: #fce8e5;
+    --red-border: #f0b8b2;
+    --yellow: #b8851a;
+    --yellow-bg: #fbf3d4;
+    --yellow-border: #e8d489;
+    --green: #2d6a3f;
+    --green-bg: #e5f0e7;
+    --shadow-sm: 0 1px 2px rgba(26,26,23,0.04);
+    --shadow-md: 0 2px 8px rgba(26,26,23,0.06), 0 1px 2px rgba(26,26,23,0.04);
+    --shadow-lg: 0 12px 32px rgba(26,26,23,0.08), 0 2px 6px rgba(26,26,23,0.04);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter Tight', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(200,57,47,0.03), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(184,133,26,0.03), transparent 40%);
+  }
+
+  /* ===== HEADER ===== */
+  .topbar {
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--line);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(8px);
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .brand-mark {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .brand-mark em {
+    font-style: italic;
+    color: var(--red);
+  }
+  .brand-sub {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-mute);
+    font-weight: 500;
+    border-left: 1px solid var(--line-strong);
+    padding-left: 14px;
+  }
+
+  .user-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .user-selector label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    font-weight: 500;
+  }
+  .user-select {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 14px;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-card);
+    border-radius: 6px;
+    color: var(--ink);
+    cursor: pointer;
+    font-weight: 500;
+    min-width: 220px;
+  }
+  .user-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .user-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+  .badge-trainee { background: #e8e4d4; color: #5c4a1a; }
+  .badge-revisor { background: #d8e4ea; color: #1a4a5c; }
+
+  /* ===== MAIN LAYOUT ===== */
+  .main {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 28px 32px 80px;
+  }
+
+  /* ===== DATE HEADER ===== */
+  .date-section {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .date-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 42px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .date-title em {
+    font-style: italic;
+    color: var(--ink-mute);
+    font-size: 0.7em;
+  }
+  .date-meta {
+    display: flex;
+    gap: 28px;
+    align-items: center;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    font-weight: 500;
+  }
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .stat-value.red { color: var(--red); }
+  .stat-value.yellow { color: var(--yellow); }
+  .stat-value.green { color: var(--green); }
+
+  /* ===== TABS (per trainee) ===== */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+  .tab {
+    font-family: inherit;
+    background: transparent;
+    border: none;
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-mute);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  .tab-count {
+    background: var(--line);
+    color: var(--ink-soft);
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+  }
+  .tab.active .tab-count { background: var(--ink); color: var(--bg-card); }
+  .tab-pending-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    display: inline-block;
+  }
+
+  /* ===== TABLE ===== */
+  .table-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+  }
+
+  .table-header-bar {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, #fdfcf7, var(--bg-card));
+  }
+  .table-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+  }
+  .table-title em { font-style: italic; color: var(--red); }
+
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    color: var(--ink-mute);
+    border-bottom: 1px solid var(--line);
+    background: #faf8f2;
+    position: sticky;
+    top: 0;
+  }
+
+  .table tbody tr {
+    border-bottom: 1px solid var(--line);
+    transition: background 0.1s ease;
+  }
+  .table tbody tr:last-child { border-bottom: none; }
+  .table tbody tr:hover { background: #faf8f2; }
+
+  .table tbody tr.row-red {
+    background: var(--red-bg);
+    border-left: 3px solid var(--red);
+  }
+  .table tbody tr.row-red:hover { background: #fbdfdb; }
+  .table tbody tr.row-yellow {
+    background: var(--yellow-bg);
+    border-left: 3px solid var(--yellow);
+  }
+  .table tbody tr.row-yellow:hover { background: #f7eccb; }
+
+  .table td {
+    padding: 11px 14px;
+    vertical-align: top;
+  }
+  .table td.col-data {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .table td.col-actions {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .cell-editable {
+    cursor: text;
+    border-bottom: 1px dashed transparent;
+  }
+  .cell-editable:hover { border-bottom-color: var(--line-strong); }
+  .cell-editable:focus {
+    outline: none;
+    border-bottom-color: var(--accent);
+    background: #fdfcf7;
+  }
+
+  .cell-meta {
+    font-size: 10px;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 3px;
+    font-weight: 500;
+  }
+
+  .review-note {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    font-style: italic;
+    padding-left: 8px;
+    border-left: 2px solid var(--line-strong);
+  }
+  .row-red .review-note { border-left-color: var(--red); color: #6b2620; }
+  .row-yellow .review-note { border-left-color: var(--yellow); color: #6e5215; }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-icon {
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .btn-approve { color: var(--green); border-color: transparent; }
+  .btn-approve:hover { background: var(--green-bg); border-color: var(--green); }
+  .btn-approve .btn-icon { background: var(--green); color: white; }
+
+  .btn-flag-red { color: var(--red); }
+  .btn-flag-red:hover { background: var(--red-bg); border-color: var(--red); }
+  .btn-flag-red .btn-icon { background: var(--red); color: white; }
+
+  .btn-flag-yellow { color: var(--yellow); }
+  .btn-flag-yellow:hover { background: var(--yellow-bg); border-color: var(--yellow); }
+  .btn-flag-yellow .btn-icon { background: var(--yellow); color: white; }
+
+  .btn-clear { color: var(--ink-mute); font-size: 11px; }
+  .btn-clear:hover { color: var(--ink); background: var(--line); }
+
+  .btn-delete { color: var(--ink-mute); font-size: 11px; }
+  .btn-delete:hover { color: var(--red); }
+
+  .btn-primary {
+    background: var(--ink);
+    color: var(--bg-card);
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+  }
+  .btn-primary:hover { background: #000; }
+
+  .btn-secondary {
+    border: 1px solid var(--line-strong);
+    color: var(--ink);
+    padding: 8px 16px;
+    font-size: 12px;
+    border-radius: 6px;
+    background: var(--bg-card);
+  }
+  .btn-secondary:hover { background: var(--bg); border-color: var(--ink); }
+
+  .btn-danger {
+    background: var(--red);
+    color: white;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+  }
+  .btn-danger:hover { background: #a82e26; }
+
+  /* ===== ADD ROW ===== */
+  .add-row-bar {
+    padding: 14px 20px;
+    background: #faf8f2;
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .add-row-bar input {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    background: var(--bg-card);
+    flex: 1;
+    min-width: 0;
+  }
+  .add-row-bar input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  .add-row-bar input.col-data-input { flex: 0 0 130px; }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-state {
+    padding: 60px 24px;
+    text-align: center;
+    color: var(--ink-mute);
+  }
+  .empty-state-icon {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 56px;
+    color: var(--line-strong);
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+  .empty-state-text {
+    font-size: 14px;
+    max-width: 340px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  /* ===== ACTION BAR ===== */
+  .action-bar {
+    margin-top: 24px;
+    padding: 20px 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .action-bar-text {
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .action-bar-text strong { color: var(--ink); font-weight: 600; }
+  .action-bar-buttons { display: flex; gap: 10px; }
+
+  /* ===== HISTORY ===== */
+  .history-section {
+    margin-top: 40px;
+  }
+  .history-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .history-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+  }
+  .history-title em { font-style: italic; color: var(--ink-mute); }
+  .history-toggle {
+    font-family: inherit;
+    background: none;
+    border: none;
+    color: var(--ink-mute);
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .history-toggle:hover { color: var(--ink); }
+
+  .history-day {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .history-day-header {
+    padding: 12px 18px;
+    background: #faf8f2;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+  }
+  .history-day-header:hover { background: #f5f2e8; }
+  .history-day-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .history-day-summary {
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--ink-mute);
+  }
+  .history-day-summary span { display: inline-flex; align-items: center; gap: 4px; }
+  .history-day-summary .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .history-day-summary .dot.green { background: var(--green); }
+  .history-day-summary .dot.red { background: var(--red); }
+  .history-day-summary .dot.yellow { background: var(--yellow); }
+  .history-day-body {
+    padding: 0;
+    display: none;
+  }
+  .history-day-body.expanded { display: block; }
+
+  /* ===== MODAL ===== */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,23,0.4);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(2px);
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--bg-card);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    max-width: 480px;
+    width: 100%;
+    padding: 28px;
+    border: 1px solid var(--line);
+  }
+  .modal-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 26px;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .modal-title em { font-style: italic; }
+  .modal-desc {
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  .modal textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--bg);
+    resize: vertical;
+    min-height: 90px;
+    color: var(--ink);
+  }
+  .modal textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  .modal-actions {
+    margin-top: 18px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  /* ===== ROLE-BASED VISIBILITY ===== */
+  body[data-role="trainee"] .revisor-only { display: none !important; }
+  body[data-role="revisor"] .trainee-only { display: none !important; }
+
+  /* ===== INFO BANNER ===== */
+  .info-banner {
+    background: linear-gradient(to right, #fef9e7, #fdf6e0);
+    border: 1px solid var(--yellow-border);
+    border-left: 3px solid var(--yellow);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 12px;
+    color: #5c4515;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .info-banner-icon {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--yellow);
+    flex-shrink: 0;
+  }
+
+  /* responsive */
+  @media (max-width: 900px) {
+    .topbar { padding: 14px 16px; flex-wrap: wrap; }
+    .main { padding: 20px 16px; }
+    .date-title { font-size: 28px; }
+    .date-section { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .table { font-size: 12px; }
+    .table td, .table thead th { padding: 8px 10px; }
+    .add-row-bar { flex-wrap: wrap; }
+    .add-row-bar input { flex: 1 0 100%; }
+  }
+</style>
+</head>
+<body data-role="revisor">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">GT3<em>.</em>revisão</div>
+    <div class="brand-sub">Módulo · Acompanhamento Diário</div>
+  </div>
+  <div class="user-selector">
+    <label for="userSelect">Usuário ativo</label>
+    <select id="userSelect" class="user-select">
+      <optgroup label="Trainees">
+        <option value="trainee:joao">João Silva (Trainee)</option>
+        <option value="trainee:ana">Ana Costa (Trainee)</option>
+      </optgroup>
+      <optgroup label="Revisores">
+        <option value="revisor:rodrigo" selected>Rodrigo Balem (Revisor)</option>
+        <option value="revisor:marina">Marina Souza (Revisor)</option>
+      </optgroup>
+    </select>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- INFO BANNER -->
+  <div class="info-banner">
+    <span class="info-banner-icon">i</span>
+    <div>
+      <strong>Protótipo de validação.</strong> Dados ficam salvos neste navegador. Em produção (sistema GT3) haverá sincronização em tempo real entre trainees e revisores. Use o seletor acima para alternar entre perfis e testar o fluxo.
+    </div>
+  </div>
+
+  <!-- DATE HEADER -->
+  <div class="date-section">
+    <h1 class="date-title">
+      <span id="currentDateLabel">—</span>
+      <em id="currentDateWeekday"></em>
+    </h1>
+    <div class="date-meta">
+      <div class="stat">
+        <span class="stat-label">Pendentes</span>
+        <span class="stat-value" id="statPending">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Com erro</span>
+        <span class="stat-value red" id="statRed">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">A discutir</span>
+        <span class="stat-value yellow" id="statYellow">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Aprovados hoje</span>
+        <span class="stat-value green" id="statGreen">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRAINEE TABS -->
+  <div class="tabs" id="traineeTabs"></div>
+
+  <!-- ACTIVE TABLE -->
+  <div class="table-wrap">
+    <div class="table-header-bar">
+      <div class="table-title">Registros do dia · <em id="activeTraineeName">—</em></div>
+      <div style="font-size:11px; color:var(--ink-mute); text-transform:uppercase; letter-spacing:0.08em;">
+        <span class="trainee-only">Você está registrando seus documentos</span>
+        <span class="revisor-only">Você está revisando os registros</span>
+      </div>
+    </div>
+
+    <div id="tableContainer"></div>
+
+    <!-- ADD ROW (trainee only) -->
+    <div class="add-row-bar trainee-only">
+      <input type="text" id="inputEmpresa" placeholder="Empresa">
+      <input type="text" id="inputColaborador" placeholder="Colaborador">
+      <input type="text" id="inputDocumento" placeholder="Documento">
+      <button class="btn-primary" id="btnAddRow">+ Adicionar registro</button>
+    </div>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div class="action-bar">
+    <div class="action-bar-text">
+      <strong id="actionBarSummary">Sem registros para o dia ativo.</strong>
+      <br><span style="color:var(--ink-mute);">Ao finalizar, todas as linhas (pendentes, aprovadas, sinalizadas) vão para o histórico e uma nova data é iniciada.</span>
+    </div>
+    <div class="action-bar-buttons">
+      <button class="btn-secondary revisor-only" id="btnExportDay">Exportar CSV</button>
+      <button class="btn-danger" id="btnCloseDay">Finalizar dia · Iniciar nova data</button>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="history-section">
+    <div class="history-header">
+      <h2 class="history-title">Histórico · <em>dias anteriores</em></h2>
+      <button class="history-toggle" id="btnToggleHistory">mostrar/ocultar</button>
+    </div>
+    <div id="historyContainer"></div>
+  </div>
+
+</main>
+
+<!-- MODAL: comentário do revisor -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 class="modal-title" id="modalTitle">Sinalizar registro</h3>
+    <p class="modal-desc" id="modalDesc">Descreva o que precisa ser corrigido ou conversado.</p>
+    <textarea id="modalComment" placeholder="Digite sua observação..."></textarea>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btnModalCancel">Cancelar</button>
+      <button class="btn-primary" id="btnModalSave">Salvar sinalização</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   GT3 REVISÃO DIÁRIA — Lógica
+   Estrutura de dados:
+   {
+     activeDate: 'YYYY-MM-DD',
+     trainees: { 'joao': 'João Silva', 'ana': 'Ana Costa' },
+     reviewers: { 'rodrigo': 'Rodrigo Balem', 'marina': 'Marina Souza' },
+     // registros do dia ativo, por trainee
+     active: { joao: [...rows], ana: [...rows] },
+     // histórico de dias finalizados
+     history: [ { date, snapshots: { joao: [...], ana: [...] } } ]
+   }
+   Row: { id, data, empresa, colaborador, documento,
+          createdBy, createdAt,
+          status: 'pending'|'red'|'yellow'|'green',
+          reviewNote, reviewedBy, reviewedAt }
+============================================================ */
+
+const STORAGE_KEY = 'gt3_revisao_v1';
+const TRAINEES = { joao: 'João Silva', ana: 'Ana Costa' };
+const REVIEWERS = { rodrigo: 'Rodrigo Balem', marina: 'Marina Souza' };
+
+let state = loadState();
+let activeUser = { role: 'revisor', id: 'rodrigo' };
+let activeTrainee = 'joao';
+let historyExpanded = true;
+let pendingFlagAction = null; // {rowId, status}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return {
+    activeDate: todayISO(),
+    active: { joao: [], ana: [] },
+    history: []
+  };
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch (e) { console.warn('storage fail', e); }
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().split('T')[0];
+}
+
+function formatDate(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function formatDateLong(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function weekday(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('pt-BR', { weekday: 'long' });
+}
+
+function nowTime() {
+  const d = new Date();
+  return d.toTimeString().slice(0,5);
+}
+
+function newId() {
+  return 'r' + Date.now() + Math.random().toString(36).slice(2,7);
+}
+
+/* ============ RENDER ============ */
+
+function render() {
+  renderUserContext();
+  renderDateHeader();
+  renderTabs();
+  renderTable();
+  renderActionBar();
+  renderHistory();
+}
+
+function renderUserContext() {
+  document.body.dataset.role = activeUser.role;
+}
+
+function renderDateHeader() {
+  document.getElementById('currentDateLabel').textContent = formatDateLong(state.activeDate);
+  document.getElementById('currentDateWeekday').textContent = weekday(state.activeDate);
+
+  const rows = state.active[activeTrainee] || [];
+  const pending = rows.filter(r => r.status === 'pending').length;
+  const red = rows.filter(r => r.status === 'red').length;
+  const yellow = rows.filter(r => r.status === 'yellow').length;
+  const green = rows.filter(r => r.status === 'green').length;
+
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statRed').textContent = red;
+  document.getElementById('statYellow').textContent = yellow;
+  document.getElementById('statGreen').textContent = green;
+}
+
+function renderTabs() {
+  const tabs = document.getElementById('traineeTabs');
+  tabs.innerHTML = '';
+
+  // Trainee só vê sua própria aba
+  const traineeKeys = activeUser.role === 'trainee'
+    ? [activeUser.id]
+    : Object.keys(TRAINEES);
+
+  traineeKeys.forEach(key => {
+    const rows = state.active[key] || [];
+    const visibleCount = rows.filter(r => r.status !== 'green').length;
+    const hasPending = rows.some(r => r.status === 'red' || r.status === 'yellow');
+
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (key === activeTrainee ? ' active' : '');
+    btn.innerHTML = `
+      ${TRAINEES[key]}
+      ${hasPending ? '<span class="tab-pending-dot"></span>' : ''}
+      <span class="tab-count">${visibleCount}</span>
+    `;
+    btn.onclick = () => {
+      activeTrainee = key;
+      render();
+    };
+    tabs.appendChild(btn);
+  });
+
+  // Se trainee logado, força activeTrainee = ele
+  if (activeUser.role === 'trainee') {
+    activeTrainee = activeUser.id;
+  }
+
+  document.getElementById('activeTraineeName').textContent = TRAINEES[activeTrainee];
+}
+
+function renderTable() {
+  const container = document.getElementById('tableContainer');
+  const rows = (state.active[activeTrainee] || []).filter(r => r.status !== 'green');
+
+  if (rows.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">∅</div>
+        <div class="empty-state-text">
+          ${activeUser.role === 'trainee'
+            ? 'Nenhum registro ainda. Use o formulário abaixo para adicionar o primeiro documento do dia.'
+            : 'Nenhum registro pendente. ' + TRAINEES[activeTrainee] + ' ainda não adicionou linhas — ou tudo já foi aprovado.'}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Ordenar: red > yellow > pending (last)
+  const order = { red: 0, yellow: 1, pending: 2 };
+  rows.sort((a,b) => order[a.status] - order[b.status]);
+
+  let html = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th style="width:130px;">Data / hora</th>
+          <th>Empresa</th>
+          <th>Colaborador</th>
+          <th>Documento</th>
+          <th style="width:280px;" class="revisor-only">Ações</th>
+          <th style="width:60px;" class="trainee-only"></th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  rows.forEach(row => {
+    const rowClass = row.status === 'red' ? 'row-red' : row.status === 'yellow' ? 'row-yellow' : '';
+    const canEdit = activeUser.role === 'trainee' && activeUser.id === row.createdBy;
+
+    html += `<tr class="${rowClass}" data-id="${row.id}">
+      <td class="col-data">
+        ${row.data}<br>
+        <span class="cell-meta">${TRAINEES[row.createdBy] ? TRAINEES[row.createdBy].split(' ')[0] : '—'}</span>
+      </td>
+      <td>
+        <div ${canEdit ? 'contenteditable="true" class="cell-editable"' : ''} data-field="empresa">${escapeHtml(row.empresa)}</div>
+      </td>
+      <td>
+        <div ${canEdit ? 'contenteditable="true" class="cell-editable"' : ''} data-field="colaborador">${escapeHtml(row.colaborador)}</div>
+      </td>
+      <td>
+        <div ${canEdit ? 'contenteditable="true" class="cell-editable"' : ''} data-field="documento">${escapeHtml(row.documento)}</div>
+        ${row.reviewNote ? `<div class="review-note">"${escapeHtml(row.reviewNote)}" — ${REVIEWERS[row.reviewedBy] || '—'}, ${row.reviewedAt || ''}</div>` : ''}
+      </td>
+      <td class="col-actions revisor-only">
+        <button class="btn btn-approve" data-action="approve"><span class="btn-icon">✓</span> Aprovar</button>
+        <button class="btn btn-flag-yellow" data-action="yellow"><span class="btn-icon">!</span> Discutir</button>
+        <button class="btn btn-flag-red" data-action="red"><span class="btn-icon">✕</span> Erro</button>
+        ${row.status !== 'pending' ? '<button class="btn btn-clear" data-action="clear">limpar</button>' : ''}
+      </td>
+      <td class="col-actions trainee-only">
+        ${canEdit ? '<button class="btn btn-delete" data-action="delete">excluir</button>' : ''}
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+
+  // Bind events
+  container.querySelectorAll('button[data-action]').forEach(btn => {
+    btn.onclick = (e) => {
+      const tr = e.target.closest('tr');
+      const rowId = tr.dataset.id;
+      const action = btn.dataset.action;
+      handleRowAction(rowId, action);
+    };
+  });
+
+  container.querySelectorAll('[contenteditable]').forEach(el => {
+    el.onblur = (e) => {
+      const tr = e.target.closest('tr');
+      const rowId = tr.dataset.id;
+      const field = e.target.dataset.field;
+      const value = e.target.textContent.trim();
+      updateRowField(rowId, field, value);
+    };
+    el.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+    };
+  });
+}
+
+function renderActionBar() {
+  const rows = state.active[activeTrainee] || [];
+  const total = rows.length;
+  const pending = rows.filter(r => r.status === 'pending').length;
+  const flagged = rows.filter(r => r.status === 'red' || r.status === 'yellow').length;
+
+  let summary;
+  if (total === 0) {
+    summary = 'Sem registros para ' + TRAINEES[activeTrainee] + ' no dia ativo.';
+  } else {
+    summary = `${total} registro${total > 1 ? 's' : ''} de ${TRAINEES[activeTrainee]}: ${pending} pendente${pending !== 1 ? 's' : ''} de revisão, ${flagged} com sinalização.`;
+  }
+  document.getElementById('actionBarSummary').textContent = summary;
+}
+
+function renderHistory() {
+  const container = document.getElementById('historyContainer');
+
+  if (state.history.length === 0) {
+    container.innerHTML = '<div style="padding:20px; color:var(--ink-mute); font-size:13px; font-style:italic;">Nenhum dia finalizado ainda.</div>';
+    return;
+  }
+
+  if (!historyExpanded) {
+    container.innerHTML = '';
+    return;
+  }
+
+  // Ordenar: mais recente primeiro
+  const sorted = [...state.history].sort((a,b) => b.date.localeCompare(a.date));
+
+  container.innerHTML = sorted.map((day, idx) => {
+    const allRows = Object.values(day.snapshots).flat();
+    const green = allRows.filter(r => r.status === 'green').length;
+    const red = allRows.filter(r => r.status === 'red').length;
+    const yellow = allRows.filter(r => r.status === 'yellow').length;
+    const pending = allRows.filter(r => r.status === 'pending').length;
+
+    let bodyHtml = '';
+    Object.keys(day.snapshots).forEach(traineeKey => {
+      const rows = day.snapshots[traineeKey];
+      if (rows.length === 0) return;
+      bodyHtml += `<div style="padding:14px 20px; border-top:1px solid var(--line);">
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-mute); font-weight:600; margin-bottom:8px;">${TRAINEES[traineeKey] || traineeKey} · ${rows.length} registro${rows.length > 1 ? 's' : ''}</div>
+        <table class="table" style="border-radius:4px;">
+          <thead><tr>
+            <th style="width:90px;">Data</th><th>Empresa</th><th>Colaborador</th><th>Documento</th><th style="width:110px;">Status</th><th style="width:140px;">Revisor</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r => {
+              const statusLabel = {
+                green: '<span style="color:var(--green);">✓ Aprovado</span>',
+                red: '<span style="color:var(--red);">✕ Erro</span>',
+                yellow: '<span style="color:var(--yellow);">! Discutir</span>',
+                pending: '<span style="color:var(--ink-mute);">○ Pendente</span>'
+              }[r.status];
+              return `<tr>
+                <td class="col-data">${r.data}</td>
+                <td>${escapeHtml(r.empresa)}</td>
+                <td>${escapeHtml(r.colaborador)}</td>
+                <td>${escapeHtml(r.documento)}${r.reviewNote ? '<div class="review-note">"' + escapeHtml(r.reviewNote) + '"</div>' : ''}</td>
+                <td style="font-size:12px;">${statusLabel}</td>
+                <td style="font-size:11px; color:var(--ink-mute);">${r.reviewedBy ? REVIEWERS[r.reviewedBy] : '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    });
+
+    return `<div class="history-day">
+      <div class="history-day-header" data-day-idx="${idx}">
+        <div class="history-day-date">${formatDate(day.date)} · ${weekday(day.date)}</div>
+        <div class="history-day-summary">
+          <span><span class="dot green"></span> ${green} aprovados</span>
+          <span><span class="dot red"></span> ${red} com erro</span>
+          <span><span class="dot yellow"></span> ${yellow} a discutir</span>
+          ${pending > 0 ? `<span>○ ${pending} não revisados</span>` : ''}
+        </div>
+      </div>
+      <div class="history-day-body" id="historyBody-${idx}">${bodyHtml}</div>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.history-day-header').forEach(h => {
+    h.onclick = () => {
+      const body = h.nextElementSibling;
+      body.classList.toggle('expanded');
+    };
+  });
+}
+
+/* ============ ACTIONS ============ */
+
+function handleRowAction(rowId, action) {
+  const rows = state.active[activeTrainee];
+  const row = rows.find(r => r.id === rowId);
+  if (!row) return;
+
+  if (action === 'approve') {
+    row.status = 'green';
+    row.reviewedBy = activeUser.id;
+    row.reviewedAt = nowTime();
+    row.reviewNote = '';
+    saveState(); render();
+  } else if (action === 'red' || action === 'yellow') {
+    pendingFlagAction = { rowId, status: action };
+    openFlagModal(action, row.reviewNote || '');
+  } else if (action === 'clear') {
+    row.status = 'pending';
+    row.reviewedBy = null;
+    row.reviewedAt = null;
+    row.reviewNote = '';
+    saveState(); render();
+  } else if (action === 'delete') {
+    if (confirm('Excluir este registro? Não pode ser desfeito.')) {
+      state.active[activeTrainee] = rows.filter(r => r.id !== rowId);
+      saveState(); render();
+    }
+  }
+}
+
+function openFlagModal(status, existingNote) {
+  const backdrop = document.getElementById('modalBackdrop');
+  document.getElementById('modalTitle').innerHTML = status === 'red'
+    ? 'Marcar como <em>erro</em>'
+    : 'Sinalizar para <em>discussão</em>';
+  document.getElementById('modalDesc').textContent = status === 'red'
+    ? 'Descreva o que está errado para que o trainee corrija.'
+    : 'Descreva o que precisa ser conversado sobre este registro.';
+  document.getElementById('modalComment').value = existingNote;
+  backdrop.classList.add('open');
+  setTimeout(() => document.getElementById('modalComment').focus(), 50);
+}
+
+function closeFlagModal() {
+  document.getElementById('modalBackdrop').classList.remove('open');
+  pendingFlagAction = null;
+}
+
+function saveFlagModal() {
+  if (!pendingFlagAction) return;
+  const { rowId, status } = pendingFlagAction;
+  const note = document.getElementById('modalComment').value.trim();
+  if (!note) { alert('Por favor, descreva o motivo da sinalização.'); return; }
+
+  const row = state.active[activeTrainee].find(r => r.id === rowId);
+  if (row) {
+    row.status = status;
+    row.reviewNote = note;
+    row.reviewedBy = activeUser.id;
+    row.reviewedAt = nowTime();
+    saveState(); render();
+  }
+  closeFlagModal();
+}
+
+function updateRowField(rowId, field, value) {
+  const row = state.active[activeTrainee].find(r => r.id === rowId);
+  if (row && row[field] !== value) {
+    row[field] = value;
+    // Se trainee corrige um registro com erro, volta a pending
+    if (row.status === 'red' || row.status === 'yellow') {
+      row.status = 'pending';
+      row.reviewNote = '';
+      row.reviewedBy = null;
+      row.reviewedAt = null;
+    }
+    saveState(); render();
+  }
+}
+
+function addRow() {
+  if (activeUser.role !== 'trainee') return;
+  const empresa = document.getElementById('inputEmpresa').value.trim();
+  const colaborador = document.getElementById('inputColaborador').value.trim();
+  const documento = document.getElementById('inputDocumento').value.trim();
+  if (!empresa && !colaborador && !documento) {
+    alert('Preencha ao menos um campo.');
+    return;
+  }
+  const row = {
+    id: newId(),
+    data: formatDate(state.activeDate) + ' ' + nowTime(),
+    empresa, colaborador, documento,
+    createdBy: activeUser.id,
+    createdAt: nowTime(),
+    status: 'pending',
+    reviewNote: '',
+    reviewedBy: null,
+    reviewedAt: null
+  };
+  if (!state.active[activeUser.id]) state.active[activeUser.id] = [];
+  state.active[activeUser.id].push(row);
+  document.getElementById('inputEmpresa').value = '';
+  document.getElementById('inputColaborador').value = '';
+  document.getElementById('inputDocumento').value = '';
+  document.getElementById('inputEmpresa').focus();
+  saveState(); render();
+}
+
+function closeDay() {
+  const totalRows = Object.values(state.active).flat().length;
+  if (totalRows === 0) {
+    alert('Não há registros para finalizar.');
+    return;
+  }
+  const pending = Object.values(state.active).flat().filter(r => r.status === 'pending').length;
+  let msg = `Finalizar o dia ${formatDate(state.activeDate)} e iniciar nova data?\n\nTodos os ${totalRows} registros (de todos os trainees) irão para o histórico.`;
+  if (pending > 0) {
+    msg += `\n\n⚠️ Atenção: ${pending} registro(s) ainda não foram revisados.`;
+  }
+  if (!confirm(msg)) return;
+
+  state.history.push({
+    date: state.activeDate,
+    snapshots: JSON.parse(JSON.stringify(state.active))
+  });
+  state.activeDate = todayISO();
+  state.active = { joao: [], ana: [] };
+  saveState(); render();
+}
+
+function exportCSV() {
+  const rows = [];
+  rows.push(['Data','Trainee','Empresa','Colaborador','Documento','Status','Observação revisor','Revisor','Hora revisão']);
+  Object.keys(state.active).forEach(traineeKey => {
+    state.active[traineeKey].forEach(r => {
+      rows.push([
+        r.data,
+        TRAINEES[traineeKey],
+        r.empresa,
+        r.colaborador,
+        r.documento,
+        r.status,
+        r.reviewNote || '',
+        r.reviewedBy ? REVIEWERS[r.reviewedBy] : '',
+        r.reviewedAt || ''
+      ]);
+    });
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `gt3_revisao_${state.activeDate}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ============ INIT ============ */
+
+document.getElementById('userSelect').addEventListener('change', (e) => {
+  const [role, id] = e.target.value.split(':');
+  activeUser = { role, id };
+  if (role === 'trainee') activeTrainee = id;
+  render();
+});
+
+document.getElementById('btnAddRow').addEventListener('click', addRow);
+['inputEmpresa','inputColaborador','inputDocumento'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addRow();
+  });
+});
+
+document.getElementById('btnCloseDay').addEventListener('click', closeDay);
+document.getElementById('btnExportDay').addEventListener('click', exportCSV);
+document.getElementById('btnToggleHistory').addEventListener('click', () => {
+  historyExpanded = !historyExpanded;
+  renderHistory();
+});
+
+document.getElementById('btnModalCancel').addEventListener('click', closeFlagModal);
+document.getElementById('btnModalSave').addEventListener('click', saveFlagModal);
+document.getElementById('modalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'modalBackdrop') closeFlagModal();
+});
+
+// Seed demo data se vazio
+if (Object.values(state.active).flat().length === 0 && state.history.length === 0) {
+  state.active.joao = [
+    { id: newId(), data: formatDate(state.activeDate) + ' 08:42', empresa: 'Construtora Alfa Ltda', colaborador: 'Pedro Mendes', documento: 'ASO admissional', createdBy: 'joao', createdAt: '08:42', status: 'pending', reviewNote: '', reviewedBy: null, reviewedAt: null },
+    { id: newId(), data: formatDate(state.activeDate) + ' 09:15', empresa: 'Metalúrgica Beta SA', colaborador: 'Carla Ribeiro', documento: 'PGR 2024', createdBy: 'joao', createdAt: '09:15', status: 'red', reviewNote: 'Documento vencido — precisa solicitar versão atualizada', reviewedBy: 'rodrigo', reviewedAt: '09:30' },
+    { id: newId(), data: formatDate(state.activeDate) + ' 09:48', empresa: 'Logística Gama', colaborador: 'Roberto Lima', documento: 'PCMSO', createdBy: 'joao', createdAt: '09:48', status: 'yellow', reviewNote: 'Verificar se o documento cobre os riscos químicos identificados', reviewedBy: 'rodrigo', reviewedAt: '10:02' }
+  ];
+  state.active.ana = [
+    { id: newId(), data: formatDate(state.activeDate) + ' 08:50', empresa: 'Indústria Delta', colaborador: 'Marina Alves', documento: 'FGTS regular', createdBy: 'ana', createdAt: '08:50', status: 'pending', reviewNote: '', reviewedBy: null, reviewedAt: null },
+    { id: newId(), data: formatDate(state.activeDate) + ' 09:22', empresa: 'Serviços Épsilon', colaborador: 'Lucas Santos', documento: 'ASO periódico', createdBy: 'ana', createdAt: '09:22', status: 'pending', reviewNote: '', reviewedBy: null, reviewedAt: null }
+  ];
+  saveState();
+}
+
+render();
+</script>
+</body>
+</html>

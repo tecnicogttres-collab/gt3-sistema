@@ -1,0 +1,702 @@
+'use client'
+
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useUser } from '../components/UserContext'
+
+type Status = 'pending' | 'red' | 'yellow' | 'green'
+
+type Registro = {
+  id: string
+  data_dia: string
+  empresa: string
+  colaborador: string
+  documento: string
+  criado_por: string
+  criado_em: string
+  status: Status
+  nota_revisor: string | null
+  revisado_por: string | null
+  revisado_em: string | null
+  criado_por_profile: { nome: string } | null
+  revisado_por_profile: { nome: string } | null
+}
+
+type DateRow = {
+  data: string
+  finalizado: boolean
+  finalizado_em: string | null
+  finalizador?: { nome: string } | null
+}
+
+type Trainee = { id: string; nome: string }
+
+type ApiData = {
+  activeDate: string | null
+  activeDateRow: DateRow | null
+  records: Registro[]
+  historyDates: DateRow[]
+  trainees: Trainee[]
+  currentUserId: string
+  currentPapel: string
+}
+
+const STATUS_LABEL: Record<Status, string> = {
+  pending: 'Pendente',
+  red: 'Erro',
+  yellow: 'A discutir',
+  green: 'Aprovado',
+}
+
+function formatDate(iso: string) {
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function formatDateLong(iso: string) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function todayISO() {
+  return new Date().toISOString().split('T')[0]
+}
+
+function rowBg(status: Status) {
+  if (status === 'red') return '#FEF2F2'
+  if (status === 'yellow') return '#FFFBEB'
+  return 'transparent'
+}
+
+function rowBorderLeft(status: Status) {
+  if (status === 'red') return '3px solid #DC2626'
+  if (status === 'yellow') return '3px solid #D97706'
+  return '3px solid transparent'
+}
+
+export default function RevisoesTraineeClient() {
+  const { profile, loading: profileLoading } = useUser()
+
+  const [data, setData] = useState<ApiData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState('')
+  const [activeTraineeId, setActiveTraineeId] = useState<string>('')
+
+  // Add record form (trainee)
+  const [newEmpresa, setNewEmpresa] = useState('')
+  const [newColaborador, setNewColaborador] = useState('')
+  const [newDocumento, setNewDocumento] = useState('')
+  const [addingRow, setAddingRow] = useState(false)
+
+  // Inline edit (trainee)
+  const [editCell, setEditCell] = useState<{ id: string; field: string } | null>(null)
+  const [editVal, setEditVal] = useState('')
+  const editRef = useRef<HTMLInputElement>(null)
+
+  // Flag modal (revisor)
+  const [flagModal, setFlagModal] = useState<{ id: string; status: 'red' | 'yellow' } | null>(null)
+  const [flagNote, setFlagNote] = useState('')
+  const [flagLoading, setFlagLoading] = useState(false)
+
+  // Finalizar modal
+  const [finalizarOpen, setFinalizarOpen] = useState(false)
+  const [finalizarLoading, setFinalizarLoading] = useState(false)
+
+  // Nova data modal
+  const [novaDataOpen, setNovaDataOpen] = useState(false)
+  const [novaDataInput, setNovaDataInput] = useState(todayISO())
+  const [novaDataLoading, setNovaDataLoading] = useState(false)
+  const [novaDataError, setNovaDataError] = useState('')
+
+  // History
+  const [historyExpanded, setHistoryExpanded] = useState(true)
+  const [historyRecords, setHistoryRecords] = useState<Record<string, Registro[]>>({})
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+
+  const [toast, setToast] = useState('')
+
+  const isTrainee = profile?.papel === 'trainee'
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  const fetchData = useCallback(async () => {
+    const res = await fetch('/api/revisoes')
+    if (!res.ok) { setFetchError('Erro ao carregar dados'); setLoading(false); return }
+    const json: ApiData = await res.json()
+    setData(prev => {
+      // Keep activeTraineeId if already set and still in trainees list
+      if (!activeTraineeId && json.trainees.length > 0) setActiveTraineeId(json.trainees[0].id)
+      return json
+    })
+    setLoading(false)
+    setFetchError('')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!profileLoading) fetchData()
+  }, [profileLoading, fetchData])
+
+  useEffect(() => {
+    if (editCell && editRef.current) editRef.current.focus()
+  }, [editCell])
+
+  if (profileLoading || loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#6B7A99', fontSize: 14 }}>
+        Carregando...
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return <div style={{ padding: 32, color: '#DC2626', fontSize: 14 }}>{fetchError}</div>
+  }
+
+  if (!data) return null
+
+  const activeDate = data.activeDate
+  const isFinalized = data.activeDateRow?.finalizado ?? false
+  const records = data.records
+
+  const visibleRecords = isTrainee
+    ? records.filter(r => r.criado_por === data.currentUserId)
+    : activeTraineeId
+      ? records.filter(r => r.criado_por === activeTraineeId)
+      : []
+
+  const activeRecords = visibleRecords.filter(r => r.status !== 'green')
+  const pendingCount = visibleRecords.filter(r => r.status === 'pending').length
+  const redCount = visibleRecords.filter(r => r.status === 'red').length
+  const yellowCount = visibleRecords.filter(r => r.status === 'yellow').length
+  const greenCount = visibleRecords.filter(r => r.status === 'green').length
+  const totalCount = visibleRecords.length
+
+  // ── Add record ─────────────────────────────────────────────────
+  async function handleAddRow() {
+    if (!newEmpresa.trim() && !newColaborador.trim() && !newDocumento.trim()) return
+    if (!activeDate) return
+    setAddingRow(true)
+    const res = await fetch('/api/revisoes/registros', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data_dia: activeDate, empresa: newEmpresa, colaborador: newColaborador, documento: newDocumento }),
+    })
+    if (res.ok) {
+      setNewEmpresa(''); setNewColaborador(''); setNewDocumento('')
+      await fetchData()
+    }
+    setAddingRow(false)
+  }
+
+  // ── Inline edit ────────────────────────────────────────────────
+  function startEdit(id: string, field: string, value: string) {
+    setEditCell({ id, field })
+    setEditVal(value)
+  }
+
+  async function commitEdit() {
+    if (!editCell) return
+    const rec = records.find(r => r.id === editCell.id)
+    if (!rec || rec[editCell.field as keyof Registro] === editVal) { setEditCell(null); return }
+    const res = await fetch(`/api/revisoes/registros/${editCell.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [editCell.field]: editVal }),
+    })
+    if (res.ok) await fetchData()
+    setEditCell(null)
+  }
+
+  // ── Delete record ──────────────────────────────────────────────
+  async function handleDelete(id: string) {
+    if (!confirm('Excluir este registro?')) return
+    await fetch(`/api/revisoes/registros/${id}`, { method: 'DELETE' })
+    await fetchData()
+  }
+
+  // ── Approve ────────────────────────────────────────────────────
+  async function handleApprove(id: string) {
+    await fetch(`/api/revisoes/registros/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'green', nota_revisor: null }),
+    })
+    await fetchData()
+  }
+
+  // ── Clear flag ─────────────────────────────────────────────────
+  async function handleClear(id: string) {
+    await fetch(`/api/revisoes/registros/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'pending', nota_revisor: null }),
+    })
+    await fetchData()
+  }
+
+  // ── Flag modal ─────────────────────────────────────────────────
+  function openFlag(id: string, status: 'red' | 'yellow') {
+    const rec = records.find(r => r.id === id)
+    setFlagModal({ id, status })
+    setFlagNote(rec?.nota_revisor ?? '')
+  }
+
+  async function submitFlag() {
+    if (!flagModal) return
+    if (!flagNote.trim()) { alert('Descreva o motivo da sinalização.'); return }
+    setFlagLoading(true)
+    await fetch(`/api/revisoes/registros/${flagModal.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: flagModal.status, nota_revisor: flagNote }),
+    })
+    await fetchData()
+    setFlagModal(null); setFlagNote(''); setFlagLoading(false)
+  }
+
+  // ── Finalizar ──────────────────────────────────────────────────
+  async function handleFinalizar() {
+    if (!activeDate) return
+    setFinalizarLoading(true)
+    const res = await fetch('/api/revisoes/finalizar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data_dia: activeDate }),
+    })
+    if (res.ok) showToast('Dia finalizado com sucesso!')
+    setFinalizarOpen(false)
+    setFinalizarLoading(false)
+    await fetchData()
+  }
+
+  // ── Nova data ──────────────────────────────────────────────────
+  async function handleNovaData() {
+    setNovaDataLoading(true); setNovaDataError('')
+    const res = await fetch('/api/revisoes/nova-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data_dia: novaDataInput }),
+    })
+    if (res.ok) {
+      setNovaDataOpen(false); setNovaDataInput(todayISO())
+      await fetchData()
+    } else {
+      const d = await res.json()
+      setNovaDataError(d.error ?? 'Erro ao criar data')
+    }
+    setNovaDataLoading(false)
+  }
+
+  // ── History ────────────────────────────────────────────────────
+  async function toggleDay(dataDia: string) {
+    const next = new Set(expandedDays)
+    if (next.has(dataDia)) { next.delete(dataDia); setExpandedDays(next); return }
+    next.add(dataDia); setExpandedDays(next)
+    if (!historyRecords[dataDia]) {
+      const res = await fetch(`/api/revisoes/historico/${dataDia}`)
+      if (res.ok) {
+        const recs: Registro[] = await res.json()
+        setHistoryRecords(prev => ({ ...prev, [dataDia]: recs }))
+      }
+    }
+  }
+
+  // ── CSV export ─────────────────────────────────────────────────
+  function exportCSV() {
+    const rows = [['Data', 'Trainee', 'Empresa', 'Colaborador', 'Documento', 'Status', 'Observação', 'Revisor', 'Hora revisão']]
+    records.forEach(r => {
+      rows.push([
+        r.data_dia, r.criado_por_profile?.nome ?? '', r.empresa, r.colaborador, r.documento,
+        STATUS_LABEL[r.status], r.nota_revisor ?? '',
+        r.revisado_por_profile?.nome ?? '', r.revisado_em ? formatTime(r.revisado_em) : '',
+      ])
+    })
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `gt3_revisoes_${activeDate ?? 'historico'}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ── Cell renderer ──────────────────────────────────────────────
+  function renderCell(rec: Registro, field: 'empresa' | 'colaborador' | 'documento') {
+    const canEdit = isTrainee && rec.criado_por === data!.currentUserId && !!activeDate && !isFinalized
+    const isEditing = editCell?.id === rec.id && editCell.field === field
+
+    if (canEdit && isEditing) {
+      return (
+        <input
+          ref={editRef}
+          value={editVal}
+          onChange={e => setEditVal(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitEdit() } if (e.key === 'Escape') setEditCell(null) }}
+          style={{ width: '100%', border: 'none', borderBottom: '2px solid #2A4F96', outline: 'none', fontSize: 13, padding: '2px 0', background: 'transparent', color: '#1E293B' }}
+        />
+      )
+    }
+
+    return (
+      <span
+        onClick={() => canEdit && startEdit(rec.id, field, rec[field])}
+        style={{ cursor: canEdit ? 'text' : 'default', borderBottom: canEdit ? '1px dashed #CBD5E1' : 'none', fontSize: 13, color: '#1E293B', display: 'block', minWidth: 60, minHeight: 20, padding: '2px 0' }}
+      >
+        {rec[field] || <span style={{ color: '#CBD5E1' }}>—</span>}
+      </span>
+    )
+  }
+
+  return (
+    <div>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1100, backgroundColor: '#1E3A6E', color: '#fff', padding: '12px 20px', borderRadius: 8, fontSize: 14, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1E293B' }}>Revisões Trainee</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7A99' }}>
+            {activeDate ? formatDateLong(activeDate) : 'Nenhuma data ativa'}
+          </p>
+        </div>
+        {!isTrainee && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {activeDate && !isFinalized && (
+              <button onClick={() => setFinalizarOpen(true)} style={{ padding: '8px 16px', backgroundColor: '#DC2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Finalizar dia
+              </button>
+            )}
+            {!activeDate && (
+              <button onClick={() => { setNovaDataOpen(true); setNovaDataInput(todayISO()); setNovaDataError('') }} style={{ padding: '8px 16px', backgroundColor: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                + Nova data
+              </button>
+            )}
+            {activeDate && (
+              <button onClick={exportCSV} style={{ padding: '8px 16px', backgroundColor: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                Exportar CSV
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Stats */}
+      {activeDate && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Total', value: totalCount, color: '#1E293B' },
+            { label: 'Pendentes', value: pendingCount, color: '#6B7A99' },
+            { label: 'Com erro', value: redCount, color: '#DC2626' },
+            { label: 'A discutir', value: yellowCount, color: '#D97706' },
+            { label: 'Aprovados', value: greenCount, color: '#16A34A' },
+          ].map(s => (
+            <div key={s.label} style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 14px', minWidth: 72 }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', fontWeight: 600, marginBottom: 4 }}>{s.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No active date */}
+      {!activeDate && (
+        <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '48px 32px', textAlign: 'center', color: '#6B7A99', fontSize: 14, marginBottom: 24 }}>
+          {isTrainee ? 'Aguardando um revisor criar a data do dia.' : 'Nenhuma data ativa. Clique em "+ Nova data" para iniciar.'}
+        </div>
+      )}
+
+      {/* Trainee tabs (revisor only) */}
+      {!isTrainee && activeDate && (
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #E2E8F0', overflowX: 'auto' }}>
+          {data.trainees.length === 0 ? (
+            <span style={{ padding: '11px 18px', fontSize: 13, color: '#94A3B8', fontStyle: 'italic' }}>Nenhum trainee cadastrado</span>
+          ) : data.trainees.map(t => {
+            const tRecs = records.filter(r => r.criado_por === t.id)
+            const tFlagged = tRecs.filter(r => r.status === 'red' || r.status === 'yellow').length
+            const isActive = activeTraineeId === t.id
+            return (
+              <button key={t.id} onClick={() => setActiveTraineeId(t.id)} style={{ background: 'none', border: 'none', padding: '11px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', color: isActive ? '#1E293B' : '#6B7A99', borderBottom: isActive ? '2px solid #2A4F96' : '2px solid transparent', marginBottom: -1, display: 'flex', alignItems: 'center', gap: 7 }}>
+                {t.nome.split(' ')[0]}
+                {tFlagged > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#DC2626', display: 'inline-block' }} />}
+                <span style={{ backgroundColor: isActive ? '#1E3A6E' : '#E2E8F0', color: isActive ? '#D1AE6E' : '#6B7A99', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10 }}>
+                  {tRecs.filter(r => r.status !== 'green').length}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Table */}
+      {activeDate && (
+        <div style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: isTrainee ? 12 : '0 0 12px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden', marginBottom: 24 }}>
+          <div style={{ padding: '11px 18px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FAFAFA' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>
+              {isTrainee ? 'Seus registros de hoje' : (activeTraineeId ? `Registros — ${data.trainees.find(t => t.id === activeTraineeId)?.nome ?? '—'}` : 'Registros')}
+            </span>
+            <span style={{ fontSize: 11, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {isTrainee ? 'Você está adicionando registros' : 'Modo revisor'}
+            </span>
+          </div>
+
+          {activeRecords.length === 0 ? (
+            <div style={{ padding: '48px 24px', textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>
+              {isTrainee ? 'Nenhum registro ainda. Use o formulário abaixo para adicionar.' : 'Nenhum registro pendente para este trainee.'}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F8FAFC' }}>
+                    {['Hora', 'Empresa', 'Colaborador', 'Documento', isTrainee ? '' : 'Ações'].map((col, i) => (
+                      <th key={i} style={{ padding: '8px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeRecords.map(rec => (
+                    <tr key={rec.id} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: rowBg(rec.status), borderLeft: rowBorderLeft(rec.status) }}>
+                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#6B7A99', fontSize: 12 }}>{formatTime(rec.criado_em)}</td>
+                      <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'empresa')}</td>
+                      <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'colaborador')}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        {renderCell(rec, 'documento')}
+                        {rec.nota_revisor && (
+                          <div style={{ fontSize: 11, color: rec.status === 'red' ? '#9B1C1C' : '#92400E', marginTop: 4, fontStyle: 'italic', borderLeft: `2px solid ${rec.status === 'red' ? '#FCA5A5' : '#FCD34D'}`, paddingLeft: 6 }}>
+                            "{rec.nota_revisor}" — {rec.revisado_por_profile?.nome ?? '—'}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                        {isTrainee ? (
+                          rec.criado_por === data.currentUserId && !isFinalized && (
+                            <button onClick={() => handleDelete(rec.id)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: 12, padding: '3px 6px', borderRadius: 4 }} onMouseEnter={e => (e.currentTarget.style.color = '#DC2626')} onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}>
+                              excluir
+                            </button>
+                          )
+                        ) : (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => handleApprove(rec.id)} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#16A34A', fontSize: 11, fontWeight: 500, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#F0FFF4'; e.currentTarget.style.borderColor = '#16A34A' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}>
+                              ✓ Aprovar
+                            </button>
+                            <button onClick={() => openFlag(rec.id, 'yellow')} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#D97706', fontSize: 11, fontWeight: 500, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#FFFBEB'; e.currentTarget.style.borderColor = '#D97706' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}>
+                              ! Discutir
+                            </button>
+                            <button onClick={() => openFlag(rec.id, 'red')} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#DC2626', fontSize: 11, fontWeight: 500, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = '#DC2626' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}>
+                              ✕ Erro
+                            </button>
+                            {rec.status !== 'pending' && (
+                              <button onClick={() => handleClear(rec.id)} style={{ padding: '4px 8px', borderRadius: 5, border: 'none', background: 'transparent', color: '#94A3B8', fontSize: 11, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.color = '#374151'; e.currentTarget.style.background = '#F1F5F9' }} onMouseLeave={e => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'transparent' }}>
+                                limpar
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Add form (trainee) */}
+          {isTrainee && !isFinalized && (
+            <div style={{ padding: '11px 18px', borderTop: '1px solid #F1F5F9', backgroundColor: '#FAFAFA', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([
+                { v: newEmpresa, s: setNewEmpresa, p: 'Empresa', f: 2 },
+                { v: newColaborador, s: setNewColaborador, p: 'Colaborador', f: 1 },
+                { v: newDocumento, s: setNewDocumento, p: 'Documento', f: 2 },
+              ] as { v: string; s: (x: string) => void; p: string; f: number }[]).map(({ v, s, p, f }) => (
+                <input key={p} type="text" placeholder={p} value={v} onChange={e => s(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddRow() }} style={{ flex: f, minWidth: 110, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
+              ))}
+              <button onClick={handleAddRow} disabled={addingRow} style={{ padding: '8px 16px', backgroundColor: addingRow ? '#9BB3D4' : '#2A4F96', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: addingRow ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                {addingRow ? 'Adicionando...' : '+ Adicionar'}
+              </button>
+            </div>
+          )}
+
+          {isTrainee && isFinalized && (
+            <div style={{ padding: '11px 18px', borderTop: '1px solid #F1F5F9', backgroundColor: '#F8FAFC', fontSize: 12, color: '#6B7A99', textAlign: 'center' }}>
+              Este dia foi finalizado — novos registros não são permitidos.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* History */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Histórico</h2>
+          <button onClick={() => setHistoryExpanded(p => !p)} style={{ background: 'none', border: 'none', color: '#6B7A99', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+            {historyExpanded ? 'ocultar' : 'mostrar'}
+          </button>
+        </div>
+
+        {historyExpanded && (
+          data.historyDates.length === 0
+            ? <div style={{ padding: '16px 0', color: '#94A3B8', fontSize: 14, fontStyle: 'italic' }}>Nenhum dia finalizado ainda.</div>
+            : data.historyDates.map(hd => {
+              const isOpen = expandedDays.has(hd.data)
+              const hRecs = historyRecords[hd.data] ?? []
+              const hGreen = hRecs.filter(r => r.status === 'green').length
+              const hRed = hRecs.filter(r => r.status === 'red').length
+              const hYellow = hRecs.filter(r => r.status === 'yellow').length
+              const hPending = hRecs.filter(r => r.status === 'pending').length
+
+              const traineeMap: Record<string, { nome: string; recs: Registro[] }> = {}
+              hRecs.forEach(r => {
+                const key = r.criado_por
+                if (!traineeMap[key]) traineeMap[key] = { nome: r.criado_por_profile?.nome ?? key, recs: [] }
+                traineeMap[key].recs.push(r)
+              })
+
+              return (
+                <div key={hd.data} style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+                  <div onClick={() => toggleDay(hd.data)} style={{ padding: '11px 18px', backgroundColor: '#FAFAFA', borderBottom: isOpen ? '1px solid #E2E8F0' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#FAFAFA')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{formatDate(hd.data)}</span>
+                      {hd.finalizador && <span style={{ fontSize: 11, color: '#94A3B8' }}>finalizado por {hd.finalizador.nome}</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11 }}>
+                      {isOpen && hRecs.length > 0 && (
+                        <>
+                          <span style={{ color: '#16A34A' }}>● {hGreen}</span>
+                          <span style={{ color: '#DC2626' }}>● {hRed}</span>
+                          <span style={{ color: '#D97706' }}>● {hYellow}</span>
+                          {hPending > 0 && <span style={{ color: '#94A3B8' }}>○ {hPending}</span>}
+                        </>
+                      )}
+                      <span style={{ color: '#94A3B8', fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
+                    </div>
+                  </div>
+
+                  {isOpen && (
+                    <div>
+                      {hRecs.length === 0 ? (
+                        <div style={{ padding: '20px', color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>Carregando...</div>
+                      ) : Object.values(traineeMap).map(({ nome, recs }) => (
+                        <div key={nome} style={{ borderTop: '1px solid #F1F5F9' }}>
+                          <div style={{ padding: '7px 18px', backgroundColor: '#F8FAFC', fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                            {nome} · {recs.length} registro{recs.length > 1 ? 's' : ''}
+                          </div>
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                              <thead>
+                                <tr style={{ backgroundColor: '#FAFAFA' }}>
+                                  {['Hora', 'Empresa', 'Colaborador', 'Documento', 'Status', 'Revisor'].map((col, i) => (
+                                    <th key={i} style={{ padding: '7px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #F1F5F9' }}>{col}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {recs.map(r => (
+                                  <tr key={r.id} style={{ borderBottom: '1px solid #F8FAFC', backgroundColor: rowBg(r.status) }}>
+                                    <td style={{ padding: '8px 14px', color: '#6B7A99', fontSize: 11, whiteSpace: 'nowrap' }}>{formatTime(r.criado_em)}</td>
+                                    <td style={{ padding: '8px 14px' }}>{r.empresa}</td>
+                                    <td style={{ padding: '8px 14px' }}>{r.colaborador}</td>
+                                    <td style={{ padding: '8px 14px' }}>
+                                      {r.documento}
+                                      {r.nota_revisor && <div style={{ fontSize: 10, color: '#6B7A99', fontStyle: 'italic', marginTop: 2 }}>"{r.nota_revisor}"</div>}
+                                    </td>
+                                    <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
+                                      <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 6px', borderRadius: 4, backgroundColor: r.status === 'green' ? '#D1FAE5' : r.status === 'red' ? '#FEE2E2' : r.status === 'yellow' ? '#FEF3C7' : '#F1F5F9', color: r.status === 'green' ? '#065F46' : r.status === 'red' ? '#991B1B' : r.status === 'yellow' ? '#92400E' : '#6B7A99' }}>
+                                        {STATUS_LABEL[r.status]}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '8px 14px', fontSize: 11, color: '#6B7A99' }}>{r.revisado_por_profile?.nome ?? '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+        )}
+      </div>
+
+      {/* ── Modal: Flag ───────────────────────────────────────────── */}
+      {flagModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setFlagModal(null) }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>
+                {flagModal.status === 'red' ? 'Marcar como erro' : 'Sinalizar para discussão'}
+              </h2>
+              <button onClick={() => setFlagModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+            </div>
+            <p style={{ margin: '0 0 14px', fontSize: 13, color: '#6B7A99' }}>
+              {flagModal.status === 'red' ? 'Descreva o que está errado.' : 'Descreva o que precisa ser conversado.'}
+            </p>
+            <textarea autoFocus value={flagNote} onChange={e => setFlagNote(e.target.value)} placeholder="Digite sua observação..." rows={3} style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, color: '#1E293B', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={() => setFlagModal(null)} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #D1D5DB', backgroundColor: '#fff', color: '#374151', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={submitFlag} disabled={flagLoading} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: flagLoading ? '#9BB3D4' : flagModal.status === 'red' ? '#DC2626' : '#D97706', color: '#fff', fontSize: 14, fontWeight: 600, cursor: flagLoading ? 'not-allowed' : 'pointer' }}>
+                {flagLoading ? 'Salvando...' : 'Salvar sinalização'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Finalizar ──────────────────────────────────────── */}
+      {finalizarOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setFinalizarOpen(false) }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Finalizar dia</h2>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6B7A99' }}>
+              {activeDate ? `Finalizar ${formatDateLong(activeDate)}? Todos os registros vão para o histórico.` : ''}
+            </p>
+            {pendingCount > 0 && (
+              <div style={{ marginBottom: 16, padding: '10px 14px', backgroundColor: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, fontSize: 13, color: '#92400E' }}>
+                ⚠️ {pendingCount} registro{pendingCount > 1 ? 's' : ''} ainda não {pendingCount > 1 ? 'foram revisados' : 'foi revisado'}.
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setFinalizarOpen(false)} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #D1D5DB', backgroundColor: '#fff', color: '#374151', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={handleFinalizar} disabled={finalizarLoading} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: finalizarLoading ? '#F87171' : '#DC2626', color: '#fff', fontSize: 14, fontWeight: 600, cursor: finalizarLoading ? 'not-allowed' : 'pointer' }}>
+                {finalizarLoading ? 'Finalizando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Nova data ──────────────────────────────────────── */}
+      {novaDataOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setNovaDataOpen(false) }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Nova data</h2>
+            <p style={{ margin: '0 0 14px', fontSize: 13, color: '#6B7A99' }}>Selecione a data a ser ativada.</p>
+            <input type="date" value={novaDataInput} onChange={e => setNovaDataInput(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+            {novaDataError && <div style={{ marginBottom: 14, padding: '10px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>{novaDataError}</div>}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setNovaDataOpen(false)} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #D1D5DB', backgroundColor: '#fff', color: '#374151', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={handleNovaData} disabled={novaDataLoading || !novaDataInput} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: novaDataLoading ? '#9BB3D4' : '#2A4F96', color: '#fff', fontSize: 14, fontWeight: 600, cursor: novaDataLoading ? 'not-allowed' : 'pointer' }}>
+                {novaDataLoading ? 'Criando...' : 'Criar data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

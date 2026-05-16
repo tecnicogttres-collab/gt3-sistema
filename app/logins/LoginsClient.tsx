@@ -20,19 +20,21 @@ type UserRow = {
   created_at: string
 }
 
-const PAPEIS_CRIACAO = ['colaborador', 'gestor'] as const
-const PAPEIS_TODOS = ['colaborador', 'gestor', 'admin'] as const
+const PAPEIS_CRIACAO = ['colaborador', 'gestor', 'trainee'] as const
+const PAPEIS_TODOS = ['colaborador', 'gestor', 'admin', 'trainee'] as const
 
 const PAPEL_LABELS: Record<string, string> = {
   colaborador: 'Colaborador',
   gestor: 'Gestor',
   admin: 'Admin',
+  trainee: 'Trainee',
 }
 
 const PAPEL_COLORS: Record<string, { bg: string; color: string }> = {
   admin:       { bg: '#FEF3C7', color: '#92400E' },
   gestor:      { bg: '#EBF4FF', color: '#1E40AF' },
   colaborador: { bg: '#F0FFF4', color: '#166534' },
+  trainee:     { bg: '#D1FAE5', color: '#065F46' },
 }
 
 function toUsername(email: string) {
@@ -443,8 +445,9 @@ export default function LoginsClient() {
                   onChange={(e) => setForm((f) => ({ ...f, papel: e.target.value }))}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
                 >
-                  <option value="colaborador">Colaborador</option>
-                  <option value="gestor">Gestor</option>
+                  {PAPEIS_CRIACAO.map((p) => (
+                    <option key={p} value={p}>{PAPEL_LABELS[p]}</option>
+                  ))}
                 </select>
               </div>
 

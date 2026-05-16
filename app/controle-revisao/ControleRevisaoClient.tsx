@@ -571,7 +571,7 @@ export default function ControleRevisaoClient() {
 
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: INK, letterSpacing: -0.3 }}>Controle de Revisão</h1>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: INK, letterSpacing: -0.3 }}>Revisões BSA</h1>
         <p style={{ margin: '4px 0 0', fontSize: 13, color: MUTED }}>Registro de inconsistências + escala diária de revisores</p>
       </div>
 

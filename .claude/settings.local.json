@@ -24,7 +24,9 @@
       "PowerShell(New-Item *)",
       "Bash(curl *)",
       "PowerShell(head *)",
-      "PowerShell(node -e \"require\\('xlsx'\\)\" 2>&1)"
+      "PowerShell(node -e \"require\\('xlsx'\\)\" 2>&1)",
+      "Bash(git remote *)",
+      "Bash(xargs cat)"
     ]
   }
 }

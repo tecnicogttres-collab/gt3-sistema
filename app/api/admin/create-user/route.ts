@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   if (senha.length < 6) {
     return Response.json({ error: 'Senha deve ter ao menos 6 caracteres' }, { status: 400 })
   }
-  if (!['colaborador', 'gestor'].includes(papel)) {
+  if (!['colaborador', 'gestor', 'trainee'].includes(papel)) {
     return Response.json({ error: 'Papel inválido' }, { status: 400 })
   }
 

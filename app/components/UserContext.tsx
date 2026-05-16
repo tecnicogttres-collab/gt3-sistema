@@ -8,7 +8,7 @@ export type Profile = {
   id: string
   nome: string | null
   email: string | null
-  papel: 'colaborador' | 'gestor' | 'admin' | null
+  papel: 'colaborador' | 'gestor' | 'admin' | 'trainee' | null
   gestor_id: string | null
   pdi_slug: string | null
 }
@@ -36,15 +36,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
 
   async function loadProfile(_userId: string) {
-    const res = await fetch('/api/me')
-    if (res.ok) setProfile(await res.json())
-    else setProfile(null)
+    try {
+      const res = await fetch('/api/me')
+      if (res.ok) setProfile(await res.json())
+      else setProfile(null)
+    } catch {
+      setProfile(null)
+    }
   }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user)
       if (user) loadProfile(user.id)
+      setLoading(false)
+    }).catch(() => {
       setLoading(false)
     })
 

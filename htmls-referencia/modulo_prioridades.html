@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT3 — Módulo de Prioridades</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e1e4e8;
+    --text: #1a1d21;
+    --text-muted: #6b7280;
+    --primary: #1e40af;
+    --primary-hover: #1e3a8a;
+    --primary-soft: #eff6ff;
+    --danger: #b91c1c;
+    --danger-hover: #991b1b;
+    --success: #047857;
+    --warning: #b45309;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Header */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header-left h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .header-left .subtitle {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-top: 2px;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .user-simulator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--primary-soft);
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    border: 1px solid #dbeafe;
+  }
+  .user-simulator label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .user-simulator select {
+    border: none;
+    background: transparent;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .user-simulator input {
+    border: 1px solid #dbeafe;
+    background: white;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+    width: 110px;
+  }
+
+  /* Container */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .toolbar-filters {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    flex-wrap: wrap;
+  }
+  .toolbar-filters input,
+  .toolbar-filters select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    background: white;
+  }
+  .toolbar-filters input { min-width: 200px; }
+
+  /* Buttons */
+  .btn {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn:hover { background: #f9fafb; }
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-danger {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+  }
+  .btn-danger:hover { background: var(--danger-hover); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+  }
+  .btn-ghost:hover { background: #f3f4f6; color: var(--text); }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Cards / List */
+  .priorities-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .priority-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: grid;
+    grid-template-columns: auto 32px 1fr auto;
+    gap: 14px;
+    align-items: start;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.15s, transform 0.15s;
+  }
+  .priority-card.dragging {
+    opacity: 0.4;
+  }
+  .priority-card.drag-over {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-soft);
+  }
+  .drag-handle {
+    cursor: grab;
+    color: var(--text-muted);
+    padding: 4px;
+    user-select: none;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .drag-handle:active { cursor: grabbing; }
+  .position-badge {
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 13px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card-body { min-width: 0; }
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+  }
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .card-meta strong { color: var(--text); font-weight: 500; }
+  .last-status {
+    background: #fafbfc;
+    border-left: 3px solid var(--border);
+    padding: 8px 12px;
+    border-radius: 0 4px 4px 0;
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .last-status-header {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .last-status-text {
+    color: var(--text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 24px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+  }
+  .empty-state h3 { margin: 0 0 8px 0; color: var(--text); }
+
+  /* Modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 100;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+    overflow-y: auto;
+  }
+  .modal-backdrop.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius);
+    max-width: 720px;
+    width: 100%;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-header h2 { margin: 0; font-size: 16px; }
+  .modal-close {
+    background: transparent;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0;
+    line-height: 1;
+  }
+  .modal-body { padding: 20px; }
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* Form */
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .form-group input,
+  .form-group textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .form-group textarea { resize: vertical; min-height: 80px; }
+  .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+  /* Detail view (status feed + history) */
+  .detail-section {
+    margin-bottom: 24px;
+  }
+  .detail-section h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+  .detail-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    background: #fafbfc;
+    padding: 12px;
+    border-radius: var(--radius);
+  }
+  .detail-info-grid > div { font-size: 13px; }
+  .detail-info-grid label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .detail-edit-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    background: transparent;
+    color: var(--text);
+    transition: all 0.15s;
+  }
+  .detail-edit-input:hover {
+    background: white;
+    border-color: var(--border);
+  }
+  .detail-edit-input:focus {
+    background: white;
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--primary-soft);
+  }
+  .status-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 350px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .status-entry {
+    background: #fafbfc;
+    border-left: 3px solid var(--primary);
+    padding: 10px 12px;
+    border-radius: 0 4px 4px 0;
+  }
+  .status-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .status-entry-author { font-weight: 600; color: var(--text); }
+  .status-entry-text {
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .status-entry-edit-btn {
+    background: transparent;
+    border: none;
+    color: var(--primary);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    margin-left: 8px;
+  }
+  .edited-tag {
+    font-style: italic;
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-left: 4px;
+  }
+  .new-status-area {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .new-status-area textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 60px;
+  }
+  .new-status-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+  .history-list {
+    max-height: 250px;
+    overflow-y: auto;
+    background: #fafbfc;
+    border-radius: var(--radius);
+    padding: 8px 12px;
+  }
+  .history-item {
+    font-size: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item strong { color: var(--text); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--text);
+    color: white;
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.2s;
+    z-index: 200;
+    pointer-events: none;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Confirm dialog reuses modal */
+  .confirm-text {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 640px) {
+    .priority-card {
+      grid-template-columns: auto 32px 1fr;
+    }
+    .card-actions {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+    .detail-info-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Prioridades</h1>
+    <div class="subtitle">Empresas em análise prioritária de documentação</div>
+  </div>
+  <div class="header-right">
+    <div class="user-simulator">
+      <label>Simular usuário:</label>
+      <input type="text" id="userName" value="Rodrigo Balem">
+      <select id="userRole">
+        <option value="colaborador">Colaborador</option>
+        <option value="gestor" selected>Gestor</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="toolbar">
+    <div class="toolbar-filters">
+      <input type="text" id="searchInput" placeholder="Buscar empresa ou contratante...">
+      <select id="filterResponsible">
+        <option value="">Todos os responsáveis</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="openCreateModal()">+ Nova prioridade</button>
+  </div>
+
+  <div id="prioritiesList" class="priorities-list"></div>
+  <div id="emptyState" class="empty-state" style="display:none;">
+    <h3>Nenhuma prioridade cadastrada</h3>
+    <p>Clique em "+ Nova prioridade" para adicionar a primeira empresa ao radar do time.</p>
+  </div>
+</div>
+
+<!-- Modal: Create / Edit -->
+<div id="formModal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="formModalTitle">Nova prioridade</h2>
+      <button class="modal-close" onclick="closeFormModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="formEmpresa">Nome da empresa *</label>
+        <input type="text" id="formEmpresa" placeholder="Ex.: Construtora Alfa Ltda.">
+      </div>
+      <div class="form-group">
+        <label for="formContratante">Contratante *</label>
+        <input type="text" id="formContratante" placeholder="Ex.: Indústria Beta S.A.">
+      </div>
+      <div class="form-group" id="formStatusGroup">
+        <label for="formStatus">Status inicial *</label>
+        <textarea id="formStatus" placeholder="Descreva a situação inicial da prioridade..."></textarea>
+        <div class="form-hint">Esta será a primeira entrada do histórico cronológico de status.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeFormModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveForm()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Detail / Status feed -->
+<div id="detailModal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="detailTitle">Detalhes</h2>
+      <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-section">
+        <h3>Informações</h3>
+        <div class="detail-info-grid">
+          <div>
+            <label>Empresa</label>
+            <input type="text" id="detailEmpresaInput" class="detail-edit-input">
+          </div>
+          <div>
+            <label>Contratante</label>
+            <input type="text" id="detailContratanteInput" class="detail-edit-input">
+          </div>
+          <div>
+            <label>Responsável GT3</label>
+            <div id="detailResponsavel"></div>
+          </div>
+          <div>
+            <label>Criado em</label>
+            <div id="detailCriado"></div>
+          </div>
+        </div>
+        <div id="detailEditActions" style="display:none; justify-content:flex-end; gap:6px; margin-top:8px;">
+          <button class="btn btn-sm" onclick="cancelDetailEdit()">Cancelar</button>
+          <button class="btn btn-sm btn-primary" onclick="saveDetailEdit()">Salvar alterações</button>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Histórico de status</h3>
+        <div id="statusFeed" class="status-feed"></div>
+        <div class="new-status-area">
+          <textarea id="newStatusInput" placeholder="Adicionar nova atualização de status..."></textarea>
+          <div class="new-status-actions">
+            <button class="btn btn-primary btn-sm" onclick="addStatusEntry()">Adicionar atualização</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Histórico de edições</h3>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeDetailModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm -->
+<div id="confirmModal" class="modal-backdrop">
+  <div class="modal" style="max-width: 420px;">
+    <div class="modal-header">
+      <h2 id="confirmTitle">Confirmar</h2>
+    </div>
+    <div class="modal-body">
+      <p class="confirm-text" id="confirmText"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeConfirm()">Cancelar</button>
+      <button class="btn btn-danger" id="confirmActionBtn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  // ====== State ======
+  const STORAGE_KEY = 'gt3_prioridades_v1';
+  const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutos
+
+  let state = {
+    priorities: [], // {id, empresa, contratante, responsavel, criadoEm, atualizadoEm, statusFeed: [{id, autor, data, texto, editadoEm}], historico: [{data, autor, acao}]}
+    currentDetailId: null,
+    dragId: null
+  };
+
+  // ====== Persistence (in-memory for this artifact; localStorage works when hosted) ======
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) state.priorities = JSON.parse(raw);
+    } catch(e) { /* fallback to empty */ }
+    if (state.priorities.length === 0) seedExamples();
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.priorities)); } catch(e) {}
+  }
+
+  function seedExamples() {
+    const now = Date.now();
+    state.priorities = [
+      {
+        id: uid(),
+        empresa: 'Construtora Horizonte Ltda.',
+        contratante: 'Indústria Metalúrgica Sul S.A.',
+        responsavel: 'Rodrigo Balem',
+        criadoEm: now - 86400000 * 3,
+        atualizadoEm: now - 3600000 * 5,
+        statusFeed: [
+          { id: uid(), autor: 'Rodrigo Balem', data: now - 86400000 * 3, texto: 'PGR vencido há 2 meses. Aguardando envio do novo documento pela construtora.' },
+          { id: uid(), autor: 'Rodrigo Balem', data: now - 3600000 * 5, texto: 'Contato realizado com o responsável técnico. Prometeram envio até sexta-feira.' }
+        ],
+        historico: [
+          { data: now - 86400000 * 3, autor: 'Rodrigo Balem', acao: 'Criou a prioridade' },
+          { data: now - 3600000 * 5, autor: 'Rodrigo Balem', acao: 'Adicionou nova entrada de status' }
+        ]
+      },
+      {
+        id: uid(),
+        empresa: 'Serviços Gerais Vértice ME',
+        contratante: 'Frigorífico Boa Vista',
+        responsavel: 'Rodrigo Balem',
+        criadoEm: now - 86400000 * 1,
+        atualizadoEm: now - 86400000 * 1,
+        statusFeed: [
+          { id: uid(), autor: 'Rodrigo Balem', data: now - 86400000 * 1, texto: 'ASOs de 4 colaboradores pendentes. Empresa solicitou prorrogação de prazo.' }
+        ],
+        historico: [
+          { data: now - 86400000 * 1, autor: 'Rodrigo Balem', acao: 'Criou a prioridade' }
+        ]
+      }
+    ];
+    save();
+  }
+
+  function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+  // ====== Current user (simulated) ======
+  function currentUser() {
+    return {
+      name: document.getElementById('userName').value.trim() || 'Usuário',
+      role: document.getElementById('userRole').value
+    };
+  }
+  function isGestor() { return currentUser().role === 'gestor'; }
+
+  // ====== Formatting ======
+  function fmtDateTime(ts) {
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function fmtRelative(ts) {
+    const diff = Date.now() - ts;
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return 'agora';
+    if (min < 60) return `há ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `há ${h}h`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `há ${d}d`;
+    return fmtDateTime(ts);
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ====== Render ======
+  function render() {
+    const list = document.getElementById('prioritiesList');
+    const empty = document.getElementById('emptyState');
+    const search = document.getElementById('searchInput').value.toLowerCase().trim();
+    const filterResp = document.getElementById('filterResponsible').value;
+
+    // Atualiza filtro de responsáveis
+    const responsaveis = [...new Set(state.priorities.map(p => p.responsavel))].sort();
+    const select = document.getElementById('filterResponsible');
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">Todos os responsáveis</option>' +
+      responsaveis.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+    select.value = currentVal;
+
+    const filtered = state.priorities.filter(p => {
+      const matchSearch = !search ||
+        p.empresa.toLowerCase().includes(search) ||
+        p.contratante.toLowerCase().includes(search);
+      const matchResp = !filterResp || p.responsavel === filterResp;
+      return matchSearch && matchResp;
+    });
+
+    if (filtered.length === 0) {
+      list.style.display = 'none';
+      empty.style.display = 'block';
+      if (state.priorities.length > 0) {
+        empty.innerHTML = '<h3>Nenhum resultado</h3><p>Nenhuma prioridade corresponde aos filtros aplicados.</p>';
+      } else {
+        empty.innerHTML = '<h3>Nenhuma prioridade cadastrada</h3><p>Clique em "+ Nova prioridade" para adicionar a primeira empresa ao radar do time.</p>';
+      }
+      return;
+    }
+    list.style.display = 'flex';
+    empty.style.display = 'none';
+
+    list.innerHTML = filtered.map((p, idx) => {
+      const lastStatus = p.statusFeed[p.statusFeed.length - 1];
+      const realPos = state.priorities.indexOf(p) + 1;
+      const canDelete = isGestor();
+      return `
+        <div class="priority-card" draggable="true" data-id="${p.id}"
+             ondragstart="onDragStart(event)"
+             ondragend="onDragEnd(event)"
+             ondragover="onDragOver(event)"
+             ondragleave="onDragLeave(event)"
+             ondrop="onDrop(event)">
+          <div class="drag-handle" title="Arrastar para reordenar">⋮⋮</div>
+          <div class="position-badge">${realPos}</div>
+          <div class="card-body" onclick="openDetail('${p.id}')" style="cursor:pointer;">
+            <h3 class="card-title">${escapeHtml(p.empresa)}</h3>
+            <div class="card-meta">
+              <span><strong>Contratante:</strong> ${escapeHtml(p.contratante)}</span>
+              <span><strong>Responsável:</strong> ${escapeHtml(p.responsavel)}</span>
+              <span><strong>Atualizado:</strong> ${fmtRelative(p.atualizadoEm)}</span>
+            </div>
+            ${lastStatus ? `
+              <div class="last-status">
+                <div class="last-status-header">${fmtDateTime(lastStatus.data)} — ${escapeHtml(lastStatus.autor)}</div>
+                <div class="last-status-text">${escapeHtml(lastStatus.texto)}</div>
+              </div>
+            ` : ''}
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-sm" onclick="openDetail('${p.id}')">Abrir</button>
+            <button class="btn btn-sm btn-danger" onclick="confirmDelete('${p.id}')" ${canDelete ? '' : 'disabled title="Apenas Gestor pode excluir"'}>Excluir</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ====== Drag & Drop ======
+  function onDragStart(e) {
+    state.dragId = e.currentTarget.dataset.id;
+    e.currentTarget.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  }
+  function onDragEnd(e) {
+    e.currentTarget.classList.remove('dragging');
+    document.querySelectorAll('.priority-card').forEach(el => el.classList.remove('drag-over'));
+    state.dragId = null;
+  }
+  function onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (e.currentTarget.dataset.id !== state.dragId) {
+      e.currentTarget.classList.add('drag-over');
+    }
+  }
+  function onDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+  function onDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    const targetId = e.currentTarget.dataset.id;
+    if (!state.dragId || state.dragId === targetId) return;
+    const fromIdx = state.priorities.findIndex(p => p.id === state.dragId);
+    const toIdx = state.priorities.findIndex(p => p.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = state.priorities.splice(fromIdx, 1);
+    state.priorities.splice(toIdx, 0, moved);
+    addHistory(moved, `Reordenou para a posição ${toIdx + 1}`);
+    save();
+    render();
+    toast('Ordem atualizada');
+  }
+
+  // ====== Form modal (create/edit) ======
+  let formMode = 'create';
+  let formEditId = null;
+
+  function openCreateModal() {
+    formMode = 'create';
+    formEditId = null;
+    document.getElementById('formModalTitle').textContent = 'Nova prioridade';
+    document.getElementById('formEmpresa').value = '';
+    document.getElementById('formContratante').value = '';
+    document.getElementById('formStatus').value = '';
+    document.getElementById('formStatusGroup').style.display = 'block';
+    document.getElementById('formModal').classList.add('active');
+    setTimeout(() => document.getElementById('formEmpresa').focus(), 50);
+  }
+  function closeFormModal() {
+    document.getElementById('formModal').classList.remove('active');
+  }
+  function saveForm() {
+    const empresa = document.getElementById('formEmpresa').value.trim();
+    const contratante = document.getElementById('formContratante').value.trim();
+    const status = document.getElementById('formStatus').value.trim();
+    const user = currentUser();
+
+    if (!empresa || !contratante) {
+      toast('Preencha empresa e contratante');
+      return;
+    }
+    if (!status) {
+      toast('Adicione um status inicial');
+      return;
+    }
+
+    const now = Date.now();
+    const newP = {
+      id: uid(),
+      empresa, contratante,
+      responsavel: user.name,
+      criadoEm: now,
+      atualizadoEm: now,
+      statusFeed: [{ id: uid(), autor: user.name, data: now, texto: status }],
+      historico: [{ data: now, autor: user.name, acao: 'Criou a prioridade' }]
+    };
+    state.priorities.push(newP);
+    toast('Prioridade criada');
+    save();
+    render();
+    closeFormModal();
+  }
+
+  // ====== Detail modal ======
+  function openDetail(id) {
+    state.currentDetailId = id;
+    const p = state.priorities.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('detailTitle').textContent = p.empresa;
+    const empresaInput = document.getElementById('detailEmpresaInput');
+    const contratanteInput = document.getElementById('detailContratanteInput');
+    empresaInput.value = p.empresa;
+    contratanteInput.value = p.contratante;
+    empresaInput.dataset.original = p.empresa;
+    contratanteInput.dataset.original = p.contratante;
+    document.getElementById('detailEditActions').style.display = 'none';
+    document.getElementById('detailResponsavel').textContent = p.responsavel;
+    document.getElementById('detailCriado').textContent = fmtDateTime(p.criadoEm);
+    renderStatusFeed(p);
+    renderHistory(p);
+    document.getElementById('newStatusInput').value = '';
+    document.getElementById('detailModal').classList.add('active');
+  }
+
+  function checkDetailEditDirty() {
+    const empresaInput = document.getElementById('detailEmpresaInput');
+    const contratanteInput = document.getElementById('detailContratanteInput');
+    const dirty = empresaInput.value.trim() !== empresaInput.dataset.original ||
+                  contratanteInput.value.trim() !== contratanteInput.dataset.original;
+    document.getElementById('detailEditActions').style.display = dirty ? 'flex' : 'none';
+  }
+
+  function cancelDetailEdit() {
+    const p = state.priorities.find(x => x.id === state.currentDetailId);
+    if (!p) return;
+    document.getElementById('detailEmpresaInput').value = p.empresa;
+    document.getElementById('detailContratanteInput').value = p.contratante;
+    document.getElementById('detailEditActions').style.display = 'none';
+  }
+
+  function saveDetailEdit() {
+    const p = state.priorities.find(x => x.id === state.currentDetailId);
+    if (!p) return;
+    const empresa = document.getElementById('detailEmpresaInput').value.trim();
+    const contratante = document.getElementById('detailContratanteInput').value.trim();
+    if (!empresa || !contratante) {
+      toast('Empresa e contratante são obrigatórios');
+      return;
+    }
+    const changes = [];
+    if (p.empresa !== empresa) changes.push(`Empresa: "${p.empresa}" → "${empresa}"`);
+    if (p.contratante !== contratante) changes.push(`Contratante: "${p.contratante}" → "${contratante}"`);
+    if (changes.length === 0) {
+      document.getElementById('detailEditActions').style.display = 'none';
+      return;
+    }
+    p.empresa = empresa;
+    p.contratante = contratante;
+    p.atualizadoEm = Date.now();
+    addHistory(p, 'Editou: ' + changes.join('; '));
+    save();
+    // Atualizar UI
+    document.getElementById('detailTitle').textContent = p.empresa;
+    document.getElementById('detailEmpresaInput').dataset.original = p.empresa;
+    document.getElementById('detailContratanteInput').dataset.original = p.contratante;
+    document.getElementById('detailEditActions').style.display = 'none';
+    renderHistory(p);
+    render();
+    toast('Alterações salvas');
+  }
+  function closeDetailModal() {
+    document.getElementById('detailModal').classList.remove('active');
+    state.currentDetailId = null;
+  }
+  function renderStatusFeed(p) {
+    const feed = document.getElementById('statusFeed');
+    const user = currentUser();
+    // Mais recente no topo
+    const ordered = [...p.statusFeed].reverse();
+    feed.innerHTML = ordered.map(s => {
+      const canEdit = s.autor === user.name && (Date.now() - s.data) < EDIT_WINDOW_MS;
+      const wasEdited = !!s.editadoEm;
+      return `
+        <div class="status-entry">
+          <div class="status-entry-header">
+            <span><span class="status-entry-author">${escapeHtml(s.autor)}</span> · ${fmtDateTime(s.data)}${wasEdited ? '<span class="edited-tag">(editado)</span>' : ''}</span>
+            ${canEdit ? `<button class="status-entry-edit-btn" onclick="editStatusEntry('${s.id}')">editar</button>` : ''}
+          </div>
+          <div class="status-entry-text" id="status-text-${s.id}">${escapeHtml(s.texto)}</div>
+        </div>
+      `;
+    }).join('') || '<div style="font-size:13px;color:var(--text-muted);">Sem entradas ainda.</div>';
+  }
+  function renderHistory(p) {
+    const list = document.getElementById('historyList');
+    const ordered = [...p.historico].reverse();
+    list.innerHTML = ordered.map(h => `
+      <div class="history-item"><strong>${escapeHtml(h.autor)}</strong> · ${fmtDateTime(h.data)} — ${escapeHtml(h.acao)}</div>
+    `).join('') || '<div style="font-size:12px;color:var(--text-muted);">Sem histórico.</div>';
+  }
+  function addStatusEntry() {
+    const text = document.getElementById('newStatusInput').value.trim();
+    if (!text) { toast('Digite uma atualização'); return; }
+    const p = state.priorities.find(x => x.id === state.currentDetailId);
+    if (!p) return;
+    const user = currentUser();
+    const now = Date.now();
+    p.statusFeed.push({ id: uid(), autor: user.name, data: now, texto: text });
+    p.atualizadoEm = now;
+    addHistory(p, 'Adicionou nova entrada de status', user.name);
+    save();
+    renderStatusFeed(p);
+    renderHistory(p);
+    render();
+    document.getElementById('newStatusInput').value = '';
+    toast('Status adicionado');
+  }
+  function editStatusEntry(entryId) {
+    const p = state.priorities.find(x => x.id === state.currentDetailId);
+    if (!p) return;
+    const entry = p.statusFeed.find(s => s.id === entryId);
+    if (!entry) return;
+    const user = currentUser();
+    if (entry.autor !== user.name) { toast('Apenas o autor pode editar'); return; }
+    if (Date.now() - entry.data >= EDIT_WINDOW_MS) { toast('Prazo de edição (15 min) expirado'); return; }
+
+    const container = document.getElementById('status-text-' + entryId);
+    if (!container) return;
+    const current = entry.texto;
+    container.innerHTML = `
+      <textarea id="edit-status-${entryId}" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:13px;">${escapeHtml(current)}</textarea>
+      <div style="display:flex;gap:6px;margin-top:6px;justify-content:flex-end;">
+        <button class="btn btn-sm" onclick="cancelEditStatus('${entryId}')">Cancelar</button>
+        <button class="btn btn-sm btn-primary" onclick="saveEditStatus('${entryId}')">Salvar</button>
+      </div>
+    `;
+    document.getElementById('edit-status-' + entryId).focus();
+  }
+  function cancelEditStatus(entryId) {
+    const p = state.priorities.find(x => x.id === state.currentDetailId);
+    if (p) renderStatusFeed(p);
+  }
+  function saveEditStatus(entryId) {
+    const p = state.priorities.find(x => x.id === state.currentDetailId);
+    if (!p) return;
+    const entry = p.statusFeed.find(s => s.id === entryId);
+    if (!entry) return;
+    if (Date.now() - entry.data >= EDIT_WINDOW_MS) { toast('Prazo expirado'); renderStatusFeed(p); return; }
+    const newText = document.getElementById('edit-status-' + entryId).value.trim();
+    if (!newText) { toast('Texto vazio'); return; }
+    if (newText === entry.texto) { renderStatusFeed(p); return; }
+    entry.texto = newText;
+    entry.editadoEm = Date.now();
+    p.atualizadoEm = Date.now();
+    addHistory(p, 'Editou uma entrada de status');
+    save();
+    renderStatusFeed(p);
+    renderHistory(p);
+    render();
+    toast('Entrada editada');
+  }
+
+  // ====== Delete (Gestor only) ======
+  function confirmDelete(id) {
+    if (!isGestor()) {
+      toast('Apenas Gestor pode excluir');
+      return;
+    }
+    const p = state.priorities.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('confirmTitle').textContent = 'Excluir prioridade';
+    document.getElementById('confirmText').innerHTML =
+      `Tem certeza que deseja excluir <strong>${escapeHtml(p.empresa)}</strong>? Esta ação é irreversível.`;
+    const btn = document.getElementById('confirmActionBtn');
+    btn.textContent = 'Excluir';
+    btn.onclick = () => {
+      state.priorities = state.priorities.filter(x => x.id !== id);
+      save();
+      render();
+      closeConfirm();
+      toast('Prioridade excluída');
+    };
+    document.getElementById('confirmModal').classList.add('active');
+  }
+  function closeConfirm() {
+    document.getElementById('confirmModal').classList.remove('active');
+  }
+
+  // ====== History helper ======
+  function addHistory(p, acao, autor) {
+    p.historico.push({
+      data: Date.now(),
+      autor: autor || currentUser().name,
+      acao
+    });
+  }
+
+  // ====== Toast ======
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  // ====== Wire up ======
+  document.getElementById('searchInput').addEventListener('input', render);
+  document.getElementById('filterResponsible').addEventListener('change', render);
+  document.getElementById('userRole').addEventListener('change', render);
+  document.getElementById('userName').addEventListener('input', render);
+  document.getElementById('detailEmpresaInput').addEventListener('input', checkDetailEditDirty);
+  document.getElementById('detailContratanteInput').addEventListener('input', checkDetailEditDirty);
+
+  // Fechar modais ao clicar no backdrop
+  document.querySelectorAll('.modal-backdrop').forEach(bd => {
+    bd.addEventListener('click', e => {
+      if (e.target === bd) {
+        bd.classList.remove('active');
+        if (bd.id === 'detailModal') state.currentDetailId = null;
+      }
+    });
+  });
+
+  // Init
+  load();
+  render();
+</script>
+
+</body>
+</html>

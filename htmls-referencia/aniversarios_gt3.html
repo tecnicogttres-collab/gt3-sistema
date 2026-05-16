@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aniversários — GT3 Consultoria</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F5F3EE;
+    --surface: #FFFFFF;
+    --surface2: #EFEDE8;
+    --border: #DDD9D0;
+    --border-strong: #C8C4BA;
+    --text: #1A1916;
+    --text-muted: #7A7870;
+    --text-faint: #B0ADA5;
+    --accent: #2D5F3F;
+    --accent-light: #E8F2EC;
+    --accent-mid: #4A8A60;
+    --accent-text: #1C3D28;
+    --red: #C0392B;
+    --red-light: #FBEAE8;
+    --font-display: 'DM Serif Display', serif;
+    --font-body: 'DM Sans', sans-serif;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* ─── Header ─── */
+  .app-header {
+    max-width: 900px;
+    margin: 0 auto 2.5rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .brand { display: flex; flex-direction: column; gap: 2px; }
+
+  .brand-logo {
+    font-family: var(--font-display);
+    font-size: 26px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  .brand-sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .header-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn-nav {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    font-size: 16px;
+  }
+
+  .btn-nav:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .month-display {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--text);
+    min-width: 200px;
+    text-align: center;
+    letter-spacing: -0.3px;
+  }
+
+  /* ─── Upcoming strip ─── */
+  .upcoming-bar {
+    max-width: 900px;
+    margin: 0 auto 1.5rem;
+    background: var(--accent-light);
+    border: 1px solid #C5DFD0;
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--accent-text);
+    min-height: 42px;
+  }
+
+  .upcoming-label {
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .upcoming-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .upcoming-chip {
+    background: var(--surface);
+    border: 1px solid #C5DFD0;
+    border-radius: 100px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .upcoming-chip .day-badge {
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 11px;
+  }
+
+  /* ─── Calendar ─── */
+  .calendar {
+    max-width: 900px;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .weekday {
+    padding: 10px 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+  }
+
+  .days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+  }
+
+  .day-cell {
+    min-height: 88px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 8px 6px;
+    cursor: pointer;
+    transition: background 0.12s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .day-cell:nth-child(7n) { border-right: none; }
+
+  .day-cell:hover {
+    background: var(--accent-light);
+  }
+
+  .day-cell:hover .cell-plus {
+    opacity: 1;
+  }
+
+  .day-cell.empty {
+    background: var(--surface2);
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .day-cell.today .day-num {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .day-num {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+    line-height: 1;
+  }
+
+  .bday-list { display: flex; flex-direction: column; gap: 2px; }
+
+  .bday-tag {
+    background: var(--accent-light);
+    color: var(--accent-text);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .bday-tag svg {
+    width: 10px; height: 10px;
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  .cell-plus {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    font-size: 16px;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.12s;
+    line-height: 1;
+    font-weight: 300;
+  }
+
+  /* ─── Modal ─── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 25, 22, 0.45);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 14px;
+    width: 360px;
+    max-width: 94vw;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+    overflow: hidden;
+    animation: pop 0.18s ease;
+  }
+
+  @keyframes pop {
+    from { transform: scale(0.95); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .modal-head {
+    background: var(--accent);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .modal-head h2 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    color: #fff;
+    font-weight: 400;
+    letter-spacing: -0.2px;
+  }
+
+  .modal-head button {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+
+  .modal-head button:hover { color: #fff; }
+
+  .modal-body { padding: 20px; }
+
+  .existing-section { margin-bottom: 16px; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+
+  .existing-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .existing-item button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-faint);
+    font-size: 15px;
+    padding: 0 2px;
+    line-height: 1;
+    transition: color 0.12s;
+  }
+
+  .existing-item button:hover { color: var(--red); }
+
+  .no-items { font-size: 13px; color: var(--text-faint); font-style: italic; }
+
+  .add-row { display: flex; gap: 8px; }
+
+  .add-row input {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    font-size: 14px;
+    font-family: var(--font-body);
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.12s;
+  }
+
+  .add-row input:focus { border-color: var(--accent); }
+
+  .add-row input::placeholder { color: var(--text-faint); }
+
+  .btn-add {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 9px 16px;
+    font-size: 14px;
+    font-family: var(--font-body);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s;
+  }
+
+  .btn-add:hover { background: var(--accent-mid); }
+
+  /* ─── Footer ─── */
+  .app-footer {
+    max-width: 900px;
+    margin: 1.5rem auto 0;
+    font-size: 12px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-logo">GT3 Consultoria</span>
+    <span class="brand-sub">Módulo de Aniversários</span>
+  </div>
+  <div class="header-nav">
+    <button class="btn-nav" id="btn-prev" title="Mês anterior">&#8592;</button>
+    <span class="month-display" id="month-display"></span>
+    <button class="btn-nav" id="btn-next" title="Próximo mês">&#8594;</button>
+  </div>
+</header>
+
+<div class="upcoming-bar" id="upcoming-bar">
+  <span class="upcoming-label">Próximos</span>
+  <div class="upcoming-list" id="upcoming-list"></div>
+</div>
+
+<div class="calendar">
+  <div class="weekdays">
+    <div class="weekday">Dom</div>
+    <div class="weekday">Seg</div>
+    <div class="weekday">Ter</div>
+    <div class="weekday">Qua</div>
+    <div class="weekday">Qui</div>
+    <div class="weekday">Sex</div>
+    <div class="weekday">Sáb</div>
+  </div>
+  <div class="days-grid" id="days-grid"></div>
+</div>
+
+<p class="app-footer">Os dados ficam salvos neste navegador. Para exportar, use Ctrl+S para salvar a página.</p>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-date-title"></h2>
+      <button id="btn-close-modal" title="Fechar">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <div class="existing-section">
+        <div class="section-label">Aniversariantes</div>
+        <div id="modal-list"></div>
+      </div>
+      <div>
+        <div class="section-label">Adicionar colaborador</div>
+        <div class="add-row">
+          <input type="text" id="input-name" placeholder="Nome completo" maxlength="80" autocomplete="off" />
+          <button class="btn-add" id="btn-save">Adicionar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const STORAGE_KEY = 'gt3_aniversarios';
+
+let cy, cm;
+const today = new Date();
+
+(function init() {
+  cy = today.getFullYear();
+  cm = today.getMonth();
+  render();
+})();
+
+function loadData() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveData(d) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+}
+
+function key(m, d) {
+  return `${String(m + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function render() {
+  document.getElementById('month-display').textContent = `${MONTHS[cm]} de ${cy}`;
+  renderCalendar();
+  renderUpcoming();
+}
+
+function renderCalendar() {
+  const data = loadData();
+  const grid = document.getElementById('days-grid');
+  grid.innerHTML = '';
+
+  const firstDay = new Date(cy, cm, 1).getDay();
+  const totalDays = new Date(cy, cm + 1, 0).getDate();
+
+  for (let i = 0; i < firstDay; i++) {
+    const el = document.createElement('div');
+    el.className = 'day-cell empty';
+    grid.appendChild(el);
+  }
+
+  for (let d = 1; d <= totalDays; d++) {
+    const k = key(cm, d);
+    const cell = document.createElement('div');
+    cell.className = 'day-cell';
+
+    const isToday = today.getDate() === d && today.getMonth() === cm && today.getFullYear() === cy;
+    if (isToday) cell.classList.add('today');
+
+    const numEl = document.createElement('div');
+    numEl.className = 'day-num';
+    if (isToday) {
+      const inner = document.createElement('div');
+      inner.textContent = d;
+      numEl.appendChild(inner);
+    } else {
+      numEl.textContent = d;
+    }
+    cell.appendChild(numEl);
+
+    if (data[k] && data[k].length > 0) {
+      const list = document.createElement('div');
+      list.className = 'bday-list';
+      const maxShow = 3;
+      data[k].slice(0, maxShow).forEach(name => {
+        const tag = document.createElement('div');
+        tag.className = 'bday-tag';
+        tag.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 000-4H4a2 2 0 000 4zM12 4c0-1.1.9-2 2-2"/><path d="M8 20V10M12 20V10M16 20V10M4 10h16"/><circle cx="12" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="7" r="1" fill="currentColor" stroke="none"/></svg>${name}`;
+        list.appendChild(tag);
+      });
+      if (data[k].length > maxShow) {
+        const more = document.createElement('div');
+        more.className = 'bday-tag';
+        more.style.color = 'var(--text-muted)';
+        more.textContent = `+${data[k].length - maxShow} mais`;
+        list.appendChild(more);
+      }
+      cell.appendChild(list);
+    }
+
+    const plus = document.createElement('span');
+    plus.className = 'cell-plus';
+    plus.textContent = '+';
+    cell.appendChild(plus);
+
+    cell.addEventListener('click', () => openModal(d));
+    grid.appendChild(cell);
+  }
+}
+
+function renderUpcoming() {
+  const data = loadData();
+  const container = document.getElementById('upcoming-list');
+  container.innerHTML = '';
+
+  const ref = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const upcoming = [];
+
+  for (let offset = 0; offset <= 30; offset++) {
+    const d = new Date(ref);
+    d.setDate(ref.getDate() + offset);
+    const k = key(d.getMonth(), d.getDate());
+    if (data[k] && data[k].length > 0) {
+      data[k].forEach(name => {
+        const label = offset === 0 ? 'Hoje' : offset === 1 ? 'Amanhã' : `${d.getDate()}/${d.getMonth()+1}`;
+        upcoming.push({ name, label, offset });
+      });
+    }
+  }
+
+  if (upcoming.length === 0) {
+    container.innerHTML = '<span style="font-size:13px;color:var(--accent-text);opacity:0.6">Nenhum aniversário nos próximos 30 dias</span>';
+    return;
+  }
+
+  upcoming.slice(0, 6).forEach(item => {
+    const chip = document.createElement('div');
+    chip.className = 'upcoming-chip';
+    chip.innerHTML = `<span class="day-badge">${item.label}</span> ${item.name}`;
+    container.appendChild(chip);
+  });
+}
+
+let selectedDay = null;
+
+function openModal(day) {
+  selectedDay = day;
+  const k = key(cm, day);
+  const data = loadData();
+
+  document.getElementById('modal-date-title').textContent = `${day} de ${MONTHS[cm]}`;
+  document.getElementById('input-name').value = '';
+
+  const list = document.getElementById('modal-list');
+  list.innerHTML = '';
+
+  if (data[k] && data[k].length > 0) {
+    data[k].forEach((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'existing-item';
+      row.innerHTML = `<span>${name}</span><button title="Remover ${name}" data-i="${i}">&#215;</button>`;
+      row.querySelector('button').addEventListener('click', function() {
+        removePerson(k, parseInt(this.dataset.i));
+        openModal(day);
+      });
+      list.appendChild(row);
+    });
+  } else {
+    list.innerHTML = '<p class="no-items">Nenhum aniversariante cadastrado.</p>';
+  }
+
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('input-name').focus(), 50);
+}
+
+function removePerson(k, i) {
+  const data = loadData();
+  if (data[k]) {
+    data[k].splice(i, 1);
+    if (data[k].length === 0) delete data[k];
+    saveData(data);
+    render();
+  }
+}
+
+function addPerson() {
+  const name = document.getElementById('input-name').value.trim();
+  if (!name || selectedDay === null) return;
+  const k = key(cm, selectedDay);
+  const data = loadData();
+  if (!data[k]) data[k] = [];
+  if (data[k].includes(name)) return;
+  data[k].push(name);
+  saveData(data);
+  render();
+  openModal(selectedDay);
+}
+
+document.getElementById('btn-save').addEventListener('click', addPerson);
+document.getElementById('input-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addPerson();
+});
+document.getElementById('btn-close-modal').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('open');
+});
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+});
+document.getElementById('btn-prev').addEventListener('click', () => {
+  cm--; if (cm < 0) { cm = 11; cy--; } render();
+});
+document.getElementById('btn-next').addEventListener('click', () => {
+  cm++; if (cm > 11) { cm = 0; cy++; } render();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('modal-overlay').classList.remove('open');
+});
+</script>
+</body>
+</html>

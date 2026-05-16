@@ -1,4 +1,4 @@
-export type Role = 'colaborador' | 'gestor' | 'admin'
+export type Role = 'colaborador' | 'gestor' | 'admin' | 'trainee'
 
 export type Module = {
   id: string
@@ -16,7 +16,7 @@ export const MODULES: Module[] = [
     color: '#4A90D9',
     path: '/observacoes',
     description: 'Categorias e subcategorias com cards copiáveis',
-    allowedRoles: ['colaborador', 'gestor', 'admin'],
+    allowedRoles: ['colaborador', 'gestor', 'admin', 'trainee'],
   },
   {
     id: 'cadastro',
@@ -32,7 +32,7 @@ export const MODULES: Module[] = [
     color: '#9B59B6',
     path: '/emails',
     description: 'Templates com preview HTML e download .eml',
-    allowedRoles: ['colaborador', 'gestor', 'admin'],
+    allowedRoles: ['colaborador', 'gestor', 'admin', 'trainee'],
   },
   {
     id: 'manuais',
@@ -40,7 +40,7 @@ export const MODULES: Module[] = [
     color: '#E67E22',
     path: '/manuais',
     description: 'Documentos com seções editáveis',
-    allowedRoles: ['colaborador', 'gestor', 'admin'],
+    allowedRoles: ['colaborador', 'gestor', 'admin', 'trainee'],
   },
   {
     id: 'homeoffice',
@@ -52,7 +52,7 @@ export const MODULES: Module[] = [
   },
   {
     id: 'revisao',
-    label: 'Controle de Revisão',
+    label: 'Revisões BSA',
     color: '#E74C3C',
     path: '/controle-revisao',
     description: 'Registro de inconsistências e escala de revisores',
@@ -81,5 +81,29 @@ export const MODULES: Module[] = [
     path: '/logins',
     description: 'Gestão de usuários e acessos',
     allowedRoles: ['admin', 'gestor'],
+  },
+  {
+    id: 'aniversarios',
+    label: 'Aniversários',
+    color: '#F472B6',
+    path: '/aniversarios',
+    description: 'Calendário de aniversários dos colaboradores',
+    allowedRoles: ['colaborador', 'gestor', 'admin'],
+  },
+  {
+    id: 'prioridades',
+    label: 'Prioridades',
+    color: '#F97316',
+    path: '/prioridades',
+    description: 'Empresas em análise prioritária de documentação',
+    allowedRoles: ['colaborador', 'gestor', 'admin'],
+  },
+  {
+    id: 'revisoes-trainee',
+    label: 'Revisões Trainee',
+    color: '#10B981',
+    path: '/revisoes-trainee',
+    description: 'Acompanhamento diário de documentos por trainee',
+    allowedRoles: ['colaborador', 'gestor', 'admin', 'trainee'],
   },
 ]
