@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { createAdminClient } from '../../../../lib/supabase-admin'
-import { createClient } from '../../../../lib/supabase-server'
+import { createAdminClient } from '../../../lib/supabase-admin'
+import { createClient } from '../../../lib/supabase-server'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -23,19 +23,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const isTrainee = profile.papel === 'trainee'
 
   const { data: existing } = await admin
-    .from('revisoes_registros')
+    .from('revisoes_trainee')
     .select('criado_por, data_dia, status')
     .eq('id', id)
     .single()
 
   if (!existing) return Response.json({ error: 'Registro não encontrado' }, { status: 404 })
 
-  // Trainee can only edit their own records
   if (isTrainee && existing.criado_por !== user.id) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }
 
-  // Check date is not finalized
   const { data: dateRow } = await admin
     .from('revisoes_datas')
     .select('finalizado')
@@ -47,17 +45,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   const body = await request.json() as Record<string, unknown>
+  const updates: Record<string, unknown> = {}
 
-  // Trainee can update: empresa, colaborador, documento
-  // Revisor can update: status, nota_revisor
-  let updates: Record<string, unknown> = {}
+  const AUTO_AVAL_VALUES = ['aprovado', 'pendente', 'reprovado']
 
   if (isTrainee) {
     if (body.empresa !== undefined) updates.empresa = (body.empresa as string).trim()
-    if (body.colaborador !== undefined) updates.colaborador = (body.colaborador as string).trim()
+    if (body.colaborador !== undefined) updates.colaborador = (body.colaborador as string)?.trim() || null
     if (body.documento !== undefined) updates.documento = (body.documento as string).trim()
-    // Auto-reset flagged status when trainee edits their record
-    if (Object.keys(updates).length > 0 && (existing.status === 'red' || existing.status === 'yellow')) {
+    if (body.observacoes !== undefined) updates.observacoes = (body.observacoes as string)?.trim() || null
+    if (body.auto_avaliacao !== undefined) {
+      const v = body.auto_avaliacao
+      if (v !== null && v !== '' && !AUTO_AVAL_VALUES.includes(v as string)) {
+        return Response.json({ error: 'auto_avaliacao inválido' }, { status: 400 })
+      }
+      updates.auto_avaliacao = v || null
+    }
+    // Auto-reset flagged status when trainee edits their record (only for editable content fields)
+    const contentFieldsChanged = ['empresa', 'colaborador', 'documento', 'observacoes'].some(k => k in updates)
+    if (contentFieldsChanged && (existing.status === 'red' || existing.status === 'yellow')) {
       updates.status = 'pending'
       updates.nota_revisor = null
       updates.revisado_por = null
@@ -81,7 +87,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   const { data: updated, error } = await admin
-    .from('revisoes_registros')
+    .from('revisoes_trainee')
     .update(updates)
     .eq('id', id)
     .select('*, criado_por_profile:profiles!criado_por(nome), revisado_por_profile:profiles!revisado_por(nome)')
@@ -111,21 +117,17 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   const isTrainee = profile.papel === 'trainee'
 
   const { data: existing } = await admin
-    .from('revisoes_registros')
+    .from('revisoes_trainee')
     .select('criado_por, data_dia')
     .eq('id', id)
     .single()
 
   if (!existing) return Response.json({ error: 'Registro não encontrado' }, { status: 404 })
 
-  // Trainee can only delete their own records
   if (isTrainee && existing.criado_por !== user.id) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }
 
-  // Non-trainee (revisores) can delete any record
-
-  // Check date is not finalized
   const { data: dateRow } = await admin
     .from('revisoes_datas')
     .select('finalizado')
@@ -137,7 +139,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   }
 
   const { error } = await admin
-    .from('revisoes_registros')
+    .from('revisoes_trainee')
     .delete()
     .eq('id', id)
 

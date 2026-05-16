@@ -2,6 +2,24 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
 import { createClient } from '../../../lib/supabase-server'
 
+export async function GET() {
+  const serverClient = await createClient()
+  const { data: { user } } = await serverClient.auth.getUser()
+  if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from('revisoes_datas')
+    .select('*, finalizador:profiles!finalizado_por(nome)')
+    .order('data', { ascending: false })
+    .limit(60)
+
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  return Response.json(data ?? [])
+}
+
 export async function POST(request: NextRequest) {
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
@@ -38,5 +56,5 @@ export async function POST(request: NextRequest) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  return Response.json({ success: true })
+  return Response.json({ success: true }, { status: 201 })
 }

@@ -1,24 +1,34 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useUser } from '../components/UserContext'
 
 type Status = 'pending' | 'red' | 'yellow' | 'green'
+type AutoAval = 'aprovado' | 'pendente' | 'reprovado' | null
+type SortKey = 'created_at' | 'empresa' | 'colaborador' | 'documento' | 'auto_avaliacao' | 'status'
 
 type Registro = {
   id: string
   data_dia: string
   empresa: string
-  colaborador: string
+  colaborador: string | null
   documento: string
+  observacoes: string | null
+  auto_avaliacao: AutoAval
   criado_por: string
-  criado_em: string
+  created_at: string
   status: Status
   nota_revisor: string | null
   revisado_por: string | null
   revisado_em: string | null
   criado_por_profile: { nome: string } | null
   revisado_por_profile: { nome: string } | null
+}
+
+const AUTO_AVAL_META: Record<NonNullable<AutoAval>, { icon: string; label: string; color: string; bg: string }> = {
+  aprovado:  { icon: '✅', label: 'Aprovei',  color: '#065F46', bg: '#D1FAE5' },
+  pendente:  { icon: '⏳', label: 'Pendente', color: '#92400E', bg: '#FEF3C7' },
+  reprovado: { icon: '❌', label: 'Reprovei', color: '#991B1B', bg: '#FEE2E2' },
 }
 
 type DateRow = {
@@ -85,12 +95,23 @@ export default function RevisoesTraineeClient() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState('')
   const [activeTraineeId, setActiveTraineeId] = useState<string>('')
+  const activeTraineeIdRef = useRef('')
 
   // Add record form (trainee)
   const [newEmpresa, setNewEmpresa] = useState('')
   const [newColaborador, setNewColaborador] = useState('')
   const [newDocumento, setNewDocumento] = useState('')
+  const [newObservacoes, setNewObservacoes] = useState('')
+  const [newAutoAval, setNewAutoAval] = useState<AutoAval>(null)
   const [addingRow, setAddingRow] = useState(false)
+  const [addError, setAddError] = useState('')
+
+  // Sort (revisor view)
+  const [sortKey, setSortKey] = useState<SortKey>('created_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  // Finalizar com pendentes — escolha por trainee
+  const [groupActions, setGroupActions] = useState<Record<string, 'transfer' | 'history'>>({})
 
   // Inline edit (trainee)
   const [editCell, setEditCell] = useState<{ id: string; field: string } | null>(null)
@@ -120,6 +141,7 @@ export default function RevisoesTraineeClient() {
   const [toast, setToast] = useState('')
 
   const isTrainee = profile?.papel === 'trainee'
+  activeTraineeIdRef.current = activeTraineeId
 
   function showToast(msg: string) {
     setToast(msg)
@@ -130,14 +152,12 @@ export default function RevisoesTraineeClient() {
     const res = await fetch('/api/revisoes')
     if (!res.ok) { setFetchError('Erro ao carregar dados'); setLoading(false); return }
     const json: ApiData = await res.json()
-    setData(prev => {
-      // Keep activeTraineeId if already set and still in trainees list
-      if (!activeTraineeId && json.trainees.length > 0) setActiveTraineeId(json.trainees[0].id)
-      return json
-    })
+    if (!activeTraineeIdRef.current && json.trainees.length > 0) {
+      setActiveTraineeId(json.trainees[0].id)
+    }
+    setData(json)
     setLoading(false)
     setFetchError('')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -147,6 +167,53 @@ export default function RevisoesTraineeClient() {
   useEffect(() => {
     if (editCell && editRef.current) editRef.current.focus()
   }, [editCell])
+
+  const activeDate = data?.activeDate ?? null
+  const isFinalized = data?.activeDateRow?.finalizado ?? false
+  const records = data?.records ?? []
+
+  const visibleRecords = isTrainee
+    ? records.filter(r => r.criado_por === data?.currentUserId)
+    : activeTraineeId
+      ? records.filter(r => r.criado_por === activeTraineeId)
+      : []
+
+  const activeRecords = visibleRecords.filter(r => r.status !== 'green')
+  const pendingCount = visibleRecords.filter(r => r.status === 'pending').length
+  const redCount = visibleRecords.filter(r => r.status === 'red').length
+  const yellowCount = visibleRecords.filter(r => r.status === 'yellow').length
+  const greenCount = visibleRecords.filter(r => r.status === 'green').length
+  const totalCount = visibleRecords.length
+
+  const sortedRecords = useMemo(() => {
+    const arr = [...activeRecords]
+    const dir = sortDir === 'asc' ? 1 : -1
+    arr.sort((a, b) => {
+      let av: string | number = ''
+      let bv: string | number = ''
+      if (sortKey === 'created_at') {
+        av = new Date(a.created_at).getTime()
+        bv = new Date(b.created_at).getTime()
+      } else {
+        av = (a[sortKey] ?? '') as string
+        bv = (b[sortKey] ?? '') as string
+      }
+      if (av < bv) return -1 * dir
+      if (av > bv) return 1 * dir
+      return 0
+    })
+    return arr
+  }, [activeRecords, sortKey, sortDir])
+
+  const pendingByTrainee = useMemo(() => {
+    const map: Record<string, { nome: string; count: number }> = {}
+    records.filter(r => r.status === 'pending').forEach(r => {
+      const key = r.criado_por
+      if (!map[key]) map[key] = { nome: r.criado_por_profile?.nome ?? key.slice(0, 8), count: 0 }
+      map[key].count++
+    })
+    return map
+  }, [records])
 
   if (profileLoading || loading) {
     return (
@@ -162,36 +229,41 @@ export default function RevisoesTraineeClient() {
 
   if (!data) return null
 
-  const activeDate = data.activeDate
-  const isFinalized = data.activeDateRow?.finalizado ?? false
-  const records = data.records
-
-  const visibleRecords = isTrainee
-    ? records.filter(r => r.criado_por === data.currentUserId)
-    : activeTraineeId
-      ? records.filter(r => r.criado_por === activeTraineeId)
-      : []
-
-  const activeRecords = visibleRecords.filter(r => r.status !== 'green')
-  const pendingCount = visibleRecords.filter(r => r.status === 'pending').length
-  const redCount = visibleRecords.filter(r => r.status === 'red').length
-  const yellowCount = visibleRecords.filter(r => r.status === 'yellow').length
-  const greenCount = visibleRecords.filter(r => r.status === 'green').length
-  const totalCount = visibleRecords.length
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
 
   // ── Add record ─────────────────────────────────────────────────
-  async function handleAddRow() {
-    if (!newEmpresa.trim() && !newColaborador.trim() && !newDocumento.trim()) return
+  async function handleAddRow(autoAval: NonNullable<AutoAval>) {
+    if (!newEmpresa.trim() || !newDocumento.trim()) {
+      setAddError('Preencha Empresa e Documento antes de salvar.')
+      return
+    }
     if (!activeDate) return
+    setAddError('')
     setAddingRow(true)
-    const res = await fetch('/api/revisoes/registros', {
+
+    const res = await fetch('/api/revisoes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data_dia: activeDate, empresa: newEmpresa, colaborador: newColaborador, documento: newDocumento }),
+      body: JSON.stringify({
+        data_dia: activeDate,
+        empresa: newEmpresa,
+        colaborador: newColaborador,
+        documento: newDocumento,
+        observacoes: newObservacoes,
+        auto_avaliacao: autoAval,
+      }),
     })
+
     if (res.ok) {
       setNewEmpresa(''); setNewColaborador(''); setNewDocumento('')
+      setNewObservacoes(''); setNewAutoAval(null)
       await fetchData()
+    } else {
+      const d = await res.json().catch(() => ({}))
+      setAddError(d.error ?? 'Erro ao salvar registro. Tente novamente.')
     }
     setAddingRow(false)
   }
@@ -206,7 +278,7 @@ export default function RevisoesTraineeClient() {
     if (!editCell) return
     const rec = records.find(r => r.id === editCell.id)
     if (!rec || rec[editCell.field as keyof Registro] === editVal) { setEditCell(null); return }
-    const res = await fetch(`/api/revisoes/registros/${editCell.id}`, {
+    const res = await fetch(`/api/revisoes/${editCell.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [editCell.field]: editVal }),
@@ -218,13 +290,13 @@ export default function RevisoesTraineeClient() {
   // ── Delete record ──────────────────────────────────────────────
   async function handleDelete(id: string) {
     if (!confirm('Excluir este registro?')) return
-    await fetch(`/api/revisoes/registros/${id}`, { method: 'DELETE' })
+    await fetch(`/api/revisoes/${id}`, { method: 'DELETE' })
     await fetchData()
   }
 
   // ── Approve ────────────────────────────────────────────────────
   async function handleApprove(id: string) {
-    await fetch(`/api/revisoes/registros/${id}`, {
+    await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'green', nota_revisor: null }),
@@ -234,7 +306,7 @@ export default function RevisoesTraineeClient() {
 
   // ── Clear flag ─────────────────────────────────────────────────
   async function handleClear(id: string) {
-    await fetch(`/api/revisoes/registros/${id}`, {
+    await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'pending', nota_revisor: null }),
@@ -253,7 +325,7 @@ export default function RevisoesTraineeClient() {
     if (!flagModal) return
     if (!flagNote.trim()) { alert('Descreva o motivo da sinalização.'); return }
     setFlagLoading(true)
-    await fetch(`/api/revisoes/registros/${flagModal.id}`, {
+    await fetch(`/api/revisoes/${flagModal.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: flagModal.status, nota_revisor: flagNote }),
@@ -262,10 +334,44 @@ export default function RevisoesTraineeClient() {
     setFlagModal(null); setFlagNote(''); setFlagLoading(false)
   }
 
+  // ── Cycle auto_avaliacao no row do trainee ─────────────────────
+  async function cycleAutoAval(rec: Registro) {
+    const order: AutoAval[] = [null, 'aprovado', 'pendente', 'reprovado']
+    const idx = order.indexOf(rec.auto_avaliacao)
+    const next = order[(idx + 1) % order.length]
+    await fetch(`/api/revisoes/${rec.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auto_avaliacao: next }),
+    })
+    await fetchData()
+  }
+
   // ── Finalizar ──────────────────────────────────────────────────
+  function openFinalizar() {
+    const pending = records.filter(r => r.status === 'pending')
+    const initial: Record<string, 'transfer' | 'history'> = {}
+    pending.forEach(r => { if (!initial[r.criado_por]) initial[r.criado_por] = 'history' })
+    setGroupActions(initial)
+    setFinalizarOpen(true)
+  }
+
   async function handleFinalizar() {
     if (!activeDate) return
     setFinalizarLoading(true)
+
+    // Executa transferências escolhidas antes de finalizar
+    const transfers = Object.entries(groupActions)
+      .filter(([, action]) => action === 'transfer')
+      .map(([criado_por]) =>
+        fetch('/api/revisoes/transferir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ criado_por, from_data_dia: activeDate }),
+        })
+      )
+    if (transfers.length > 0) await Promise.all(transfers)
+
     const res = await fetch('/api/revisoes/finalizar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -280,7 +386,7 @@ export default function RevisoesTraineeClient() {
   // ── Nova data ──────────────────────────────────────────────────
   async function handleNovaData() {
     setNovaDataLoading(true); setNovaDataError('')
-    const res = await fetch('/api/revisoes/nova-data', {
+    const res = await fetch('/api/revisoes/datas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data_dia: novaDataInput }),
@@ -301,7 +407,7 @@ export default function RevisoesTraineeClient() {
     if (next.has(dataDia)) { next.delete(dataDia); setExpandedDays(next); return }
     next.add(dataDia); setExpandedDays(next)
     if (!historyRecords[dataDia]) {
-      const res = await fetch(`/api/revisoes/historico/${dataDia}`)
+      const res = await fetch(`/api/revisoes?date=${dataDia}`)
       if (res.ok) {
         const recs: Registro[] = await res.json()
         setHistoryRecords(prev => ({ ...prev, [dataDia]: recs }))
@@ -311,10 +417,11 @@ export default function RevisoesTraineeClient() {
 
   // ── CSV export ─────────────────────────────────────────────────
   function exportCSV() {
-    const rows = [['Data', 'Trainee', 'Empresa', 'Colaborador', 'Documento', 'Status', 'Observação', 'Revisor', 'Hora revisão']]
+    const rows = [['Data', 'Trainee', 'Empresa', 'Colaborador', 'Documento', 'Observações', 'Auto-aval', 'Status', 'Nota revisor', 'Revisor', 'Hora revisão']]
     records.forEach(r => {
       rows.push([
-        r.data_dia, r.criado_por_profile?.nome ?? '', r.empresa, r.colaborador, r.documento,
+        r.data_dia, r.criado_por_profile?.nome ?? '', r.empresa, r.colaborador ?? '', r.documento,
+        r.observacoes ?? '', r.auto_avaliacao ?? '',
         STATUS_LABEL[r.status], r.nota_revisor ?? '',
         r.revisado_por_profile?.nome ?? '', r.revisado_em ? formatTime(r.revisado_em) : '',
       ])
@@ -347,7 +454,7 @@ export default function RevisoesTraineeClient() {
 
     return (
       <span
-        onClick={() => canEdit && startEdit(rec.id, field, rec[field])}
+        onClick={() => canEdit && startEdit(rec.id, field, rec[field] ?? '')}
         style={{ cursor: canEdit ? 'text' : 'default', borderBottom: canEdit ? '1px dashed #CBD5E1' : 'none', fontSize: 13, color: '#1E293B', display: 'block', minWidth: 60, minHeight: 20, padding: '2px 0' }}
       >
         {rec[field] || <span style={{ color: '#CBD5E1' }}>—</span>}
@@ -375,7 +482,7 @@ export default function RevisoesTraineeClient() {
         {!isTrainee && (
           <div style={{ display: 'flex', gap: 8 }}>
             {activeDate && !isFinalized && (
-              <button onClick={() => setFinalizarOpen(true)} style={{ padding: '8px 16px', backgroundColor: '#DC2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={openFinalizar} style={{ padding: '8px 16px', backgroundColor: '#DC2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 Finalizar dia
               </button>
             )}
@@ -461,25 +568,83 @@ export default function RevisoesTraineeClient() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F8FAFC' }}>
-                    {['Hora', 'Empresa', 'Colaborador', 'Documento', isTrainee ? '' : 'Ações'].map((col, i) => (
-                      <th key={i} style={{ padding: '8px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{col}</th>
-                    ))}
+                    {(isTrainee
+                      ? [
+                          { key: 'created_at',     label: 'Hora' },
+                          { key: 'empresa',        label: 'Empresa' },
+                          { key: 'colaborador',    label: 'Colaborador' },
+                          { key: 'documento',      label: 'Documento' },
+                          { key: 'auto_avaliacao', label: 'Auto-aval' },
+                          { key: null,             label: '' },
+                        ]
+                      : [
+                          { key: 'created_at',     label: 'Hora' },
+                          { key: 'empresa',        label: 'Empresa' },
+                          { key: 'colaborador',    label: 'Colaborador' },
+                          { key: 'documento',      label: 'Documento' },
+                          { key: 'auto_avaliacao', label: 'Auto-aval' },
+                          { key: 'status',         label: 'Status revisor' },
+                          { key: null,             label: 'Ações' },
+                        ]
+                    ).map((col, i) => {
+                      const canSort = !isTrainee && col.key !== null
+                      const isActive = canSort && sortKey === col.key
+                      return (
+                        <th
+                          key={i}
+                          onClick={() => canSort && toggleSort(col.key as SortKey)}
+                          style={{ padding: '8px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: isActive ? '#1E293B' : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: canSort ? 'pointer' : 'default', userSelect: 'none' }}
+                        >
+                          {col.label}
+                          {isActive && <span style={{ marginLeft: 4, fontSize: 9 }}>{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                        </th>
+                      )
+                    })}
                   </tr>
                 </thead>
                 <tbody>
-                  {activeRecords.map(rec => (
+                  {(isTrainee ? activeRecords : sortedRecords).map(rec => (
                     <tr key={rec.id} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: rowBg(rec.status), borderLeft: rowBorderLeft(rec.status) }}>
-                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#6B7A99', fontSize: 12 }}>{formatTime(rec.criado_em)}</td>
+                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#6B7A99', fontSize: 12 }}>{formatTime(rec.created_at)}</td>
                       <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'empresa')}</td>
                       <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'colaborador')}</td>
                       <td style={{ padding: '10px 14px' }}>
                         {renderCell(rec, 'documento')}
+                        {rec.observacoes && (
+                          <div style={{ fontSize: 11, color: '#475569', marginTop: 4, fontStyle: 'italic', borderLeft: '2px solid #CBD5E1', paddingLeft: 6 }}>
+                            obs: "{rec.observacoes}"
+                          </div>
+                        )}
                         {rec.nota_revisor && (
                           <div style={{ fontSize: 11, color: rec.status === 'red' ? '#9B1C1C' : '#92400E', marginTop: 4, fontStyle: 'italic', borderLeft: `2px solid ${rec.status === 'red' ? '#FCA5A5' : '#FCD34D'}`, paddingLeft: 6 }}>
                             "{rec.nota_revisor}" — {rec.revisado_por_profile?.nome ?? '—'}
                           </div>
                         )}
                       </td>
+                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                        {isTrainee && rec.criado_por === data.currentUserId && !isFinalized ? (
+                          <button
+                            onClick={() => cycleAutoAval(rec)}
+                            style={{ padding: '3px 8px', borderRadius: 4, border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', backgroundColor: rec.auto_avaliacao ? AUTO_AVAL_META[rec.auto_avaliacao].bg : '#F1F5F9', color: rec.auto_avaliacao ? AUTO_AVAL_META[rec.auto_avaliacao].color : '#94A3B8' }}
+                            title="Clique para alterar"
+                          >
+                            {rec.auto_avaliacao ? `${AUTO_AVAL_META[rec.auto_avaliacao].icon} ${AUTO_AVAL_META[rec.auto_avaliacao].label}` : '—'}
+                          </button>
+                        ) : rec.auto_avaliacao ? (
+                          <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 500, backgroundColor: AUTO_AVAL_META[rec.auto_avaliacao].bg, color: AUTO_AVAL_META[rec.auto_avaliacao].color }}>
+                            {AUTO_AVAL_META[rec.auto_avaliacao].icon} {AUTO_AVAL_META[rec.auto_avaliacao].label}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#CBD5E1', fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                      {!isTrainee && (
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 7px', borderRadius: 4, backgroundColor: rec.status === 'green' ? '#D1FAE5' : rec.status === 'red' ? '#FEE2E2' : rec.status === 'yellow' ? '#FEF3C7' : '#F1F5F9', color: rec.status === 'green' ? '#065F46' : rec.status === 'red' ? '#991B1B' : rec.status === 'yellow' ? '#92400E' : '#6B7A99' }}>
+                            {STATUS_LABEL[rec.status]}
+                          </span>
+                        </td>
+                      )}
                       <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                         {isTrainee ? (
                           rec.criado_por === data.currentUserId && !isFinalized && (
@@ -515,17 +680,59 @@ export default function RevisoesTraineeClient() {
 
           {/* Add form (trainee) */}
           {isTrainee && !isFinalized && (
-            <div style={{ padding: '11px 18px', borderTop: '1px solid #F1F5F9', backgroundColor: '#FAFAFA', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {([
-                { v: newEmpresa, s: setNewEmpresa, p: 'Empresa', f: 2 },
-                { v: newColaborador, s: setNewColaborador, p: 'Colaborador', f: 1 },
-                { v: newDocumento, s: setNewDocumento, p: 'Documento', f: 2 },
-              ] as { v: string; s: (x: string) => void; p: string; f: number }[]).map(({ v, s, p, f }) => (
-                <input key={p} type="text" placeholder={p} value={v} onChange={e => s(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddRow() }} style={{ flex: f, minWidth: 110, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
-              ))}
-              <button onClick={handleAddRow} disabled={addingRow} style={{ padding: '8px 16px', backgroundColor: addingRow ? '#9BB3D4' : '#2A4F96', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: addingRow ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                {addingRow ? 'Adicionando...' : '+ Adicionar'}
-              </button>
+            <div style={{ padding: '11px 18px', borderTop: '1px solid #F1F5F9', backgroundColor: '#FAFAFA' }}>
+              {totalCount >= 150 ? (
+                <div style={{ padding: '10px 14px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, fontSize: 13, color: '#DC2626', textAlign: 'center', fontWeight: 500 }}>
+                  Limite de 150 registros por dia atingido.
+                </div>
+              ) : (
+                <>
+                  {addError && (
+                    <div style={{ marginBottom: 8, padding: '8px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, fontSize: 12, color: '#DC2626' }}>
+                      {addError}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {([
+                      { v: newEmpresa, s: setNewEmpresa, p: 'Empresa *', f: 2 },
+                      { v: newColaborador, s: setNewColaborador, p: 'Colaborador (opcional)', f: 1 },
+                      { v: newDocumento, s: setNewDocumento, p: 'Documento *', f: 2 },
+                    ] as { v: string; s: (x: string) => void; p: string; f: number }[]).map(({ v, s, p, f }) => (
+                      <input key={p} type="text" placeholder={p} value={v} onChange={e => { s(e.target.value); if (addError) setAddError('') }} style={{ flex: f, minWidth: 110, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
+                    ))}
+                  </div>
+                  <textarea
+                    placeholder="Observações (opcional)"
+                    value={newObservacoes}
+                    onChange={e => setNewObservacoes(e.target.value)}
+                    rows={2}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', marginBottom: 8 }}
+                    onFocus={e => { e.target.style.borderColor = '#2A4F96' }}
+                    onBlur={e => { e.target.style.borderColor = '#D1D5DB' }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: '#6B7A99', fontWeight: 500, marginRight: 4 }}>
+                      {addingRow ? 'Salvando...' : 'Salvar como:'}
+                    </span>
+                    {(['aprovado', 'pendente', 'reprovado'] as const).map(v => {
+                      const meta = AUTO_AVAL_META[v]
+                      return (
+                        <button
+                          key={v}
+                          onClick={() => handleAddRow(v)}
+                          disabled={addingRow}
+                          style={{ padding: '8px 14px', borderRadius: 6, border: `1px solid ${meta.color}`, backgroundColor: meta.bg, color: meta.color, fontSize: 12, fontWeight: 600, cursor: addingRow ? 'not-allowed' : 'pointer', opacity: addingRow ? 0.6 : 1 }}
+                        >
+                          {meta.icon} {meta.label}
+                        </button>
+                      )
+                    })}
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: totalCount >= 130 ? '#D97706' : '#94A3B8' }}>
+                      {totalCount} / 150
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -605,7 +812,7 @@ export default function RevisoesTraineeClient() {
                               <tbody>
                                 {recs.map(r => (
                                   <tr key={r.id} style={{ borderBottom: '1px solid #F8FAFC', backgroundColor: rowBg(r.status) }}>
-                                    <td style={{ padding: '8px 14px', color: '#6B7A99', fontSize: 11, whiteSpace: 'nowrap' }}>{formatTime(r.criado_em)}</td>
+                                    <td style={{ padding: '8px 14px', color: '#6B7A99', fontSize: 11, whiteSpace: 'nowrap' }}>{formatTime(r.created_at)}</td>
                                     <td style={{ padding: '8px 14px' }}>{r.empresa}</td>
                                     <td style={{ padding: '8px 14px' }}>{r.colaborador}</td>
                                     <td style={{ padding: '8px 14px' }}>
@@ -660,20 +867,49 @@ export default function RevisoesTraineeClient() {
       {/* ── Modal: Finalizar ──────────────────────────────────────── */}
       {finalizarOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setFinalizarOpen(false) }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 540, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Finalizar dia</h2>
             <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6B7A99' }}>
-              {activeDate ? `Finalizar ${formatDateLong(activeDate)}? Todos os registros vão para o histórico.` : ''}
+              {activeDate ? `Finalizar ${formatDateLong(activeDate)}? Os registros vão para o histórico.` : ''}
             </p>
-            {pendingCount > 0 && (
-              <div style={{ marginBottom: 16, padding: '10px 14px', backgroundColor: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, fontSize: 13, color: '#92400E' }}>
-                ⚠️ {pendingCount} registro{pendingCount > 1 ? 's' : ''} ainda não {pendingCount > 1 ? 'foram revisados' : 'foi revisado'}.
+
+            {Object.keys(pendingByTrainee).length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ padding: '10px 14px', backgroundColor: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, fontSize: 13, color: '#92400E', marginBottom: 12 }}>
+                  ⚠️ Há registros pendentes não avaliados. Escolha o destino de cada trainee:
+                </div>
+
+                {Object.entries(pendingByTrainee).map(([traineeId, group]) => {
+                  const action = groupActions[traineeId] ?? 'history'
+                  return (
+                    <div key={traineeId} style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 8, marginBottom: 8, backgroundColor: '#FAFAFA' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', marginBottom: 8 }}>
+                        {group.nome} <span style={{ color: '#94A3B8', fontWeight: 400 }}>· {group.count} pendente{group.count > 1 ? 's' : ''}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => setGroupActions(prev => ({ ...prev, [traineeId]: 'transfer' }))}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: `1px solid ${action === 'transfer' ? '#2A4F96' : '#D1D5DB'}`, backgroundColor: action === 'transfer' ? '#EBF2FF' : '#fff', color: action === 'transfer' ? '#1E3A6E' : '#6B7A99', fontSize: 12, fontWeight: action === 'transfer' ? 600 : 500, cursor: 'pointer', textAlign: 'left' }}
+                        >
+                          {action === 'transfer' ? '◉' : '○'} Transferir para hoje
+                        </button>
+                        <button
+                          onClick={() => setGroupActions(prev => ({ ...prev, [traineeId]: 'history' }))}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: `1px solid ${action === 'history' ? '#6B7A99' : '#D1D5DB'}`, backgroundColor: action === 'history' ? '#F1F5F9' : '#fff', color: action === 'history' ? '#1E293B' : '#6B7A99', fontSize: 12, fontWeight: action === 'history' ? 600 : 500, cursor: 'pointer', textAlign: 'left' }}
+                        >
+                          {action === 'history' ? '◉' : '○'} Enviar p/ histórico sem avaliação
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
+
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setFinalizarOpen(false)} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #D1D5DB', backgroundColor: '#fff', color: '#374151', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
               <button onClick={handleFinalizar} disabled={finalizarLoading} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: finalizarLoading ? '#F87171' : '#DC2626', color: '#fff', fontSize: 14, fontWeight: 600, cursor: finalizarLoading ? 'not-allowed' : 'pointer' }}>
-                {finalizarLoading ? 'Finalizando...' : 'Confirmar'}
+                {finalizarLoading ? 'Finalizando...' : 'Confirmar finalização'}
               </button>
             </div>
           </div>

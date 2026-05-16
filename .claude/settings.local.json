@@ -26,7 +26,10 @@
       "PowerShell(head *)",
       "PowerShell(node -e \"require\\('xlsx'\\)\" 2>&1)",
       "Bash(git remote *)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\revisoes\\\\registros\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\revisoes\\\\nova-data\\\\route.ts\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\revisoes\\\\historico\\\\[data]\\\\route.ts\")"
     ]
   }
 }
