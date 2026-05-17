@@ -36,7 +36,7 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
     .eq('id', user.id)
     .single()
 
-  const papel = (profile?.papel as string) ?? null
+  const papel = (profile?.papel as string) ?? 'colaborador'
   const pdiSlug = (profile?.pdi_slug as string) ?? null
 
   // Colaborador só acessa o próprio PDI
@@ -45,5 +45,5 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
     redirect('/pdi')
   }
 
-  return <PdiDetailClient pdi={pdi} />
+  return <PdiDetailClient pdi={pdi} papel={papel} />
 }

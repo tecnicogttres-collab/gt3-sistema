@@ -1,4 +1,4 @@
-import type { PdiColaborador } from './types'
+﻿import type { PdiColaborador } from './types'
 
 const marinaMagnaguagnoZanella: PdiColaborador = {
   id: "marina-magnaguagno-zanella",
@@ -149,7 +149,7 @@ const marinaMagnaguagnoZanella: PdiColaborador = {
       pontosAtencao: [
         "Tendência à rigidez excessiva",
         "Possível inflexibilidade decisória",
-        "Pode assumir papel de “fiscal” em vez de “facilitadora”"
+        'Pode assumir papel de "fiscal" em vez de "facilitadora"'
       ],
       comoDesenvolver: [
         "Reuniões rápidas de calibragem",
@@ -161,31 +161,38 @@ const marinaMagnaguagnoZanella: PdiColaborador = {
         animal: "Lobo",
         emoji: "🐺",
         pontoForte: "Lealdade elevada à empresa e ao time.",
-        tendencia: "alta responsabilidade, constância e confiabilidade operacional. excelente para rotinas mensais e controle documental."
+        tendencia: "alta responsabilidade, constância e confiabilidade operacional. excelente para rotinas mensais e controle documental.",
+        percentual: 36
       },
       {
         animal: "Gato",
         emoji: "🐱",
         pontoForte: "bom relacionamento interpessoal e clima leve.",
-        tendencia: "mantém bom humor e integração com o time."
+        tendencia: "mantém bom humor e integração com o time.",
+        percentual: 24
       },
       {
         animal: "Águia",
         emoji: "🦅",
         pontoForte: "certa capacidade de visão técnica",
-        tendencia: "menor inclinação natural para visão estratégica ampla."
+        tendencia: "menor inclinação natural para visão estratégica ampla.",
+        percentual: 20
       },
       {
         animal: "Tubarão",
         emoji: "🦈",
         pontoForte: "firmeza pontual quando necessário",
-        tendencia: "não é naturalmente agressiva ou orientada a confronto. Firme, mas não dominante"
+        tendencia: "não é naturalmente agressiva ou orientada a confronto. Firme, mas não dominante",
+        percentual: 20
       }
     ],
     mbti: {
-      tipo: "",
+      tipo: "ESTJ",
       nucleo: "Segurança → regra → execução correta",
-      veredito: ""
+      veredito: 'O ESTJ dela aparece bem "clássico", reforçado por: Eneagrama alto em Tipo 1 (Perfeccionista), Eneagrama alto em Tipo 8 (assertividade), Predominância Lobo (36%) no comportamental. Ela não só gosta de regra — ela se sente responsável por protegê-la.',
+      estiloDecisao: 'Padrão dominante: lógico–normativo. Como ela decide: 1) Primeiro: "o que a regra diz?" 2) Depois: "o documento está correto?" 3) Só por último (às vezes nem entra): "qual o impacto relacional?"\n\nPonto forte: Baixíssima tolerância a erro técnico. Alta confiabilidade em ambientes regulados. Protege a GT3 de riscos formais.\n\nPonto de atenção: Pode supervalorizar o critério técnico isolado. Risco de perder a visão de proporcionalidade. Tendência a interpretar flexibilização como "erro".',
+      curvaAprendizado: 'Aprende melhor pela prática repetida, pela clareza de procedimento, pelo erro corrigido rapidamente e menos por estudo teórico espontâneo.\n\nEla não é naturalmente autodidata exploratória — isso não é falta de capacidade, é estilo cognitivo. Evolui melhor com: trilhas guiadas, feedback estruturado, exemplos concretos e explicação do "porquê do ajuste".',
+      impactoClima: 'Ponto muito positivo: mesmo com o perfil mais firme, sempre é respeitosa. Isso mostra que o lado relacional (provavelmente influenciado pelo Gato 24%) está funcionando como amortecedor social — excelente sinal de maturidade.\n\nRisco futuro (se pressionada demais): pode endurecer comunicação, pode ficar excessivamente normativa, pode entrar em modo "certo é certo".'
     }
   },
   conclusoes: {

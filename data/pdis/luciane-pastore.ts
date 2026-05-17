@@ -1,4 +1,4 @@
-import type { PdiColaborador } from './types'
+﻿import type { PdiColaborador } from './types'
 
 const lucianePastore: PdiColaborador = {
   id: "luciane-pastore",
@@ -165,7 +165,7 @@ const lucianePastore: PdiColaborador = {
         "Cumpre horários, prazos e instruções com fidelidade."
       ],
       pontosAtencao: [
-        "Pode entrar na defensiva quando questionada (“É que…”), interpretando perguntas como cobrança.",
+        'Pode entrar na defensiva quando questionada ("É que…"), interpretando perguntas como cobrança.',
         "Baixa iniciativa em buscar informações por conta própria; depende de orientação.",
         "Risco de sobrecarga emocional se sentir que precisa agradar a todos."
       ],
@@ -181,25 +181,29 @@ const lucianePastore: PdiColaborador = {
         animal: "Lobo",
         emoji: "🐺",
         pontoForte: "Lealdade e trabalho em equipe",
-        tendencia: "Valoriza o grupo, segue o líder"
+        tendencia: "Valoriza o grupo, segue o líder",
+        percentual: 36
       },
       {
         animal: "Gato",
         emoji: "🐱",
         pontoForte: "Reservado no início, mas muito leal quando confia",
-        tendencia: "Autonomia quando se sente seguro"
+        tendencia: "Autonomia quando se sente seguro",
+        percentual: 36
       },
       {
         animal: "Águia",
         emoji: "🦅",
         pontoForte: "Boa para tarefas estratégicas quando motivada",
-        tendencia: "Tem visão estratégica quando se sente segura e envolvida no objetivo"
+        tendencia: "Tem visão estratégica quando se sente segura e envolvida no objetivo",
+        percentual: 20
       },
       {
         animal: "Tubarão",
         emoji: "🦈",
         pontoForte: "",
-        tendencia: "Não gera conflitos desnecessários (mas também não “empurra” metas)"
+        tendencia: 'Não gera conflitos desnecessários (mas também não "empurra" metas)',
+        percentual: 8
       }
     ]
   },
@@ -210,7 +214,7 @@ const lucianePastore: PdiColaborador = {
       "Humor equilibrado: mantém clima positivo na equipe."
     ],
     pontosAtencao: [
-      "Defensividade imediata quando questionada (“É que…”, “Eu fiz porque…\"). → Indica medo de errar e receio de desapontar, não malícia.",
+      'Defensividade imediata quando questionada ("É que…", "Eu fiz porque…"). → Indica medo de errar e receio de desapontar, não malícia.',
       "Pode evitar tarefas pouco claras por insegurança em tomar decisões."
     ],
     ondeAgrega: [

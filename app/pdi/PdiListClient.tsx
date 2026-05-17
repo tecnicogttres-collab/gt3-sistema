@@ -161,6 +161,30 @@ export default function PdiListClient() {
                       ))}
                     </div>
                   )}
+
+                  {/* Animal dominante + MBTI */}
+                  {(pdi.perfilComportamental.animais.length > 0 || pdi.perfilComportamental.mbti?.tipo) && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {pdi.perfilComportamental.animais.length > 0 && (() => {
+                        const top = [...pdi.perfilComportamental.animais].sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0]
+                        return (
+                          <span style={{ fontSize: 11, color: '#475569' }}>
+                            {top.emoji} {top.animal}{top.percentual ? ` ${top.percentual}%` : ''}
+                          </span>
+                        )
+                      })()}
+                      {pdi.perfilComportamental.mbti?.tipo && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          padding: '2px 7px', borderRadius: 20,
+                          backgroundColor: '#1E3A6E', color: '#D1AE6E',
+                          letterSpacing: '0.05em',
+                        }}>
+                          {pdi.perfilComportamental.mbti.tipo}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </Link>

@@ -168,31 +168,38 @@ const alexandraOtobelliTrentin: PdiColaborador = {
         animal: "Gato",
         emoji: "🐱",
         pontoForte: "Harmonia, boa comunicação, empatia e facilidade em lidar com pessoas.",
-        tendencia: "Busca preservar harmonia e evitar confrontos. Pode demorar mais para dar feedbacks difíceis ou impor limites quando necessário."
-      },
-      {
-        animal: "Tubarão",
-        emoji: "🦈",
-        pontoForte: "Capacidade de agir com agilidade e senso de urgência quando identifica pendências ou precisa resolver questões rapidamente durante o cadastro",
-        tendencia: "Ajuda a manter o fluxo de onboarding em movimento, mas pode gerar ansiedade interna ou pressa excessiva em situações de volume alto."
+        tendencia: "Busca preservar harmonia e evitar confrontos. Pode demorar mais para dar feedbacks difíceis ou impor limites quando necessário.",
+        percentual: 40
       },
       {
         animal: "Lobo",
         emoji: "🐺",
         pontoForte: "Boa organização, atenção a detalhes e preocupação em seguir processos e padrões de qualidade nos cadastros.",
-        tendencia: "Gosta de regras claras e trabalho bem estruturado, porém com menor intensidade que o Gato e o Tubarão neste perfil."
+        tendencia: "Gosta de regras claras e trabalho bem estruturado, porém com menor intensidade que o Gato e o Tubarão neste perfil.",
+        percentual: 24
+      },
+      {
+        animal: "Tubarão",
+        emoji: "🦈",
+        pontoForte: "Capacidade de agir com agilidade e senso de urgência quando identifica pendências ou precisa resolver questões rapidamente durante o cadastro",
+        tendencia: "Ajuda a manter o fluxo de onboarding em movimento, mas pode gerar ansiedade interna ou pressa excessiva em situações de volume alto.",
+        percentual: 20
       },
       {
         animal: "Águia",
         emoji: "🦅",
         pontoForte: "Capacidade básica de visualizar o contexto geral do processo de cadastro.",
-        tendencia: "Baixa influência. Prefere seguir caminhos já conhecidos e testados em vez de inovar ou propor grandes mudanças nos fluxos."
+        tendencia: "Baixa influência. Prefere seguir caminhos já conhecidos e testados em vez de inovar ou propor grandes mudanças nos fluxos.",
+        percentual: 8
       }
     ],
     mbti: {
       tipo: "ISFP",
       nucleo: "Alexandra opera principalmente no modo Introvertido + Sensorial + Sentimental + Perceptivo (ISFP), com forte proximidade de ISTP e ISTJ. Seu núcleo é prático, observador e orientado por valores pessoais. Ela funciona melhor quando pode trabalhar com atenção a detalhes, em um ritmo controlado e com senso de propósito ou utilidade no que faz. Prefere tarefas concretas, visíveis e que permitam certa autonomia, em vez de grandes abstrações ou pressão constante por resultados rápidos.",
-      veredito: "Alexandra tem um perfil ISTP com forte influência de ISTJ/ISFP, sendo muito adequada para funções que exigem cuidado, atenção a detalhes, contato inicial com clientes e execução de processos bem estruturados. Seu maior valor está na qualidade do trabalho e na capacidade de criar uma experiência positiva no onboarding. Pode vir a entender como injustiça situações no ambiente. No entanto, precisa de ambiente estável, comunicação calma e respeitosa, e clareza de expectativas para performar bem. Se colocada em contextos de alta pressão, mudanças frequentes ou forte cobrança por velocidade, tende a"
+      veredito: "Alexandra tem um perfil ISTP com forte influência de ISTJ/ISFP, sendo muito adequada para funções que exigem cuidado, atenção a detalhes, contato inicial com clientes e execução de processos bem estruturados. Seu maior valor está na qualidade do trabalho e na capacidade de criar uma experiência positiva no onboarding. Pode vir a entender como injustiça situações no ambiente. No entanto, precisa de ambiente estável, comunicação calma e respeitosa, e clareza de expectativas para performar bem. Se colocada em contextos de alta pressão, mudanças frequentes ou forte cobrança por velocidade, tende a retrair.",
+      estiloDecisao: "Decide predominantemente pelos valores e impacto humano (F – Feeling), mas com boa dose de lógica prática (influência de T dos tipos próximos).",
+      curvaAprendizado: "Aprende melhor de forma prática e experiencial (fazendo + observando). Tem boa capacidade de absorver procedimentos repetitivos e detalhados, especialmente quando vê sentido ou utilidade no trabalho. Curva de aprendizado é mais lenta em áreas muito abstratas, estratégicas ou que exigem constante inovação e adaptação rápida. Fortalece-se quando recebe treinamento estruturado, exemplos reais e tempo suficiente para praticar antes de ser cobrada por performance.",
+      impactoClima: "Contribui positivamente com cordialidade, calma e boa vontade no dia a dia. Ajuda a manter um clima mais humano e acolhedor, especialmente com novos colaboradores em fase de cadastro/onboarding. Pode gerar tensão sutil quando se sente injustiçada, pois tende a ruminar e justificar suas posições internamente. Seu impacto é mais positivo em times estáveis, com processos claros e liderança respeitosa e calma."
     }
   },
   conclusoes: {

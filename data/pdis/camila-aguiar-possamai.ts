@@ -1,4 +1,4 @@
-import type { PdiColaborador } from './types'
+﻿import type { PdiColaborador } from './types'
 
 const camilaAguiarPossamai: PdiColaborador = {
   id: "camila-aguiar-possamai",
@@ -124,7 +124,7 @@ const camilaAguiarPossamai: PdiColaborador = {
       ],
       pontosFortes: [
         "Alto comprometimento com a empresa e com as pessoas",
-        "Não “finge concordar”: quando algo incomoda, ela comunica"
+        'Não "finge concordar": quando algo incomoda, ela comunica'
       ],
       pontosAtencao: [
         "Quando pressionada, pode ficar defensiva ou impaciente",
@@ -144,26 +144,30 @@ const camilaAguiarPossamai: PdiColaborador = {
       {
         animal: "Águia",
         emoji: "🦅",
-        pontoForte: "Boa leitura técnica e visão de “como deveria ser feito”",
-        tendencia: "Analisa cenários pensando em riscos futuros e consequências."
-      },
-      {
-        animal: "Gato",
-        emoji: "🐱",
-        pontoForte: "Autonomia técnica e observação cuidadosa.",
-        tendencia: "Prefere agir quando se sente segura; evita exposição desnecessária."
+        pontoForte: 'Boa leitura técnica e visão de "como deveria ser feito"',
+        tendencia: "Analisa cenários pensando em riscos futuros e consequências.",
+        percentual: 36
       },
       {
         animal: "Lobo",
         emoji: "🐺",
         pontoForte: "Lealdade institucional muito forte",
-        tendencia: "Defende a empresa e o time, mas pode entrar em conflito quando sente injustiça"
+        tendencia: "Defende a empresa e o time, mas pode entrar em conflito quando sente injustiça",
+        percentual: 32
+      },
+      {
+        animal: "Gato",
+        emoji: "🐱",
+        pontoForte: "Autonomia técnica e observação cuidadosa.",
+        tendencia: "Prefere agir quando se sente segura; evita exposição desnecessária.",
+        percentual: 20
       },
       {
         animal: "Tubarão",
         emoji: "🦈",
         pontoForte: "Capacidade de enfrentamento quando valores são ameaçados.",
-        tendencia: "Aparece mais de forma reativa/emocional, não como estilo dominante. Pode emergir em conflitos específicos"
+        tendencia: "Aparece mais de forma reativa/emocional, não como estilo dominante. Pode emergir em conflitos específicos",
+        percentual: 12
       }
     ]
   },

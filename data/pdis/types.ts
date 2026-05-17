@@ -19,12 +19,16 @@ export type Animal = {
   emoji: string
   pontoForte: string
   tendencia: string
+  percentual?: number
 }
 
 export type Mbti = {
   tipo: string
   nucleo: string
   veredito: string
+  estiloDecisao?: string
+  curvaAprendizado?: string
+  impactoClima?: string
 }
 
 export type PdiColaborador = {

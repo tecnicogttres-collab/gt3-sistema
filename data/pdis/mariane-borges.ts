@@ -117,31 +117,38 @@ const marianeBorges: PdiColaborador = {
         animal: "Lobo",
         emoji: "🐺",
         pontoForte: "Organização, atenção a detalhes e capacidade de seguir processos de forma estruturada.",
-        tendencia: "Prefere trabalhar com regras claras, checklists e padrões bem definidos."
-      },
-      {
-        animal: "Gato",
-        emoji: "🐱",
-        pontoForte: "Boa habilidade de manter um tom cordial e educado nas interações internas e com clientes. Facilita o ambiente de trabalho.",
-        tendencia: "Prioriza harmonia e evita confrontos diretos."
-      },
-      {
-        animal: "Águia",
-        emoji: "🦅",
-        pontoForte: "Capacidade básica de visualizar o contexto geral das tarefas.",
-        tendencia: "Baixa influência. Prefere seguir caminhos já conhecidos ao invés de propor inovações ou mudanças radicais."
+        tendencia: "Prefere trabalhar com regras claras, checklists e padrões bem definidos.",
+        percentual: 44
       },
       {
         animal: "Tubarão",
         emoji: "🦈",
         pontoForte: "Capacidade de agir com agilidade quando necessário para resolver pendências.",
-        tendencia: "Pode gerar ansiedade interna em situações de alto volume ou pressão por velocidade."
+        tendencia: "Pode gerar ansiedade interna em situações de alto volume ou pressão por velocidade.",
+        percentual: 38
+      },
+      {
+        animal: "Gato",
+        emoji: "🐱",
+        pontoForte: "Boa habilidade de manter um tom cordial e educado nas interações internas e com clientes. Facilita o ambiente de trabalho.",
+        tendencia: "Prioriza harmonia e evita confrontos diretos.",
+        percentual: 32
+      },
+      {
+        animal: "Águia",
+        emoji: "🦅",
+        pontoForte: "Capacidade básica de visualizar o contexto geral das tarefas.",
+        tendencia: "Baixa influência. Prefere seguir caminhos já conhecidos ao invés de propor inovações ou mudanças radicais.",
+        percentual: 4
       }
     ],
     mbti: {
       tipo: "ESTJ",
       nucleo: "Mariane opera predominantemente no modo ESTJ (com forte proximidade de ESTP e ISTJ). Seu núcleo é prático, organizado e orientado por resultados. Ela funciona melhor em ambientes com regras claras, processos definidos e objetivos concretos. Tem boa capacidade de execução, senso de responsabilidade e prefere trabalhar com fatos, rotinas e entregas mensuráveis. É uma pessoa que valoriza ordem, eficiência e cumprimento de deveres.",
-      veredito: "Mariane tem um perfil ESTJ bem marcado (86% de caimento), com forte viés para organização, execução prática e foco em resultados. É uma profissional confiável para rotinas financeiras e administrativas que exigem precisão, consistência e cumprimento de prazos. Seu maior valor está em funções operacionais bem estruturadas, onde pode aplicar sua capacidade de organização e senso de dever. No entanto, precisa de clareza de processos, estabilidade e feedback objetivo para performar no seu melhor. Ambientes muito flexíveis, caóticos ou com ritmo extremamente acelerado sem suporte podem gerar frustr"
+      veredito: "Mariane tem um perfil ESTJ bem marcado (86% de caimento), com forte viés para organização, execução prática e foco em resultados. É uma profissional confiável para rotinas financeiras e administrativas que exigem precisão, consistência e cumprimento de prazos. Seu maior valor está em funções operacionais bem estruturadas, onde pode aplicar sua capacidade de organização e senso de dever. No entanto, precisa de clareza de processos, estabilidade e feedback objetivo para performar no seu melhor. Ambientes muito flexíveis, caóticos ou com ritmo extremamente acelerado sem suporte podem gerar frustração.",
+      estiloDecisao: "Decide principalmente pela lógica e eficiência (T – Thinking), com forte influência de estrutura e organização (J). Prefere decisões baseadas em fatos, prazos, regras e resultados práticos, em vez de considerações emocionais ou subjetivas. Gosta de clareza e objetividade. Quando há ambiguidade, tende a buscar padrões ou procedimentos já existentes para se apoiar. Pode ser direta e assertiva nas decisões, especialmente quando percebe ineficiência ou desorganização.",
+      curvaAprendizado: "Aprende melhor de forma estruturada, prática e sequencial (fazendo + repetindo). Tem boa capacidade de absorver rotinas operacionais e procedimentos detalhados. A curva de aprendizado é mais rápida em tarefas concretas e repetitivas, mas mais lenta em situações de alta ambiguidade ou que exigem muita improvisação. Fortalece-se com treinamento prático, exemplos claros, checklists e feedback objetivo sobre performance.",
+      impactoClima: "Contribui com organização, pontualidade e foco em resultados, ajudando a manter o time alinhado com processos. Traz estabilidade e previsibilidade para rotinas administrativas/financeiras. Pode gerar tensão se perceber desorganização ou falta de comprometimento dos outros. Seu impacto é mais positivo em equipes que valorizam estrutura, responsabilidade e execução eficiente."
     }
   },
   conclusoes: {

@@ -5,13 +5,14 @@ import { useState, useEffect, useCallback } from 'react'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type RowType = 'normal' | 'weekend' | 'holiday'
-type Row = { day: number; type: RowType; label: string; person: string }
+type Row = { day: number; type: RowType; label: string; entries: string[] }
 type Sheet = { year: number; monthIdx: number; name: string; rows: Row[] }
 type HistoryData = Record<number, Record<number, Sheet>>
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'gt3_home_office_v1'
+const STORAGE_KEY = 'gt3_home_office_v2'
+const STORAGE_KEY_V1 = 'gt3_home_office_v1'
 const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
 const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
 const DEFAULT_PEOPLE = ['Marcio Z', 'Luciane', 'Rodrigo Balem']
@@ -51,7 +52,7 @@ function buildSheet(year: number, monthIdx: number): Sheet {
     let label = ''
     if (dow === 6) { type = 'weekend'; label = 'SAB' }
     else if (dow === 0) { type = 'weekend'; label = 'DOM' }
-    rows.push({ day: d, type, label, person: '' })
+    rows.push({ day: d, type, label, entries: [] })
   }
   return { year, monthIdx, name: monthKey(year, monthIdx), rows }
 }
@@ -61,13 +62,23 @@ function nextMonthOf(year: number, monthIdx: number) {
   return { year, monthIdx: monthIdx + 1 }
 }
 
+// Migrate a row from v1 format (person: string) to v2 format (entries: string[])
+function migrateRow(r: any): Row {
+  if (Array.isArray(r.entries)) return r as Row
+  return { day: r.day, type: r.type, label: r.label, entries: r.person ? [r.person] : [] }
+}
+
+function migrateSheet(sheet: any): Sheet {
+  return { ...sheet, rows: sheet.rows.map(migrateRow) }
+}
+
 function buildSeedData(): { current: Sheet; history: HistoryData; people: string[] } {
   const seedMay = buildSheet(2026, 4)
   seedMay.rows.forEach(r => {
-    if (r.day === 4)  { r.person = 'Marcio Z' }
-    if (r.day === 6)  { r.person = 'Luciane' }
-    if (r.day === 7)  { r.person = 'Rodrigo Balem' }
-    if (r.day === 26) { r.type = 'holiday'; r.label = 'CARAVAGGIO'; r.person = '' }
+    if (r.day === 4)  { r.entries = ['Marcio Z'] }
+    if (r.day === 6)  { r.entries = ['Luciane'] }
+    if (r.day === 7)  { r.entries = ['Rodrigo Balem'] }
+    if (r.day === 26) { r.type = 'holiday'; r.label = 'CARAVAGGIO'; r.entries = [] }
   })
   return {
     current: buildSheet(2026, 5),
@@ -249,13 +260,29 @@ function MonthTable({
   sheet,
   people,
   readOnly,
-  onPersonChange,
+  pendingAddDays,
+  onEntryChange,
+  onEntryAdd,
+  onPendingCommit,
 }: {
   sheet: Sheet
   people: string[]
   readOnly: boolean
-  onPersonChange?: (day: number, person: string) => void
+  pendingAddDays?: Set<number>
+  onEntryChange?: (day: number, idx: number, person: string) => void
+  onEntryAdd?: (day: number) => void
+  onPendingCommit?: (day: number, person: string) => void
 }) {
+  const selectStyle: React.CSSProperties = {
+    flex: 1, height: 36, border: 'none', background: 'transparent',
+    padding: '0 10px', fontSize: 13, cursor: 'pointer',
+    fontFamily: 'inherit', outline: 'none',
+  }
+  const iconBtnStyle: React.CSSProperties = {
+    border: 'none', background: 'none', padding: '0 6px', cursor: 'pointer',
+    height: 36, display: 'flex', alignItems: 'center', fontSize: 14,
+  }
+
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13 }}>
@@ -283,55 +310,122 @@ function MonthTable({
             const rowBg = isWeekend ? WEEKEND_BG : isHoliday ? HOLIDAY_BG : '#fff'
             const dayColor = isWeekend ? WEEKEND_TEXT : isHoliday ? HOLIDAY_TEXT : MUTED
 
-            return (
-              <tr key={row.day}>
-                <td style={{
-                  background: rowBg, borderBottom: `1px solid ${BORDER}`,
-                  borderLeft: `1px solid ${BORDER}`, padding: '0 14px',
-                  height: 36, textAlign: 'center',
-                }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: dayColor }}>
-                    {dateStr}
-                  </span>
-                </td>
-                <td style={{
-                  background: rowBg, borderBottom: `1px solid ${BORDER}`,
-                  borderLeft: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}`,
-                  height: 36, padding: 0,
-                }}>
-                  {isWeekend ? (
+            const dateTd = (
+              <td style={{
+                background: rowBg, borderBottom: `1px solid ${BORDER}`,
+                borderLeft: `1px solid ${BORDER}`, padding: '0 14px',
+                textAlign: 'center', verticalAlign: 'middle',
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: dayColor }}>{dateStr}</span>
+              </td>
+            )
+
+            if (isWeekend || isHoliday) {
+              return (
+                <tr key={row.day}>
+                  {dateTd}
+                  <td style={{
+                    background: rowBg, borderBottom: `1px solid ${BORDER}`,
+                    borderLeft: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}`,
+                    height: 36, padding: 0,
+                  }}>
                     <div style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: WEEKEND_TEXT }}>{row.label}</span>
-                    </div>
-                  ) : isHoliday ? (
-                    <div style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: HOLIDAY_TEXT }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: isWeekend ? WEEKEND_TEXT : HOLIDAY_TEXT }}>
                         {row.label || 'FERIADO'}
                       </span>
                     </div>
-                  ) : readOnly ? (
-                    <div style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: 13, color: row.person ? INK : '#C0C8D8' }}>
-                        {row.person || '—'}
-                      </span>
-                    </div>
-                  ) : (
-                    <select
-                      value={row.person}
-                      onChange={e => onPersonChange?.(row.day, e.target.value)}
-                      style={{
-                        width: '100%', height: 36, border: 'none', background: 'transparent',
-                        padding: '0 10px', fontSize: 13, color: row.person ? INK : MUTED,
-                        cursor: 'pointer', fontFamily: 'inherit', outline: 'none',
-                      }}
-                    >
-                      <option value="">—</option>
-                      {people.map(p => <option key={p} value={p}>{p}</option>)}
-                      {STATUS_OPTIONS.map(s => (
-                        <option key={s} value={s}>{s}</option>
+                  </td>
+                </tr>
+              )
+            }
+
+            const entries = row.entries || []
+
+            if (readOnly) {
+              return (
+                <tr key={row.day}>
+                  {dateTd}
+                  <td style={{
+                    background: rowBg, borderBottom: `1px solid ${BORDER}`,
+                    borderLeft: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}`,
+                    padding: 0,
+                  }}>
+                    <div style={{ padding: '6px 14px', minHeight: 36, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+                      {entries.length === 0 ? (
+                        <span style={{ fontSize: 13, color: '#C0C8D8' }}>—</span>
+                      ) : entries.map((e, i) => (
+                        <span key={i} style={{ fontSize: 13, color: INK }}>{e}</span>
                       ))}
-                    </select>
-                  )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            }
+
+            // Editable: single <tr> per day, all entries stacked inside PESSOA <td>
+            const hasPending = pendingAddDays?.has(row.day) ?? false
+            const displayEntries = entries.length === 0 ? [''] : entries
+
+            return (
+              <tr key={row.day}>
+                {dateTd}
+                <td style={{
+                  background: rowBg, borderBottom: `1px solid ${BORDER}`,
+                  borderLeft: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}`,
+                  padding: 0,
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', padding: '2px 0' }}>
+                    {displayEntries.map((person, i) => {
+                      const isLastEntry = i === entries.length - 1
+                      const showAdd = isLastEntry && person !== '' && !hasPending
+                      const showRemove = person !== ''
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', minHeight: 36 }}>
+                          <select
+                            value={person}
+                            onChange={e => onEntryChange?.(row.day, i, e.target.value)}
+                            style={{ ...selectStyle, color: person ? INK : MUTED }}
+                          >
+                            <option value="">—</option>
+                            {people.map(p => <option key={p} value={p}>{p}</option>)}
+                            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          {showRemove && (
+                            <button
+                              onClick={() => onEntryChange?.(row.day, i, '')}
+                              title="Remover"
+                              style={{ ...iconBtnStyle, color: '#9CA3AF' }}
+                            >×</button>
+                          )}
+                          {showAdd && (
+                            <button
+                              onClick={() => onEntryAdd?.(row.day)}
+                              title="Adicionar pessoa"
+                              style={{ ...iconBtnStyle, color: PRIMARY, fontWeight: 700, fontSize: 16 }}
+                            >+</button>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {hasPending && (
+                      <div style={{ display: 'flex', alignItems: 'center', minHeight: 36 }}>
+                        <select
+                          value=""
+                          onChange={e => onPendingCommit?.(row.day, e.target.value)}
+                          style={{ ...selectStyle, color: MUTED }}
+                        >
+                          <option value="">+ Selecionar colaborador</option>
+                          {people.map(p => <option key={p} value={p}>{p}</option>)}
+                          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <button
+                          onClick={() => onPendingCommit?.(row.day, '')}
+                          title="Cancelar"
+                          style={{ ...iconBtnStyle, color: '#9CA3AF' }}
+                        >×</button>
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             )
@@ -352,6 +446,7 @@ export default function HomeOfficeClient() {
   const [people, setPeople] = useState<string[]>([...DEFAULT_PEOPLE])
   const [histPath, setHistPath] = useState<{ year: number | null; month: number | null }>({ year: null, month: null })
   const [newPersonInput, setNewPersonInput] = useState('')
+  const [pendingAddDays, setPendingAddDays] = useState<Set<number>>(new Set())
 
   // Modals
   const [showGenerate, setShowGenerate] = useState(false)
@@ -360,18 +455,47 @@ export default function HomeOfficeClient() {
   // Load from localStorage on mount
   useEffect(() => {
     try {
+      // Try v2 first
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
         const data = JSON.parse(raw)
-        setCurrent(data.current ?? null)
-        setHistory(data.history ?? {})
+        setCurrent(data.current ? migrateSheet(data.current) : null)
+        const hist: HistoryData = data.history ?? {}
+        const migratedHist: HistoryData = {}
+        for (const yr of Object.keys(hist)) {
+          migratedHist[Number(yr)] = {}
+          for (const mo of Object.keys(hist[Number(yr)])) {
+            migratedHist[Number(yr)][Number(mo)] = migrateSheet(hist[Number(yr)][Number(mo)])
+          }
+        }
+        setHistory(migratedHist)
         setPeople(data.people ?? [...DEFAULT_PEOPLE])
       } else {
-        const seed = buildSeedData()
-        setCurrent(seed.current)
-        setHistory(seed.history)
-        setPeople(seed.people)
-        saveToStorage(seed.current, seed.history, seed.people)
+        // Try migrating from v1
+        const rawV1 = localStorage.getItem(STORAGE_KEY_V1)
+        if (rawV1) {
+          const data = JSON.parse(rawV1)
+          const cur = data.current ? migrateSheet(data.current) : null
+          const hist: HistoryData = data.history ?? {}
+          const migratedHist: HistoryData = {}
+          for (const yr of Object.keys(hist)) {
+            migratedHist[Number(yr)] = {}
+            for (const mo of Object.keys(hist[Number(yr)])) {
+              migratedHist[Number(yr)][Number(mo)] = migrateSheet(hist[Number(yr)][Number(mo)])
+            }
+          }
+          const ppl = data.people ?? [...DEFAULT_PEOPLE]
+          setCurrent(cur)
+          setHistory(migratedHist)
+          setPeople(ppl)
+          saveToStorage(cur, migratedHist, ppl)
+        } else {
+          const seed = buildSeedData()
+          setCurrent(seed.current)
+          setHistory(seed.history)
+          setPeople(seed.people)
+          saveToStorage(seed.current, seed.history, seed.people)
+        }
       }
     } catch {
       const seed = buildSeedData()
@@ -395,11 +519,35 @@ export default function HomeOfficeClient() {
     const sheet = buildSheet(year, monthIdx)
     save(sheet, history, people)
     setShowGenerate(false)
+    setPendingAddDays(new Set())
   }
 
-  function handlePersonChange(day: number, person: string) {
+  function handleEntryChange(day: number, idx: number, person: string) {
     if (!current) return
-    const rows = current.rows.map(r => r.day === day ? { ...r, person } : r)
+    const rows = current.rows.map(r => {
+      if (r.day !== day) return r
+      const newEntries = [...r.entries]
+      if (person === '') {
+        if (idx < newEntries.length) newEntries.splice(idx, 1)
+      } else {
+        newEntries[idx] = person
+      }
+      return { ...r, entries: newEntries }
+    })
+    save({ ...current, rows }, history, people)
+  }
+
+  function handleEntryAdd(day: number) {
+    setPendingAddDays(prev => new Set([...prev, day]))
+  }
+
+  function handlePendingCommit(day: number, person: string) {
+    setPendingAddDays(prev => { const next = new Set(prev); next.delete(day); return next })
+    if (!person || !current) return
+    const rows = current.rows.map(r => {
+      if (r.day !== day) return r
+      return { ...r, entries: [...r.entries, person] }
+    })
     save({ ...current, rows }, history, people)
   }
 
@@ -420,7 +568,7 @@ export default function HomeOfficeClient() {
   function handleMarkHoliday(day: number, name?: string) {
     if (!current) return
     const rows = current.rows.map(r =>
-      r.day === day ? { ...r, type: 'holiday' as RowType, label: (name || 'FERIADO').toUpperCase(), person: '' } : r
+      r.day === day ? { ...r, type: 'holiday' as RowType, label: (name || 'FERIADO').toUpperCase(), entries: [] } : r
     )
     save({ ...current, rows }, history, people)
     setHolidayModal(null)
@@ -431,9 +579,9 @@ export default function HomeOfficeClient() {
     const dow = dayOfWeek(current.year, current.monthIdx, day)
     const rows = current.rows.map(r => {
       if (r.day !== day) return r
-      if (dow === 6) return { ...r, type: 'weekend' as RowType, label: 'SAB', person: '' }
-      if (dow === 0) return { ...r, type: 'weekend' as RowType, label: 'DOM', person: '' }
-      return { ...r, type: 'normal' as RowType, label: '', person: '' }
+      if (dow === 6) return { ...r, type: 'weekend' as RowType, label: 'SAB', entries: [] }
+      if (dow === 0) return { ...r, type: 'weekend' as RowType, label: 'DOM', entries: [] }
+      return { ...r, type: 'normal' as RowType, label: '', entries: [] }
     })
     save({ ...current, rows }, history, people)
     setHolidayModal(null)
@@ -442,6 +590,7 @@ export default function HomeOfficeClient() {
   function handleReset() {
     if (!current) return
     if (!window.confirm('Limpar todos os preenchimentos do mês vigente?')) return
+    setPendingAddDays(new Set())
     save(buildSheet(current.year, current.monthIdx), history, people)
   }
 
@@ -453,6 +602,7 @@ export default function HomeOfficeClient() {
     if (!newHistory[current.year]) newHistory[current.year] = {}
     newHistory[current.year][current.monthIdx] = JSON.parse(JSON.stringify(current))
     const { year: ny, monthIdx: nm } = nextMonthOf(current.year, current.monthIdx)
+    setPendingAddDays(new Set())
     save(buildSheet(ny, nm), newHistory, people)
   }
 
@@ -473,7 +623,7 @@ export default function HomeOfficeClient() {
 
   const stats = current ? {
     workdays: current.rows.filter(r => r.type === 'normal').length,
-    filled: current.rows.filter(r => r.type === 'normal' && r.person).length,
+    filled: current.rows.filter(r => r.type === 'normal' && r.entries.length > 0).length,
     holidays: current.rows.filter(r => r.type === 'holiday').length,
   } : null
 
@@ -599,7 +749,10 @@ export default function HomeOfficeClient() {
                 sheet={current}
                 people={people}
                 readOnly={false}
-                onPersonChange={handlePersonChange}
+                pendingAddDays={pendingAddDays}
+                onEntryChange={handleEntryChange}
+                onEntryAdd={handleEntryAdd}
+                onPendingCommit={handlePendingCommit}
               />
 
               {/* Actions */}

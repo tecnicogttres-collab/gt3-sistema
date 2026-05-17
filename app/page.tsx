@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { MODULES } from './lib/modules'
+import PdiCard from './components/PdiCard'
 
 export default function DashboardPage() {
   const mainModules = MODULES.filter((m) => m.id !== 'pdi')
@@ -39,28 +40,7 @@ export default function DashboardPage() {
       </div>
 
       {/* PDI — featured card */}
-      <Link href={pdi.path} className="pdi-card-link">
-        <div className="pdi-card">
-          <div style={{ height: 4, backgroundColor: '#D1AE6E' }} />
-          <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20 }}>
-            <div className="pdi-icon">
-              <div style={{ width: 24, height: 24, borderRadius: '50%', backgroundColor: '#D1AE6E' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1E253D', margin: 0 }}>
-                  PDI — Plano de Desenvolvimento Individual
-                </h2>
-                <span className="pdi-badge">Destaque</span>
-              </div>
-              <p style={{ fontSize: 13, color: '#6B7A99', margin: 0, lineHeight: 1.5 }}>
-                Acompanhe o desenvolvimento individual de Natália e Marina — metas, ações e prazos.
-              </p>
-            </div>
-            <span style={{ fontSize: 22, color: '#D1AE6E', fontWeight: 300 }}>→</span>
-          </div>
-        </div>
-      </Link>
+      <PdiCard path={pdi.path} />
     </div>
   )
 }

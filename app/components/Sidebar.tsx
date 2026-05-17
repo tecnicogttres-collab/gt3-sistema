@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { MODULES } from '../lib/modules'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
@@ -20,6 +21,7 @@ const PAPEL_LABELS: Record<string, string> = {
 export default function Sidebar({ collapsed, onToggle }: Props) {
   const pathname = usePathname()
   const { profile, loading, signOut } = useUser()
+  const [pdiNotifCount, setPdiNotifCount] = useState(0)
 
   const papel = profile?.papel as Role | null
   const visibleModules = papel
@@ -28,8 +30,18 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
     ? []
     : MODULES.filter((m) => m.allowedRoles.includes('colaborador'))
 
+  // Fetch unread PDI notifications for collaborators
+  useEffect(() => {
+    if (!profile || profile.papel !== 'colaborador') return
+    fetch('/api/pdi/notificacoes')
+      .then(r => r.ok ? r.json() : { count: 0 })
+      .then(data => setPdiNotifCount(data.count ?? 0))
+      .catch(() => {})
+  }, [profile, pathname])
+
   function itemStyle(isActive: boolean): React.CSSProperties {
     return {
+      position: 'relative',
       display: 'flex',
       alignItems: 'center',
       gap: collapsed ? 0 : 12,
@@ -94,11 +106,25 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
         <div style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
 
         {visibleModules.map((mod) => {
-          const isActive = pathname === mod.path
+          const isActive = pathname === mod.path || pathname.startsWith(mod.path + '/')
+          const showBadge = mod.id === 'pdi' && pdiNotifCount > 0
           return (
             <Link key={mod.id} href={mod.path} style={itemStyle(isActive)}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: mod.color, flexShrink: 0 }} />
               {!collapsed && <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{mod.label}</span>}
+              {showBadge && (
+                <span style={{
+                  position: 'absolute',
+                  top: collapsed ? 8 : 7,
+                  right: collapsed ? 10 : 14,
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: '#EF4444',
+                  border: '1.5px solid #1E3A6E',
+                  flexShrink: 0,
+                }} />
+              )}
             </Link>
           )
         })}

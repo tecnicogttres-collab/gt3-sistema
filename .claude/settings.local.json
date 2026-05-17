@@ -29,7 +29,11 @@
       "Bash(xargs cat)",
       "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\revisoes\\\\registros\")",
       "Bash(Remove-Item -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\revisoes\\\\nova-data\\\\route.ts\")",
-      "Bash(Remove-Item -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\revisoes\\\\historico\\\\[data]\\\\route.ts\")"
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\revisoes\\\\historico\\\\[data]\\\\route.ts\")",
+      "PowerShell(Get-Command *)",
+      "Bash(powershell *)",
+      "Bash(Remove-Item *)",
+      "PowerShell($json = Get-Content \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\data.json\" -Raw | ConvertFrom-Json; $structure = @\\(\\); foreach\\($key in $json.PSObject.Properties.Name\\) { $structure += @{Category = $key} }; $structure | ConvertTo-Json -Depth 2)"
     ]
   }
 }

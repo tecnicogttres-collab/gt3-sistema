@@ -135,31 +135,38 @@ const daianaTattoZorzo: PdiColaborador = {
         animal: "Gato",
         emoji: "🐱",
         pontoForte: "Foco em harmonia,  trabalho colaborativo e sensibilidade relacional.",
-        tendencia: "Boa comunicação informal e proximidade com colegas"
+        tendencia: "Boa comunicação informal e proximidade com colegas",
+        percentual: 40
       },
       {
         animal: "Lobo",
         emoji: "🐺",
         pontoForte: "Organização, estratégia, detalhismo, pontualidade e lealdade a normas",
-        tendencia: "Apoia processos estruturados."
-      },
-      {
-        animal: "Águia",
-        emoji: "🦅",
-        pontoForte: "Ação prática, senso de urgência, foco em resultados",
-        tendencia: "iniciativa para \"fazer acontecer\""
+        tendencia: "Apoia processos estruturados.",
+        percentual: 24
       },
       {
         animal: "Tubarão",
         emoji: "🦈",
         pontoForte: "Foco em resolver problemas rapidamente.",
-        tendencia: "Pode agir rápido demais em algumas decisões"
+        tendencia: "Pode agir rápido demais em algumas decisões",
+        percentual: 24
+      },
+      {
+        animal: "Águia",
+        emoji: "🦅",
+        pontoForte: "Ação prática, senso de urgência, foco em resultados",
+        tendencia: "iniciativa para \"fazer acontecer\"",
+        percentual: 12
       }
     ],
     mbti: {
       tipo: "INFP",
-      nucleo: "O INFP trabalha melhor quando sente: *propósito *justiça *coerência de valores Rapidez → ajuda → execução prática *pensa rápido *resolve rápido *ajuda colegas *domina o processo técnico",
-      veredito: ""
+      nucleo: "O INFP trabalha melhor quando sente: propósito, justiça e coerência de valores. Rapidez → ajuda → execução prática: pensa rápido, resolve rápido, ajuda colegas e domina o processo técnico.",
+      veredito: "",
+      estiloDecisao: "Ela decide com base em: conhecimento técnico, experiência prática e necessidade de resolver rápido. Por isso às vezes surge: julgamento rápido e avaliação preto ou branco.",
+      curvaAprendizado: "Aprende rápido quando pode executar, testar e resolver problemas reais — por isso se desenvolveu bem na GT3. Depois de entender o processo, ela tende a: dominar a lógica, virar referência para colegas e ajudar outros a aprender. Isso explica por que virou ponto de consulta do setor.",
+      impactoClima: "Aspectos que fortalecem o clima: boa disposição no ambiente, facilidade de interação com colegas, disposição para ajudar quando surgem dúvidas e troca constante de conhecimento técnico. Ela contribui para um ambiente onde colegas se sentem confortáveis para perguntar e o conhecimento circula informalmente."
     }
   },
   conclusoes: {

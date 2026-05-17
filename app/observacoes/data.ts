@@ -97,9 +97,6 @@ function normalizeCategory(key: string, rawCat: unknown): Category | null {
     // Append category-level fixed right to every subtab
     columns = [...columns, ...fixedRightCols]
 
-    // Remove "Sistema - Geral" — exists in the standalone HTML but not part of the Next.js structure
-    columns = columns.filter(col => col.title !== 'Sistema - Geral')
-
     // Deduplicate columns by title (keep first occurrence)
     const seen = new Set<string>()
     columns = columns.filter(col => {

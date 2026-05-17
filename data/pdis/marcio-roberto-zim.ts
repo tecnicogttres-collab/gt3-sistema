@@ -1,4 +1,4 @@
-import type { PdiColaborador } from './types'
+﻿import type { PdiColaborador } from './types'
 
 const marcioRobertoZim: PdiColaborador = {
   id: "marcio-roberto-zim",
@@ -137,7 +137,7 @@ const marcioRobertoZim: PdiColaborador = {
         "Naturalmente inclinado a seguir procedimentos — fundamental na GT3."
       ],
       pontosAtencao: [
-        "Tende a preferir “um jeito certo” de fazer",
+        'Tende a preferir "um jeito certo" de fazer',
         "Em atividades com múltiplas demandas ao mesmo tempo pode perder o timing.",
         "Mais executor do que inovador.",
         "Precisa de ambiente com menos interrupções."
@@ -154,25 +154,29 @@ const marcioRobertoZim: PdiColaborador = {
         animal: "Lobo",
         emoji: "🐺",
         pontoForte: "Trabalho em equipe, lealdade e senso de coletividade",
-        tendencia: "Excelente para funções que exigem parceria constante."
+        tendencia: "Excelente para funções que exigem parceria constante.",
+        percentual: 32
       },
       {
         animal: "Gato",
         emoji: "🐱",
         pontoForte: "Observador, cuidadoso e constante.",
-        tendencia: "Prefere estabilidade e previsibilidade"
+        tendencia: "Prefere estabilidade e previsibilidade",
+        percentual: 28
       },
       {
         animal: "Águia",
         emoji: "🦅",
         pontoForte: "Boa visão estratégica quando envolvida no objetivo.",
-        tendencia: "Quando motivado, vê o todo e melhora processos."
+        tendencia: "Quando motivado, vê o todo e melhora processos.",
+        percentual: 20
       },
       {
         animal: "Tubarão",
         emoji: "🦈",
         pontoForte: "Disciplina, foco e persistência",
-        tendencia: "Não provoca conflitos, prefere manter paz operacional."
+        tendencia: "Não provoca conflitos, prefere manter paz operacional.",
+        percentual: 20
       }
     ]
   },
