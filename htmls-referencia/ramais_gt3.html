@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ramais — GT3 Consultoria</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F7F6F3;
+    --surface: #FFFFFF;
+    --border: #E2E0D8;
+    --border-strong: #C8C5BB;
+    --text: #1A1916;
+    --text-muted: #7A7771;
+    --text-faint: #B0ADA6;
+    --accent: #1A4D3A;
+    --accent-light: #E8F2ED;
+    --accent-mid: #2E7D56;
+    --danger: #B93030;
+    --danger-light: #FDF0F0;
+    --warn: #8A5A00;
+    --warn-light: #FFF8E6;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --radius: 8px;
+    --radius-lg: 14px;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2.5rem 1.5rem;
+  }
+
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 1.75rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .page-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-weight: 400;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: #133828; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  .btn-ghost:hover { background: var(--bg); color: var(--text); border-color: var(--border-strong); }
+
+  .btn-danger-ghost {
+    background: transparent;
+    color: var(--danger);
+    border-color: var(--border);
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .btn-danger-ghost:hover { background: var(--danger-light); border-color: #E8AAAA; }
+
+  .btn-edit {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border);
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .btn-edit:hover { background: var(--bg); color: var(--text); border-color: var(--border-strong); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-faint);
+    padding: 14px 20px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  tbody tr {
+    transition: background 0.1s;
+  }
+
+  tbody tr:hover {
+    background: #FAFAF8;
+  }
+
+  tbody tr + tr {
+    border-top: 1px solid var(--border);
+  }
+
+  td {
+    padding: 14px 20px;
+    vertical-align: middle;
+    font-size: 14px;
+  }
+
+  .td-nome { font-weight: 500; color: var(--text); }
+  .td-ramal {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent-mid);
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+  .td-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  .empty-state {
+    padding: 3rem 20px;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 14px;
+  }
+
+  .count-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-family: var(--mono);
+    background: var(--accent-light);
+    color: var(--accent);
+    border-radius: 99px;
+    padding: 2px 9px;
+    font-weight: 500;
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+
+  /* OVERLAY */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20,18,15,0.45);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+  .overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 400px;
+    padding: 1.75rem;
+    position: relative;
+    animation: pop 0.18s ease;
+  }
+  @keyframes pop {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .modal-step {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 0.75rem;
+  }
+
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    margin-bottom: 0.4rem;
+  }
+
+  .modal-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  .form-group { margin-bottom: 1rem; }
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+  .form-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .form-input:focus { border-color: var(--accent-mid); background: var(--surface); }
+  .form-input[readonly] {
+    color: var(--text-muted);
+    background: var(--bg);
+    cursor: default;
+  }
+
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.5rem; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
+  .confirm-box {
+    background: var(--warn-light);
+    border: 1px solid #F0D78A;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--warn);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+  }
+
+  .confirm-box-danger {
+    background: var(--danger-light);
+    border: 1px solid #EDBBBB;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--danger);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+  }
+
+  .preview-row {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 1rem;
+  }
+  .preview-row .pr-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-bottom: 4px; }
+  .preview-row .pr-val { font-size: 14px; font-weight: 500; color: var(--text); }
+  .preview-row .pr-ramal { font-family: var(--mono); color: var(--accent-mid); }
+
+  .btn-confirm {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-size: 13px;
+    padding: 9px 18px;
+  }
+  .btn-confirm:hover { background: #133828; }
+
+  .btn-confirm-danger {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+    font-size: 13px;
+    padding: 9px 18px;
+  }
+  .btn-confirm-danger:hover { background: #8F2424; }
+
+  .flash {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    background: var(--accent);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 12px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 999;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.2s;
+    pointer-events: none;
+  }
+  .flash.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="page-header">
+    <div>
+      <div class="page-title">
+        Ramais
+        <span class="count-badge" id="badge">0</span>
+      </div>
+      <div class="page-subtitle">GT3 Consultoria — lista de ramais internos</div>
+    </div>
+    <button class="btn btn-primary" onclick="abrirModalAdicionar()">+ Adicionar ramal</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:50%">Nome</th>
+          <th style="width:25%">Ramal</th>
+          <th style="width:25%;text-align:right">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="empty" class="empty-state" style="display:none;">Nenhum ramal cadastrado ainda.</div>
+  </div>
+</div>
+
+<!-- OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<div class="flash" id="flash"></div>
+
+<script>
+let ramais = [
+  { id: 1, nome: 'Ana Paula Souza', ramal: '1001' },
+  { id: 2, nome: 'Carlos Menezes', ramal: '1002' },
+  { id: 3, nome: 'Fernanda Lima', ramal: '1003' },
+];
+let nextId = 4;
+
+function render() {
+  const tbody = document.getElementById('tbody');
+  const empty = document.getElementById('empty');
+  const badge = document.getElementById('badge');
+  badge.textContent = ramais.length;
+  if (ramais.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = ramais.map(r => `
+    <tr>
+      <td class="td-nome">${esc(r.nome)}</td>
+      <td class="td-ramal">${esc(r.ramal)}</td>
+      <td><div class="td-actions">
+        <button class="btn btn-edit" onclick="abrirModalEditar(${r.id})">✎ Editar</button>
+        <button class="btn btn-danger-ghost" onclick="abrirModalExcluir(${r.id})">✕ Excluir</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function abrirModal(html) {
+  document.getElementById('modal-box').innerHTML = html;
+  document.getElementById('overlay').classList.add('open');
+}
+
+function fecharModal() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+document.getElementById('overlay').addEventListener('click', function(e) {
+  if (e.target === this) fecharModal();
+});
+
+function mostrarFlash(msg) {
+  const f = document.getElementById('flash');
+  f.textContent = msg;
+  f.classList.add('show');
+  setTimeout(() => f.classList.remove('show'), 2500);
+}
+
+// ── ADICIONAR ──────────────────────────────────────────────
+function abrirModalAdicionar() {
+  abrirModal(`
+    <div class="modal-step">Passo 1 de 2 — Preenchimento</div>
+    <div class="modal-title">Novo ramal</div>
+    <div class="modal-desc">Preencha os dados do novo colaborador.</div>
+    <div class="form-group">
+      <label class="form-label">Nome completo</label>
+      <input class="form-input" id="inp-nome" type="text" placeholder="Ex.: João da Silva" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Número do ramal</label>
+      <input class="form-input" id="inp-ramal" type="text" placeholder="Ex.: 1004" maxlength="6" autocomplete="off">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarAdicionar()">Continuar →</button>
+    </div>
+  `);
+}
+
+function confirmarAdicionar() {
+  const nome = document.getElementById('inp-nome').value.trim();
+  const ramal = document.getElementById('inp-ramal').value.trim();
+  if (!nome || !ramal) { alert('Preencha nome e ramal.'); return; }
+  abrirModal(`
+    <div class="modal-step">Passo 2 de 2 — Confirmação</div>
+    <div class="modal-title">Confirmar inclusão</div>
+    <div class="modal-desc">Verifique os dados antes de salvar.</div>
+    <div class="preview-row">
+      <div class="pr-label">Nome</div>
+      <div class="pr-val">${esc(nome)}</div>
+    </div>
+    <div class="preview-row">
+      <div class="pr-label">Ramal</div>
+      <div class="pr-val pr-ramal">${esc(ramal)}</div>
+    </div>
+    <div class="confirm-box">Confirme que os dados estão corretos antes de salvar.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="abrirModalAdicionar()">← Voltar</button>
+      <button class="btn btn-confirm" onclick="salvarAdicionar('${escJs(nome)}','${escJs(ramal)}')">✓ Confirmar e salvar</button>
+    </div>
+  `);
+}
+
+function salvarAdicionar(nome, ramal) {
+  ramais.push({ id: nextId++, nome, ramal });
+  fecharModal();
+  render();
+  mostrarFlash('Ramal adicionado com sucesso');
+}
+
+// ── EDITAR ────────────────────────────────────────────────
+function abrirModalEditar(id) {
+  const r = ramais.find(x => x.id === id);
+  if (!r) return;
+  abrirModal(`
+    <div class="modal-step">Passo 1 de 2 — Edição</div>
+    <div class="modal-title">Editar ramal</div>
+    <div class="modal-desc">Altere os dados do colaborador.</div>
+    <div class="form-group">
+      <label class="form-label">Nome completo</label>
+      <input class="form-input" id="edit-nome" type="text" value="${esc(r.nome)}" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Número do ramal</label>
+      <input class="form-input" id="edit-ramal" type="text" value="${esc(r.ramal)}" maxlength="6" autocomplete="off">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarEditar(${id})">Continuar →</button>
+    </div>
+  `);
+}
+
+function confirmarEditar(id) {
+  const nome = document.getElementById('edit-nome').value.trim();
+  const ramal = document.getElementById('edit-ramal').value.trim();
+  if (!nome || !ramal) { alert('Preencha nome e ramal.'); return; }
+  const r = ramais.find(x => x.id === id);
+  abrirModal(`
+    <div class="modal-step">Passo 2 de 2 — Confirmação</div>
+    <div class="modal-title">Confirmar alteração</div>
+    <div class="modal-desc">Compare os dados antes de salvar.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem;">
+      <div>
+        <div class="pr-label" style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);margin-bottom:4px;">Antes</div>
+        <div class="preview-row" style="margin-bottom:0;">
+          <div class="pr-label">Nome</div>
+          <div class="pr-val" style="font-size:13px;color:var(--text-muted);">${esc(r.nome)}</div>
+          <div class="pr-label" style="margin-top:8px;">Ramal</div>
+          <div class="pr-val pr-ramal" style="font-size:13px;color:var(--text-muted);">${esc(r.ramal)}</div>
+        </div>
+      </div>
+      <div>
+        <div class="pr-label" style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);margin-bottom:4px;">Depois</div>
+        <div class="preview-row" style="margin-bottom:0;">
+          <div class="pr-label">Nome</div>
+          <div class="pr-val" style="font-size:13px;">${esc(nome)}</div>
+          <div class="pr-label" style="margin-top:8px;">Ramal</div>
+          <div class="pr-val pr-ramal" style="font-size:13px;">${esc(ramal)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="confirm-box">Confirme que as alterações estão corretas antes de salvar.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="abrirModalEditar(${id})">← Voltar</button>
+      <button class="btn btn-confirm" onclick="salvarEditar(${id},'${escJs(nome)}','${escJs(ramal)}')">✓ Confirmar alteração</button>
+    </div>
+  `);
+}
+
+function salvarEditar(id, nome, ramal) {
+  const r = ramais.find(x => x.id === id);
+  if (r) { r.nome = nome; r.ramal = ramal; }
+  fecharModal();
+  render();
+  mostrarFlash('Ramal atualizado com sucesso');
+}
+
+// ── EXCLUIR ───────────────────────────────────────────────
+function abrirModalExcluir(id) {
+  const r = ramais.find(x => x.id === id);
+  if (!r) return;
+  abrirModal(`
+    <div class="modal-step">Passo 1 de 2 — Solicitação</div>
+    <div class="modal-title">Excluir ramal</div>
+    <div class="modal-desc">Você está prestes a remover o seguinte registro:</div>
+    <div class="preview-row">
+      <div class="pr-label">Nome</div>
+      <div class="pr-val">${esc(r.nome)}</div>
+    </div>
+    <div class="preview-row">
+      <div class="pr-label">Ramal</div>
+      <div class="pr-val pr-ramal">${esc(r.ramal)}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-danger-ghost" style="font-size:13px;padding:9px 18px;" onclick="confirmarExcluir(${id})">Continuar →</button>
+    </div>
+  `);
+}
+
+function confirmarExcluir(id) {
+  const r = ramais.find(x => x.id === id);
+  abrirModal(`
+    <div class="modal-step">Passo 2 de 2 — Confirmação final</div>
+    <div class="modal-title">Confirmar exclusão</div>
+    <div class="confirm-box-danger">Esta ação não pode ser desfeita. O registro será removido permanentemente.</div>
+    <div class="preview-row">
+      <div class="pr-label">Nome</div>
+      <div class="pr-val">${esc(r.nome)}</div>
+      <div class="pr-label" style="margin-top:8px;">Ramal</div>
+      <div class="pr-val pr-ramal">${esc(r.ramal)}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="abrirModalExcluir(${id})">← Voltar</button>
+      <button class="btn btn-confirm-danger" onclick="salvarExcluir(${id})">✕ Confirmar exclusão</button>
+    </div>
+  `);
+}
+
+function salvarExcluir(id) {
+  ramais = ramais.filter(x => x.id !== id);
+  fecharModal();
+  render();
+  mostrarFlash('Ramal excluído');
+}
+
+function escJs(s) {
+  return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+render();
+</script>
+</body>
+</html>

@@ -113,7 +113,7 @@ function buildColumnUI(col: Column, dbRows: DbObservacao[]): ColumnUI {
 // ─── Card Component ────────────────────────────────────────────────────────────
 
 function ObsCard({
-  card, id, isCopied, onCopy, search, canManage, onEdit, onDelete,
+  card, id, isCopied, onCopy, search, canManage, onEdit, onDelete, isFixed,
 }: {
   card: CardUI
   id: string
@@ -123,7 +123,12 @@ function ObsCard({
   canManage?: boolean
   onEdit?: () => void
   onDelete?: () => void
+  isFixed?: boolean
 }) {
+  const accentColor = isFixed ? ACCENT : PRIMARY
+  const tagBg = isFixed ? 'rgba(209,174,110,0.15)' : 'rgba(42,79,150,0.08)'
+  const borderColor = isCopied ? '#22C55E' : accentColor
+
   return (
     <div
       role="button"
@@ -132,14 +137,16 @@ function ObsCard({
       onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onCopy(id, card.parecer)}
       style={{
         background: BG_CARD,
-        border: `1.5px solid ${isCopied ? '#22C55E' : card._source === 'db' ? '#BFDBFE' : BORDER}`,
+        border: `1.5px solid ${borderColor}`,
         borderRadius: 8,
         padding: '10px 12px',
         cursor: 'pointer',
         transition: 'border-color 0.2s, box-shadow 0.15s, transform 0.1s',
         boxShadow: isCopied
           ? '0 0 0 3px rgba(34,197,94,0.15)'
-          : '0 1px 3px rgba(30,37,61,0.05)',
+          : isFixed
+            ? '0 1px 3px rgba(209,174,110,0.12)'
+            : '0 1px 3px rgba(42,79,150,0.08)',
         transform: isCopied ? 'scale(0.99)' : undefined,
         position: 'relative',
         userSelect: 'none',
@@ -152,7 +159,11 @@ function ObsCard({
         {isCopied ? '✓ Copiado' : '⧉'}
       </div>
 
-      <div style={{ fontSize: 12, fontWeight: 700, color: PRIMARY, marginBottom: 5, paddingRight: 52, lineHeight: 1.3 }}>
+      <div style={{
+        display: 'inline-block', fontSize: 12, fontWeight: 700, color: accentColor,
+        background: tagBg, borderRadius: 4, padding: '2px 7px',
+        marginBottom: 6, lineHeight: 1.4, maxWidth: 'calc(100% - 52px)',
+      }}>
         {highlight(card.motivo, search)}
       </div>
       <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -247,16 +258,17 @@ function ObsColumn({
       background: BG_CARD,
       border: `2px solid ${col.isFixed ? ACCENT : PRIMARY}`,
       borderRadius: 10,
-      overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
       boxShadow: col.isFixed
         ? '0 2px 8px rgba(209,174,110,0.18)'
         : '0 2px 8px rgba(42,79,150,0.10)',
+      overflow: 'visible',
     }}>
       {/* Header */}
       <div style={{
         background: headerBg, padding: '10px 14px',
+        borderRadius: '8px 8px 0 0',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -304,6 +316,7 @@ function ObsColumn({
               onCopy={onCopy}
               search={search}
               canManage={canManage}
+              isFixed={col.isFixed}
               onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
               onDelete={() => card._id && onDelete(card._id)}
             />
@@ -330,6 +343,7 @@ function ObsColumn({
                   onCopy={onCopy}
                   search={search}
                   canManage={canManage}
+                  isFixed={col.isFixed}
                   onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
                   onDelete={() => card._id && onDelete(card._id)}
                 />
@@ -367,6 +381,10 @@ export default function ObservacoesClient() {
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const colScrollRef = useRef<HTMLDivElement>(null)
+  const topScrollRef = useRef<HTMLDivElement>(null)
+  const phantomRef = useRef<HTMLDivElement>(null)
+  const scrollSyncRef = useRef(false)
 
   const [dbObs, setDbObs] = useState<DbObservacao[]>([])
   const [dbSubtabs, setDbSubtabs] = useState<DbSubtab[]>([])
@@ -387,6 +405,31 @@ export default function ObservacoesClient() {
       .then(data => setDbSubtabs(data))
       .catch(() => {})
   }, [activeCatKey])
+
+  // Sync top scroll mirror ↔ column scroll body
+  useEffect(() => {
+    const top = topScrollRef.current
+    const body = colScrollRef.current
+    if (!top || !body) return
+    const onTop = () => {
+      if (scrollSyncRef.current) return
+      scrollSyncRef.current = true
+      body.scrollLeft = top.scrollLeft
+      scrollSyncRef.current = false
+    }
+    const onBody = () => {
+      if (scrollSyncRef.current) return
+      scrollSyncRef.current = true
+      top.scrollLeft = body.scrollLeft
+      scrollSyncRef.current = false
+    }
+    top.addEventListener('scroll', onTop, { passive: true })
+    body.addEventListener('scroll', onBody, { passive: true })
+    return () => {
+      top.removeEventListener('scroll', onTop)
+      body.removeEventListener('scroll', onBody)
+    }
+  }, [])
 
   const activeCategory = useMemo<Category | undefined>(
     () => CATEGORIES.find(c => c.key === activeCatKey),
@@ -437,10 +480,22 @@ export default function ObservacoesClient() {
     )
   }, [mergedMainCols, mergedFixedCols, search])
 
+  // Keep phantom width in sync with actual scroll width (after mergedCols are computed)
+  useEffect(() => {
+    const body = colScrollRef.current
+    const phantom = phantomRef.current
+    if (!body || !phantom) return
+    const id = requestAnimationFrame(() => {
+      phantom.style.width = body.scrollWidth + 'px'
+    })
+    return () => cancelAnimationFrame(id)
+  }, [mergedMainCols, mergedFixedCols, activeSubtabKey])
+
   const handleCatChange = useCallback((key: string) => {
     const cat = CATEGORIES.find(c => c.key === key)
     setActiveCatKey(key)
     setActiveSubtabKey(cat?.subtabs[0]?.key ?? '')
+    setDbSubtabs([])
     setSearch('')
   }, [])
 
@@ -873,7 +928,7 @@ export default function ObservacoesClient() {
       {/* ── Main layout ─────────────────────────────────── */}
       <div style={{
         display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0,
-        minHeight: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'hidden',
+        minHeight: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'clip',
         border: `1px solid ${BORDER}`, boxShadow: '0 1px 6px rgba(30,37,61,0.06)',
       }}>
         {/* ── Internal category nav ──────────────────────── */}
@@ -1012,67 +1067,80 @@ export default function ObservacoesClient() {
           </div>
 
           {/* Columns grid */}
-          <div style={{ padding: '0 20px 32px', flex: 1 }}>
-            {activeSubtab ? (
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                {mergedMainCols.length > 0 && (
-                  <div style={{
-                    flex: 1, display: 'grid',
-                    gridTemplateColumns: `repeat(${Math.min(mergedMainCols.length, 5)}, minmax(160px, 1fr))`,
-                    gap: 12, alignItems: 'flex-start', minWidth: 0,
-                  }}>
-                    {mergedMainCols.map(col => (
-                      <ObsColumn
-                        key={`${activeSubtab.key}|${col.title}`}
-                        col={col}
-                        catKey={activeCatKey}
-                        subtabKey={activeSubtab.key}
-                        search={search}
-                        copiedId={copiedId}
-                        onCopy={handleCopy}
-                        papel={papel}
-                        onAdd={handleAdd}
-                        onEdit={handleEditOpen}
-                        onDelete={handleDeleteRequest}
-                      />
-                    ))}
-                  </div>
-                )}
-                {mergedFixedCols.length > 0 && (
-                  <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {mergedFixedCols.map(col => (
-                      <ObsColumn
-                        key={`${activeSubtab.key}|${col.title}`}
-                        col={col}
-                        catKey={activeCatKey}
-                        subtabKey={activeSubtab.key}
-                        search={search}
-                        copiedId={copiedId}
-                        onCopy={handleCopy}
-                        papel={papel}
-                        onAdd={handleAdd}
-                        onEdit={handleEditOpen}
-                        onDelete={handleDeleteRequest}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ color: MUTED, fontSize: 14, padding: 32, textAlign: 'center' }}>
-                Selecione uma categoria.
-              </div>
-            )}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
 
-            {search && totalResults === 0 && (
-              <div style={{ textAlign: 'center', padding: '48px 24px', color: MUTED }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>
-                  Nenhum resultado para "{search}"
+            {/* Top scroll mirror — scrollbar appears above column headers */}
+            <div
+              ref={topScrollRef}
+              style={{ overflowX: 'auto', overflowY: 'hidden', height: 10, flexShrink: 0 }}
+            >
+              <div ref={phantomRef} style={{ height: 1 }} />
+            </div>
+
+            {/* Actual columns scroll container */}
+            <div ref={colScrollRef} style={{ overflowX: 'auto', flex: 1, padding: '0 0 32px' }}>
+              {activeSubtab ? (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '0 20px' }}>
+                  {mergedMainCols.map(col => (
+                    <div key={`${activeSubtab.key}|${col.title}`} style={{ flex: '1 0 280px' }}>
+                      <ObsColumn
+                        col={col}
+                        catKey={activeCatKey}
+                        subtabKey={activeSubtab.key}
+                        search={search}
+                        copiedId={copiedId}
+                        onCopy={handleCopy}
+                        papel={papel}
+                        onAdd={handleAdd}
+                        onEdit={handleEditOpen}
+                        onDelete={handleDeleteRequest}
+                      />
+                    </div>
+                  ))}
+                  {mergedFixedCols.map(col => (
+                    <div
+                      key={`${activeSubtab.key}|${col.title}`}
+                      style={{
+                        flex: '0 0 280px',
+                        position: 'sticky',
+                        right: 0,
+                        zIndex: 10,
+                        background: BG_CARD,
+                        paddingLeft: 4,
+                        boxShadow: '-6px 0 18px rgba(30,37,61,0.08)',
+                      }}
+                    >
+                      <ObsColumn
+                        col={col}
+                        catKey={activeCatKey}
+                        subtabKey={activeSubtab.key}
+                        search={search}
+                        copiedId={copiedId}
+                        onCopy={handleCopy}
+                        papel={papel}
+                        onAdd={handleAdd}
+                        onEdit={handleEditOpen}
+                        onDelete={handleDeleteRequest}
+                      />
+                    </div>
+                  ))}
                 </div>
-                <div style={{ fontSize: 13 }}>Tente outros termos ou limpe a busca.</div>
-              </div>
-            )}
+              ) : (
+                <div style={{ color: MUTED, fontSize: 14, padding: 32, textAlign: 'center' }}>
+                  Selecione uma categoria.
+                </div>
+              )}
+
+              {search && totalResults === 0 && (
+                <div style={{ textAlign: 'center', padding: '48px 24px', color: MUTED }}>
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>
+                    Nenhum resultado para "{search}"
+                  </div>
+                  <div style={{ fontSize: 13 }}>Tente outros termos ou limpe a busca.</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

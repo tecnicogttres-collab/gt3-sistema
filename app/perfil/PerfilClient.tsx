@@ -30,12 +30,6 @@ export default function PerfilClient() {
       setMessage('Nova senha e confirmação não coincidem.')
       return
     }
-    if (newPassword.length < 6) {
-      setStatus('error')
-      setMessage('A nova senha deve ter ao menos 6 caracteres.')
-      return
-    }
-
     // Verify current password
     const email = user?.email ?? ''
     const { error: signInError } = await supabase.auth.signInWithPassword({

@@ -206,7 +206,7 @@ export default function LoginsClient() {
   // ── Reset password ────────────────────────────────────────────
   async function handleResetPassword(e: React.FormEvent) {
     e.preventDefault()
-    if (!resetUser || resetPassword.length < 6) return
+    if (!resetUser) return
     setResetLoading(true)
     setResetMsg('')
 
@@ -298,6 +298,10 @@ export default function LoginsClient() {
               {filtered.map((u, i) => {
                 const colors = PAPEL_COLORS[u.papel ?? ''] ?? { bg: '#F3F4F6', color: '#374151' }
                 const initials = (u.nome ?? u.email).slice(0, 2).toUpperCase()
+                // Rows belonging to another admin are read-only
+                const isProtectedAdmin = u.papel === 'admin' && user?.id !== u.id
+                const canEditThisRow = isAdmin && !isProtectedAdmin
+                const canManageThisRow = canManage && !isProtectedAdmin
                 return (
                   <tr key={u.id} style={{ borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none', opacity: u.banned ? 0.5 : 1 }}>
 
@@ -318,7 +322,7 @@ export default function LoginsClient() {
 
                     {/* Papel */}
                     <td style={{ padding: '13px 16px' }}>
-                      {canManage ? (
+                      {canManageThisRow ? (
                         <select
                           value={u.papel ?? ''}
                           onChange={(e) => handleRoleChange(u.id, e.target.value)}
@@ -337,7 +341,7 @@ export default function LoginsClient() {
 
                     {/* PDI vinculado */}
                     <td style={{ padding: '13px 16px' }}>
-                      {canManage ? (
+                      {canManageThisRow ? (
                         <select
                           value={u.pdi_slug ?? ''}
                           onChange={(e) => handlePdiChange(u.id, e.target.value || null)}
@@ -371,7 +375,7 @@ export default function LoginsClient() {
                     {/* Ações */}
                     <td style={{ padding: '13px 16px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        {isAdmin && (
+                        {canEditThisRow && (
                           <button
                             onClick={() => openEdit(u)}
                             style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #D1D5DB', backgroundColor: '#fff', color: '#374151', fontSize: 12, cursor: 'pointer' }}
@@ -379,7 +383,7 @@ export default function LoginsClient() {
                             Editar
                           </button>
                         )}
-                        {canManage && (
+                        {canManageThisRow && (
                           <>
                             <button
                               onClick={() => { setResetUser(u); setResetPassword(''); setResetMsg('') }}
@@ -421,7 +425,7 @@ export default function LoginsClient() {
               {[
                 { label: 'Nome', key: 'nome', type: 'text', placeholder: 'Ex: João Silva' },
                 { label: 'Usuário', key: 'usuario', type: 'text', placeholder: 'GT3.NOME' },
-                { label: 'Senha temporária', key: 'senha', type: 'text', placeholder: 'Mínimo 6 caracteres' },
+                { label: 'Senha temporária', key: 'senha', type: 'text', placeholder: 'Senha do usuário' },
               ].map(({ label, key, type, placeholder }) => (
                 <div key={key} style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 5 }}>{label}</label>
@@ -580,7 +584,7 @@ export default function LoginsClient() {
                 <input
                   type="text"
                   required
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Nova senha"
                   value={resetPassword}
                   onChange={(e) => setResetPassword(e.target.value)}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box' }}
@@ -599,7 +603,7 @@ export default function LoginsClient() {
                 <button type="button" onClick={() => { setResetUser(null); setResetMsg('') }} style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid #D1D5DB', backgroundColor: '#fff', color: '#374151', fontSize: 14, cursor: 'pointer' }}>
                   Fechar
                 </button>
-                <button type="submit" disabled={resetLoading || resetPassword.length < 6} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: resetLoading ? '#9BB3D4' : '#2A4F96', color: '#fff', fontSize: 14, fontWeight: 600, cursor: resetLoading ? 'not-allowed' : 'pointer' }}>
+                <button type="submit" disabled={resetLoading} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: resetLoading ? '#9BB3D4' : '#2A4F96', color: '#fff', fontSize: 14, fontWeight: 600, cursor: resetLoading ? 'not-allowed' : 'pointer' }}>
                   {resetLoading ? 'Salvando...' : 'Confirmar'}
                 </button>
               </div>

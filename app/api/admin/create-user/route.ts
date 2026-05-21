@@ -36,9 +36,6 @@ export async function POST(request: NextRequest) {
   if (!nome?.trim() || !usuario?.trim() || !senha || !papel) {
     return Response.json({ error: 'Campos obrigatórios: nome, usuario, senha, papel' }, { status: 400 })
   }
-  if (senha.length < 6) {
-    return Response.json({ error: 'Senha deve ter ao menos 6 caracteres' }, { status: 400 })
-  }
   if (!['colaborador', 'gestor', 'trainee'].includes(papel)) {
     return Response.json({ error: 'Papel inválido' }, { status: 400 })
   }

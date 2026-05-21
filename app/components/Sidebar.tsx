@@ -22,6 +22,7 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
   const pathname = usePathname()
   const { profile, loading, signOut } = useUser()
   const [pdiNotifCount, setPdiNotifCount] = useState(0)
+  const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
 
   const papel = profile?.papel as Role | null
   const visibleModules = papel
@@ -30,7 +31,7 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
     ? []
     : MODULES.filter((m) => m.allowedRoles.includes('colaborador'))
 
-  // Fetch unread PDI notifications for collaborators
+  // PDI notifications (tabela pdi_notificacoes — sistema existente para colaboradores)
   useEffect(() => {
     if (!profile || profile.papel !== 'colaborador') return
     fetch('/api/pdi/notificacoes')
@@ -38,6 +39,30 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
       .then(data => setPdiNotifCount(data.count ?? 0))
       .catch(() => {})
   }, [profile, pathname])
+
+  // Notificações gerais por módulo (tabela notificacoes_usuario)
+  useEffect(() => {
+    if (!profile) return
+    fetch('/api/notificacoes/usuario')
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, number>) => setModuleNotifs(data))
+      .catch(() => {})
+  }, [profile, pathname])
+
+  // Marca como visto ao entrar num módulo
+  useEffect(() => {
+    if (!profile) return
+    const activeModule = MODULES.find(
+      m => pathname === m.path || pathname.startsWith(m.path + '/')
+    )
+    if (!activeModule || !(moduleNotifs[activeModule.id] > 0)) return
+    fetch('/api/notificacoes/usuario', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modulo: activeModule.id }),
+    }).catch(() => {})
+    setModuleNotifs(prev => ({ ...prev, [activeModule.id]: 0 }))
+  }, [pathname, profile])
 
   function itemStyle(isActive: boolean): React.CSSProperties {
     return {
@@ -107,12 +132,14 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
 
         {visibleModules.map((mod) => {
           const isActive = pathname === mod.path || pathname.startsWith(mod.path + '/')
-          const showBadge = mod.id === 'pdi' && pdiNotifCount > 0
+          const hasBadge =
+            (mod.id === 'pdi' && pdiNotifCount > 0) ||
+            (moduleNotifs[mod.id] ?? 0) > 0
           return (
             <Link key={mod.id} href={mod.path} style={itemStyle(isActive)}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: mod.color, flexShrink: 0 }} />
               {!collapsed && <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{mod.label}</span>}
-              {showBadge && (
+              {hasBadge && (
                 <span style={{
                   position: 'absolute',
                   top: collapsed ? 8 : 7,

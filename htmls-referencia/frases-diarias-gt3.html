@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frases Diárias — GT3</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #f1efe8;
+    --border: #e5e3dc;
+    --border-strong: #d3d1c7;
+    --text: #1a1a18;
+    --text-secondary: #5f5e5a;
+    --text-tertiary: #888780;
+    --accent: #185fa5;
+    --accent-bg: #e6f1fb;
+    --success: #0f6e56;
+    --success-bg: #e1f5ee;
+    --danger: #a32d2d;
+    --danger-bg: #fcebeb;
+    --warning: #854f0b;
+    --warning-bg: #faeeda;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .header .subtitle {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* FRASE DO DIA */
+  .quote-of-day {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px 32px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow);
+  }
+  .quote-of-day .label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+  .quote-of-day .label .date {
+    margin-left: auto;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-tertiary);
+  }
+  .quote-of-day .text {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 22px;
+    line-height: 1.5;
+    color: var(--text);
+    margin: 0 0 14px;
+  }
+  .quote-of-day .author {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 20px;
+  }
+  .quote-of-day .author::before {
+    content: "— ";
+  }
+  .quote-of-day .empty {
+    color: var(--text-tertiary);
+    font-style: italic;
+    font-size: 16px;
+  }
+
+  /* MÉTRICAS */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .stat .stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0 0 4px;
+  }
+  .stat .stat-value {
+    font-size: 22px;
+    font-weight: 500;
+    margin: 0;
+  }
+
+  /* TOOLBAR */
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  /* FORMS */
+  input[type="text"], select, textarea {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input[type="text"]:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(24, 95, 165, 0.12);
+  }
+  input[type="text"], select {
+    height: 36px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 90px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  .search-input {
+    flex: 1;
+    min-width: 220px;
+  }
+  .filter-select {
+    min-width: 180px;
+  }
+
+  /* BUTTONS */
+  button {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.05s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+  }
+  button:hover { background: var(--surface-2); border-color: var(--text-tertiary); }
+  button:active { transform: scale(0.98); }
+
+  button.primary {
+    background: var(--text);
+    color: white;
+    border-color: var(--text);
+  }
+  button.primary:hover { background: #2c2c2a; border-color: #2c2c2a; }
+
+  button.danger {
+    color: var(--danger);
+    border-color: #f0c5c5;
+  }
+  button.danger:hover { background: var(--danger-bg); border-color: var(--danger); }
+
+  button.icon-only {
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+  }
+
+  /* LISTA DE FRASES */
+  .quotes-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .list-header h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .list-count {
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+  .quote-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  .quote-item:last-child { border-bottom: none; }
+  .quote-item:hover { background: #fafaf7; }
+  .quote-item.inactive {
+    opacity: 0.55;
+  }
+  .quote-item .content {
+    flex: 1;
+    min-width: 0;
+  }
+  .quote-item .text {
+    font-size: 15px;
+    line-height: 1.55;
+    margin: 0 0 6px;
+    color: var(--text);
+    word-wrap: break-word;
+  }
+  .quote-item .meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+  }
+  .quote-item .author {
+    font-weight: 500;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    line-height: 1.6;
+  }
+  .badge.active { background: var(--success-bg); color: var(--success); }
+  .badge.inactive { background: var(--surface-2); color: var(--text-secondary); }
+
+  .quote-item .actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .empty-state {
+    padding: 48px 20px;
+    text-align: center;
+    color: var(--text-tertiary);
+  }
+  .empty-state .icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+  .empty-state h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .empty-state p {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  /* MODAL */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    animation: modalIn 0.15s ease-out;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .modal-body {
+    padding: 22px;
+  }
+  .field {
+    margin-bottom: 16px;
+  }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .field input[type="text"] {
+    width: 100%;
+  }
+  .field .hint {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+  }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px 22px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-2);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--text);
+    color: white;
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    z-index: 200;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ICONS (Unicode/SVG simples) */
+  .icon-svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div>
+      <h1>Frases diárias</h1>
+      <div class="subtitle">Módulo de gestão — GT3 Consultoria</div>
+    </div>
+    <div class="header-actions">
+      <button id="btn-export" title="Exportar frases em JSON">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar
+      </button>
+      <button id="btn-import" title="Importar frases de um arquivo JSON">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar
+      </button>
+      <input type="file" id="file-input" accept="application/json" style="display:none">
+    </div>
+  </div>
+
+  <!-- FRASE DO DIA -->
+  <div class="quote-of-day">
+    <div class="label">
+      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2H4c-1.25 0-2 .75-2 2v8c0 1.25.75 2 2 2h4"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2h-4c-1.25 0-2 .75-2 2v8c0 1.25.75 2 2 2h4"/></svg>
+      <span>Frase do dia</span>
+      <span class="date" id="today-date"></span>
+    </div>
+    <div id="quote-display">
+      <p class="text" id="quote-text">Nenhuma frase cadastrada ainda.</p>
+      <p class="author" id="quote-author" style="display:none;"></p>
+    </div>
+    <button id="btn-shuffle">
+      <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Sortear outra
+    </button>
+  </div>
+
+  <!-- MÉTRICAS -->
+  <div class="stats">
+    <div class="stat">
+      <p class="stat-label">Total cadastradas</p>
+      <p class="stat-value" id="stat-total">0</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Ativas</p>
+      <p class="stat-value" id="stat-active">0</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Inativas</p>
+      <p class="stat-value" id="stat-inactive">0</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Autores</p>
+      <p class="stat-value" id="stat-authors">0</p>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <button class="primary" id="btn-add">
+      <svg class="icon-svg" viewBox="0 0 24 24" style="stroke: white;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Adicionar frase
+    </button>
+    <input type="text" id="search" class="search-input" placeholder="Buscar por frase ou autor…">
+    <select id="filter-author" class="filter-select">
+      <option value="">Todos os autores</option>
+    </select>
+    <select id="filter-status" class="filter-select" style="min-width:140px;">
+      <option value="all">Todas</option>
+      <option value="active">Apenas ativas</option>
+      <option value="inactive">Apenas inativas</option>
+    </select>
+  </div>
+
+  <!-- LISTA -->
+  <div class="quotes-list">
+    <div class="list-header">
+      <h2>Frases cadastradas</h2>
+      <span class="list-count" id="list-count">0 frases</span>
+    </div>
+    <div id="quotes-container"></div>
+  </div>
+
+</div>
+
+<!-- MODAL ADICIONAR/EDITAR -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Adicionar frase</h2>
+      <button class="icon-only" id="modal-close" aria-label="Fechar">
+        <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="input-text">Frase</label>
+        <textarea id="input-text" placeholder="Digite a frase…"></textarea>
+      </div>
+      <div class="field">
+        <label for="input-author">Autor</label>
+        <input type="text" id="input-author" placeholder="Ex.: Peter Drucker" list="authors-datalist">
+        <datalist id="authors-datalist"></datalist>
+        <div class="hint">Deixe em branco se desconhecido. Sugestões aparecem conforme você digita.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="modal-cancel">Cancelar</button>
+      <button class="primary" id="modal-save">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   MÓDULO DE FRASES DIÁRIAS — GT3
+   Standalone HTML. Persistência via localStorage.
+   Pronto para integração futura: lógica isolada em FrasesModule.
+   ============================================================ */
+
+const FrasesModule = (() => {
+  const STORAGE_KEY = 'gt3_frases_diarias_v1';
+  const ROTATION_KEY = 'gt3_frases_rotation_v1';
+
+  // ===== ESTADO =====
+  let state = {
+    quotes: [],          // [{ id, text, author, active, createdAt }]
+    rotation: {          // controle de "aleatório sem repetir"
+      pool: [],          // ids ainda não usados no ciclo
+      currentId: null,
+      currentDate: null  // YYYY-MM-DD
+    }
+  };
+
+  // ===== PERSISTÊNCIA =====
+  function load() {
+    try {
+      const q = localStorage.getItem(STORAGE_KEY);
+      const r = localStorage.getItem(ROTATION_KEY);
+      if (q) state.quotes = JSON.parse(q);
+      if (r) state.rotation = JSON.parse(r);
+    } catch (e) {
+      console.error('Erro ao carregar dados:', e);
+    }
+  }
+  function saveQuotes() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.quotes));
+  }
+  function saveRotation() {
+    localStorage.setItem(ROTATION_KEY, JSON.stringify(state.rotation));
+  }
+
+  // ===== UTILS =====
+  function uid() {
+    return 'q_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+  function todayStr() {
+    const d = new Date();
+    return d.toISOString().slice(0, 10);
+  }
+  function formatDate(d = new Date()) {
+    return d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  // ===== CRUD =====
+  function add(text, author) {
+    const quote = {
+      id: uid(),
+      text: text.trim(),
+      author: (author || '').trim(),
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+    state.quotes.push(quote);
+    saveQuotes();
+    return quote;
+  }
+  function update(id, fields) {
+    const q = state.quotes.find(x => x.id === id);
+    if (!q) return null;
+    Object.assign(q, fields);
+    saveQuotes();
+    return q;
+  }
+  function remove(id) {
+    state.quotes = state.quotes.filter(x => x.id !== id);
+    // limpa rotação se necessário
+    state.rotation.pool = state.rotation.pool.filter(x => x !== id);
+    if (state.rotation.currentId === id) state.rotation.currentId = null;
+    saveQuotes();
+    saveRotation();
+  }
+  function toggleActive(id) {
+    const q = state.quotes.find(x => x.id === id);
+    if (!q) return;
+    q.active = !q.active;
+    saveQuotes();
+  }
+  function getAll() { return state.quotes.slice(); }
+  function getAuthors() {
+    const set = new Set();
+    state.quotes.forEach(q => { if (q.author) set.add(q.author); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }
+
+  // ===== ROTAÇÃO: aleatória sem repetir até esgotar =====
+  function refillPool() {
+    state.rotation.pool = state.quotes
+      .filter(q => q.active)
+      .map(q => q.id);
+    // embaralha
+    for (let i = state.rotation.pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [state.rotation.pool[i], state.rotation.pool[j]] = [state.rotation.pool[j], state.rotation.pool[i]];
+    }
+  }
+
+  function getQuoteOfDay() {
+    const today = todayStr();
+    // Mesmo dia? Mantém a frase
+    if (state.rotation.currentDate === today && state.rotation.currentId) {
+      const q = state.quotes.find(x => x.id === state.rotation.currentId);
+      if (q && q.active) return q;
+    }
+    // Sorteia nova
+    return drawNew(today);
+  }
+
+  function drawNew(date = todayStr()) {
+    if (state.rotation.pool.length === 0) refillPool();
+    if (state.rotation.pool.length === 0) {
+      state.rotation.currentId = null;
+      state.rotation.currentDate = date;
+      saveRotation();
+      return null;
+    }
+    const id = state.rotation.pool.shift();
+    state.rotation.currentId = id;
+    state.rotation.currentDate = date;
+    saveRotation();
+    return state.quotes.find(x => x.id === id) || null;
+  }
+
+  function forceShuffle() {
+    // remove a atual do pool (se estiver) e sorteia outra
+    if (state.rotation.currentId) {
+      state.rotation.pool = state.rotation.pool.filter(x => x !== state.rotation.currentId);
+    }
+    state.rotation.currentId = null;
+    return drawNew();
+  }
+
+  // ===== EXPORT/IMPORT =====
+  function exportJSON() {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      quotes: state.quotes
+    };
+    return JSON.stringify(data, null, 2);
+  }
+  function importJSON(jsonStr) {
+    const data = JSON.parse(jsonStr);
+    if (!data.quotes || !Array.isArray(data.quotes)) throw new Error('Formato inválido');
+    // mescla por id (se id colide, mantém o existente; senão adiciona)
+    const existingIds = new Set(state.quotes.map(q => q.id));
+    let added = 0;
+    data.quotes.forEach(q => {
+      if (!q.text) return;
+      const newQ = {
+        id: q.id && !existingIds.has(q.id) ? q.id : uid(),
+        text: String(q.text).trim(),
+        author: String(q.author || '').trim(),
+        active: q.active !== false,
+        createdAt: q.createdAt || new Date().toISOString()
+      };
+      state.quotes.push(newQ);
+      added++;
+    });
+    saveQuotes();
+    return added;
+  }
+
+  // ===== SEED inicial (opcional, só se vazio) =====
+  function seedIfEmpty() {
+    if (state.quotes.length > 0) return;
+    const seeds = [
+      { text: 'O que pode ser medido pode ser melhorado.', author: 'Peter Drucker' },
+      { text: 'Cultura come estratégia no café da manhã.', author: 'Peter Drucker' },
+      { text: 'Não basta fazer o seu melhor: você deve saber o que fazer, e então fazer o seu melhor.', author: 'W. Edwards Deming' },
+      { text: 'A qualidade nunca é um acidente; é sempre o resultado de esforço inteligente.', author: 'John Ruskin' }
+    ];
+    seeds.forEach(s => add(s.text, s.author));
+  }
+
+  // ===== INIT =====
+  load();
+  seedIfEmpty();
+
+  return {
+    add, update, remove, toggleActive,
+    getAll, getAuthors,
+    getQuoteOfDay, forceShuffle,
+    exportJSON, importJSON,
+    formatDate
+  };
+})();
+
+/* ============================================================
+   UI / CONTROLLER
+   ============================================================ */
+
+const UI = (() => {
+  const els = {
+    quoteText: document.getElementById('quote-text'),
+    quoteAuthor: document.getElementById('quote-author'),
+    todayDate: document.getElementById('today-date'),
+    btnShuffle: document.getElementById('btn-shuffle'),
+    btnAdd: document.getElementById('btn-add'),
+    btnExport: document.getElementById('btn-export'),
+    btnImport: document.getElementById('btn-import'),
+    fileInput: document.getElementById('file-input'),
+    search: document.getElementById('search'),
+    filterAuthor: document.getElementById('filter-author'),
+    filterStatus: document.getElementById('filter-status'),
+    quotesContainer: document.getElementById('quotes-container'),
+    listCount: document.getElementById('list-count'),
+    statTotal: document.getElementById('stat-total'),
+    statActive: document.getElementById('stat-active'),
+    statInactive: document.getElementById('stat-inactive'),
+    statAuthors: document.getElementById('stat-authors'),
+    modal: document.getElementById('modal'),
+    modalTitle: document.getElementById('modal-title'),
+    modalClose: document.getElementById('modal-close'),
+    modalCancel: document.getElementById('modal-cancel'),
+    modalSave: document.getElementById('modal-save'),
+    inputText: document.getElementById('input-text'),
+    inputAuthor: document.getElementById('input-author'),
+    authorsDatalist: document.getElementById('authors-datalist'),
+    toast: document.getElementById('toast')
+  };
+
+  let editingId = null;
+
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => els.toast.classList.remove('show'), 2200);
+  }
+
+  function renderQuoteOfDay() {
+    const q = FrasesModule.getQuoteOfDay();
+    els.todayDate.textContent = FrasesModule.formatDate();
+    if (!q) {
+      els.quoteText.textContent = 'Nenhuma frase ativa cadastrada.';
+      els.quoteText.classList.add('empty');
+      els.quoteAuthor.style.display = 'none';
+      return;
+    }
+    els.quoteText.textContent = '“' + q.text + '”';
+    els.quoteText.classList.remove('empty');
+    if (q.author) {
+      els.quoteAuthor.textContent = q.author;
+      els.quoteAuthor.style.display = 'block';
+    } else {
+      els.quoteAuthor.style.display = 'none';
+    }
+  }
+
+  function renderStats() {
+    const all = FrasesModule.getAll();
+    const active = all.filter(q => q.active).length;
+    els.statTotal.textContent = all.length;
+    els.statActive.textContent = active;
+    els.statInactive.textContent = all.length - active;
+    els.statAuthors.textContent = FrasesModule.getAuthors().length;
+  }
+
+  function renderFilters() {
+    const authors = FrasesModule.getAuthors();
+    const currentVal = els.filterAuthor.value;
+    els.filterAuthor.innerHTML = '<option value="">Todos os autores</option>' +
+      authors.map(a => `<option value="${escapeHTML(a)}">${escapeHTML(a)}</option>`).join('');
+    if (authors.includes(currentVal)) els.filterAuthor.value = currentVal;
+
+    // datalist do modal
+    els.authorsDatalist.innerHTML = authors.map(a => `<option value="${escapeHTML(a)}">`).join('');
+  }
+
+  function renderList() {
+    const search = els.search.value.trim().toLowerCase();
+    const authorFilter = els.filterAuthor.value;
+    const statusFilter = els.filterStatus.value;
+
+    let list = FrasesModule.getAll();
+
+    if (authorFilter) list = list.filter(q => q.author === authorFilter);
+    if (statusFilter === 'active') list = list.filter(q => q.active);
+    if (statusFilter === 'inactive') list = list.filter(q => !q.active);
+    if (search) {
+      list = list.filter(q =>
+        q.text.toLowerCase().includes(search) ||
+        (q.author || '').toLowerCase().includes(search)
+      );
+    }
+
+    // ordena por data de criação desc
+    list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    els.listCount.textContent = list.length + (list.length === 1 ? ' frase' : ' frases');
+
+    if (list.length === 0) {
+      els.quotesContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">📭</div>
+          <h3>Nenhuma frase encontrada</h3>
+          <p>Ajuste os filtros ou adicione uma nova frase.</p>
+        </div>`;
+      return;
+    }
+
+    els.quotesContainer.innerHTML = list.map(q => `
+      <div class="quote-item ${q.active ? '' : 'inactive'}" data-id="${q.id}">
+        <div class="content">
+          <p class="text">${escapeHTML(q.text)}</p>
+          <div class="meta">
+            <span class="author">${q.author ? escapeHTML(q.author) : '<em style="color:var(--text-tertiary);font-style:italic;">Sem autor</em>'}</span>
+            <span class="badge ${q.active ? 'active' : 'inactive'}">${q.active ? 'Ativa' : 'Inativa'}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="icon-only" data-action="toggle" title="${q.active ? 'Inativar' : 'Ativar'}">
+            ${q.active
+              ? '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+              : '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+            }
+          </button>
+          <button class="icon-only" data-action="edit" title="Editar">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="icon-only danger" data-action="delete" title="Excluir">
+            <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderAll() {
+    renderQuoteOfDay();
+    renderStats();
+    renderFilters();
+    renderList();
+  }
+
+  // ===== MODAL =====
+  function openModal(quote = null) {
+    editingId = quote ? quote.id : null;
+    els.modalTitle.textContent = quote ? 'Editar frase' : 'Adicionar frase';
+    els.inputText.value = quote ? quote.text : '';
+    els.inputAuthor.value = quote ? quote.author : '';
+    els.modal.classList.add('open');
+    setTimeout(() => els.inputText.focus(), 50);
+  }
+  function closeModal() {
+    els.modal.classList.remove('open');
+    editingId = null;
+  }
+  function saveModal() {
+    const text = els.inputText.value.trim();
+    const author = els.inputAuthor.value.trim();
+    if (!text) {
+      toast('A frase não pode ficar vazia.');
+      els.inputText.focus();
+      return;
+    }
+    if (editingId) {
+      FrasesModule.update(editingId, { text, author });
+      toast('Frase atualizada.');
+    } else {
+      FrasesModule.add(text, author);
+      toast('Frase adicionada.');
+    }
+    closeModal();
+    renderAll();
+  }
+
+  // ===== EVENTOS =====
+  function bind() {
+    els.btnAdd.addEventListener('click', () => openModal());
+    els.btnShuffle.addEventListener('click', () => {
+      FrasesModule.forceShuffle();
+      renderQuoteOfDay();
+      toast('Nova frase sorteada.');
+    });
+    els.modalClose.addEventListener('click', closeModal);
+    els.modalCancel.addEventListener('click', closeModal);
+    els.modalSave.addEventListener('click', saveModal);
+    els.modal.addEventListener('click', (e) => {
+      if (e.target === els.modal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && els.modal.classList.contains('open')) closeModal();
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && els.modal.classList.contains('open')) saveModal();
+    });
+
+    els.search.addEventListener('input', renderList);
+    els.filterAuthor.addEventListener('change', renderList);
+    els.filterStatus.addEventListener('change', renderList);
+
+    els.quotesContainer.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const item = btn.closest('.quote-item');
+      const id = item.dataset.id;
+      const action = btn.dataset.action;
+      const quote = FrasesModule.getAll().find(q => q.id === id);
+
+      if (action === 'edit') {
+        openModal(quote);
+      } else if (action === 'toggle') {
+        FrasesModule.toggleActive(id);
+        toast(quote.active ? 'Frase inativada.' : 'Frase ativada.');
+        renderAll();
+      } else if (action === 'delete') {
+        if (confirm('Excluir esta frase?\n\n"' + quote.text.slice(0, 80) + (quote.text.length > 80 ? '…' : '') + '"')) {
+          FrasesModule.remove(id);
+          toast('Frase excluída.');
+          renderAll();
+        }
+      }
+    });
+
+    // Export
+    els.btnExport.addEventListener('click', () => {
+      const json = FrasesModule.exportJSON();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'frases-gt3-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Arquivo exportado.');
+    });
+
+    // Import
+    els.btnImport.addEventListener('click', () => els.fileInput.click());
+    els.fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const count = FrasesModule.importJSON(ev.target.result);
+          toast(count + ' frase(s) importada(s).');
+          renderAll();
+        } catch (err) {
+          toast('Erro ao importar: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      els.fileInput.value = '';
+    });
+  }
+
+  return {
+    init() {
+      bind();
+      renderAll();
+    }
+  };
+})();
+
+document.addEventListener('DOMContentLoaded', () => UI.init());
+</script>
+
+</body>
+</html>

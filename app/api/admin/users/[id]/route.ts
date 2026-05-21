@@ -2,26 +2,33 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { createClient } from '../../../../lib/supabase-server'
 
-async function getCallerRole(): Promise<string | null> {
+async function getCaller(): Promise<{ role: string | null; id: string | null }> {
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
-  if (!user) return null
+  if (!user) return { role: null, id: null }
   const admin = createAdminClient()
   const { data } = await admin.from('profiles').select('papel').eq('id', user.id).single()
-  return (data?.papel as string) ?? null
+  return { role: (data?.papel as string) ?? null, id: user.id }
 }
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const role = await getCallerRole()
-  if (!role || !['gestor', 'admin'].includes(role)) {
+  const caller = await getCaller()
+  if (!caller.role || !['gestor', 'admin'].includes(caller.role)) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { id } = await context.params
-  const body = await request.json() as Record<string, unknown>
   const admin = createAdminClient()
+
+  // Admin rows can only be edited by that same admin
+  const { data: targetProfile } = await admin.from('profiles').select('papel').eq('id', id).single()
+  if (targetProfile?.papel === 'admin' && caller.id !== id) {
+    return Response.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const body = await request.json() as Record<string, unknown>
 
   const profileUpdates: Record<string, unknown> = {}
   if ('nome' in body) profileUpdates.nome = body.nome

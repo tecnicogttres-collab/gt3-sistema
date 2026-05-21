@@ -33,7 +33,12 @@
       "PowerShell(Get-Command *)",
       "Bash(powershell *)",
       "Bash(Remove-Item *)",
-      "PowerShell($json = Get-Content \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\data.json\" -Raw | ConvertFrom-Json; $structure = @\\(\\); foreach\\($key in $json.PSObject.Properties.Name\\) { $structure += @{Category = $key} }; $structure | ConvertTo-Json -Depth 2)"
+      "PowerShell($json = Get-Content \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\data.json\" -Raw | ConvertFrom-Json; $structure = @\\(\\); foreach\\($key in $json.PSObject.Properties.Name\\) { $structure += @{Category = $key} }; $structure | ConvertTo-Json -Depth 2)",
+      "PowerShell(taskkill *)",
+      "Bash(taskkill /PID 66744 /F)",
+      "Bash(rm -rf C:/Users/rodri/gt3-sistema/.next/cache)",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Get-Process *)"
     ]
   }
 }
