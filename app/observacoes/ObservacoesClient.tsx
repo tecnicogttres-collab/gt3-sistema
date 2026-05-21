@@ -260,15 +260,17 @@ function ObsColumn({
       borderRadius: 10,
       display: 'flex',
       flexDirection: 'column',
+      height: '100%',
+      overflow: 'hidden',
       boxShadow: col.isFixed
         ? '0 2px 8px rgba(209,174,110,0.18)'
         : '0 2px 8px rgba(42,79,150,0.10)',
-      overflow: 'visible',
     }}>
       {/* Header */}
       <div style={{
         background: headerBg, padding: '10px 14px',
         borderRadius: '8px 8px 0 0',
+        flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -304,7 +306,7 @@ function ObsColumn({
       </div>
 
       {/* Cards */}
-      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto' }}>
         {ungrouped.map(({ card, idx }) => {
           const id = cardId(catKey, subtabKey, col.title, idx)
           return (
@@ -381,10 +383,9 @@ export default function ObservacoesClient() {
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const colScrollRef = useRef<HTMLDivElement>(null)
   const topScrollRef = useRef<HTMLDivElement>(null)
-  const phantomRef = useRef<HTMLDivElement>(null)
-  const scrollSyncRef = useRef(false)
+  const colsScrollRef = useRef<HTMLDivElement>(null)
+  const spacerRef = useRef<HTMLDivElement>(null)
 
   const [dbObs, setDbObs] = useState<DbObservacao[]>([])
   const [dbSubtabs, setDbSubtabs] = useState<DbSubtab[]>([])
@@ -406,30 +407,38 @@ export default function ObservacoesClient() {
       .catch(() => {})
   }, [activeCatKey])
 
-  // Sync top scroll mirror ↔ column scroll body
   useEffect(() => {
+    // Condição DENTRO do efeito, nunca antes
+    if (activeCatKey === 'Funcionários') return
+
     const top = topScrollRef.current
-    const body = colScrollRef.current
-    if (!top || !body) return
-    const onTop = () => {
-      if (scrollSyncRef.current) return
-      scrollSyncRef.current = true
-      body.scrollLeft = top.scrollLeft
-      scrollSyncRef.current = false
+    const cols = colsScrollRef.current
+    if (!top || !cols) return
+
+    let isSyncing = false
+
+    const syncFromTop = () => {
+      if (isSyncing) return
+      isSyncing = true
+      cols.scrollLeft = top.scrollLeft
+      isSyncing = false
     }
-    const onBody = () => {
-      if (scrollSyncRef.current) return
-      scrollSyncRef.current = true
-      top.scrollLeft = body.scrollLeft
-      scrollSyncRef.current = false
+
+    const syncFromCols = () => {
+      if (isSyncing) return
+      isSyncing = true
+      top.scrollLeft = cols.scrollLeft
+      isSyncing = false
     }
-    top.addEventListener('scroll', onTop, { passive: true })
-    body.addEventListener('scroll', onBody, { passive: true })
+
+    top.addEventListener('scroll', syncFromTop)
+    cols.addEventListener('scroll', syncFromCols)
+
     return () => {
-      top.removeEventListener('scroll', onTop)
-      body.removeEventListener('scroll', onBody)
+      top.removeEventListener('scroll', syncFromTop)
+      cols.removeEventListener('scroll', syncFromCols)
     }
-  }, [])
+  }, [activeCatKey]) // <- dependência fixa, nunca condicional
 
   const activeCategory = useMemo<Category | undefined>(
     () => CATEGORIES.find(c => c.key === activeCatKey),
@@ -473,6 +482,22 @@ export default function ObservacoesClient() {
     [fixedCols, dbObsForSubtab]
   )
 
+  // Para Funcionários: mescla todas as colunas fixas (Aguardando + Sistema-Geral)
+  // numa única coluna, usando o título de cada uma como group header.
+  const funcFixedMergedCol = useMemo<ColumnUI | null>(() => {
+    if (mergedFixedCols.length === 0) return null
+    if (mergedFixedCols.length === 1) return mergedFixedCols[0]
+    const first = mergedFixedCols[0]
+    const rest = mergedFixedCols.slice(1)
+    const mergedCards: CardUI[] = [
+      ...first.cards,
+      ...rest.flatMap(col =>
+        col.cards.map(card => ({ ...card, group: card.group ?? col.title }))
+      ),
+    ]
+    return { ...first, cards: mergedCards }
+  }, [mergedFixedCols])
+
   const totalResults = useMemo(() => {
     if (!search) return null
     return [...mergedMainCols, ...mergedFixedCols].reduce(
@@ -480,15 +505,21 @@ export default function ObservacoesClient() {
     )
   }, [mergedMainCols, mergedFixedCols, search])
 
-  // Keep phantom width in sync with actual scroll width (after mergedCols are computed)
+  // Mantém a largura do spacer da barra superior igual à scrollWidth real das colunas
   useEffect(() => {
-    const body = colScrollRef.current
-    const phantom = phantomRef.current
-    if (!body || !phantom) return
-    const id = requestAnimationFrame(() => {
-      phantom.style.width = body.scrollWidth + 'px'
-    })
-    return () => cancelAnimationFrame(id)
+    const cols = colsScrollRef.current
+    const spacer = spacerRef.current
+    if (!cols || !spacer) return
+    const update = () => {
+      spacer.style.width = cols.scrollWidth + 'px'
+    }
+    const id = requestAnimationFrame(update)
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    ro?.observe(cols)
+    return () => {
+      cancelAnimationFrame(id)
+      ro?.disconnect()
+    }
   }, [mergedMainCols, mergedFixedCols, activeSubtabKey])
 
   const handleCatChange = useCallback((key: string) => {
@@ -1066,82 +1097,152 @@ export default function ObservacoesClient() {
             )}
           </div>
 
-          {/* Columns grid */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-
-            {/* Top scroll mirror — scrollbar appears above column headers */}
-            <div
-              ref={topScrollRef}
-              style={{ overflowX: 'auto', overflowY: 'hidden', height: 10, flexShrink: 0 }}
-            >
-              <div ref={phantomRef} style={{ height: 1 }} />
-            </div>
-
-            {/* Actual columns scroll container */}
-            <div ref={colScrollRef} style={{ overflowX: 'auto', flex: 1, padding: '0 0 32px' }}>
-              {activeSubtab ? (
-                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '0 20px' }}>
-                  {mergedMainCols.map(col => (
-                    <div key={`${activeSubtab.key}|${col.title}`} style={{ flex: '1 0 280px' }}>
-                      <ObsColumn
-                        col={col}
-                        catKey={activeCatKey}
-                        subtabKey={activeSubtab.key}
-                        search={search}
-                        copiedId={copiedId}
-                        onCopy={handleCopy}
-                        papel={papel}
-                        onAdd={handleAdd}
-                        onEdit={handleEditOpen}
-                        onDelete={handleDeleteRequest}
-                      />
-                    </div>
-                  ))}
-                  {mergedFixedCols.map(col => (
-                    <div
-                      key={`${activeSubtab.key}|${col.title}`}
-                      style={{
-                        flex: '0 0 280px',
-                        position: 'sticky',
-                        right: 0,
-                        zIndex: 10,
-                        background: BG_CARD,
-                        paddingLeft: 4,
-                        boxShadow: '-6px 0 18px rgba(30,37,61,0.08)',
-                      }}
-                    >
-                      <ObsColumn
-                        col={col}
-                        catKey={activeCatKey}
-                        subtabKey={activeSubtab.key}
-                        search={search}
-                        copiedId={copiedId}
-                        onCopy={handleCopy}
-                        papel={papel}
-                        onAdd={handleAdd}
-                        onEdit={handleEditOpen}
-                        onDelete={handleDeleteRequest}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ color: MUTED, fontSize: 14, padding: 32, textAlign: 'center' }}>
-                  Selecione uma categoria.
-                </div>
-              )}
-
-              {search && totalResults === 0 && (
-                <div style={{ textAlign: 'center', padding: '48px 24px', color: MUTED }}>
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>
-                    Nenhum resultado para "{search}"
+          {/* Kanban — layouts distintos: Funcionários (área fixa à direita) | Empresas+Outros (scrollbar no topo) */}
+          {activeSubtab ? (
+            activeCatKey === 'Funcionários' ? (
+              // ── FUNCIONÁRIOS ─────────────────────────────────
+              <div style={{
+                flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'stretch',
+                padding: '0 20px 20px',
+                gap: 0,
+              }}>
+                {/* Cell 1: scroll horizontal das colunas principais */}
+                <div
+                  ref={colsScrollRef}
+                  className="obs-hscroll-visible"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    overflowX: 'auto', overflowY: 'hidden',
+                    paddingRight: 0,
+                  }}
+                >
+                  <div style={{
+                    display: 'flex', flexDirection: 'row',
+                    gap: 16, height: '100%', width: 'max-content',
+                  }}>
+                    {mergedMainCols.map(col => (
+                      <div
+                        key={`${activeSubtab.key}|${col.title}`}
+                        style={{
+                          width: 320, minWidth: 320, flexShrink: 0, height: '100%',
+                          backgroundColor: BG_CARD, borderRadius: 10,
+                        }}
+                      >
+                        <ObsColumn
+                          col={col}
+                          catKey={activeCatKey}
+                          subtabKey={activeSubtab.key}
+                          search={search}
+                          copiedId={copiedId}
+                          onCopy={handleCopy}
+                          papel={papel}
+                          onAdd={handleAdd}
+                          onEdit={handleEditOpen}
+                          onDelete={handleDeleteRequest}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ fontSize: 13 }}>Tente outros termos ou limpe a busca.</div>
                 </div>
-              )}
+
+                {/* Cell 2: divisor vertical visual (12px de gap entre scroll e fixa) */}
+                {funcFixedMergedCol && (
+                  <div style={{
+                    flexShrink: 0,
+                    width: 12,
+                  }} />
+                )}
+
+                {/* Cell 3: coluna fixa única (Aguardando + Sistema-Geral mesclados) */}
+                {funcFixedMergedCol && (
+                  <div style={{
+                    flexShrink: 0,
+                    width: 280,
+                    minHeight: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}>
+                    <ObsColumn
+                      col={funcFixedMergedCol}
+                      catKey={activeCatKey}
+                      subtabKey={activeSubtab.key}
+                      search={search}
+                      copiedId={copiedId}
+                      onCopy={handleCopy}
+                      papel={papel}
+                      onAdd={handleAdd}
+                      onEdit={handleEditOpen}
+                      onDelete={handleDeleteRequest}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              // ── EMPRESAS / OUTROS ────────────────────────────
+              <div style={{
+                flex: 1, minHeight: 0, minWidth: 0,
+                display: 'flex', flexDirection: 'column', padding: '0 20px 20px',
+              }}>
+                {/* Scrollbar grossa espelhada no topo */}
+                <div ref={topScrollRef} className="obs-scroll-top">
+                  <div ref={spacerRef} style={{ height: 1 }} />
+                </div>
+
+                {/* Container do scroll real (scrollbar nativa oculta) */}
+                <div
+                  ref={colsScrollRef}
+                  className="obs-hscroll-hidden"
+                  style={{
+                    flex: 1, minWidth: 0,
+                    overflowX: 'auto', overflowY: 'hidden',
+                  }}
+                >
+                  <div style={{
+                    display: 'flex', flexDirection: 'row',
+                    gap: 16, height: '100%', width: 'max-content',
+                  }}>
+                    {[...mergedMainCols, ...mergedFixedCols].map(col => (
+                      <div
+                        key={`${activeSubtab.key}|${col.title}`}
+                        style={{ width: 320, minWidth: 320, flexShrink: 0, height: '100%' }}
+                      >
+                        <ObsColumn
+                          col={col}
+                          catKey={activeCatKey}
+                          subtabKey={activeSubtab.key}
+                          search={search}
+                          copiedId={copiedId}
+                          onCopy={handleCopy}
+                          papel={papel}
+                          onAdd={handleAdd}
+                          onEdit={handleEditOpen}
+                          onDelete={handleDeleteRequest}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          ) : (
+            <div style={{ flex: 1, color: MUTED, fontSize: 14, padding: 32, textAlign: 'center' }}>
+              Selecione uma categoria.
             </div>
-          </div>
+          )}
+
+          {activeSubtab && search && totalResults === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px', color: MUTED, flexShrink: 0 }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>
+                Nenhum resultado para "{search}"
+              </div>
+              <div style={{ fontSize: 13 }}>Tente outros termos ou limpe a busca.</div>
+            </div>
+          )}
         </div>
       </div>
     </>
