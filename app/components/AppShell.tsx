@@ -334,9 +334,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <header style={{
             backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0',
             padding: '10px 24px', display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', flexShrink: 0,
+            justifyContent: 'space-between', flexShrink: 0, gap: 12,
           }}>
-            <span style={{ fontSize: 13, color: '#6B7A99' }}>{breadcrumb}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => router.back()}
+                title="Voltar"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#A0AEC0', fontSize: 16, lineHeight: 1,
+                  padding: '2px 4px', borderRadius: 4,
+                  display: 'flex', alignItems: 'center',
+                  transition: 'color 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1E3A6E' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#A0AEC0' }}
+              >
+                ←
+              </button>
+              <span style={{ fontSize: 13, color: '#6B7A99' }}>{breadcrumb}</span>
+            </div>
             <span style={{
               fontSize: 12, fontWeight: 500, padding: '3px 12px',
               borderRadius: 999, backgroundColor: '#EBF0FB', color: '#2A4F96',
