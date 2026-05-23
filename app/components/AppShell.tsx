@@ -101,7 +101,7 @@ function dismissPdiNotifStorage(pdiId: string, userId: string) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
