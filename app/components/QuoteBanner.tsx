@@ -58,13 +58,12 @@ export default function QuoteBanner() {
 
   return (
     <div style={{
-      background: '#2A4F96',
-      borderRadius: 10,
-      padding: '16px 24px',
+      background: '#1E3A6E',
+      padding: '14px 32px',
       display: 'flex',
       alignItems: 'center',
       gap: 16,
-      marginTop: 8,
+      boxShadow: '0 -2px 12px rgba(0,0,0,0.15)',
     }}>
       <span style={{ fontSize: 20, opacity: 0.5, flexShrink: 0, color: '#fff' }}>"</span>
       <div style={{ flex: 1, minWidth: 0 }}>

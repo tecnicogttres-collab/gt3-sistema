@@ -9,6 +9,7 @@ import { useUser } from './UserContext'
 import { createClient } from '../lib/supabase'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
+import QuoteBanner from './QuoteBanner'
 
 function useBreadcrumb(pathname: string): string {
   if (pathname === '/') return 'Dashboard'
@@ -428,7 +429,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <Tabbar />
 
-          <main style={{ flex: 1, overflow: 'auto', backgroundColor: '#F4F6FA', padding: 24 }}>
+          <main style={{ flex: 1, overflow: 'auto', backgroundColor: '#F4F6FA', padding: 24, paddingBottom: 80 }}>
             {children}
           </main>
         </div>
@@ -446,6 +447,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onVerDepois={() => dismissTopAta(true)}
         />
       )}
+
+      <div style={{
+        position: 'fixed', bottom: 0,
+        left: collapsed ? 60 : 220,
+        right: 0, zIndex: 100,
+        transition: 'left 0.25s ease',
+      }}>
+        <QuoteBanner />
+      </div>
     </>
   )
 }
