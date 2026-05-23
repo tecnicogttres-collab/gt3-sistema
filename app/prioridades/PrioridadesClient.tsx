@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useUser } from '../components/UserContext'
+import { createClient } from '../lib/supabase'
+import { markPrioridadeVista } from '../components/AppShell'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -194,7 +196,7 @@ export default function PrioridadesClient() {
     setFormOpen(true)
   }
 
-  function saveForm() {
+  async function saveForm() {
     const empresa = formEmpresa.trim()
     const contratante = formContratante.trim()
     const status = formStatus.trim()
@@ -213,6 +215,20 @@ export default function PrioridadesClient() {
     save(updated)
     setFormOpen(false)
     toast('Prioridade criada')
+
+    // Broadcast para notificação Realtime — best-effort
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('prioridades_avisos')
+        .insert({ empresa })
+        .select('id')
+        .single()
+      if (data?.id && profile?.id) {
+        // Marca como vista imediatamente para o criador não receber o popup
+        markPrioridadeVista(data.id, profile.id)
+      }
+    } catch { /* noop — tabela pode ainda não existir */ }
   }
 
   // ── Detail ──

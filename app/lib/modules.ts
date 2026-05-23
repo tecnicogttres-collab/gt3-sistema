@@ -109,7 +109,7 @@ export const MODULES: Module[] = [
     color: '#5B8DEF',
     path: '/atas',
     description: 'Atas por hierarquia Ano › Mês › Data',
-    allowedRoles: ['gestor', 'admin'],
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
     dashboardRoles: ['admin'],
   },
   // ── Exclusivos do Admin (sidebar + Dashboard) ────────────────
