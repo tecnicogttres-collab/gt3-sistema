@@ -9,6 +9,7 @@ import { useUser } from './UserContext'
 import { createClient } from '../lib/supabase'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
+import PdiConversaNotificacao from './PdiConversaNotificacao'
 
 function useBreadcrumb(pathname: string): string {
   if (pathname === '/') return 'Dashboard'
@@ -66,6 +67,10 @@ function dismissBanner(ataId: string, userId: string) {
   } catch { /* noop */ }
 }
 
+// ─── PDI Conversa helpers ─────────────────────────────────────────────────────
+
+type PdiConversaAviso = { id: string; ciclo_id: string; data_conversa: string }
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -73,6 +78,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
+  const [pdiConversaQueue, setPdiConversaQueue] = useState<PdiConversaAviso[]>([])
   const pathname = usePathname()
   const breadcrumb = useBreadcrumb(pathname)
   const { profile, loading } = useUser()
@@ -122,8 +128,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       } catch { /* noop */ }
     }
 
+    async function checkUnseenPdiConversa() {
+      if (!isColabOrTrainee) return
+      try {
+        const { data } = await supabase
+          .from('pdi_ciclos')
+          .select('id, data_conversa')
+          .eq('colaborador_id', userId)
+          .not('data_conversa', 'is', null)
+          .is('conversa_confirmada_em', null)
+        if (!mounted || !data) return
+        const pending = (data as { id: string; data_conversa: string }[])
+          .map(r => ({ id: r.id, ciclo_id: r.id, data_conversa: r.data_conversa }))
+        if (pending.length > 0) setPdiConversaQueue(pending)
+      } catch { /* noop */ }
+    }
+
     checkUnseenPrio()
     checkUnseenAtas()
+    checkUnseenPdiConversa()
 
     const channel = supabase
       .channel(`global-notif-${userId}`)
@@ -152,6 +175,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               return [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
             })
           }
+        }
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'pdi_conversa_avisos', filter: `colaborador_id=eq.${userId}` },
+        (payload) => {
+          if (!isColabOrTrainee) return
+          const r = payload.new as { id: string; ciclo_id: string; data_conversa: string }
+          if (!r?.ciclo_id) return
+          setPdiConversaQueue(prev =>
+            prev.some(p => p.ciclo_id === r.ciclo_id) ? prev : [...prev, { id: r.id, ciclo_id: r.ciclo_id, data_conversa: r.data_conversa }]
+          )
         }
       )
       .subscribe()
@@ -194,9 +228,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push(`/atas?ata=${ataId}`)
   }
 
-  // If both queues have items, show prioridades first
-  const showPrioNotif = prioQueue.length > 0
-  const showAtaNotif = !showPrioNotif && ataQueue.length > 0
+  async function confirmPdiConversa() {
+    const top = pdiConversaQueue[0]
+    if (!top) return
+    setPdiConversaQueue(prev => prev.slice(1))
+    try {
+      await fetch(`/api/pdi/ciclos/${top.ciclo_id}/confirmar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_confirmada_em: new Date().toISOString() }),
+      })
+    } catch { /* noop */ }
+  }
+
+  // Priority: PDI conversa > prioridade > ata
+  const showPdiConversa = pdiConversaQueue.length > 0
+  const showPrioNotif = !showPdiConversa && prioQueue.length > 0
+  const showAtaNotif = !showPdiConversa && !showPrioNotif && ataQueue.length > 0
 
   // Top unread banner: show only if not on /atas page
   const bannerAta = pathname !== '/atas' && isColabOrTrainee && unreadAtas.length > 0 ? unreadAtas[0] : null
@@ -276,6 +324,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           titulo={ataQueue[0].titulo}
           onLerAgora={handleLerAgora}
           onVerDepois={() => dismissTopAta(true)}
+        />
+      )}
+      {showPdiConversa && (
+        <PdiConversaNotificacao
+          dataConversa={pdiConversaQueue[0].data_conversa}
+          onCiente={confirmPdiConversa}
         />
       )}
     </>

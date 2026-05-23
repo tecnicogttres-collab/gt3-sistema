@@ -45,5 +45,34 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
     redirect('/pdi')
   }
 
+  // Seed ciclo 1 na primeira abertura de qualquer usuário
+  const { data: existingCiclo } = await admin
+    .from('pdi_ciclos')
+    .select('id')
+    .eq('pdi_id', id)
+    .limit(1)
+    .maybeSingle()
+
+  if (!existingCiclo) {
+    // Encontra o colaborador dono deste PDI
+    const { data: colab } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('pdi_slug', id)
+      .maybeSingle()
+
+    await admin.from('pdi_ciclos').insert({
+      pdi_id: id,
+      colaborador_id: colab?.id ?? null,
+      numero_ciclo: 1,
+      status: 'ativo',
+      avaliacao_diretiva: pdi.matrizAvaliacao.diretiva,
+      autoavaliacao: pdi.matrizAvaliacao.auto,
+      ambicao: pdi.matrizAvaliacao.ambicao,
+      autoavaliacao_salva: true,
+      criado_por: user.id,
+    })
+  }
+
   return <PdiDetailClient pdi={pdi} papel={papel} />
 }

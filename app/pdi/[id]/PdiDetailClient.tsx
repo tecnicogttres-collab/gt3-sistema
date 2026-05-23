@@ -6,6 +6,22 @@ import type { PdiColaborador, AcaoPdi } from '../../../data/pdis/types'
 
 type Tab = 'acoes' | 'avaliacoes' | 'eneagrama' | 'mbti' | 'conclusoes'
 
+type Ciclo = {
+  id: string
+  pdi_id: string
+  colaborador_id: string
+  numero_ciclo: number
+  status: 'ativo' | 'arquivado'
+  avaliacao_diretiva: number[]
+  autoavaliacao: number[]
+  ambicao: number[]
+  autoavaliacao_salva: boolean
+  data_conversa: string | null
+  conversa_confirmada_em: string | null
+  criado_em: string
+  arquivado_em: string | null
+}
+
 const TABS: { id: Tab; label: string }[] = [
   { id: 'acoes', label: 'Plano de Ações' },
   { id: 'avaliacoes', label: 'Avaliações' },
@@ -451,71 +467,389 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
 
 // ── Other tabs (unchanged) ─────────────────────────────────────────────
 
-function AvaliacoesTab({ pdi }: { pdi: PdiColaborador }) {
-  const { competencias, diretiva, auto, ambicao, totais } = pdi.matrizAvaliacao
-  const max = totais.max
+// ── AvaliacoesTab ─────────────────────────────────────────────────────────────
+
+function ScoreCells({ scores, color, editable, onChange }: {
+  scores: number[]; color: string; editable: boolean
+  onChange?: (i: number, v: number) => void
+}) {
+  return (
+    <>
+      {scores.map((v, i) => (
+        <td key={i} style={{ padding: '8px 10px', textAlign: 'center' }}>
+          {editable && onChange ? (
+            <select
+              value={v}
+              onChange={e => onChange(i, Number(e.target.value))}
+              style={{ width: 52, textAlign: 'center', border: '1px solid #CBD5E0', borderRadius: 6, fontSize: 13, fontWeight: 700, color, padding: '2px 4px', cursor: 'pointer' }}
+            >
+              {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          ) : (
+            <span style={{ fontWeight: 700, color }}>{v}</span>
+          )}
+        </td>
+      ))}
+    </>
+  )
+}
+
+function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFirst }: {
+  ciclo: Ciclo; pdi: PdiColaborador; papel: string
+  colaboradorId: string | null
+  onUpdate: (updated: Ciclo) => void
+  onDelete: (id: string) => void
+  isFirst: boolean
+}) {
+  const isGestorAdmin = ['gestor', 'admin'].includes(papel)
+  const isColab = papel === 'colaborador' || papel === 'trainee'
+  const isAtivo = ciclo.status === 'ativo'
+  const competencias = pdi.matrizAvaliacao.competencias
+  const maxScore = competencias.length * 5
+
+  const [diretiva, setDiretiva] = useState<number[]>(ciclo.avaliacao_diretiva.length ? ciclo.avaliacao_diretiva : competencias.map(() => 0))
+  const [autoaval, setAutoaval] = useState<number[]>(ciclo.autoavaliacao.length ? ciclo.autoavaliacao : competencias.map(() => 0))
+  const [ambicao, setAmbicao] = useState<number[]>(ciclo.ambicao.length ? ciclo.ambicao : competencias.map(() => 0))
+  const [autoSalva, setAutoSalva] = useState(ciclo.autoavaliacao_salva)
+  const [dataConversa, setDataConversa] = useState(ciclo.data_conversa ? ciclo.data_conversa.slice(0, 16) : '')
+  const [saving, setSaving] = useState<'diretiva' | 'auto' | 'conversa' | null>(null)
+  const [open, setOpen] = useState(isAtivo)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [err, setErr] = useState('')
+
+  const sumDiretiva = diretiva.reduce((a, b) => a + b, 0)
+  const sumAuto = autoaval.reduce((a, b) => a + b, 0)
+  const sumAmbicao = ambicao.reduce((a, b) => a + b, 0)
+
+  async function saveDiretiva() {
+    setSaving('diretiva'); setErr('')
+    try {
+      const res = await fetch(`/api/pdi/${ciclo.pdi_id}/ciclos/${ciclo.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avaliacao_diretiva: diretiva }),
+      })
+      if (!res.ok) throw new Error()
+      onUpdate({ ...ciclo, avaliacao_diretiva: diretiva })
+    } catch { setErr('Erro ao salvar avaliação diretiva.') } finally { setSaving(null) }
+  }
+
+  async function saveAutoaval() {
+    setSaving('auto'); setErr('')
+    try {
+      const res = await fetch(`/api/pdi/${ciclo.pdi_id}/ciclos/${ciclo.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoavaliacao: autoaval, ambicao, autoavaliacao_salva: true }),
+      })
+      if (!res.ok) throw new Error()
+      setAutoSalva(true)
+      onUpdate({ ...ciclo, autoavaliacao: autoaval, ambicao, autoavaliacao_salva: true })
+    } catch { setErr('Erro ao salvar autoavaliação.') } finally { setSaving(null) }
+  }
+
+  async function saveConversa() {
+    if (!dataConversa) { setErr('Informe a data e hora.'); return }
+    setSaving('conversa'); setErr('')
+    try {
+      const res = await fetch(`/api/pdi/${ciclo.pdi_id}/ciclos/${ciclo.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data_conversa: new Date(dataConversa).toISOString(),
+          colaborador_id: colaboradorId,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      onUpdate({ ...ciclo, data_conversa: new Date(dataConversa).toISOString() })
+    } catch { setErr('Erro ao agendar conversa.') } finally { setSaving(null) }
+  }
+
+  const statusBadge = (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 20,
+      backgroundColor: isAtivo ? '#D1FAE5' : '#F1F5F9',
+      color: isAtivo ? '#065F46' : '#64748B',
+    }}>
+      {isAtivo ? 'Ativo' : 'Arquivado'}
+    </span>
+  )
+
+  const arquivadoLabel = ciclo.arquivado_em
+    ? `arquivado em ${new Date(ciclo.arquivado_em).toLocaleDateString('pt-BR')}`
+    : ''
+
+  return (
+    <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      {/* Accordion header */}
+      <div
+        onClick={() => setOpen(v => !v)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', background: isAtivo ? '#F0F7FF' : '#F8FAFC', cursor: 'pointer' }}
+      >
+        <span style={{ fontSize: 11 }}>{open ? '▼' : '▶'}</span>
+        <span style={{ fontWeight: 700, fontSize: 14, color: '#1E293B', flex: 1 }}>
+          Ciclo {ciclo.numero_ciclo} {arquivadoLabel && <span style={{ fontSize: 11, fontWeight: 400, color: '#94A3B8' }}>— {arquivadoLabel}</span>}
+        </span>
+        {statusBadge}
+        {isGestorAdmin && (
+          <button
+            onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+            style={{ marginLeft: 8, padding: '2px 8px', border: 'none', background: '#FEF2F2', color: '#DC2626', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+          >
+            🗑
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {err && <div style={{ fontSize: 13, color: '#DC2626', background: '#FEF2F2', padding: '8px 12px', borderRadius: 8 }}>{err}</div>}
+
+          {/* Score totals */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {[
+              { label: 'Diretiva', value: sumDiretiva, color: '#2A4F96', bg: '#EBF4FF' },
+              { label: 'Autoavaliação', value: sumAuto, color: '#D1AE6E', bg: '#FFFBEB' },
+              { label: 'Ambição', value: sumAmbicao, color: '#16A34A', bg: '#F0FFF4' },
+            ].map(({ label, value, color, bg }) => (
+              <div key={label} style={{ flex: 1, minWidth: 130, background: bg, borderRadius: 8, padding: '10px 14px', border: `1px solid ${color}22` }}>
+                <div style={{ fontSize: 10, color: '#6B7A99', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color }}>
+                  {value}<span style={{ fontSize: 12, fontWeight: 400, color: '#94A3B8', marginLeft: 4 }}>/ {maxScore}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Matrix table */}
+          <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                  <th style={{ padding: '8px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase' }}>Competência</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#2A4F96', textTransform: 'uppercase' }}>Diretiva</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#92400E', textTransform: 'uppercase' }}>Auto</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#166534', textTransform: 'uppercase' }}>Ambição</th>
+                </tr>
+              </thead>
+              <tbody>
+                {competencias.map((comp, i) => (
+                  <tr key={i} style={{ borderBottom: i < competencias.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                    <td style={{ padding: '8px 14px', color: '#1E293B', fontWeight: 500 }}>{shorten(comp)}</td>
+                    <ScoreCells
+                      scores={[diretiva[i] ?? 0]}
+                      color="#2A4F96"
+                      editable={isGestorAdmin && isAtivo}
+                      onChange={(_, v) => setDiretiva(prev => { const a = [...prev]; a[i] = v; return a })}
+                    />
+                    <ScoreCells
+                      scores={[autoaval[i] ?? 0]}
+                      color="#92400E"
+                      editable={isColab && isAtivo && !autoSalva}
+                      onChange={(_, v) => setAutoaval(prev => { const a = [...prev]; a[i] = v; return a })}
+                    />
+                    <ScoreCells
+                      scores={[ambicao[i] ?? 0]}
+                      color="#166534"
+                      editable={isColab && isAtivo && !autoSalva && isFirst}
+                      onChange={(_, v) => setAmbicao(prev => { const a = [...prev]; a[i] = v; return a })}
+                    />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Save buttons */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {isGestorAdmin && isAtivo && (
+              <button
+                onClick={saveDiretiva}
+                disabled={saving === 'diretiva'}
+                style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving === 'diretiva' ? 0.7 : 1 }}
+              >
+                {saving === 'diretiva' ? 'Salvando…' : 'Salvar Avaliação Diretiva'}
+              </button>
+            )}
+            {isColab && isAtivo && !autoSalva && (
+              <button
+                onClick={saveAutoaval}
+                disabled={saving === 'auto'}
+                style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#D1AE6E', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving === 'auto' ? 0.7 : 1 }}
+              >
+                {saving === 'auto' ? 'Salvando…' : 'Confirmar Autoavaliação'}
+              </button>
+            )}
+            {isColab && autoSalva && (
+              <span style={{ fontSize: 12, color: '#166534', fontWeight: 600, alignSelf: 'center' }}>✓ Autoavaliação registrada</span>
+            )}
+          </div>
+
+          {/* Agendamento de conversa */}
+          {isGestorAdmin && isAtivo && (
+            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>📅 Agendar Conversa</div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, color: '#6B7A99', marginBottom: 4 }}>Data e hora</label>
+                  <input
+                    type="datetime-local"
+                    value={dataConversa}
+                    onChange={e => setDataConversa(e.target.value)}
+                    style={{ padding: '7px 10px', border: '1px solid #CBD5E0', borderRadius: 8, fontSize: 13 }}
+                  />
+                </div>
+                <button
+                  onClick={saveConversa}
+                  disabled={saving === 'conversa'}
+                  style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#5B8DEF', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving === 'conversa' ? 0.7 : 1 }}
+                >
+                  {saving === 'conversa' ? 'Salvando…' : 'Salvar data'}
+                </button>
+                {ciclo.data_conversa && (
+                  <span style={{ fontSize: 12, color: '#374151', alignSelf: 'center' }}>
+                    Agendada: {new Date(ciclo.data_conversa).toLocaleString('pt-BR')}
+                    {ciclo.conversa_confirmada_em
+                      ? <span style={{ marginLeft: 8, color: '#166534', fontWeight: 600 }}>✓ Confirmado</span>
+                      : <span style={{ marginLeft: 8, color: '#F59E0B', fontWeight: 600 }}>⏳ Pendente</span>}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {isColab && ciclo.data_conversa && (
+            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 14, fontSize: 13, color: '#374151' }}>
+              📅 Conversa agendada para <strong>{new Date(ciclo.data_conversa).toLocaleString('pt-BR')}</strong>
+              {ciclo.conversa_confirmada_em && <span style={{ marginLeft: 8, color: '#166534' }}>✓ Confirmado</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '28px 30px', maxWidth: 360, textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🗑</div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Excluir Ciclo {ciclo.numero_ciclo}?</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>Todos os dados deste ciclo serão removidos permanentemente.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmDelete(false)} style={{ padding: '8px 20px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={() => { setConfirmDelete(false); onDelete(ciclo.id) }} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AvaliacoesTab({ pdi, papel }: { pdi: PdiColaborador; papel: string }) {
+  const [ciclos, setCiclos] = useState<Ciclo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [colaboradorId, setColaboradorId] = useState<string | null>(null)
+  const [showNovoCicloModal, setShowNovoCicloModal] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const isGestorAdmin = ['gestor', 'admin'].includes(papel)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const r = await fetch(`/api/pdi/${pdi.id}/ciclos`)
+        if (!r.ok) throw new Error()
+        const data: Ciclo[] = await r.json()
+        if (!cancelled) {
+          setColaboradorId(data[0]?.colaborador_id ?? null)
+          setCiclos(data)
+        }
+      } catch { /* noop */ } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [pdi.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function criarNovoCiclo() {
+    setCreating(true)
+    try {
+      const res = await fetch(`/api/pdi/${pdi.id}/ciclos`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ colaborador_id: colaboradorId }),
+      })
+      if (!res.ok) throw new Error()
+      const novo: Ciclo = await res.json()
+      // Archive the previously active one in local state
+      setCiclos(prev => [novo, ...prev.map(c => c.status === 'ativo' ? { ...c, status: 'arquivado' as const, arquivado_em: new Date().toISOString() } : c)])
+      setShowNovoCicloModal(false)
+    } catch { /* noop */ } finally { setCreating(false) }
+  }
+
+  function handleUpdate(updated: Ciclo) {
+    setCiclos(prev => prev.map(c => c.id === updated.id ? updated : c))
+  }
+
+  function handleDelete(id: string) {
+    setCiclos(prev => {
+      const remaining = prev.filter(c => c.id !== id)
+      // If we deleted the active one and there are remaining, activate the first
+      if (prev.find(c => c.id === id)?.status === 'ativo' && remaining.length > 0) {
+        remaining[0] = { ...remaining[0], status: 'ativo' }
+      }
+      return remaining
+    })
+    fetch(`/api/pdi/${pdi.id}/ciclos/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>Carregando avaliações…</div>
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Avaliação diretiva', value: totais.diretiva, color: '#2A4F96', bg: '#EBF4FF' },
-          { label: 'Autoavaliação', value: totais.auto, color: '#D1AE6E', bg: '#FFFBEB' },
-          { label: 'Ambição realista', value: totais.ambicao, color: '#16A34A', bg: '#F0FFF4' },
-        ].map(({ label, value, color, bg }) => (
-          <div key={label} style={{ flex: 1, minWidth: 160, backgroundColor: bg, borderRadius: 10, padding: '14px 18px', border: `1px solid ${color}22` }}>
-            <div style={{ fontSize: 11, color: '#6B7A99', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color }}>
-              {value}<span style={{ fontSize: 14, fontWeight: 400, color: '#94A3B8', marginLeft: 4 }}>/ {max}</span>
-            </div>
-            <div style={{ height: 4, backgroundColor: '#fff', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${max > 0 ? (value / max) * 100 : 0}%`, backgroundColor: color, borderRadius: 2 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 13, color: '#6B7A99' }}>{ciclos.length} ciclo{ciclos.length !== 1 ? 's' : ''}</div>
+        {isGestorAdmin && (
+          <button
+            onClick={() => setShowNovoCicloModal(true)}
+            style={{ padding: '8px 16px', border: 'none', borderRadius: 8, background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            + Novo ciclo
+          </button>
+        )}
+      </div>
+
+      {ciclos.length === 0 && (
+        <div style={{ padding: 32, textAlign: 'center', color: '#94A3B8', fontSize: 14, background: '#F8FAFC', borderRadius: 10, border: '1px dashed #E2E8F0' }}>
+          Nenhum ciclo de avaliação iniciado.
+        </div>
+      )}
+
+      {ciclos.map((ciclo, idx) => (
+        <CicloCard
+          key={ciclo.id}
+          ciclo={ciclo}
+          pdi={pdi}
+          papel={papel}
+          colaboradorId={colaboradorId}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+          isFirst={ciclo.numero_ciclo === 1}
+        />
+      ))}
+
+      {showNovoCicloModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '32px 36px', maxWidth: 420, textAlign: 'center' }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🔄</div>
+            <h3 style={{ margin: '0 0 10px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Iniciar novo ciclo?</h3>
+            <p style={{ margin: '0 0 24px', fontSize: 13, color: '#6B7A99', lineHeight: 1.6 }}>
+              O ciclo atual será arquivado. A autoavaliação ficará em branco para novo preenchimento. A ambição permanece igual ao Ciclo 1.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={() => setShowNovoCicloModal(false)} style={{ padding: '9px 22px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={criarNovoCiclo} disabled={creating} style={{ padding: '9px 22px', border: 'none', borderRadius: 8, background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: creating ? 0.7 : 1 }}>
+                {creating ? 'Criando…' : 'Confirmar'}
+              </button>
             </div>
           </div>
-        ))}
-      </div>
-      <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
-              <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Competência</th>
-              <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Diretiva</th>
-              <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Auto</th>
-              <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ambição</th>
-              <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Visualização</th>
-            </tr>
-          </thead>
-          <tbody>
-            {competencias.map((comp, i) => {
-              const d = diretiva[i] ?? 0, a = auto[i] ?? 0, am = ambicao[i] ?? 0
-              return (
-                <tr key={i} style={{ borderBottom: i < competencias.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
-                  <td style={{ padding: '10px 16px', color: '#1E293B', fontWeight: 500 }}>{shorten(comp)}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#2A4F96' }}>{d}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#92400E' }}>{a}</td>
-                  <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#166534' }}>{am}</td>
-                  <td style={{ padding: '10px 16px', minWidth: 180 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {[{ v: d, c: '#2A4F96' }, { v: a, c: '#D1AE6E' }, { v: am, c: '#16A34A' }].map(({ v, c }, j) => (
-                        <div key={j} style={{ height: 5, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${(v / 5) * 100}%`, backgroundColor: c, borderRadius: 3 }} />
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ marginTop: 14, display: 'flex', gap: 20, fontSize: 11, color: '#6B7A99' }}>
-        {[['#2A4F96', 'Avaliação diretiva'], ['#D1AE6E', 'Autoavaliação'], ['#16A34A', 'Ambição realista']].map(([c, l]) => (
-          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div style={{ width: 12, height: 4, backgroundColor: c, borderRadius: 2 }} />
-            <span>{l}</span>
-          </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -713,7 +1047,7 @@ export default function PdiDetailClient({ pdi, papel }: { pdi: PdiColaborador; p
 
       <div>
         {activeTab === 'acoes' && <AcoesTab pdi={pdi} canEdit={canEdit} />}
-        {activeTab === 'avaliacoes' && <AvaliacoesTab pdi={pdi} />}
+        {activeTab === 'avaliacoes' && <AvaliacoesTab pdi={pdi} papel={papel} />}
         {activeTab === 'eneagrama' && <EneagramaTab pdi={pdi} />}
         {activeTab === 'mbti' && <MbtiTab pdi={pdi} />}
         {activeTab === 'conclusoes' && <ConclusoesTab pdi={pdi} />}
