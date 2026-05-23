@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import { createClient } from '../../lib/supabase-server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
@@ -14,13 +14,19 @@ export async function GET() {
   if (!profile) return Response.json({ error: 'Perfil não encontrado' }, { status: 403 })
 
   const isColabOrTrainee = profile.papel === 'colaborador' || profile.papel === 'trainee'
+  const q = new URL(request.url).searchParams.get('q')?.trim() ?? ''
+  const escaped = q.replace(/%/g, '\\%').replace(/_/g, '\\_')
+
+  const baseSelect = 'id, titulo, data, status, autor_id, created_at, updated_at, autor:profiles!autor_id(nome)'
+  const selectFields = q ? `${baseSelect}, conteudo` : baseSelect
 
   let query = admin
     .from('atas')
-    .select('id, titulo, data, status, autor_id, created_at, updated_at, autor:profiles!autor_id(nome)')
+    .select(selectFields)
     .order('data', { ascending: false })
 
   if (isColabOrTrainee) query = query.eq('status', 'Validada')
+  if (q) query = query.or(`titulo.ilike.%${escaped}%,conteudo.ilike.%${escaped}%`)
 
   const { data, error } = await query
   if (error) return Response.json({ error: error.message }, { status: 500 })

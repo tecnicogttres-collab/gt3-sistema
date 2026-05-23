@@ -141,7 +141,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'atas', filter: 'status=eq.Validada' },
         (payload) => {
-          if (!isColabOrTrainee) return
           const record = payload.new as { id: string; data: string; titulo: string | null; status: string }
           if (record?.status !== 'Validada' || !record?.id) return
           const seen = getAtaSeenIds(userId)
