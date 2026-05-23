@@ -14,7 +14,7 @@ async function getAuth() {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const { cicloId } = await params
+  const { id, cicloId } = await params
   const { user, papel } = await getAuth()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
@@ -26,7 +26,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (isGestorAdmin) {
     if (body.avaliacao_diretiva !== undefined) updates.avaliacao_diretiva = body.avaliacao_diretiva
-    if (body.data_conversa !== undefined) updates.data_conversa = body.data_conversa
+    if (body.data_conversa !== undefined) {
+      updates.data_conversa = body.data_conversa
+      updates.conversa_confirmada_em = null // reseta ciência ao reagendar
+    }
     if (body.conversa_confirmada_em !== undefined) updates.conversa_confirmada_em = body.conversa_confirmada_em
   }
 
@@ -45,17 +48,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .from('pdi_ciclos')
     .update(updates)
     .eq('id', cicloId)
-    .select()
+    .select('id, pdi_id, colaborador_id')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  // If gestor saved data_conversa, broadcast via pdi_conversa_avisos
-  if (isGestorAdmin && body.data_conversa && body.colaborador_id) {
-    await admin.from('pdi_conversa_avisos').insert({
-      ciclo_id: cicloId,
-      colaborador_id: body.colaborador_id,
-      data_conversa: body.data_conversa,
+  const colaboradorId = (data as { colaborador_id: string | null }).colaborador_id
+
+  // Notifica colaborador quando gestor salva avaliação diretiva
+  if (isGestorAdmin && body.avaliacao_diretiva !== undefined && colaboradorId) {
+    await admin.from('pdi_notificacoes').insert({
+      pdi_id: id,
+      colaborador_id: colaboradorId,
+      visto: false,
     })
   }
 

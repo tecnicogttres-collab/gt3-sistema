@@ -996,7 +996,14 @@ export default function PdiDetailClient({ pdi, papel }: { pdi: PdiColaborador; p
   const canEdit = ['gestor', 'admin'].includes(papel)
   const hasMbti = !!pdi.perfilComportamental.mbti
 
-  // Collaborator: mark notifications as seen on page open
+  // Lê ?tab= da URL para abrir na aba certa
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tab = params.get('tab') as Tab | null
+    if (tab && TABS.some(t => t.id === tab)) setActiveTab(tab)
+  }, [])
+
+  // Colaborador: marca notificações como vistas ao abrir o PDI
   useEffect(() => {
     if (papel === 'colaborador') {
       fetch(`/api/pdi/${pdi.id}/notificacoes/vista`, { method: 'POST' }).catch(() => {})

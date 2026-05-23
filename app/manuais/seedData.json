@@ -299,12 +299,1344 @@
           ]
         }
       ]
+    },
+    {
+      "id": "treinamentos_nr",
+      "nome": "Treinamentos NR",
+      "periodicidade": "Conforme NR",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data do treinamento",
+            "NR correspondente identificada no certificado",
+            "Assinatura do instrutor ou carimbo da empresa treinadora",
+            "Carga horária compatível com a NR"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade varia conforme a NR exigida pelo cliente"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "notif_nc_pessoa",
+      "nome": "Notificação NC Pessoa (MP/Ciferal/Volare)",
+      "periodicidade": "Condicional",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Descrição da não conformidade",
+            "Data da ocorrência",
+            "Assinatura do funcionário e do responsável"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Gerado apenas quando há registro de não conformidade envolvendo pessoa"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "notif_nc_acidente",
+      "nome": "Notificação NC Pessoa Acidente (MP/Ciferal/Volare)",
+      "periodicidade": "Condicional",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Descrição do acidente",
+            "Data e hora da ocorrência",
+            "Assinatura do funcionário e do responsável"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Gerado apenas quando há registro de acidente"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "decl_trein_apr",
+      "nome": "Declaração de Treinamento APR (MP/Ciferal/Volare)",
+      "periodicidade": "Condicional",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Atividade/tarefa coberta pela APR",
+            "Data do treinamento",
+            "Assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Exigido para atividades com APR específica no cliente"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "os_grupo_imec",
+      "nome": "Ordem de Serviço — Grupo IMEC",
+      "periodicidade": "Bienal",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Descrição das atividades e riscos",
+            "Data de emissão",
+            "Assinatura do funcionário",
+            "Assinatura do responsável pela emissão"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: bienal"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "decl_trein_apr_jung",
+      "nome": "Declaração de Treinamento APR — Jungheinrich",
+      "periodicidade": "Condicional",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Atividade coberta",
+            "Data do treinamento",
+            "Assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Exigido para atividades com APR no cliente Jungheinrich"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "docs_pessoais_jung",
+      "nome": "Docs Pessoais — Jungheinrich",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Qualquer documento com foto aceito (RG, CNH, passaporte, etc.)",
+            "Documento legível e dentro da validade"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "os_jung",
+      "nome": "Ordem de Serviço — Jungheinrich",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Descrição das atividades e riscos",
+            "Data de emissão",
+            "Assinatura do funcionário",
+            "Assinatura do responsável"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "termo_integracao_jung",
+      "nome": "Termo de Integração — Jungheinrich",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data de integração",
+            "Assinatura do funcionário",
+            "Assinatura do responsável pela integração"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "termo_vt_jung",
+      "nome": "Termo Opção Vale Transporte — Jungheinrich",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Opção assinalada (com ou sem VT)",
+            "Data e assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "compra_vt_jung",
+      "nome": "Compra VT — Recarga Vale Transporte — Jungheinrich",
+      "periodicidade": "Mensal",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Valor ou quantidade de créditos",
+            "Mês de referência",
+            "Comprovante de recarga ou recibo assinado"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: mensal"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "carta_blaster",
+      "nome": "Carta Blaster",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Conteúdo da carta preenchido corretamente",
+            "Data e assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "curso_condutores_coletivo",
+      "nome": "Curso de Condutores Transporte Coletivo",
+      "periodicidade": "Conforme regulamentação",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do condutor",
+            "Data de realização do curso",
+            "Certificado com carga horária",
+            "Assinatura do instrutor ou carimbo da instituição"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Exigido para condutores de transporte coletivo de passageiros"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "estatuto_cooperativa",
+      "nome": "Estatuto Social / Ata de Admissão Cooperativa",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Documento oficial da cooperativa com nome do cooperado",
+            "Ata ou extrato de admissão como associado",
+            "Registro em cartório (se aplicável)"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única — exigido para cooperados"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "docs_pessoais_mebrafe",
+      "nome": "Docs Pessoais Mebrafe",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Documentos exigidos",
+          "items": [
+            "CTPS (Carteira de Trabalho)",
+            "RG",
+            "CPF",
+            "CNH (quando aplicável)"
+          ]
+        },
+        {
+          "label": "Verificação",
+          "items": [
+            "Todos os documentos legíveis e dentro da validade",
+            "Nome do funcionário consistente entre os documentos"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cartao_ponto",
+      "nome": "Cartão Ponto",
+      "periodicidade": "Mensal",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Mês de referência",
+            "Registros diários de entrada e saída",
+            "Assinatura ou validação do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: mensal"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cert_bombeiro_civil",
+      "nome": "Certificado de Qualificação de Bombeiro Civil",
+      "periodicidade": "Bienal",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data de emissão",
+            "Data de validade (bienal)",
+            "Carga horária mínima exigida",
+            "Carimbo ou assinatura da instituição treinadora"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: bienal"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rpa",
+      "nome": "RPA — Recibo de Pagamento Autônomo",
+      "periodicidade": "Mensal",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome e CPF do autônomo",
+            "Valor do serviço prestado",
+            "Mês de referência",
+            "Descrição do serviço",
+            "Assinatura do autônomo",
+            "ISS e INSS retidos quando aplicável"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: mensal — apenas para autônomos"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "holerite",
+      "nome": "Recibo de Pagamento — Holerite + Comprovante",
+      "periodicidade": "Mensal",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Mês de referência",
+            "Valor líquido, descontos e proventos discriminados",
+            "Assinatura do funcionário ou comprovante de pagamento bancário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: mensal"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contrato_autonomo",
+      "nome": "Contrato de Prestação de Serviços Autônomo",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome e CPF do autônomo",
+            "Objeto do contrato (serviços prestados)",
+            "Valor ou forma de remuneração",
+            "Prazo do contrato",
+            "Assinaturas das partes",
+            "Reconhecimento de firma ou testemunhas (quando exigido)"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "politica_seg_info",
+      "nome": "Política de Segurança da Informação (MP/Ciferal/Volare)",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data de assinatura",
+            "Assinatura do funcionário",
+            "Modelo novo (a partir de 24/02/2025)"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Novo modelo vigente desde 24/02/2025 — documentos anteriores devem ser substituídos"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "qualif_veiculos_eletricos",
+      "nome": "Qualificação de Segurança — Atividades em Veículos Elétricos",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data do treinamento",
+            "Certificado ou declaração do treinamento",
+            "Assinatura do instrutor"
+          ]
+        },
+        {
+          "label": "Aplicação",
+          "items": [
+            "Atualmente exigido apenas no cliente Mercedes"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contrato_clt",
+      "nome": "Contrato de Trabalho Efetivo (CLT)",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Cargo e função",
+            "Salário e jornada de trabalho",
+            "Data de admissão",
+            "Assinaturas do funcionário e do representante da empresa",
+            "Testemunhas (quando exigido)"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "comprov_ferias",
+      "nome": "Comprovante de Pagamento de Férias",
+      "periodicidade": "Anual",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Período aquisitivo",
+            "Valor do pagamento de férias",
+            "Data de pagamento (até 2 dias antes do início das férias)",
+            "Assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: anual (a cada gozo de férias)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "carteira_vigilante",
+      "nome": "Carteira Nacional de Vigilante",
+      "periodicidade": "5 anos",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do vigilante",
+            "Data de validade (5 anos)",
+            "Número de registro",
+            "Foto do vigilante"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: 5 anos"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dir_defensiva_csg",
+      "nome": "Noções de Direção Defensiva — CSG/Maser",
+      "periodicidade": "Conforme exigência do cliente",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data do treinamento",
+            "Certificado com carga horária",
+            "Assinatura do instrutor ou carimbo da instituição"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Exigido para condutores nos clientes CSG e Maser"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contrato_clt_woodbridge",
+      "nome": "Contrato de Trabalho Efetivo (CLT) — Woodbridge",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Cargo e função",
+            "Salário e jornada de trabalho",
+            "Data de admissão",
+            "Assinaturas do funcionário e do representante da empresa"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única — modelo específico Woodbridge"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "os_mebrafe_salton",
+      "nome": "Ordem de Serviço — Mebrafe e Salton",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Descrição das atividades e riscos",
+            "Data de emissão",
+            "Assinatura do funcionário",
+            "Assinatura do responsável"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "integracao_brinox",
+      "nome": "Integração Brinox",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data de integração",
+            "Conteúdos abordados na integração",
+            "Assinatura do funcionário",
+            "Assinatura do responsável pela integração"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "termo_oea",
+      "nome": "Termo de Treinamento OEA",
+      "periodicidade": "Semestral",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data do treinamento",
+            "Conteúdo do treinamento OEA",
+            "Assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: semestral"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ctps_bertolini",
+      "nome": "CTPS — Bertolini (matriz e Colatina)",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Carteira de Trabalho com dados do funcionário",
+            "Registro de emprego vigente",
+            "Número da CTPS e série"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Exigido nas unidades matriz e Colatina do cliente Bertolini",
+            "Periodicidade: única"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checklist_cargos_sensiveis",
+      "nome": "Check List Processo Seletivo Cargos Sensíveis",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do candidato/funcionário",
+            "Cargo em questão",
+            "Todos os itens do checklist marcados",
+            "Assinatura do responsável pelo processo seletivo",
+            "Data de preenchimento"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única — aplicado no processo seletivo para cargos sensíveis"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "certidao_crn",
+      "nome": "Certidão Cadastro/Registro CRN (Conselho Nutrição)",
+      "periodicidade": "Conforme validade",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do profissional",
+            "Número de registro no CRN",
+            "Situação ativa no conselho",
+            "Data de validade da certidão"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Exigido para nutricionistas — verificar situação no CRN"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "decl_trein_integracao_tabone",
+      "nome": "Declaração Treinamento Integração Tabone",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Data da integração",
+            "Conteúdos abordados na integração",
+            "Assinatura do funcionário",
+            "Assinatura do responsável pela integração Tabone"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Periodicidade: única"
+          ]
+        }
+      ]
     }
   ],
   "empresas": [],
   "veiculos": [],
-  "alimentar": [],
+  "alimentar": [
+    {
+      "id": "termo_camara_fria",
+      "nome": "Termo de Autorização — Câmara Fria",
+      "periodicidade": "Informada",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome da empresa",
+            "Unidade",
+            "Nome do funcionário",
+            "CPF preenchido",
+            "Data e flag de autorização",
+            "Assinatura do funcionário",
+            "Nome do responsável pela UNOP",
+            "Assinatura do responsável pela UNOP",
+            "Todos os campos devem estar preenchidos"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "os_alimentar",
+      "nome": "Ordem de Serviço Alimentar",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Modelo sem assinaturas",
+            "Nome do funcionário",
+            "Função",
+            "Riscos conforme descrito no PGR para a função",
+            "Assinatura do funcionário",
+            "Data de treinamento"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "termo_proibicao_camara",
+      "nome": "Termo de Proibição — Câmara Fria",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome da empresa",
+            "Unidade",
+            "Nome do funcionário",
+            "CPF preenchido",
+            "Assinatura do funcionário",
+            "Nome do responsável pela UNOP",
+            "Assinatura do responsável pela UNOP"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "termo_resp_gpf",
+      "nome": "Termo de Responsabilidade (GPF)",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Igual ao termo de responsabilidade integração gastronomia do contrato efetivo (CLT)",
+            "Conferir se é da pessoa e está assinado pela mesma"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "apolice_alimentar",
+      "nome": "Apólice de Seguros Alimentar",
+      "periodicidade": "Informada",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome da funcionária conforme o cadastro no portal",
+            "Data da vigência da apólice — data inicial e final (requisito terá periodicidade informada na configuração do portal)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "adesao_plano_saude",
+      "nome": "Termo de Adesão ao Plano de Saúde",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Assinatura do gestor",
+            "Assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Somente para unidade EBR (set/23)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "acordo_individual",
+      "nome": "Acordo Individual de Trabalho",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Assinatura do colaborador",
+            "Assinatura da empresa",
+            "Modelo de recusa/não aplicável — apenas validar"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "epi_alimentar",
+      "nome": "EPI Alimentar",
+      "periodicidade": "Condicional",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Validade de 60 dias, com exceção das supervisoras de contrato, que possuem validade anual",
+            "Não é possível validar se a última entrega tiver preenchida a data de devolução na mesma data"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Algumas pessoas terão solicitação de mudar a ficha para anual — será informado na observação do Portal ou via e-mail"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contrato_temp_alimentar",
+      "nome": "Contrato de Trabalho Temporário (Alimentar)",
+      "periodicidade": "Condicional",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome",
+            "Validade do contrato",
+            "Assinatura"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "registro_alimentar",
+      "nome": "Registro do Empregado / Manual do Colaborador (We Can BR)",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Itens do Manual",
+          "items": [
+            "Modalidade de contratação",
+            "Pagamentos (autorização de crédito — obrigatório para admissões a partir de 01/12/22)",
+            "Cartão de Ponto",
+            "Recibo de pagamento (holerites)",
+            "Vencimento de contrato",
+            "Benefícios / Assistência médica e odontológica",
+            "Rescisão de contrato / Experiência We Can BR",
+            "Carteira de trabalho / EPI's e Uniformes",
+            "Solicitação de vale transporte e outros (deve estar assinalado se é optante ou não)",
+            "Acordo de compensação de horas",
+            "Recibo de devolução CTPS",
+            "Contrato de trabalho temporário",
+            "Autorização para desconto em folha de pagamento (todos os itens devem estar assinalados)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "autorizacao_banheiro",
+      "nome": "Autorização Banheiro",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Validar e isentar posteriormente"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Supervisoras de contrato não possuem este documento"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "autorizacao_higienizacao",
+      "nome": "Autorização de Higienização e Coleta de Resíduos",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Precisa estar preenchido e assinado"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "restricao_higienizacao",
+      "nome": "Restrição de Higienização e Coleta de Resíduos",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Precisa estar preenchido e assinado"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "definicoes_gpf_alimentar",
+      "nome": "Definições — Grupo Prato Feito",
+      "periodicidade": "—",
+      "sections": [
+        {
+          "label": "Regras",
+          "items": [
+            "Supervisor de contrato: isentar cartão ponto e incluir ficha de EPI anual (isentar ficha de EPI 60 dias)",
+            "Jovem Aprendiz não possui ficha de EPI",
+            "Fichas de EPI com solicitação de mudança para anual (somente Unimed): salvar o arquivo, alterar no GT0100, anexar e aprovar",
+            "Cartão ponto pode ser aprovado sem assinatura",
+            "Docs rescisórios: pode ser enviada tentativa de contato com a pessoa caso não tenha assinatura da mesma"
+          ]
+        }
+      ]
+    }
+  ],
   "bsa": [],
+  "rescissorios": [
+    {
+      "id": "escopo_rescisorio",
+      "nome": "Escopo — A quem se aplica",
+      "periodicidade": "—",
+      "sections": [
+        {
+          "label": "Contratantes",
+          "items": [
+            "Marcopolo, Ciferal, Volare, Roni Chaves, Grupo Prato Feito (Alimentar, Villare, Gutten, Prato Feito, etc.)",
+            "Aplica-se somente às empresas RESIDENTES/CONTRATANTES (GPF)",
+            "Demais empresas CONTRATANTES não terão geração de documentos rescisórios"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aso_demissional",
+      "nome": "ASO Demissional",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "CNPJ e razão social",
+            "Nome e função",
+            "Data do clínico demissional",
+            "Assinatura do funcionário e do médico examinador",
+            "Médico coordenador (se obrigatório)"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Caso o ASO enviado não seja demissional: validar o último ASO periódico conforme NR-7"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fgts_rescisorio",
+      "nome": "FGTS Extrato p/ Fins Rescisórios",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Conferir se o documento pertence à pessoa",
+            "Conferir se há depósito feito recentemente"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Funcionário que entrou e saiu no mesmo mês ou demitido por justa causa: isentar no GT0100 e indicar no campo de observações"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demonstrativo_trabalhador",
+      "nome": "Demonstrativo Trabalhador",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Conferir se o documento pertence à pessoa",
+            "Conferir se a empresa indicada é a mesma do Portal",
+            "Data da movimentação deve bater com a data de afastamento no TRCT"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Quando o funcionário solicita desligamento, o demonstrativo do FGTS não é gerado — isentar sempre que identificado na carta de desligamento ou no TRCT"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ppp",
+      "nome": "PPP — Perfil Profissiográfico Previdenciário",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Nome do funcionário",
+            "Empresa",
+            "Data de emissão",
+            "Assinatura do funcionário"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "Exclusivo GPF",
+            "Não há necessidade de assinatura ou carimbo por parte do GPF",
+            "Para admissões a partir de 2023, pode ser aprovada declaração substituta"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trct",
+      "nome": "TRCT — Termo de Rescisão do Contrato",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Verificar se é da pessoa desligada",
+            "Verificar se está assinado",
+            "Verificar o saldo a receber",
+            "Confrontar com o comprovante de depósito — TRCT x Comprovante de Pagamento (valores devem fechar)"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "MP/Ciferal/Volare: possível duas testemunhas assinarem na falta da assinatura do funcionário",
+            "GPF: não é necessário solicitar assinatura do empregador, salvo unidades Marcopolo",
+            "Sócio que sai da empresa: desligar do sistema e isentar os docs rescisórios no GT0100",
+            "Funcionário temporário GPF desligado sem assinatura: deve existir justificativa em anexo (e-mail / print do WhatsApp)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "carta_desligamento",
+      "nome": "Carta de Desligamento",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Aplicação",
+          "items": [
+            "Somente para MP/Ciferal/Volare e Roni Chaves — não gerado para todos os contratantes"
+          ]
+        },
+        {
+          "label": "Verificação",
+          "items": [
+            "Conferir se o motivo do desligamento fecha com o informado no TRCT"
+          ]
+        },
+        {
+          "label": "Observações",
+          "items": [
+            "GPF pode anexar prorrogação de experiência no lugar da carta",
+            "GPF pode anexar contrato determinado no lugar da carta, se a data de término coincidir com o desligamento"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fgts_analitico",
+      "nome": "FGTS Extrato Analítico Trabalhador",
+      "periodicidade": "Única",
+      "sections": [
+        {
+          "label": "Verificação",
+          "items": [
+            "Documento precisa ser do colaborador",
+            "Constar depósitos recentes"
+          ]
+        }
+      ]
+    }
+  ],
+  "geral": [
+    {
+      "id": "rotinas_operacionais",
+      "nome": "Rotinas Operacionais",
+      "periodicidade": "—",
+      "sections": [
+        {
+          "label": "Rotinas diárias",
+          "items": [
+            "Revisar o dashboard do dia anterior todas as manhãs",
+            "Verificar o preenchimento da data de admissão na validação da Ficha Registro",
+            "Identificar as pessoas para quem for solicitar o EAD (quando for solicitado ao contratante)",
+            "Rotina de prorrogar o requisito 53 e 57 para todas as admissões da Minuano e do GPF"
+          ]
+        },
+        {
+          "label": "Inserção de NRs",
+          "items": [
+            "Inserir requisito NR 35 — somente se ASO tiver aptidão para altura",
+            "Inserir requisito NR 18 — somente se já houver NR 35 aprovada",
+            "Ao inserir NR 35 e PEMT: revisar ficha de EPI se possui capacete e cinto de segurança com talabarte em Y (MP / Neo / Volare — aplicar para todos os contratantes)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regras_socio",
+      "nome": "Regras — Sócio",
+      "periodicidade": "—",
+      "sections": [
+        {
+          "label": "Isenções",
+          "items": [
+            "Isentar EPI somente quando não realizar atividades operacionais (documentar via e-mail e assinalar no campo de observações no GT0100)",
+            "Isentar o ASO somente quando não realizar atividades em altura",
+            "Se tiver ASO: a função do ASO é a que deve ser indicada no portal; as possíveis isenções seguem os critérios acima"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regras_por_cliente",
+      "nome": "Regras por Empresa / Cliente",
+      "periodicidade": "—",
+      "sections": [
+        {
+          "label": "Regras específicas",
+          "items": [
+            "Mecamonte — Remover NR12, inserir NR 35 / NR 33",
+            "ASOs Semestrais — DMG / Clean Air / Assmann",
+            "Associados Languiru — EPI 60 dias: manter e isentar do EPI Anual para novos cadastros",
+            "Associados / Cooperados Grupo Prato Feito — Isentar CNH / Contrato Efetivo CLT / EPI / OS",
+            "Supervisores / Associados Grupo Prato Feito — Isentar Cartão Ponto e alterar EPI para anual",
+            "Auxiliar de Cozinha efetivos (Glow Hosp Unimed) — mudar para ASO semestral; manter temporários com ASO anual",
+            "Aprendizes do Grupo Prato Feito — Isentar EPI",
+            "EPI setor de rouparia (Glow Hosp. Unimed) — modificar para anual (isentar 60 dias, desisentar anual)",
+            "EPI Bombeiro Civil do GPF (Unimed) — modificar para anual (isentar 60 dias, desisentar anual)",
+            "Alimentar nas Unidades MP e Neo — não gera cartão ponto se não indicado o turno Alimentar no cadastro",
+            "Alimentares Unidades Alliance — periodicidades do PGR e PCMSO alteradas para anuais"
+          ]
+        },
+        {
+          "label": "Cartão Ponto",
+          "items": [
+            "Pessoas afastadas ou em férias: podem ser aprovados sem assinatura",
+            "Demais: cobrar assinaturas (em caso de ausência, pode aprovar — rever)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "auditoria_sistema",
+      "nome": "Auditoria de Sistema",
+      "periodicidade": "—",
+      "sections": [
+        {
+          "label": "Ao validar PGR e PCMSO — revisar",
+          "items": [
+            "Ficha Registro: bate com a função, CNPJ e está no PGR",
+            "ASO: data certa no portal (clínico) e apto com nome e funções corretas",
+            "Ficha de EPI: nome da pessoa e da empresa + datas certas no portal + CA e assinaturas nas entregas",
+            "Rever os treinamentos existentes (reanalisar um a um)",
+            "Verificar se os requisitos padrões estão corretos para cada função"
+          ]
+        },
+        {
+          "label": "APR MP / NEO",
+          "items": [
+            "Receber por e-mail e salvar na pasta para todos visualizarem",
+            "Atentar para prorrogação de prazos (se solicitado, analisar cada entrega antes de prorrogar)"
+          ]
+        },
+        {
+          "label": "Notificações",
+          "items": [
+            "Receber e comunicar os prestadores",
+            "Verificar a data de prazo; se necessário, ajustar"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "definicoes_pls",
+      "nome": "Definições PLS — Aprovação no Portal",
+      "periodicidade": "—",
+      "sections": [
+        {
+          "label": "OS (NR 01)",
+          "items": [
+            "Indicação da empresa (razão social ou CNPJ)",
+            "Indicação do nome e assinatura do funcionário",
+            "Indicação da função (conforme docs do funcionário)",
+            "Indicação de data do treinamento",
+            "Identificação e qualificação do instrutor (não precisa pertencer à área de SST; assinatura não obrigatória)",
+            "Não é necessário bater riscos com o PGR"
+          ]
+        },
+        {
+          "label": "NR 06",
+          "items": [
+            "Pode ser integralmente em EAD"
+          ]
+        },
+        {
+          "label": "NR 12 e NR 22 — Sondagem (Energold / Foraco)",
+          "items": [
+            "NR 12: pode ser online, carga horária mínima de 8h",
+            "NR 12: treinamento deve ser embasado nas ferramentas da operação de Sonda",
+            "NR 22: nome e assinatura do funcionário",
+            "NR 22: data do treinamento",
+            "NR 22: identificação, qualificação e assinatura do instrutor",
+            "NR 22: responsável técnico com qualificação legal (eng. minas / mineração / eng. segurança do trabalho) — item 2.4",
+            "NR 22: carga horária mínima 16h (mineração a céu aberto); reciclagem de 8h",
+            "NR 22: conteúdo programático obrigatório (item 2.2.1)",
+            "NR 22: treinamento pode ser 100% EAD, semipresencial ou presencial"
+          ]
+        },
+        {
+          "label": "EPI — Vigilantes",
+          "items": [
+            "Ficha de EPI dos vigilantes pode considerar data de entrega do último uniforme (não necessariamente com CA). Inclusive para Protesul"
+          ]
+        }
+      ]
+    }
+  ],
   "nrs": [
     {
       "origem": "NR 05",

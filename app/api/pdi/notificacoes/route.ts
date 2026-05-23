@@ -4,14 +4,15 @@ import { createAdminClient } from '../../../lib/supabase-admin'
 export async function GET() {
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
-  if (!user) return Response.json({ count: 0 })
+  if (!user) return Response.json({ count: 0, pdiId: null })
 
   const admin = createAdminClient()
-  const { count } = await admin
+  const { data, count } = await admin
     .from('pdi_notificacoes')
-    .select('*', { count: 'exact', head: true })
+    .select('pdi_id', { count: 'exact' })
     .eq('colaborador_id', user.id)
     .eq('visto', false)
+    .limit(1)
 
-  return Response.json({ count: count ?? 0 })
+  return Response.json({ count: count ?? 0, pdiId: data?.[0]?.pdi_id ?? null })
 }

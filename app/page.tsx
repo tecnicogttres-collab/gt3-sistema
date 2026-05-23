@@ -7,6 +7,7 @@ import PdiCard from './components/PdiCard'
 import { useUser } from './components/UserContext'
 import type { Role } from './lib/modules'
 import DashboardSidebar from './dashboard/DashboardSidebar'
+import QuoteBanner from './components/QuoteBanner'
 
 export default function DashboardPage() {
   const { profile, loading } = useUser()
@@ -40,6 +41,7 @@ export default function DashboardPage() {
   const showPdi = !!pdi && (pdi.dashboardRoles ?? pdi.allowedRoles).includes(role)
 
   return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
       {/* Main content */}
       <div style={{ flex: 1, minWidth: 0, maxWidth: 960 }}>
@@ -90,6 +92,8 @@ export default function DashboardPage() {
 
       {/* Right panel */}
       <DashboardSidebar />
+    </div>
+    <QuoteBanner />
     </div>
   )
 }

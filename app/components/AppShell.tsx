@@ -9,7 +9,6 @@ import { useUser } from './UserContext'
 import { createClient } from '../lib/supabase'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
-import PdiConversaNotificacao from './PdiConversaNotificacao'
 
 function useBreadcrumb(pathname: string): string {
   if (pathname === '/') return 'Dashboard'
@@ -69,7 +68,34 @@ function dismissBanner(ataId: string, userId: string) {
 
 // ─── PDI Conversa helpers ─────────────────────────────────────────────────────
 
-type PdiConversaAviso = { id: string; ciclo_id: string; data_conversa: string }
+type PdiConversaBanner = { cicloId: string; pdiId: string; dataConversa: string }
+type PdiNotifBanner = { pdiId: string }
+
+function pdiConversaDismissKey(userId: string) { return `pdi_conversa_dismissed_${userId}` }
+// Armazena { [cicloId]: dataConversa } — invalida automaticamente ao reagendar
+function getPdiConversaDismissed(userId: string): Record<string, string> {
+  try { return JSON.parse(sessionStorage.getItem(pdiConversaDismissKey(userId)) ?? '{}') } catch { return {} }
+}
+function dismissPdiConversaBannerStorage(cicloId: string, dataConversa: string, userId: string) {
+  try {
+    const dismissed = getPdiConversaDismissed(userId)
+    dismissed[cicloId] = dataConversa
+    sessionStorage.setItem(pdiConversaDismissKey(userId), JSON.stringify(dismissed))
+  } catch { /* noop */ }
+}
+
+function pdiNotifDismissKey(userId: string) { return `pdi_notif_dismissed_${userId}` }
+function getPdiNotifDismissed(userId: string): string[] {
+  try { return JSON.parse(sessionStorage.getItem(pdiNotifDismissKey(userId)) ?? '[]') } catch { return [] }
+}
+function dismissPdiNotifStorage(pdiId: string, userId: string) {
+  try {
+    const dismissed = getPdiNotifDismissed(userId)
+    if (!dismissed.includes(pdiId)) {
+      sessionStorage.setItem(pdiNotifDismissKey(userId), JSON.stringify([...dismissed, pdiId]))
+    }
+  } catch { /* noop */ }
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -78,7 +104,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
-  const [pdiConversaQueue, setPdiConversaQueue] = useState<PdiConversaAviso[]>([])
+  const [pdiConversaBanner, setPdiConversaBanner] = useState<PdiConversaBanner | null>(null)
+  const [pdiNotifBanner, setPdiNotifBanner] = useState<PdiNotifBanner | null>(null)
   const pathname = usePathname()
   const breadcrumb = useBreadcrumb(pathname)
   const { profile, loading } = useUser()
@@ -131,22 +158,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     async function checkUnseenPdiConversa() {
       if (!isColabOrTrainee) return
       try {
-        const { data } = await supabase
-          .from('pdi_ciclos')
-          .select('id, data_conversa')
-          .eq('colaborador_id', userId)
-          .not('data_conversa', 'is', null)
-          .is('conversa_confirmada_em', null)
-        if (!mounted || !data) return
-        const pending = (data as { id: string; data_conversa: string }[])
-          .map(r => ({ id: r.id, ciclo_id: r.id, data_conversa: r.data_conversa }))
-        if (pending.length > 0) setPdiConversaQueue(pending)
+        const res = await fetch('/api/pdi/conversa-pendente')
+        if (!mounted || !res.ok) return
+        const row = await res.json() as { cicloId: string; pdiId: string; dataConversa: string } | null
+        if (!row) { if (mounted) setPdiConversaBanner(null); return }
+        const dismissed = getPdiConversaDismissed(userId)
+        if (dismissed[row.cicloId] !== row.dataConversa) {
+          setPdiConversaBanner(row)
+        }
+      } catch { /* noop */ }
+    }
+
+    async function checkPdiNotif() {
+      if (!isColabOrTrainee) return
+      try {
+        const res = await fetch('/api/pdi/notificacoes')
+        if (!mounted || !res.ok) return
+        const { count, pdiId } = await res.json() as { count: number; pdiId: string | null }
+        if (count > 0 && pdiId) {
+          const dismissed = getPdiNotifDismissed(userId)
+          if (!dismissed.includes(pdiId)) setPdiNotifBanner({ pdiId })
+        }
       } catch { /* noop */ }
     }
 
     checkUnseenPrio()
     checkUnseenAtas()
     checkUnseenPdiConversa()
+    checkPdiNotif()
+
+    const pollTimer = setInterval(() => {
+      checkUnseenPdiConversa()
+      checkPdiNotif()
+    }, 30_000)
 
     const channel = supabase
       .channel(`global-notif-${userId}`)
@@ -178,20 +222,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         }
       )
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'pdi_conversa_avisos', filter: `colaborador_id=eq.${userId}` },
+        { event: 'UPDATE', schema: 'public', table: 'pdi_ciclos' },
         (payload) => {
           if (!isColabOrTrainee) return
-          const r = payload.new as { id: string; ciclo_id: string; data_conversa: string }
-          if (!r?.ciclo_id) return
-          setPdiConversaQueue(prev =>
-            prev.some(p => p.ciclo_id === r.ciclo_id) ? prev : [...prev, { id: r.id, ciclo_id: r.ciclo_id, data_conversa: r.data_conversa }]
-          )
+          const anterior = payload.old as { data_conversa?: string | null }
+          const atual = payload.new as { id: string; pdi_id: string; data_conversa?: string | null }
+          if (!anterior.data_conversa && atual.data_conversa) {
+            const dismissed = getPdiConversaDismissed(userId)
+            if (!dismissed.includes(atual.id)) {
+              setPdiConversaBanner({ cicloId: atual.id, pdiId: atual.pdi_id, dataConversa: atual.data_conversa! })
+            }
+          }
         }
       )
       .subscribe()
 
     return () => {
       mounted = false
+      clearInterval(pollTimer)
       supabase.removeChannel(channel)
     }
   }, [profile, isColabOrTrainee])
@@ -228,26 +276,53 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push(`/atas?ata=${ataId}`)
   }
 
-  async function confirmPdiConversa() {
-    const top = pdiConversaQueue[0]
-    if (!top) return
-    setPdiConversaQueue(prev => prev.slice(1))
+  async function handleVerPdi() {
+    if (!pdiConversaBanner) return
+    const { cicloId, pdiId, dataConversa } = pdiConversaBanner
+    setPdiConversaBanner(null)
+    if (profile) dismissPdiConversaBannerStorage(cicloId, dataConversa, profile.id)
     try {
-      await fetch(`/api/pdi/ciclos/${top.ciclo_id}/confirmar`, {
+      await fetch(`/api/pdi/ciclos/${cicloId}/confirmar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversa_confirmada_em: new Date().toISOString() }),
       })
     } catch { /* noop */ }
+    router.push(`/pdi/${pdiId}?tab=avaliacoes`)
   }
 
-  // Priority: PDI conversa > prioridade > ata
-  const showPdiConversa = pdiConversaQueue.length > 0
-  const showPrioNotif = !showPdiConversa && prioQueue.length > 0
-  const showAtaNotif = !showPdiConversa && !showPrioNotif && ataQueue.length > 0
+  function dispensarPdiConversa() {
+    if (!pdiConversaBanner || !profile) return
+    dismissPdiConversaBannerStorage(pdiConversaBanner.cicloId, pdiConversaBanner.dataConversa, profile.id)
+    setPdiConversaBanner(null)
+  }
 
-  // Top unread banner: show only if not on /atas page
+  async function handleVerPdiNotif() {
+    if (!pdiNotifBanner) return
+    const { pdiId } = pdiNotifBanner
+    setPdiNotifBanner(null)
+    try {
+      await fetch(`/api/pdi/${pdiId}/notificacoes/vista`, { method: 'POST' })
+    } catch { /* noop */ }
+    router.push(`/pdi/${pdiId}?tab=avaliacoes`)
+  }
+
+  function dispensarPdiNotif() {
+    if (!pdiNotifBanner || !profile) return
+    dismissPdiNotifStorage(pdiNotifBanner.pdiId, profile.id)
+    setPdiNotifBanner(null)
+  }
+
+  const showPrioNotif = prioQueue.length > 0
+  const showAtaNotif = !showPrioNotif && ataQueue.length > 0
+
   const bannerAta = pathname !== '/atas' && isColabOrTrainee && unreadAtas.length > 0 ? unreadAtas[0] : null
+  const bannerPdiConversa = isColabOrTrainee && pdiConversaBanner && !pathname.startsWith('/pdi') ? pdiConversaBanner : null
+  const bannerPdiNotif = isColabOrTrainee && pdiNotifBanner && !pathname.startsWith('/pdi') ? pdiNotifBanner : null
+
+  const dtPdi = bannerPdiConversa ? new Date(bannerPdiConversa.dataConversa) : null
+  const dataPdi = dtPdi?.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const horaPdi = dtPdi?.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
   return (
     <>
@@ -268,6 +343,51 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {papelLabel}
             </span>
           </header>
+
+          {bannerPdiNotif && (
+            <div style={{
+              backgroundColor: '#F0FFF4', borderBottom: '1px solid #6EE7B7',
+              padding: '10px 24px', display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexShrink: 0, gap: 12,
+            }}>
+              <span style={{ fontSize: 13, color: '#065F46' }}>
+                📝 Seu PDI foi atualizado pelo gestor — verifique as notas e ações
+              </span>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={handleVerPdiNotif} style={{
+                  padding: '4px 14px', borderRadius: 6, border: 'none',
+                  background: '#059669', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}>Ver PDI</button>
+                <button onClick={dispensarPdiNotif} style={{
+                  padding: '4px 12px', borderRadius: 6, border: '1px solid #059669',
+                  background: 'transparent', color: '#065F46', fontSize: 12, cursor: 'pointer',
+                }}>Dispensar</button>
+              </div>
+            </div>
+          )}
+
+          {bannerPdiConversa && (
+            <div style={{
+              backgroundColor: '#EBF0FB', borderBottom: '1px solid #93C5FD',
+              padding: '10px 24px', display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexShrink: 0, gap: 12,
+            }}>
+              <span style={{ fontSize: 13, color: '#1A2340' }}>
+                📅 Conversa de PDI agendada para <strong>{dataPdi} às {horaPdi}</strong>
+                {' — '}preencha sua autoavaliação antes da conversa
+              </span>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={handleVerPdi} style={{
+                  padding: '4px 14px', borderRadius: 6, border: 'none',
+                  background: '#2A4F96', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}>Ver PDI</button>
+                <button onClick={dispensarPdiConversa} style={{
+                  padding: '4px 12px', borderRadius: 6, border: '1px solid #2A4F96',
+                  background: 'transparent', color: '#1A2340', fontSize: 12, cursor: 'pointer',
+                }}>Dispensar</button>
+              </div>
+            </div>
+          )}
 
           {bannerAta && (
             <div style={{
@@ -324,12 +444,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           titulo={ataQueue[0].titulo}
           onLerAgora={handleLerAgora}
           onVerDepois={() => dismissTopAta(true)}
-        />
-      )}
-      {showPdiConversa && (
-        <PdiConversaNotificacao
-          dataConversa={pdiConversaQueue[0].data_conversa}
-          onCiente={confirmPdiConversa}
         />
       )}
     </>

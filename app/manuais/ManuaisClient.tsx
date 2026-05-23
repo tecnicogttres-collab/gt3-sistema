@@ -10,7 +10,7 @@ type Doc = { id: string; nome: string; periodicidade: string; sections: DocSecti
 type NRRow = { origem: string; treinamento: string; ch: string; periodicidade: string; reciclagem: string; instrutor: string; resp: string }
 type NRObs = { tag: string; texto: string }
 
-type DocTab = 'funcionarios' | 'empresas' | 'veiculos' | 'alimentar' | 'bsa'
+type DocTab = 'funcionarios' | 'empresas' | 'veiculos' | 'alimentar' | 'bsa' | 'rescissorios' | 'geral'
 type TabKey = DocTab | 'nrs'
 
 type ManuaisData = Record<DocTab, Doc[]> & { nrs: NRRow[]; nrsObs: NRObs[] }
@@ -27,6 +27,8 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'veiculos', label: 'Veículos' },
   { key: 'alimentar', label: 'Alimentar' },
   { key: 'bsa', label: 'BSA' },
+  { key: 'rescissorios', label: 'Rescisórios' },
+  { key: 'geral', label: 'Geral' },
 ]
 
 const TAB_TITLES: Record<TabKey, { title: string; sub: string }> = {
@@ -36,9 +38,9 @@ const TAB_TITLES: Record<TabKey, { title: string; sub: string }> = {
   veiculos: { title: 'Manuais — Veículos', sub: 'Documentos relacionados aos veículos' },
   alimentar: { title: 'Manuais — Alimentar', sub: 'Documentos do setor alimentar' },
   bsa: { title: 'Manuais — BSA', sub: 'Documentos BSA' },
+  rescissorios: { title: 'Manuais — Rescisórios', sub: 'Documentos rescisórios — GPF / Marcopolo / Ciferal / Volare' },
+  geral: { title: 'Manuais — Geral', sub: 'Definições e rotinas operacionais' },
 }
-
-const PERIODICIDADES = ['Única', 'Anual', 'Bienal', 'Condicional']
 
 const PILL: Record<string, { bg: string; color: string }> = {
   Anual:       { bg: '#EBF4FF', color: '#2A4F96' },
@@ -63,7 +65,23 @@ function loadData(): ManuaisData {
   if (typeof window === 'undefined') return SEED
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw) as ManuaisData
+      // Migra novas abas que podem não existir em versões anteriores
+      if (!parsed.rescissorios) parsed.rescissorios = JSON.parse(JSON.stringify(SEED.rescissorios))
+      if (!parsed.geral) parsed.geral = JSON.parse(JSON.stringify(SEED.geral))
+      // Alimentar estava vazio — repopula se ainda vazio
+      if (!parsed.alimentar || parsed.alimentar.length === 0) parsed.alimentar = JSON.parse(JSON.stringify(SEED.alimentar))
+      // Merge docs do SEED que ainda não existem no array salvo (por id)
+      const docTabs: DocTab[] = ['funcionarios', 'empresas', 'veiculos', 'alimentar', 'bsa', 'rescissorios', 'geral']
+      for (const tab of docTabs) {
+        const existing = parsed[tab] ?? []
+        const existingIds = new Set(existing.map((d: Doc) => d.id))
+        const missing = (SEED[tab] ?? []).filter((d: Doc) => !existingIds.has(d.id))
+        if (missing.length > 0) parsed[tab] = [...existing, ...JSON.parse(JSON.stringify(missing))]
+      }
+      return parsed
+    }
   } catch {}
   return JSON.parse(JSON.stringify(SEED))
 }
@@ -419,17 +437,15 @@ function DocModal({
               <label style={{ fontSize: 10, fontWeight: 600, color: '#A0AEC0', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: 4 }}>
                 Periodicidade
               </label>
-              <select
+              <input
                 value={doc.periodicidade}
                 onChange={e => onChange(d => ({ ...d, periodicidade: e.target.value }))}
                 style={{
-                  width: '100%', padding: '7px 10px', borderRadius: 8,
+                  width: '100%', padding: '7px 10px', borderRadius: 8, boxSizing: 'border-box',
                   border: '1px solid #CBD5E0', fontSize: 13, background: '#fff',
                   fontFamily: 'inherit', outline: 'none',
                 }}
-              >
-                {PERIODICIDADES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              />
             </div>
             <div>
               <label style={{ fontSize: 10, fontWeight: 600, color: '#A0AEC0', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: 4 }}>
