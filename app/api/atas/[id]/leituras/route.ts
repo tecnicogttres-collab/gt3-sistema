@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     admin.from('atas_leituras')
       .select('user_id, lido_em, leitor:profiles!user_id(nome)')
       .eq('ata_id', ata_id),
-    admin.from('profiles').select('id, nome').neq('papel', 'admin'),
+    admin.from('profiles').select('id, nome').in('papel', ['colaborador', 'trainee']),
   ])
 
   const lidoSet = new Set((leituras ?? []).map((l: { user_id: string }) => l.user_id))

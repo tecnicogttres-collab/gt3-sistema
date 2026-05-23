@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS atas (
   data       DATE NOT NULL,
   status     TEXT NOT NULL DEFAULT 'Rascunho'
                CHECK (status IN ('Rascunho', 'Aguardando Validação', 'Validada')),
-  autor_id   UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  autor_id   UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -20,7 +20,7 @@ ALTER TABLE atas REPLICA IDENTITY FULL;
 CREATE TABLE IF NOT EXISTS atas_leituras (
   id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ata_id  UUID NOT NULL REFERENCES atas(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   lido_em TIMESTAMPTZ DEFAULT now(),
   UNIQUE (ata_id, user_id)
 );
