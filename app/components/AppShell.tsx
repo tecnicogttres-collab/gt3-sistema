@@ -376,10 +376,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   padding: '4px 14px', borderRadius: 6, border: 'none',
                   background: '#059669', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>Ver PDI</button>
-                <button onClick={dispensarPdiNotif} style={{
-                  padding: '4px 12px', borderRadius: 6, border: '1px solid #059669',
-                  background: 'transparent', color: '#065F46', fontSize: 12, cursor: 'pointer',
-                }}>Dispensar</button>
               </div>
             </div>
           )}
@@ -399,10 +395,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   padding: '4px 14px', borderRadius: 6, border: 'none',
                   background: '#2A4F96', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>Ver PDI</button>
-                <button onClick={dispensarPdiConversa} style={{
-                  padding: '4px 12px', borderRadius: 6, border: '1px solid #2A4F96',
-                  background: 'transparent', color: '#1A2340', fontSize: 12, cursor: 'pointer',
-                }}>Dispensar</button>
               </div>
             </div>
           )}
@@ -465,14 +457,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      <div style={{
-        position: 'fixed', bottom: 0,
-        left: collapsed ? 60 : 220,
-        right: 0, zIndex: 100,
-        transition: 'left 0.25s ease',
-      }}>
-        <QuoteBanner />
-      </div>
+      {pathname === '/' && (
+        <div style={{
+          position: 'fixed', bottom: 0,
+          left: collapsed ? 60 : 220,
+          right: 0, zIndex: 100,
+          transition: 'left 0.25s ease',
+        }}>
+          <QuoteBanner />
+        </div>
+      )}
     </>
   )
 }

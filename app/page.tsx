@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const showPdi = !!pdi && (pdi.dashboardRoles ?? pdi.allowedRoles).includes(role)
 
   return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', paddingLeft: 216 }}>
       {/* Main content */}
       <div style={{ flex: 1, minWidth: 0, maxWidth: 960 }}>
         <div style={{ marginBottom: 28 }}>

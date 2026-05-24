@@ -104,6 +104,7 @@ export default function ManuaisClient() {
   const [newDocName, setNewDocName] = useState('')
   const [nrsText, setNrsText] = useState('')
   const [nrsOrigem, setNrsOrigem] = useState('todas')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     setData(loadData())
@@ -186,7 +187,7 @@ export default function ManuaisClient() {
         {TABS.map(t => (
           <button
             key={t.key}
-            onClick={() => setActiveTab(t.key)}
+            onClick={() => { setActiveTab(t.key); setSearch('') }}
             style={{
               flex: 1, minWidth: 80, padding: '7px 12px', border: 'none',
               borderRadius: 6, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit',
@@ -201,6 +202,25 @@ export default function ManuaisClient() {
           </button>
         ))}
       </div>
+
+      {/* Search */}
+      {activeTab !== 'nrs' && (
+        <div style={{ marginBottom: 14, flexShrink: 0 }}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar documento…"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              padding: '8px 12px', borderRadius: 8,
+              border: '1.5px solid #E2E8F0', fontSize: 13,
+              fontFamily: 'inherit', outline: 'none', color: '#2D3748',
+              background: '#fff',
+            }}
+          />
+        </div>
+      )}
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -234,7 +254,9 @@ export default function ManuaisClient() {
           />
         ) : (
           <DocGrid
-            docs={data[activeTab as DocTab]}
+            docs={(data[activeTab as DocTab] ?? []).filter(d =>
+              !search || d.nome.toLowerCase().includes(search.toLowerCase())
+            )}
             onOpen={id => openDoc(activeTab as DocTab, id)}
             onAdd={() => { setNewDocName(''); setAddModal(true) }}
           />

@@ -47,7 +47,7 @@ export default function Tabbar() {
         alignItems: 'flex-end',
         backgroundColor: '#fff',
         borderBottom: '1px solid #E2E8F0',
-        paddingLeft: 8,
+        paddingLeft: 240,
         overflowX: 'auto',
         flexShrink: 0,
       }}

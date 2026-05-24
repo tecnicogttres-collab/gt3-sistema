@@ -473,10 +473,10 @@ export default function PrioridadesClient() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                   <button onClick={() => openDetail(p.id)} style={btnSm}>Abrir</button>
                   <button
-                    onClick={() => isGestor && confirmDelete(p.id)}
-                    disabled={!isGestor}
-                    title={!isGestor ? 'Apenas Gestor pode excluir' : undefined}
-                    style={btnSmDanger(!isGestor)}
+                    onClick={() => (isGestor || p.responsavel === userName) && confirmDelete(p.id)}
+                    disabled={!isGestor && p.responsavel !== userName}
+                    title={!isGestor && p.responsavel !== userName ? 'Apenas o responsável ou gestor pode excluir' : undefined}
+                    style={btnSmDanger(!isGestor && p.responsavel !== userName)}
                   >Excluir</button>
                 </div>
               </div>
