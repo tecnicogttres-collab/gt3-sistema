@@ -1,12 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createClient } from '../lib/supabase'
 
-const STORAGE_KEY = 'gt3_frases_diarias_v1'
-const ROTATION_KEY = 'gt3_frases_rotation_v1'
-
-type Quote = { id: string; text: string; author: string; active: boolean }
-type Rotation = { pool: string[]; currentId: string | null; currentDate: string | null }
+type Quote = { id: string; texto: string; autor: string }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -19,29 +16,68 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function getQuoteOfDay(): Quote | null {
+async function fetchOrCreateTodayQuote(): Promise<Quote | null> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const rotRaw = localStorage.getItem(ROTATION_KEY)
-    if (!raw) return null
-    const quotes: Quote[] = JSON.parse(raw)
-    const rotation: Rotation = rotRaw ? JSON.parse(rotRaw) : { pool: [], currentId: null, currentDate: null }
+    const supabase = createClient()
     const today = todayStr()
-    const active = quotes.filter(q => q.active)
-    if (active.length === 0) return null
 
-    if (rotation.currentDate === today && rotation.currentId) {
-      const q = active.find(x => x.id === rotation.currentId)
-      if (q) return q
+    // 1. Check if today's rotation entry exists
+    const { data: entry } = await supabase
+      .from('frases_rotacao')
+      .select('frase_id')
+      .eq('data', today)
+      .maybeSingle()
+
+    if (entry?.frase_id) {
+      const { data: frase } = await supabase
+        .from('frases')
+        .select('id, texto, autor')
+        .eq('id', entry.frase_id)
+        .eq('ativo', true)
+        .maybeSingle()
+      if (frase) return frase
     }
 
-    const activeIds = active.map(q => q.id)
-    let pool = rotation.pool.filter(id => activeIds.includes(id))
-    if (pool.length === 0) pool = shuffle(activeIds)
-    const [nextId, ...rest] = pool
-    const newRotation: Rotation = { pool: rest, currentId: nextId, currentDate: today }
-    localStorage.setItem(ROTATION_KEY, JSON.stringify(newRotation))
-    return active.find(x => x.id === nextId) ?? null
+    // 2. No entry or the quote is now inactive — pick a new one
+    const { data: active } = await supabase
+      .from('frases')
+      .select('id, texto, autor')
+      .eq('ativo', true)
+    if (!active?.length) return null
+
+    // Pool-based: skip frases already used in the last full cycle
+    const { data: recent } = await supabase
+      .from('frases_rotacao')
+      .select('frase_id')
+      .order('data', { ascending: false })
+      .limit(active.length)
+    const usedIds = new Set((recent ?? []).map(r => r.frase_id))
+    const pool = active.filter(f => !usedIds.has(f.id))
+    const candidates = pool.length > 0 ? pool : shuffle(active)
+    const picked = candidates[Math.floor(Math.random() * candidates.length)]
+
+    // Upsert — ignoreDuplicates so concurrent users don't override each other
+    await supabase.from('frases_rotacao').upsert(
+      { data: today, frase_id: picked.id },
+      { onConflict: 'data', ignoreDuplicates: true }
+    )
+
+    // Re-query to get the actual winner (may differ from picked if race occurred)
+    const { data: winner } = await supabase
+      .from('frases_rotacao')
+      .select('frase_id')
+      .eq('data', today)
+      .maybeSingle()
+
+    if (winner?.frase_id && winner.frase_id !== picked.id) {
+      const { data: winnerFrase } = await supabase
+        .from('frases')
+        .select('id, texto, autor')
+        .eq('id', winner.frase_id)
+        .maybeSingle()
+      return winnerFrase ?? picked
+    }
+    return picked
   } catch {
     return null
   }
@@ -51,7 +87,7 @@ export default function QuoteBanner() {
   const [quote, setQuote] = useState<Quote | null>(null)
 
   useEffect(() => {
-    setQuote(getQuoteOfDay())
+    void fetchOrCreateTodayQuote().then(setQuote)
   }, [])
 
   if (!quote) return null
@@ -74,16 +110,16 @@ export default function QuoteBanner() {
           color: '#fff',
           fontStyle: 'italic',
         }}>
-          {quote.text}
+          {quote.texto}
         </p>
-        {quote.author && (
+        {quote.autor && (
           <p style={{
             margin: '6px 0 0',
             fontSize: 12,
             color: 'rgba(255,255,255,0.65)',
             fontStyle: 'normal',
           }}>
-            — {quote.author}
+            — {quote.autor}
           </p>
         )}
       </div>

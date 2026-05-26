@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { createClient } from '../lib/supabase'
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
@@ -10,8 +11,6 @@ const MUTED = '#6B7A99'
 const INK = '#1E253D'
 const DANGER = '#DC2626'
 const DANGER_LIGHT = '#FEF2F2'
-
-const STORAGE_KEY = 'gt3_email_templates_v1'
 
 const CATEGORIES = ['Onboarding', 'Documentação', 'Cobrança', 'Auditoria', 'Conformidade', 'Outros']
 
@@ -38,15 +37,30 @@ const MODAL_INIT: ModalState = {
 
 function uid() { return 't_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7) }
 
-function load(): Template[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-function save(templates: Template[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(templates)) } catch { /* ignore */ }
+function rowToTemplate(row: {
+  id: string
+  title: string
+  client: string
+  category: string
+  subject: string
+  tags: unknown
+  notes: string
+  file: unknown
+  created_at: string
+  updated_at: string
+}): Template {
+  return {
+    id: row.id,
+    title: row.title,
+    client: row.client,
+    category: row.category,
+    subject: row.subject,
+    tags: (row.tags as string[]) ?? [],
+    notes: row.notes,
+    file: (row.file as FileData | null) ?? null,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  }
 }
 
 function formatDate(ts: number) {
@@ -58,6 +72,7 @@ function escapeHtml(s: string) {
 }
 
 export default function EmailsClient() {
+  const [loading, setLoading] = useState(true)
   const [templates, setTemplates] = useState<Template[]>([])
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [search, setSearch] = useState('')
@@ -67,15 +82,27 @@ export default function EmailsClient() {
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setTemplates(load()) }, [])
+  useEffect(() => {
+    const supabase = createClient()
+    let cancelled = false
+    supabase
+      .from('email_templates')
+      .select('id, title, client, category, subject, tags, notes, file, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) console.error('Erro ao carregar templates:', error)
+        setTemplates((data ?? []).map(rowToTemplate))
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
 
   function showToast(msg: string) {
     if (toastRef.current) clearTimeout(toastRef.current)
     setToast({ msg, show: true })
     toastRef.current = setTimeout(() => setToast(t => ({ ...t, show: false })), 2400)
   }
-
-  function persist(t: Template[]) { setTemplates(t); save(t) }
 
   function openModal(id?: string) {
     if (id) {
@@ -111,34 +138,70 @@ export default function EmailsClient() {
     reader.readAsDataURL(file)
   }
 
-  function saveTemplate() {
+  async function saveTemplate() {
     const { title, client, category, subject, tags, notes, file, editId } = modal
     if (!title.trim() || !client.trim()) { showToast('Preencha título e cliente'); return }
     if (!file && !editId) { showToast('Anexe o arquivo .msg'); return }
 
-    const tpl: Template = {
-      id: editId || uid(),
-      title: title.trim(),
-      client: client.trim(),
-      category,
-      subject: subject.trim(),
-      tags: tags.split(',').map(s => s.trim()).filter(Boolean),
-      notes: notes.trim(),
-      file,
-      createdAt: editId ? (templates.find(x => x.id === editId)?.createdAt ?? Date.now()) : Date.now(),
-      updatedAt: Date.now(),
-    }
+    const supabase = createClient()
+    const now = Date.now()
 
-    const updated = editId ? templates.map(x => x.id === editId ? tpl : x) : [...templates, tpl]
-    persist(updated)
-    closeModal()
-    showToast(editId ? 'Template atualizado' : 'Template salvo')
+    if (editId) {
+      const payload = {
+        title: title.trim(),
+        client: client.trim(),
+        category,
+        subject: subject.trim(),
+        tags: tags.split(',').map(s => s.trim()).filter(Boolean),
+        notes: notes.trim(),
+        ...(file !== templates.find(x => x.id === editId)?.file ? { file } : {}),
+      }
+      const optimistic = templates.map(x =>
+        x.id === editId ? { ...x, ...payload, tags: payload.tags, updatedAt: now } : x
+      )
+      setTemplates(optimistic)
+      closeModal()
+      showToast('Template atualizado')
+      const { error } = await supabase.from('email_templates').update(payload).eq('id', editId)
+      if (error) console.error('Erro ao atualizar template:', error)
+    } else {
+      const id = uid()
+      const tpl: Template = {
+        id,
+        title: title.trim(),
+        client: client.trim(),
+        category,
+        subject: subject.trim(),
+        tags: tags.split(',').map(s => s.trim()).filter(Boolean),
+        notes: notes.trim(),
+        file,
+        createdAt: now,
+        updatedAt: now,
+      }
+      setTemplates(prev => [tpl, ...prev])
+      closeModal()
+      showToast('Template salvo')
+      const { error } = await supabase.from('email_templates').insert({
+        id: tpl.id,
+        title: tpl.title,
+        client: tpl.client,
+        category: tpl.category,
+        subject: tpl.subject,
+        tags: tpl.tags,
+        notes: tpl.notes,
+        file: tpl.file,
+      })
+      if (error) console.error('Erro ao criar template:', error)
+    }
   }
 
-  function deleteTemplate(id: string) {
+  async function deleteTemplate(id: string) {
     if (!confirm('Excluir este template? Esta ação não pode ser desfeita.')) return
-    persist(templates.filter(x => x.id !== id))
+    setTemplates(prev => prev.filter(x => x.id !== id))
     showToast('Template excluído')
+    const supabase = createClient()
+    const { error } = await supabase.from('email_templates').delete().eq('id', id)
+    if (error) console.error('Erro ao excluir template:', error)
   }
 
   function downloadTemplate(id: string) {
@@ -167,6 +230,14 @@ export default function EmailsClient() {
     clients: new Set(templates.map(t => t.client)).size,
     recent: templates.filter(t => t.createdAt > Date.now() - 7 * 86400000).length,
   }), [templates])
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: MUTED, fontSize: 14 }}>
+        Carregando templates…
+      </div>
+    )
+  }
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 12px', borderRadius: 6, border: `1.5px solid ${BORDER}`,
@@ -252,7 +323,7 @@ export default function EmailsClient() {
               <button onClick={closeModal} style={{ padding: '10px 18px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: '#fff', color: INK, fontSize: 14, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit' }}>
                 Cancelar
               </button>
-              <button onClick={saveTemplate} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: ACCENT, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <button onClick={() => void saveTemplate()} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: ACCENT, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Salvar Template
               </button>
             </div>
@@ -345,7 +416,7 @@ export default function EmailsClient() {
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button onClick={() => openModal(t.id)} title="Editar"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: 4, borderRadius: 4, fontSize: 14 }}>✎</button>
-                    <button onClick={() => deleteTemplate(t.id)} title="Excluir"
+                    <button onClick={() => void deleteTemplate(t.id)} title="Excluir"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: DANGER, padding: 4, borderRadius: 4, fontSize: 14 }}>🗑</button>
                   </div>
                 </div>

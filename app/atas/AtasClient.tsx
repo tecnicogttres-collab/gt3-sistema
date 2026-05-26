@@ -246,7 +246,7 @@ export default function AtasClient() {
       if (isColabOrTrainee && ata.status === 'Validada' && !readingRegistered.current.has(id)) {
         readingRegistered.current.add(id)
         fetch(`/api/atas/${id}/leitura`, { method: 'POST' }).catch(() => {})
-        if (profile?.id) markAtaNotifVista(id, profile.id)
+        if (profile?.id) void markAtaNotifVista(id, profile.id)
       }
     } finally {
       setLoadingAta(false)
@@ -326,7 +326,7 @@ export default function AtasClient() {
     if (!selected) return
     // Mark as seen before PATCH so Realtime doesn't trigger own popup
     if (newStatus === 'Validada' && profile?.id) {
-      markAtaNotifVista(selected.id, profile.id)
+      void markAtaNotifVista(selected.id, profile.id)
     }
     const res = await fetch(`/api/atas/${selected.id}`, {
       method: 'PATCH',

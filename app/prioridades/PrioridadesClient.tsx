@@ -222,7 +222,7 @@ export default function PrioridadesClient() {
         .select('id')
         .single()
       if (aviso?.id && profile?.id) {
-        markPrioridadeVista(aviso.id, profile.id)
+        void markPrioridadeVista(aviso.id, profile.id)
       }
     } catch { /* noop */ }
   }

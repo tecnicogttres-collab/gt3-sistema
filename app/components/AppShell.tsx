@@ -28,14 +28,11 @@ const PAPEL_LABELS: Record<string, string> = {
 
 type PrioridadeNotif = { id: string; empresa: string }
 
-function prioKey(userId: string) { return `prioridades_vistas_${userId}` }
-function getPrioSeenIds(userId: string): string[] {
-  try { return JSON.parse(localStorage.getItem(prioKey(userId)) ?? '[]') } catch { return [] }
-}
-export function markPrioridadeVista(id: string, userId: string) {
+export async function markPrioridadeVista(id: string, userId: string) {
   try {
-    const seen = getPrioSeenIds(userId)
-    if (!seen.includes(id)) localStorage.setItem(prioKey(userId), JSON.stringify([...seen, id]))
+    const supabase = createClient()
+    await supabase.from('prioridades_vistas')
+      .upsert({ aviso_id: id, user_id: userId }, { onConflict: 'aviso_id,user_id', ignoreDuplicates: true })
   } catch { /* noop */ }
 }
 
@@ -43,14 +40,11 @@ export function markPrioridadeVista(id: string, userId: string) {
 
 type AtaNotif = { id: string; data: string; titulo: string | null }
 
-function ataKey(userId: string) { return `atas_notif_vistas_${userId}` }
-function getAtaSeenIds(userId: string): string[] {
-  try { return JSON.parse(localStorage.getItem(ataKey(userId)) ?? '[]') } catch { return [] }
-}
-export function markAtaNotifVista(id: string, userId: string) {
+export async function markAtaNotifVista(id: string, userId: string) {
   try {
-    const seen = getAtaSeenIds(userId)
-    if (!seen.includes(id)) localStorage.setItem(ataKey(userId), JSON.stringify([...seen, id]))
+    const supabase = createClient()
+    await supabase.from('atas_leituras')
+      .upsert({ ata_id: id, user_id: userId }, { onConflict: 'ata_id,user_id', ignoreDuplicates: true })
   } catch { /* noop */ }
 }
 
@@ -120,9 +114,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/atas')
       if (!res.ok) return
       const atas: AtaNotif[] = await res.json()
-      const seen = getAtaSeenIds(userId)
+      const sup = createClient()
+      const { data: leituras } = await sup
+        .from('atas_leituras')
+        .select('ata_id')
+        .eq('user_id', userId)
+      const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
       const dismissed = getBannerDismissed(userId)
-      setUnreadAtas(atas.filter(a => !seen.includes(a.id) && !dismissed.includes(a.id)))
+      setUnreadAtas(atas.filter(a => !seenSet.has(a.id) && !dismissed.includes(a.id)))
     } catch { /* noop */ }
   }, [isColabOrTrainee])
 
@@ -134,10 +133,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     async function checkUnseenPrio() {
       try {
-        const { data } = await supabase.from('prioridades_avisos').select('id, empresa').order('created_at', { ascending: true })
-        if (!mounted || !data) return
-        const seen = getPrioSeenIds(userId)
-        const unseen = (data as PrioridadeNotif[]).filter(r => !seen.includes(r.id))
+        const { data: avisos } = await supabase
+          .from('prioridades_avisos')
+          .select('id, empresa')
+          .order('created_at', { ascending: true })
+        if (!mounted || !avisos) return
+        const { data: vistas } = await supabase
+          .from('prioridades_vistas')
+          .select('aviso_id')
+          .eq('user_id', userId)
+        const seenSet = new Set((vistas ?? []).map(r => r.aviso_id))
+        const unseen = avisos.filter(r => !seenSet.has(r.id))
         if (unseen.length > 0) setPrioQueue(unseen)
       } catch { /* tabela não existe */ }
     }
@@ -148,11 +154,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         const res = await fetch('/api/atas')
         if (!mounted || !res.ok) return
         const atas: AtaNotif[] = await res.json()
-        const seen = getAtaSeenIds(userId)
+        const { data: leituras } = await supabase
+          .from('atas_leituras')
+          .select('ata_id')
+          .eq('user_id', userId)
+        const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
         const dismissed = getBannerDismissed(userId)
-        const unnotified = atas.filter(a => !seen.includes(a.id))
+        const unnotified = atas.filter(a => !seenSet.has(a.id))
         if (unnotified.length > 0) setAtaQueue(unnotified)
-        setUnreadAtas(atas.filter(a => !seen.includes(a.id) && !dismissed.includes(a.id)))
+        setUnreadAtas(atas.filter(a => !seenSet.has(a.id) && !dismissed.includes(a.id)))
       } catch { /* noop */ }
     }
 
@@ -200,10 +210,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         (payload) => {
           const record = payload.new as PrioridadeNotif
           if (!record?.id) return
-          const seen = getPrioSeenIds(userId)
-          if (!seen.includes(record.id)) {
-            setPrioQueue(prev => prev.some(p => p.id === record.id) ? prev : [...prev, record])
-          }
+          setPrioQueue(prev => prev.some(p => p.id === record.id) ? prev : [...prev, record])
         }
       )
       .on('postgres_changes',
@@ -211,15 +218,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         (payload) => {
           const record = payload.new as { id: string; data: string; titulo: string | null; status: string }
           if (record?.status !== 'Validada' || !record?.id) return
-          const seen = getAtaSeenIds(userId)
-          if (!seen.includes(record.id)) {
-            setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
-            setUnreadAtas(prev => {
-              const dismissed = getBannerDismissed(userId)
-              if (prev.some(a => a.id === record.id) || dismissed.includes(record.id)) return prev
-              return [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
-            })
-          }
+          setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
+          setUnreadAtas(prev => {
+            const dismissed = getBannerDismissed(userId)
+            if (prev.some(a => a.id === record.id) || dismissed.includes(record.id)) return prev
+            return [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
+          })
         }
       )
       .on('postgres_changes',
@@ -258,21 +262,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   function dismissTopPrio() {
     const top = prioQueue[0]
     if (!top || !profile) return
-    markPrioridadeVista(top.id, profile.id)
+    void markPrioridadeVista(top.id, profile.id)
     setPrioQueue(prev => prev.slice(1))
   }
 
   function dismissTopAta(markSeen: boolean) {
     const top = ataQueue[0]
     if (!top || !profile) return
-    if (markSeen) markAtaNotifVista(top.id, profile.id)
+    if (markSeen) {
+      void markAtaNotifVista(top.id, profile.id)
+    } else {
+      // "Ver depois" — session-only dismiss so banner doesn't reappear on navigation
+      dismissBanner(top.id, profile.id)
+    }
     setAtaQueue(prev => prev.slice(1))
     setUnreadAtas(prev => prev.filter(a => a.id !== top.id))
   }
 
   function handleLerAgora(ataId: string) {
     if (!profile) return
-    markAtaNotifVista(ataId, profile.id)
+    void markAtaNotifVista(ataId, profile.id)
     dismissTopAta(false)
     router.push(`/atas?ata=${ataId}`)
   }
@@ -453,7 +462,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           data={ataQueue[0].data}
           titulo={ataQueue[0].titulo}
           onLerAgora={handleLerAgora}
-          onVerDepois={() => dismissTopAta(true)}
+          onVerDepois={() => dismissTopAta(false)}
         />
       )}
 
