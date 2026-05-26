@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import seedJson from './seedData.json'
+import { createClient } from '../lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -16,9 +16,6 @@ type TabKey = DocTab | 'nrs'
 type ManuaisData = Record<DocTab, Doc[]> & { nrs: NRRow[]; nrsObs: NRObs[] }
 
 // ── Constants ──────────────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'gt3_manuais_v1'
-const SEED = seedJson as unknown as ManuaisData
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'funcionarios', label: 'Funcionários' },
@@ -59,44 +56,18 @@ function pillStyle(p: string): React.CSSProperties {
   }
 }
 
-// ── Storage ────────────────────────────────────────────────────────────────
-
-function loadData(): ManuaisData {
-  if (typeof window === 'undefined') return SEED
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as ManuaisData
-      // Migra novas abas que podem não existir em versões anteriores
-      if (!parsed.rescissorios) parsed.rescissorios = JSON.parse(JSON.stringify(SEED.rescissorios))
-      if (!parsed.geral) parsed.geral = JSON.parse(JSON.stringify(SEED.geral))
-      // Alimentar estava vazio — repopula se ainda vazio
-      if (!parsed.alimentar || parsed.alimentar.length === 0) parsed.alimentar = JSON.parse(JSON.stringify(SEED.alimentar))
-      // Merge docs do SEED que ainda não existem no array salvo (por id)
-      const docTabs: DocTab[] = ['funcionarios', 'empresas', 'veiculos', 'alimentar', 'bsa', 'rescissorios', 'geral']
-      for (const tab of docTabs) {
-        const existing = parsed[tab] ?? []
-        const existingIds = new Set(existing.map((d: Doc) => d.id))
-        const missing = (SEED[tab] ?? []).filter((d: Doc) => !existingIds.has(d.id))
-        if (missing.length > 0) parsed[tab] = [...existing, ...JSON.parse(JSON.stringify(missing))]
-      }
-      return parsed
-    }
-  } catch {}
-  return JSON.parse(JSON.stringify(SEED))
-}
-
-function saveData(data: ManuaisData) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) } catch {}
-}
-
 function deepCopy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
+
+const EMPTY_DATA: ManuaisData = {
+  funcionarios: [], empresas: [], veiculos: [], alimentar: [],
+  bsa: [], rescissorios: [], geral: [], nrs: [], nrsObs: [],
+}
 
 // ── Main component ─────────────────────────────────────────────────────────
 
 export default function ManuaisClient() {
-  const [hydrated, setHydrated] = useState(false)
-  const [data, setData] = useState<ManuaisData>(SEED)
+  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<ManuaisData>(EMPTY_DATA)
   const [activeTab, setActiveTab] = useState<TabKey>('funcionarios')
   const [modalDoc, setModalDoc] = useState<Doc | null>(null)
   const [modalTab, setModalTab] = useState<DocTab>('funcionarios')
@@ -105,13 +76,65 @@ export default function ManuaisClient() {
   const [nrsText, setNrsText] = useState('')
   const [nrsOrigem, setNrsOrigem] = useState('todas')
   const [search, setSearch] = useState('')
+  const catIdMap = useRef<Record<string, string>>({})
+  const dataRef = useRef<ManuaisData>(EMPTY_DATA)
+  const nrsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => { dataRef.current = data }, [data])
 
   useEffect(() => {
-    setData(loadData())
-    setHydrated(true)
+    const supabase = createClient()
+    let cancelled = false
+    async function load() {
+      const [catsRes, docsRes] = await Promise.all([
+        supabase.from('manuais_categorias').select('id, slug').order('ordem'),
+        supabase.from('manuais_documentos').select('id, categoria_id, titulo, secoes, periodicidade').eq('ativo', true),
+      ])
+      if (cancelled) return
+      if (catsRes.error) console.error('Erro ao carregar categorias:', catsRes.error)
+      if (docsRes.error) console.error('Erro ao carregar documentos:', docsRes.error)
+
+      const idMap: Record<string, string> = {}
+      const slugById: Record<string, string> = {}
+      for (const cat of catsRes.data ?? []) {
+        idMap[cat.slug as string] = cat.id as string
+        slugById[cat.id as string] = cat.slug as string
+      }
+      catIdMap.current = idMap
+
+      const built: ManuaisData = deepCopy(EMPTY_DATA)
+      for (const doc of docsRes.data ?? []) {
+        const slug = slugById[doc.categoria_id as string]
+        if (slug === 'nrs') {
+          const nrsData = doc.secoes as { rows?: NRRow[]; obs?: NRObs[] }
+          built.nrs = nrsData.rows ?? []
+          built.nrsObs = nrsData.obs ?? []
+        } else if (slug && slug in built) {
+          ;(built[slug as DocTab] as Doc[]).push({
+            id: doc.id as string,
+            nome: doc.titulo as string,
+            periodicidade: doc.periodicidade as string,
+            sections: (doc.secoes as DocSection[]) ?? [],
+          })
+        }
+      }
+      setData(built)
+      setLoading(false)
+    }
+    void load()
+    return () => { cancelled = true }
   }, [])
 
-  useEffect(() => { if (hydrated) saveData(data) }, [data, hydrated])
+  function scheduleNrsSave() {
+    if (nrsSaveTimer.current) clearTimeout(nrsSaveTimer.current)
+    nrsSaveTimer.current = setTimeout(async () => {
+      const supabase = createClient()
+      const { error } = await supabase.from('manuais_documentos')
+        .update({ secoes: { rows: dataRef.current.nrs, obs: dataRef.current.nrsObs } })
+        .eq('id', '__nrs__')
+      if (error) console.error('Erro ao salvar NRs:', error)
+    }, 600)
+  }
 
   const updateData = useCallback((updater: (d: ManuaisData) => ManuaisData) => {
     setData(prev => updater(deepCopy(prev)))
@@ -132,6 +155,11 @@ export default function ManuaisClient() {
         ...d,
         [modalTab]: d[modalTab].map((doc: Doc) => doc.id === modalDoc.id ? modalDoc : doc),
       }))
+      const supabase = createClient()
+      void supabase.from('manuais_documentos')
+        .update({ titulo: modalDoc.nome, periodicidade: modalDoc.periodicidade, secoes: modalDoc.sections })
+        .eq('id', modalDoc.id)
+        .then(({ error }) => { if (error) console.error('Erro ao salvar documento:', error) })
     }
     setModalDoc(null)
   }
@@ -142,7 +170,7 @@ export default function ManuaisClient() {
 
   // ── Add doc ──────────────────────────────────────────────────────────────
 
-  function confirmAddDoc() {
+  async function confirmAddDoc() {
     const name = newDocName.trim()
     if (!name) return
     const id = 'doc_' + Date.now()
@@ -154,6 +182,15 @@ export default function ManuaisClient() {
     updateData(d => ({ ...d, [tab]: [...d[tab], newDoc] }))
     setAddModal(false)
     setNewDocName('')
+    const catId = catIdMap.current[tab]
+    if (catId) {
+      const supabase = createClient()
+      const { error } = await supabase.from('manuais_documentos').insert({
+        id: newDoc.id, categoria_id: catId, titulo: newDoc.nome, conteudo: '',
+        secoes: newDoc.sections, periodicidade: newDoc.periodicidade, ativo: true,
+      })
+      if (error) console.error('Erro ao criar documento:', error)
+    }
     setTimeout(() => openDoc(tab, id), 50)
   }
 
@@ -162,11 +199,21 @@ export default function ManuaisClient() {
   function deleteDoc() {
     if (!modalDoc) return
     if (!confirm(`Excluir o documento "${modalDoc.nome}"? Esta ação não pode ser desfeita.`)) return
-    updateData(d => ({ ...d, [modalTab]: d[modalTab].filter((doc: Doc) => doc.id !== modalDoc.id) }))
+    const id = modalDoc.id
+    updateData(d => ({ ...d, [modalTab]: d[modalTab].filter((doc: Doc) => doc.id !== id) }))
     setModalDoc(null)
+    const supabase = createClient()
+    void supabase.from('manuais_documentos').delete().eq('id', id)
+      .then(({ error }) => { if (error) console.error('Erro ao excluir documento:', error) })
   }
 
-  if (!hydrated) return null
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#718096', fontSize: 14 }}>
+        Carregando manuais…
+      </div>
+    )
+  }
 
   const info = TAB_TITLES[activeTab]
 
@@ -232,25 +279,37 @@ export default function ManuaisClient() {
             filterOrigem={nrsOrigem}
             onFilterText={setNrsText}
             onFilterOrigem={setNrsOrigem}
-            onUpdateRow={(idx, field, val) => updateData(d => {
-              d.nrs[idx][field as keyof NRRow] = val; return d
-            })}
+            onUpdateRow={(idx, field, val) => {
+              updateData(d => { d.nrs[idx][field as keyof NRRow] = val; return d })
+              scheduleNrsSave()
+            }}
             onDeleteRow={idx => {
               if (!confirm('Remover esta linha?')) return
               updateData(d => { d.nrs.splice(idx, 1); return d })
+              scheduleNrsSave()
             }}
-            onAddRow={() => updateData(d => {
-              d.nrs.push({ origem: 'NR ?', treinamento: 'Novo treinamento', ch: '—', periodicidade: '—', reciclagem: '—', instrutor: '—', resp: '—' })
-              return d
-            })}
-            onUpdateObs={(idx, field, val) => updateData(d => {
-              d.nrsObs[idx][field as keyof NRObs] = val; return d
-            })}
-            onDeleteObs={idx => updateData(d => { d.nrsObs.splice(idx, 1); return d })}
-            onAddObs={() => updateData(d => {
-              d.nrsObs.push({ tag: 'Nova orientação', texto: 'Descrição da orientação' })
-              return d
-            })}
+            onAddRow={() => {
+              updateData(d => {
+                d.nrs.push({ origem: 'NR ?', treinamento: 'Novo treinamento', ch: '—', periodicidade: '—', reciclagem: '—', instrutor: '—', resp: '—' })
+                return d
+              })
+              scheduleNrsSave()
+            }}
+            onUpdateObs={(idx, field, val) => {
+              updateData(d => { d.nrsObs[idx][field as keyof NRObs] = val; return d })
+              scheduleNrsSave()
+            }}
+            onDeleteObs={idx => {
+              updateData(d => { d.nrsObs.splice(idx, 1); return d })
+              scheduleNrsSave()
+            }}
+            onAddObs={() => {
+              updateData(d => {
+                d.nrsObs.push({ tag: 'Nova orientação', texto: 'Descrição da orientação' })
+                return d
+              })
+              scheduleNrsSave()
+            }}
           />
         ) : (
           <DocGrid
@@ -293,7 +352,7 @@ export default function ManuaisClient() {
               autoFocus
               value={newDocName}
               onChange={e => setNewDocName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') confirmAddDoc() }}
+              onKeyDown={e => { if (e.key === 'Enter') void confirmAddDoc() }}
               placeholder="Nome do documento…"
               style={{
                 width: '100%', boxSizing: 'border-box', padding: '8px 10px',
@@ -302,7 +361,7 @@ export default function ManuaisClient() {
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
               <button onClick={() => setAddModal(false)} style={btnSecondary}>Cancelar</button>
-              <button onClick={confirmAddDoc} style={btnPrimary}>Criar</button>
+              <button onClick={() => void confirmAddDoc()} style={btnPrimary}>Criar</button>
             </div>
           </div>
         </div>

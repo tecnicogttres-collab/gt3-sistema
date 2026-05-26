@@ -27,9 +27,6 @@ type BdayItem = {
   daysLeft: number
 }
 
-// ─── Storage keys (Aniversários ainda em localStorage) ───────────────────────
-
-const ANIV_KEY = 'gt3_aniversarios'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -127,24 +124,34 @@ export default function DashboardSidebar() {
       }
     })()
 
-    // Aniversários — today through today+3 days
-    try {
-      const raw = localStorage.getItem(ANIV_KEY)
-      if (raw) {
-        const data: Record<string, string[]> = JSON.parse(raw)
+    // Aniversários — today through today+3 days (from Supabase)
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const dates = Array.from({ length: 4 }, (_, i) => {
+          const d = new Date(todayYear, todayMonth, todayDay + i)
+          return { dia: d.getDate(), mes: d.getMonth() + 1, offset: i, month0: d.getMonth() }
+        })
+        const months = [...new Set(dates.map(d => d.mes))]
+        const { data } = await supabase
+          .from('aniversarios')
+          .select('nome, dia, mes')
+          .in('mes', months)
+        if (!data) { setBdayItems([]); return }
+        const dateSet = new Map(dates.map(d => [`${d.mes}-${d.dia}`, d]))
         const items: BdayItem[] = []
-        for (let offset = 0; offset <= 3; offset++) {
-          const d = new Date(todayYear, todayMonth, todayDay + offset)
-          const k = bdayKey(d.getMonth(), d.getDate())
-          ;(data[k] ?? []).forEach(name => {
-            items.push({ name, day: d.getDate(), month0: d.getMonth(), daysLeft: offset })
-          })
+        for (const row of data) {
+          const info = dateSet.get(`${row.mes}-${row.dia}`)
+          if (info) {
+            items.push({ name: row.nome as string, day: info.dia, month0: info.month0, daysLeft: info.offset })
+          }
         }
+        items.sort((a, b) => a.daysLeft - b.daysLeft)
         setBdayItems(items)
+      } catch {
+        setBdayItems([])
       }
-    } catch {
-      setBdayItems([])
-    }
+    })()
   }
 
   useEffect(() => {

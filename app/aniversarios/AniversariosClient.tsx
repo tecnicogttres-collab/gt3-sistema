@@ -1,25 +1,25 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '../lib/supabase'
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-const STORAGE_KEY = 'gt3_aniversarios'
 
 type BdayData = Record<string, string[]>
 
-function loadData(): BdayData {
-  if (typeof window === 'undefined') return {}
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }
-  catch { return {} }
-}
-
-function saveData(d: BdayData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(d))
-}
-
 function dateKey(month: number, day: number): string {
   return `${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function rowsToBdayData(rows: { nome: string; dia: number; mes: number }[]): BdayData {
+  const result: BdayData = {}
+  for (const r of rows) {
+    const k = dateKey(r.mes - 1, r.dia)
+    if (!result[k]) result[k] = []
+    result[k].push(r.nome)
+  }
+  return result
 }
 
 function DayCell({
@@ -108,9 +108,16 @@ export default function AniversariosClient() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [inputName, setInputName] = useState('')
 
-  useEffect(() => { setData(loadData()) }, [])
+  const loadAll = useCallback(async () => {
+    const supabase = createClient()
+    const { data: rows, error } = await supabase
+      .from('aniversarios')
+      .select('nome, dia, mes')
+    if (error) { console.error('Erro ao carregar aniversários:', error); return }
+    setData(rowsToBdayData(rows ?? []))
+  }, [])
 
-  const refresh = useCallback(() => { setData(loadData()) }, [])
+  useEffect(() => { void loadAll() }, [loadAll])
 
   const prevMonth = () => {
     if (cm === 0) { setCm(11); setCy(y => y - 1) }
@@ -122,26 +129,45 @@ export default function AniversariosClient() {
     else setCm(m => m + 1)
   }
 
-  const addPerson = () => {
+  const addPerson = async () => {
     const name = inputName.trim()
     if (!name || selectedDay === null) return
     const k = dateKey(cm, selectedDay)
-    const d = loadData()
-    if (!d[k]) d[k] = []
-    if (d[k].includes(name)) return
-    d[k].push(name)
-    saveData(d)
+    if ((data[k] ?? []).includes(name)) return
+    setData(prev => {
+      const next = { ...prev, [k]: [...(prev[k] ?? []), name] }
+      return next
+    })
     setInputName('')
-    refresh()
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('aniversarios')
+      .insert({ nome: name, dia: selectedDay, mes: cm + 1 })
+    if (error) {
+      console.error('Erro ao adicionar aniversário:', error)
+      void loadAll()
+    }
   }
 
-  const removePerson = (k: string, i: number) => {
-    const d = loadData()
-    if (d[k]) {
-      d[k].splice(i, 1)
-      if (d[k].length === 0) delete d[k]
-      saveData(d)
-      refresh()
+  const removePerson = async (k: string, i: number) => {
+    const name = data[k]?.[i]
+    if (!name) return
+    setData(prev => {
+      const next = { ...prev, [k]: (prev[k] ?? []).filter((_, idx) => idx !== i) }
+      if (next[k].length === 0) delete next[k]
+      return next
+    })
+    const [mes, dia] = k.split('-').map(Number)
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('aniversarios')
+      .delete()
+      .eq('nome', name)
+      .eq('mes', mes)
+      .eq('dia', dia)
+    if (error) {
+      console.error('Erro ao remover aniversário:', error)
+      void loadAll()
     }
   }
 
@@ -259,7 +285,7 @@ export default function AniversariosClient() {
       </div>
 
       <p style={{ textAlign: 'center', fontSize: 12, color: '#B0ADA5', marginTop: 12 }}>
-        Os dados ficam salvos neste navegador.
+        Os dados ficam salvos na nuvem e são compartilhados entre todos os usuários.
       </p>
 
       {/* Modal */}
@@ -295,7 +321,7 @@ export default function AniversariosClient() {
                     <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#F4F6FA', borderRadius: 6, marginBottom: 4, fontSize: 13, color: '#1E293B' }}>
                       <span>{name}</span>
                       <button
-                        onClick={() => { if (modalKey) removePerson(modalKey, i) }}
+                        onClick={() => { if (modalKey) void removePerson(modalKey, i) }}
                         title={`Remover ${name}`}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B0ADA5', fontSize: 16, lineHeight: 1, padding: '0 2px' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#E74C3C' }}
@@ -314,7 +340,7 @@ export default function AniversariosClient() {
                   type="text"
                   value={inputName}
                   onChange={e => setInputName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') addPerson() }}
+                  onKeyDown={e => { if (e.key === 'Enter') void addPerson() }}
                   placeholder="Nome completo"
                   maxLength={80}
                   autoComplete="off"
@@ -324,7 +350,7 @@ export default function AniversariosClient() {
                   onBlur={e => { (e.target as HTMLInputElement).style.borderColor = '#E2E8F0' }}
                 />
                 <button
-                  onClick={addPerson}
+                  onClick={() => void addPerson()}
                   style={{ background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E3A6E' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2A4F96' }}

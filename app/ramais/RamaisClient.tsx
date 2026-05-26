@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createClient } from '../lib/supabase'
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
@@ -10,38 +11,16 @@ const INK = '#1E253D'
 const DANGER = '#DC2626'
 const DANGER_LIGHT = '#FEF2F2'
 
-type Ramal = { id: number; nome: string; ramal: string }
+type Ramal = { id: string; nome: string; ramal: string }
 
 type ModalState =
   | { type: 'closed' }
   | { type: 'add-form'; nome: string; ramal: string }
   | { type: 'add-confirm'; nome: string; ramal: string }
-  | { type: 'edit-form'; id: number; nome: string; ramal: string; origNome: string; origRamal: string }
-  | { type: 'edit-confirm'; id: number; nome: string; ramal: string; origNome: string; origRamal: string }
-  | { type: 'delete-view'; id: number; nome: string; ramal: string }
-  | { type: 'delete-confirm'; id: number; nome: string; ramal: string }
-
-const STORAGE_KEY = 'gt3_ramais_v1'
-
-const SEED: Ramal[] = [
-  { id: 1, nome: 'Ana Paula Souza', ramal: '1001' },
-  { id: 2, nome: 'Carlos Menezes', ramal: '1002' },
-  { id: 3, nome: 'Fernanda Lima', ramal: '1003' },
-]
-
-function loadFromStorage(): { items: Ramal[]; nextId: number } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return { items: SEED, nextId: 4 }
-}
-
-function saveToStorage(items: Ramal[], nextId: number) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, nextId }))
-  } catch { /* ignore */ }
-}
+  | { type: 'edit-form'; id: string; nome: string; ramal: string; origNome: string; origRamal: string }
+  | { type: 'edit-confirm'; id: string; nome: string; ramal: string; origNome: string; origRamal: string }
+  | { type: 'delete-view'; id: string; nome: string; ramal: string }
+  | { type: 'delete-confirm'; id: string; nome: string; ramal: string }
 
 function Backdrop({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
@@ -59,23 +38,27 @@ function Backdrop({ onClose, children }: { onClose: () => void; children: React.
 }
 
 export default function RamaisClient() {
+  const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<Ramal[]>([])
-  const [nextId, setNextId] = useState(1)
   const [modal, setModal] = useState<ModalState>({ type: 'closed' })
   const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const data = loadFromStorage()
-    setItems(data.items)
-    setNextId(data.nextId)
+    const supabase = createClient()
+    let cancelled = false
+    supabase
+      .from('ramais')
+      .select('id, nome, numero')
+      .order('nome')
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) console.error('Erro ao carregar ramais:', error)
+        setItems((data ?? []).map(r => ({ id: r.id as string, nome: r.nome as string, ramal: r.numero as string })))
+        setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [])
-
-  function persist(newItems: Ramal[], newNextId: number) {
-    setItems(newItems)
-    setNextId(newNextId)
-    saveToStorage(newItems, newNextId)
-  }
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -85,31 +68,53 @@ export default function RamaisClient() {
 
   function closeModal() { setModal({ type: 'closed' }) }
 
-  function handleAdd() {
+  async function handleAdd() {
     if (modal.type !== 'add-form') return
     if (!modal.nome.trim() || !modal.ramal.trim()) return
-    const newItems = [...items, { id: nextId, nome: modal.nome.trim(), ramal: modal.ramal.trim() }]
-    persist(newItems, nextId + 1)
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('ramais')
+      .insert({ nome: modal.nome.trim(), numero: modal.ramal.trim() })
+      .select('id, nome, numero')
+      .single()
+    if (error) { console.error('Erro ao adicionar ramal:', error); return }
+    setItems(prev => [...prev, { id: data.id as string, nome: data.nome as string, ramal: data.numero as string }]
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
     closeModal()
     showToast('Ramal adicionado com sucesso')
   }
 
-  function handleEdit() {
+  async function handleEdit() {
     if (modal.type !== 'edit-confirm') return
-    const newItems = items.map(r =>
-      r.id === modal.id ? { ...r, nome: modal.nome.trim(), ramal: modal.ramal.trim() } : r
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('ramais')
+      .update({ nome: modal.nome.trim(), numero: modal.ramal.trim() })
+      .eq('id', modal.id)
+    if (error) { console.error('Erro ao editar ramal:', error); return }
+    setItems(prev =>
+      prev.map(r => r.id === modal.id ? { ...r, nome: modal.nome.trim(), ramal: modal.ramal.trim() } : r)
     )
-    persist(newItems, nextId)
     closeModal()
     showToast('Ramal atualizado com sucesso')
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (modal.type !== 'delete-confirm') return
-    const newItems = items.filter(r => r.id !== modal.id)
-    persist(newItems, nextId)
+    const supabase = createClient()
+    const { error } = await supabase.from('ramais').delete().eq('id', modal.id)
+    if (error) { console.error('Erro ao excluir ramal:', error); return }
+    setItems(prev => prev.filter(r => r.id !== modal.id))
     closeModal()
     showToast('Ramal excluído')
+  }
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: MUTED, fontSize: 14 }}>
+        Carregando ramais…
+      </div>
+    )
   }
 
   const inputStyle: React.CSSProperties = {
@@ -184,7 +189,7 @@ export default function RamaisClient() {
                 </div>
                 <ModalFooter>
                   <button style={btnGhost} onClick={() => setModal({ ...modal, type: 'add-form' })}>← Voltar</button>
-                  <button style={btnPrimary} onClick={handleAdd}>✓ Confirmar e salvar</button>
+                  <button style={btnPrimary} onClick={() => void handleAdd()}>✓ Confirmar e salvar</button>
                 </ModalFooter>
               </>
             )}
@@ -243,7 +248,7 @@ export default function RamaisClient() {
                 </div>
                 <ModalFooter>
                   <button style={btnGhost} onClick={() => setModal({ ...modal, type: 'edit-form' })}>← Voltar</button>
-                  <button style={btnPrimary} onClick={handleEdit}>✓ Confirmar alteração</button>
+                  <button style={btnPrimary} onClick={() => void handleEdit()}>✓ Confirmar alteração</button>
                 </ModalFooter>
               </>
             )}
@@ -279,7 +284,7 @@ export default function RamaisClient() {
                 </div>
                 <ModalFooter>
                   <button style={btnGhost} onClick={() => setModal({ ...modal, type: 'delete-view' })}>← Voltar</button>
-                  <button style={btnDanger} onClick={handleDelete}>✕ Confirmar exclusão</button>
+                  <button style={btnDanger} onClick={() => void handleDelete()}>✕ Confirmar exclusão</button>
                 </ModalFooter>
               </>
             )}
