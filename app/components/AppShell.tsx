@@ -10,6 +10,7 @@ import { createClient } from '../lib/supabase'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
 import SugestaoNotificacao from './SugestaoNotificacao'
+import EnqueteNotificacao from './EnqueteNotificacao'
 import QuoteBanner from './QuoteBanner'
 
 function useBreadcrumb(pathname: string): string {
@@ -117,6 +118,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [sugestaoQueue, setSugestaoQueue] = useState<Array<{ id: string }>>([])
+  const [enqueteQueue, setEnqueteQueue] = useState<Array<{ id: string; titulo: string }>>([])
 
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
   const [pdiConversaBanner, setPdiConversaBanner] = useState<PdiConversaBanner | null>(null)
@@ -225,11 +227,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       } catch { /* noop */ }
     }
 
+    async function checkUnseenEnquetes() {
+      try {
+        const res = await fetch('/api/enquetes')
+        if (!mounted || !res.ok) return
+        const data: Array<{ id: string; titulo: string; status: string; ja_votou: boolean }> = await res.json()
+        const pendentes = data.filter(e => e.status === 'active' && !e.ja_votou)
+        if (pendentes.length > 0) setEnqueteQueue(pendentes)
+      } catch { /* noop */ }
+    }
+
     checkUnseenPrio()
     checkUnseenAtas()
     checkUnseenPdiConversa()
     checkPdiNotif()
     checkUnseenSugestoes()
+    checkUnseenEnquetes()
 
     const pollTimer = setInterval(() => {
       checkUnseenPdiConversa()
@@ -266,6 +279,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           const record = payload.new as { id: string }
           if (!record?.id) return
           setSugestaoQueue(prev => prev.some(s => s.id === record.id) ? prev : [...prev, record])
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'enquetes', filter: 'status=eq.active' },
+        (payload) => {
+          const record = payload.new as { id: string; titulo: string; status: string }
+          if (!record?.id || record.status !== 'active') return
+          setEnqueteQueue(prev => prev.some(e => e.id === record.id) ? prev : [...prev, { id: record.id, titulo: record.titulo }])
         }
       )
       .on('postgres_changes',
@@ -380,9 +401,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push('/sugestoes')
   }
 
+  function dismissTopEnquete() {
+    setEnqueteQueue(prev => prev.slice(1))
+  }
+
+  function handleResponderAgora() {
+    setEnqueteQueue(prev => prev.slice(1))
+    router.push('/enquetes')
+  }
+
   const showPrioNotif = prioQueue.length > 0
   const showAtaNotif = !showPrioNotif && ataQueue.length > 0
   const showSugestaoNotif = !showPrioNotif && !showAtaNotif && sugestaoQueue.length > 0
+  const showEnqueteNotif = !showPrioNotif && !showAtaNotif && !showSugestaoNotif && enqueteQueue.length > 0
 
   const bannerAta = pathname !== '/atas' && isColabOrTrainee && unreadAtas.length > 0 ? unreadAtas[0] : null
   const bannerPdiConversa = isColabOrTrainee && pdiConversaBanner && !pathname.startsWith('/pdi') ? pdiConversaBanner : null
@@ -532,6 +563,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <SugestaoNotificacao
           onVerSugestao={handleVerSugestao}
           onVerDepois={dismissTopSugestao}
+        />
+      )}
+      {showEnqueteNotif && (
+        <EnqueteNotificacao
+          titulo={enqueteQueue[0].titulo}
+          onResponderAgora={handleResponderAgora}
+          onVerDepois={dismissTopEnquete}
         />
       )}
 
