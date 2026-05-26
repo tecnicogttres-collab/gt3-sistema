@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createClient } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,12 +27,9 @@ type BdayItem = {
   daysLeft: number
 }
 
-// ─── Storage keys ─────────────────────────────────────────────────────────────
+// ─── Storage keys (Aniversários ainda em localStorage) ───────────────────────
 
-const PRIO_KEY = 'gt3_prioridades_v1'
-const HO_KEY = 'gt3_home_office_v2'
 const ANIV_KEY = 'gt3_aniversarios'
-const BSA_KEY = 'gt3_controle_revisao_v1'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -57,59 +55,77 @@ export default function DashboardSidebar() {
   const [bdayItems, setBdayItems] = useState<BdayItem[]>([])
   const [modalPrio, setModalPrio] = useState<Prioridade | null>(null)
 
+  async function loadPrioridades() {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('prioridades')
+      .select('id, empresa, contratante, responsavel, status_feed')
+      .order('posicao', { ascending: true })
+    if (error) {
+      console.error('Erro ao carregar prioridades no dashboard:', error)
+      setPriorities([])
+    } else {
+      setPriorities(
+        (data ?? []).map(row => ({
+          id: row.id,
+          empresa: row.empresa,
+          contratante: row.contratante,
+          responsavel: row.responsavel,
+          statusFeed: row.status_feed ?? [],
+        }))
+      )
+    }
+  }
+
   function loadData() {
     const today = new Date()
     const todayDay = today.getDate()
     const todayMonth = today.getMonth()
     const todayYear = today.getFullYear()
 
-    // Prioridades
-    try {
-      const raw = localStorage.getItem(PRIO_KEY)
-      setPriorities(raw ? (JSON.parse(raw) ?? []) : [])
-    } catch {
-      setPriorities([])
-    }
-
-    // Home Office — entries for today in the current sheet
-    try {
-      const raw = localStorage.getItem(HO_KEY)
-      if (raw) {
-        const data = JSON.parse(raw)
-        const cur = data.current
-        if (cur && cur.year === todayYear && cur.monthIdx === todayMonth) {
-          const row = cur.rows?.find(
-            (r: { day: number; type: string; entries?: string[] }) =>
-              r.day === todayDay && r.type === 'normal'
+    // Home Office — entries for today: read from Supabase (async, fire-and-forget)
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('home_office_sheets')
+          .select('year, month_idx, rows')
+          .eq('is_current', true)
+          .single()
+        if (data && data.year === todayYear && data.month_idx === todayMonth) {
+          const row = (data.rows as { day: number; type: string; entries?: string[] }[])?.find(
+            r => r.day === todayDay && r.type === 'normal'
           )
           setHoNames(row?.entries?.filter((e: string) => Boolean(e)) ?? [])
         } else {
           setHoNames([])
         }
+      } catch {
+        setHoNames([])
       }
-    } catch {
-      setHoNames([])
-    }
+    })()
 
     // BSA (Controle Revisão) — person assigned for today
-    try {
-      const raw = localStorage.getItem(BSA_KEY)
-      if (raw) {
-        const data = JSON.parse(raw)
-        const cur = data.current
-        if (cur && cur.year === todayYear && cur.monthIdx === todayMonth) {
-          const row = cur.schedule?.find(
-            (r: { day: number; type: string; person?: string }) =>
-              r.day === todayDay && r.type === 'normal'
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('controle_revisao_sheets')
+          .select('year, month_idx, schedule')
+          .eq('is_current', true)
+          .single()
+        if (data && data.year === todayYear && data.month_idx === todayMonth) {
+          const row = (data.schedule as { day: number; type: string; person?: string }[])?.find(
+            r => r.day === todayDay && r.type === 'normal'
           )
           setBsaPerson(row?.person ?? '')
         } else {
           setBsaPerson('')
         }
+      } catch {
+        setBsaPerson('')
       }
-    } catch {
-      setBsaPerson('')
-    }
+    })()
 
     // Aniversários — today through today+3 days
     try {
@@ -132,8 +148,12 @@ export default function DashboardSidebar() {
   }
 
   useEffect(() => {
+    loadPrioridades()
     loadData()
-    const interval = setInterval(loadData, 300_000)
+    const interval = setInterval(() => {
+      void loadPrioridades()
+      loadData()
+    }, 300_000)
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

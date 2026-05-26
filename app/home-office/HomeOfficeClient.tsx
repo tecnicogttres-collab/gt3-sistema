@@ -1,18 +1,18 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type RowType = 'normal' | 'weekend' | 'holiday'
 type Row = { day: number; type: RowType; label: string; entries: string[] }
-type Sheet = { year: number; monthIdx: number; name: string; rows: Row[] }
+// id is set when the sheet comes from Supabase
+type Sheet = { id?: string; year: number; monthIdx: number; name: string; rows: Row[] }
 type HistoryData = Record<number, Record<number, Sheet>>
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'gt3_home_office_v2'
-const STORAGE_KEY_V1 = 'gt3_home_office_v1'
 const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
 const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
 const DEFAULT_PEOPLE = ['Marcio Z', 'Luciane', 'Rodrigo Balem']
@@ -62,33 +62,17 @@ function nextMonthOf(year: number, monthIdx: number) {
   return { year, monthIdx: monthIdx + 1 }
 }
 
-// Migrate a row from v1 format (person: string) to v2 format (entries: string[])
-function migrateRow(r: any): Row {
-  if (Array.isArray(r.entries)) return r as Row
-  return { day: r.day, type: r.type, label: r.label, entries: r.person ? [r.person] : [] }
-}
+// ─── Row → Sheet ──────────────────────────────────────────────────────────────
 
-function migrateSheet(sheet: any): Sheet {
-  return { ...sheet, rows: sheet.rows.map(migrateRow) }
-}
-
-function buildSeedData(): { current: Sheet; history: HistoryData; people: string[] } {
-  const seedMay = buildSheet(2026, 4)
-  seedMay.rows.forEach(r => {
-    if (r.day === 4)  { r.entries = ['Marcio Z'] }
-    if (r.day === 6)  { r.entries = ['Luciane'] }
-    if (r.day === 7)  { r.entries = ['Rodrigo Balem'] }
-    if (r.day === 26) { r.type = 'holiday'; r.label = 'CARAVAGGIO'; r.entries = [] }
-  })
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToSheet(r: any): Sheet {
   return {
-    current: buildSheet(2026, 5),
-    history: { 2026: { 4: seedMay } },
-    people: [...DEFAULT_PEOPLE],
+    id: r.id,
+    year: r.year,
+    monthIdx: r.month_idx,
+    name: monthKey(r.year, r.month_idx),
+    rows: r.rows ?? [],
   }
-}
-
-function saveToStorage(current: Sheet | null, history: HistoryData, people: string[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ current, history, people })) } catch { /* ignore */ }
 }
 
 // ─── Modal: Gerar planilha ────────────────────────────────────────────────────
@@ -362,7 +346,6 @@ function MonthTable({
               )
             }
 
-            // Editable: single <tr> per day, all entries stacked inside PESSOA <td>
             const hasPending = pendingAddDays?.has(row.day) ?? false
             const displayEntries = entries.length === 0 ? [''] : entries
 
@@ -452,72 +435,99 @@ export default function HomeOfficeClient() {
   const [showGenerate, setShowGenerate] = useState(false)
   const [holidayModal, setHolidayModal] = useState<'mark' | 'unmark' | null>(null)
 
-  // Load from localStorage on mount
+  // ── Load from Supabase ──
   useEffect(() => {
-    try {
-      // Try v2 first
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const data = JSON.parse(raw)
-        setCurrent(data.current ? migrateSheet(data.current) : null)
-        const hist: HistoryData = data.history ?? {}
-        const migratedHist: HistoryData = {}
-        for (const yr of Object.keys(hist)) {
-          migratedHist[Number(yr)] = {}
-          for (const mo of Object.keys(hist[Number(yr)])) {
-            migratedHist[Number(yr)][Number(mo)] = migrateSheet(hist[Number(yr)][Number(mo)])
-          }
-        }
-        setHistory(migratedHist)
-        setPeople(data.people ?? [...DEFAULT_PEOPLE])
-      } else {
-        // Try migrating from v1
-        const rawV1 = localStorage.getItem(STORAGE_KEY_V1)
-        if (rawV1) {
-          const data = JSON.parse(rawV1)
-          const cur = data.current ? migrateSheet(data.current) : null
-          const hist: HistoryData = data.history ?? {}
-          const migratedHist: HistoryData = {}
-          for (const yr of Object.keys(hist)) {
-            migratedHist[Number(yr)] = {}
-            for (const mo of Object.keys(hist[Number(yr)])) {
-              migratedHist[Number(yr)][Number(mo)] = migrateSheet(hist[Number(yr)][Number(mo)])
-            }
-          }
-          const ppl = data.people ?? [...DEFAULT_PEOPLE]
-          setCurrent(cur)
-          setHistory(migratedHist)
-          setPeople(ppl)
-          saveToStorage(cur, migratedHist, ppl)
-        } else {
-          const seed = buildSeedData()
-          setCurrent(seed.current)
-          setHistory(seed.history)
-          setPeople(seed.people)
-          saveToStorage(seed.current, seed.history, seed.people)
-        }
+    async function load() {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('home_office_sheets')
+        .select('*')
+        .order('year', { ascending: false })
+        .order('month_idx', { ascending: false })
+
+      if (error) {
+        console.error('Erro ao carregar home office:', error)
+        setHydrated(true)
+        return
       }
-    } catch {
-      const seed = buildSeedData()
-      setCurrent(seed.current)
-      setHistory(seed.history)
-      setPeople(seed.people)
+
+      const sheets = data ?? []
+      const currentRow = sheets.find(s => s.is_current) ?? null
+      if (currentRow) {
+        setCurrent(rowToSheet(currentRow))
+        setPeople(currentRow.people ?? [...DEFAULT_PEOPLE])
+      }
+
+      const hist: HistoryData = {}
+      for (const s of sheets.filter(s => !s.is_current)) {
+        if (!hist[s.year]) hist[s.year] = {}
+        hist[s.year][s.month_idx] = rowToSheet(s)
+      }
+      setHistory(hist)
+      setHydrated(true)
     }
-    setHydrated(true)
+    load()
   }, [])
 
-  const save = useCallback((c: Sheet | null, h: HistoryData, p: string[]) => {
-    setCurrent(c)
-    setHistory(h)
-    setPeople(p)
-    saveToStorage(c, h, p)
+  // ── Persist rows of current sheet ──
+  const saveCurrentRows = useCallback(async (newRows: Row[], optimisticSheet: Sheet) => {
+    setCurrent(optimisticSheet)
+    if (!optimisticSheet.id) return
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('home_office_sheets')
+      .update({ rows: newRows })
+      .eq('id', optimisticSheet.id)
+    if (error) console.error('Erro ao salvar planilha:', error)
   }, [])
+
+  // ── Persist people list ──
+  const savePeople = useCallback(async (newPeople: string[]) => {
+    setPeople(newPeople)
+    if (!current?.id) return
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('home_office_sheets')
+      .update({ people: newPeople })
+      .eq('id', current.id)
+    if (error) console.error('Erro ao salvar equipe:', error)
+  }, [current?.id])
 
   // ── Current tab actions ──────────────────────────────────────────────────
 
-  function handleGenerate(year: number, monthIdx: number) {
-    const sheet = buildSheet(year, monthIdx)
-    save(sheet, history, people)
+  async function handleGenerate(year: number, monthIdx: number) {
+    const newSheet = buildSheet(year, monthIdx)
+    const supabase = createClient()
+
+    // Archive existing current (if any)
+    if (current?.id) {
+      const { error } = await supabase
+        .from('home_office_sheets')
+        .update({ is_current: false })
+        .eq('id', current.id)
+      if (error) { console.error('Erro ao arquivar planilha:', error); return }
+      // Keep old current in history
+      setHistory(prev => {
+        const h = { ...prev }
+        if (!h[current.year]) h[current.year] = {}
+        h[current.year][current.monthIdx] = { ...current, id: current.id }
+        return h
+      })
+    }
+
+    // Insert (or overwrite) new current sheet
+    const { data, error } = await supabase
+      .from('home_office_sheets')
+      .upsert(
+        { year, month_idx: monthIdx, is_current: true, rows: newSheet.rows, people },
+        { onConflict: 'year,month_idx' }
+      )
+      .select()
+      .single()
+
+    if (error) { console.error('Erro ao gerar planilha:', error); return }
+
+    setCurrent(rowToSheet(data))
     setShowGenerate(false)
     setPendingAddDays(new Set())
   }
@@ -534,7 +544,7 @@ export default function HomeOfficeClient() {
       }
       return { ...r, entries: newEntries }
     })
-    save({ ...current, rows }, history, people)
+    void saveCurrentRows(rows, { ...current, rows })
   }
 
   function handleEntryAdd(day: number) {
@@ -548,21 +558,19 @@ export default function HomeOfficeClient() {
       if (r.day !== day) return r
       return { ...r, entries: [...r.entries, person] }
     })
-    save({ ...current, rows }, history, people)
+    void saveCurrentRows(rows, { ...current, rows })
   }
 
   function handleAddPerson(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return
     const name = newPersonInput.trim()
     if (!name || people.includes(name)) return
-    const newPeople = [...people, name]
-    save(current, history, newPeople)
+    void savePeople([...people, name])
     setNewPersonInput('')
   }
 
   function handleRemovePerson(idx: number) {
-    const newPeople = people.filter((_, i) => i !== idx)
-    save(current, history, newPeople)
+    void savePeople(people.filter((_, i) => i !== idx))
   }
 
   function handleMarkHoliday(day: number, name?: string) {
@@ -570,7 +578,7 @@ export default function HomeOfficeClient() {
     const rows = current.rows.map(r =>
       r.day === day ? { ...r, type: 'holiday' as RowType, label: (name || 'FERIADO').toUpperCase(), entries: [] } : r
     )
-    save({ ...current, rows }, history, people)
+    void saveCurrentRows(rows, { ...current, rows })
     setHolidayModal(null)
   }
 
@@ -583,39 +591,83 @@ export default function HomeOfficeClient() {
       if (dow === 0) return { ...r, type: 'weekend' as RowType, label: 'DOM', entries: [] }
       return { ...r, type: 'normal' as RowType, label: '', entries: [] }
     })
-    save({ ...current, rows }, history, people)
+    void saveCurrentRows(rows, { ...current, rows })
     setHolidayModal(null)
   }
 
   function handleReset() {
     if (!current) return
     if (!window.confirm('Limpar todos os preenchimentos do mês vigente?')) return
+    const freshRows = buildSheet(current.year, current.monthIdx).rows
     setPendingAddDays(new Set())
-    save(buildSheet(current.year, current.monthIdx), history, people)
+    void saveCurrentRows(freshRows, { ...current, rows: freshRows })
   }
 
-  function handleFinalize() {
+  async function handleFinalize() {
     if (!current) return
     const label = `${MONTHS_PT[current.monthIdx]} de ${current.year}`
     if (!window.confirm(`Finalizar ${label} e mover para o histórico?\n\nO próximo mês será gerado automaticamente.`)) return
-    const newHistory: HistoryData = JSON.parse(JSON.stringify(history))
-    if (!newHistory[current.year]) newHistory[current.year] = {}
-    newHistory[current.year][current.monthIdx] = JSON.parse(JSON.stringify(current))
+
     const { year: ny, monthIdx: nm } = nextMonthOf(current.year, current.monthIdx)
+    const supabase = createClient()
+
+    // Archive current sheet
+    const { error: archiveErr } = await supabase
+      .from('home_office_sheets')
+      .update({ is_current: false })
+      .eq('id', current.id)
+    if (archiveErr) { console.error('Erro ao finalizar planilha:', archiveErr); return }
+
+    // Insert new current sheet for next month
+    const { data, error: insertErr } = await supabase
+      .from('home_office_sheets')
+      .upsert(
+        { year: ny, month_idx: nm, is_current: true, rows: buildSheet(ny, nm).rows, people },
+        { onConflict: 'year,month_idx' }
+      )
+      .select()
+      .single()
+    if (insertErr) { console.error('Erro ao gerar próximo mês:', insertErr); return }
+
+    const archivedSheet = { ...current }
+    setHistory(prev => {
+      const h = { ...prev }
+      if (!h[current.year]) h[current.year] = {}
+      h[current.year][current.monthIdx] = archivedSheet
+      return h
+    })
+    setCurrent(rowToSheet(data))
+    setPeople(people)
     setPendingAddDays(new Set())
-    save(buildSheet(ny, nm), newHistory, people)
   }
 
   // ── History actions ──────────────────────────────────────────────────────
 
-  function handleDeleteArchived(year: number, month: number) {
+  async function handleDeleteArchived(year: number, month: number) {
     const sheet = history[year]?.[month]
     if (!sheet) return
     if (!window.confirm(`Excluir ${sheet.name} permanentemente do histórico?`)) return
-    const newHistory: HistoryData = JSON.parse(JSON.stringify(history))
-    delete newHistory[year][month]
-    if (Object.keys(newHistory[year]).length === 0) delete newHistory[year]
-    save(current, newHistory, people)
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('home_office_sheets')
+      .delete()
+      .eq('year', year)
+      .eq('month_idx', month)
+      .eq('is_current', false)
+    if (error) { console.error('Erro ao excluir histórico:', error); return }
+
+    setHistory(prev => {
+      const h = { ...prev }
+      const yr = { ...h[year] }
+      delete yr[month]
+      if (Object.keys(yr).length === 0) {
+        delete h[year]
+      } else {
+        h[year] = yr
+      }
+      return h
+    })
     setHistPath({ year: null, month: null })
   }
 
@@ -774,13 +826,11 @@ export default function HomeOfficeClient() {
         const { year, month } = histPath
         const years = Object.keys(history).map(Number).sort((a, b) => b - a)
 
-        // Level 3: viewing a specific month
         if (year !== null && month !== null) {
           const sheet = history[year]?.[month]
           if (!sheet) { setHistPath({ year, month: null }); return null }
           return (
             <>
-              {/* Breadcrumb */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: MUTED, marginBottom: 14 }}>
                 <button onClick={() => setHistPath({ year: null, month: null })} style={{ ...btnSecondary, padding: '4px 8px', fontSize: 13 }}>Histórico</button>
                 <span>/</span>
@@ -808,7 +858,6 @@ export default function HomeOfficeClient() {
           )
         }
 
-        // Level 2: viewing months of a year
         if (year !== null) {
           const months = history[year] ?? {}
           const monthList = Object.keys(months).map(Number).sort((a, b) => a - b)
@@ -848,7 +897,6 @@ export default function HomeOfficeClient() {
           )
         }
 
-        // Level 1: root — list of years
         if (years.length === 0) {
           return (
             <div style={{ padding: '48px 24px', textAlign: 'center', color: MUTED, background: '#F8FAFC', borderRadius: 10, border: `1px solid ${BORDER}` }}>

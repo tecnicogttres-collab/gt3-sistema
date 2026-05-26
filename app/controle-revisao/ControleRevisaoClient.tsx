@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, memo, useRef } from 'react'
+import { createClient } from '../lib/supabase'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,9 @@ type Revision = {
 
 type ScheduleRow = { day: number; type: RowType; label: string; person: string }
 
+// id is set when the sheet comes from Supabase
 type Sheet = {
+  id?: string
   year: number
   monthIdx: number
   name: string
@@ -30,7 +33,6 @@ type HistoryData = Record<number, Record<number, Sheet>>
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'gt3_controle_revisao_v1'
 const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
 const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
 const DEFAULT_PEOPLE = ['Marcio Z', 'Luciane', 'Rodrigo Balem', 'Camila']
@@ -84,27 +86,6 @@ function newRevision(): Revision {
   return { id: uid(), data: todayStr(), documento: '', empresa: '', responsavel: '', inconsistencia: '', resolvido: false }
 }
 
-function buildSeedData(): { current: Sheet; history: HistoryData; people: string[] } {
-  const seed = buildSheet(2026, 4)
-  seed.revisions = [
-    { id: uid(), data: '01/05/2026', empresa: 'BMC INSTALAÇÕES', responsavel: 'Marcio Z', documento: 'ASO', inconsistencia: 'Exames complementares anexados junto ao ASO', resolvido: true },
-    { id: uid(), data: '01/05/2026', empresa: 'MARIANI ESCALANTE', responsavel: 'Marcio Z', documento: 'Ficha Registro', inconsistencia: 'Função difere do ASO', resolvido: false },
-    { id: uid(), data: '02/05/2026', empresa: 'SOUZA MONTAGEM', responsavel: 'Luciane', documento: 'Contrato Social', inconsistencia: 'CNPJ difere do cadastrado', resolvido: false },
-  ]
-  seed.schedule.forEach(r => {
-    if (r.day === 4) r.person = 'Marcio Z'
-    if (r.day === 5) r.person = 'Rodrigo Balem'
-    if (r.day === 6) r.person = 'Luciane'
-    if (r.day === 7) r.person = 'Camila'
-    if (r.day === 26) { r.type = 'holiday'; r.label = 'CARAVAGGIO'; r.person = '' }
-  })
-  return { current: buildSheet(2026, 5), history: { 2026: { 4: seed } }, people: [...DEFAULT_PEOPLE] }
-}
-
-function saveToStorage(current: Sheet | null, history: HistoryData, people: string[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ current, history, people })) } catch { /* ignore */ }
-}
-
 function csvEscape(v: string) {
   const s = String(v ?? '')
   return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
@@ -117,6 +98,20 @@ function downloadFile(name: string, content: string, mime: string) {
   a.href = url; a.download = name
   document.body.appendChild(a); a.click()
   setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 100)
+}
+
+// ─── Row → Sheet ──────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToSheet(r: any): Sheet {
+  return {
+    id: r.id,
+    year: r.year,
+    monthIdx: r.month_idx,
+    name: monthKey(r.year, r.month_idx),
+    revisions: r.revisions ?? [],
+    schedule: r.schedule ?? [],
+  }
 }
 
 // ─── Shared button styles ────────────────────────────────────────────────────
@@ -379,30 +374,63 @@ export default function ControleRevisaoClient() {
   const [showGenerate, setShowGenerate] = useState(false)
   const [holidayModal, setHolidayModal] = useState<'mark' | 'unmark' | null>(null)
 
+  // ── Load from Supabase ──
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const d = JSON.parse(raw)
-        setCurrent(d.current ?? null)
-        setHistory(d.history ?? {})
-        setPeople(d.people ?? [...DEFAULT_PEOPLE])
-      } else {
-        const seed = buildSeedData()
-        setCurrent(seed.current); setHistory(seed.history); setPeople(seed.people)
-        saveToStorage(seed.current, seed.history, seed.people)
+    async function load() {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('controle_revisao_sheets')
+        .select('*')
+        .order('year', { ascending: false })
+        .order('month_idx', { ascending: false })
+
+      if (error) {
+        console.error('Erro ao carregar controle de revisão:', error)
+        setHydrated(true)
+        return
       }
-    } catch {
-      const seed = buildSeedData()
-      setCurrent(seed.current); setHistory(seed.history); setPeople(seed.people)
+
+      const sheets = data ?? []
+      const currentRow = sheets.find(s => s.is_current) ?? null
+      if (currentRow) {
+        setCurrent(rowToSheet(currentRow))
+        setPeople(currentRow.people ?? [...DEFAULT_PEOPLE])
+      }
+
+      const hist: HistoryData = {}
+      for (const s of sheets.filter(s => !s.is_current)) {
+        if (!hist[s.year]) hist[s.year] = {}
+        hist[s.year][s.month_idx] = rowToSheet(s)
+      }
+      setHistory(hist)
+      setHydrated(true)
     }
-    setHydrated(true)
+    load()
   }, [])
 
-  const save = useCallback((c: Sheet | null, h: HistoryData, p: string[]) => {
-    setCurrent(c); setHistory(h); setPeople(p)
-    saveToStorage(c, h, p)
+  // ── Persist current sheet content ──
+  const saveCurrentSheet = useCallback(async (updatedSheet: Sheet) => {
+    setCurrent(updatedSheet)
+    if (!updatedSheet.id) return
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('controle_revisao_sheets')
+      .update({ revisions: updatedSheet.revisions, schedule: updatedSheet.schedule })
+      .eq('id', updatedSheet.id)
+    if (error) console.error('Erro ao salvar planilha:', error)
   }, [])
+
+  // ── Persist people list ──
+  const savePeople = useCallback(async (newPeople: string[]) => {
+    setPeople(newPeople)
+    if (!current?.id) return
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('controle_revisao_sheets')
+      .update({ people: newPeople })
+      .eq('id', current.id)
+    if (error) console.error('Erro ao salvar equipe:', error)
+  }, [current?.id])
 
   // Autocomplete suggestions from all data
   const suggestions = (() => {
@@ -430,15 +458,14 @@ export default function ControleRevisaoClient() {
   function handleAddRevision() {
     if (!current) return
     const rev = newRevision()
-    const updated = { ...current, revisions: [rev, ...current.revisions] }
-    save(updated, history, people)
+    void saveCurrentSheet({ ...current, revisions: [rev, ...current.revisions] })
     setSearch('')
   }
 
   function handleUpdateRevision(id: string, field: keyof Revision, value: string | boolean) {
     if (!current) return
     const revisions = current.revisions.map(r => r.id === id ? { ...r, [field]: value } : r)
-    save({ ...current, revisions }, history, people)
+    void saveCurrentSheet({ ...current, revisions })
   }
 
   function handleDeleteRevision(id: string) {
@@ -447,7 +474,7 @@ export default function ControleRevisaoClient() {
     const desc = rev?.empresa || rev?.responsavel || 'este registro'
     if (!window.confirm(`Excluir: ${desc}?`)) return
     const revisions = current.revisions.filter(r => r.id !== id)
-    save({ ...current, revisions }, history, people)
+    void saveCurrentSheet({ ...current, revisions })
   }
 
   // ── Schedule actions ─────────────────────────────────────────────────────
@@ -455,7 +482,7 @@ export default function ControleRevisaoClient() {
   function handlePersonChange(day: number, person: string) {
     if (!current) return
     const schedule = current.schedule.map(r => r.day === day ? { ...r, person } : r)
-    save({ ...current, schedule }, history, people)
+    void saveCurrentSheet({ ...current, schedule })
   }
 
   function handleMarkHoliday(day: number, name?: string) {
@@ -463,7 +490,7 @@ export default function ControleRevisaoClient() {
     const schedule = current.schedule.map(r =>
       r.day === day ? { ...r, type: 'holiday' as RowType, label: (name || 'FERIADO').toUpperCase(), person: '' } : r
     )
-    save({ ...current, schedule }, history, people)
+    void saveCurrentSheet({ ...current, schedule })
     setHolidayModal(null)
   }
 
@@ -476,42 +503,107 @@ export default function ControleRevisaoClient() {
       if (dow === 0) return { ...r, type: 'weekend' as RowType, label: 'DOM', person: '' }
       return { ...r, type: 'normal' as RowType, label: '', person: '' }
     })
-    save({ ...current, schedule }, history, people)
+    void saveCurrentSheet({ ...current, schedule })
     setHolidayModal(null)
   }
 
   // ── Month actions ────────────────────────────────────────────────────────
 
-  function handleGenerate(year: number, mi: number) {
-    save(buildSheet(year, mi), history, people)
+  async function handleGenerate(year: number, mi: number) {
+    const newSheet = buildSheet(year, mi)
+    const supabase = createClient()
+
+    if (current?.id) {
+      const { error } = await supabase
+        .from('controle_revisao_sheets')
+        .update({ is_current: false })
+        .eq('id', current.id)
+      if (error) { console.error('Erro ao arquivar planilha:', error); return }
+      setHistory(prev => {
+        const h = { ...prev }
+        if (!h[current.year]) h[current.year] = {}
+        h[current.year][current.monthIdx] = { ...current }
+        return h
+      })
+    }
+
+    const { data, error } = await supabase
+      .from('controle_revisao_sheets')
+      .upsert(
+        { year, month_idx: mi, is_current: true, revisions: [], schedule: newSheet.schedule, people },
+        { onConflict: 'year,month_idx' }
+      )
+      .select()
+      .single()
+
+    if (error) { console.error('Erro ao gerar planilha:', error); return }
+    setCurrent(rowToSheet(data))
     setShowGenerate(false)
   }
 
   function handleReset() {
     if (!current) return
     if (!window.confirm('Limpar TODAS as revisões e a escala do mês vigente?\n\nEsta ação não pode ser desfeita.')) return
-    save(buildSheet(current.year, current.monthIdx), history, people)
+    const fresh = buildSheet(current.year, current.monthIdx)
+    void saveCurrentSheet({ ...current, revisions: [], schedule: fresh.schedule })
   }
 
-  function handleFinalize() {
+  async function handleFinalize() {
     if (!current) return
     const label = `${MONTHS_PT[current.monthIdx]} de ${current.year}`
     if (!window.confirm(`Finalizar ${label} e arquivar no histórico?\n\n• ${current.revisions.length} revisão(ões) serão arquivadas.\n• O próximo mês será gerado automaticamente.`)) return
-    const newHistory: HistoryData = JSON.parse(JSON.stringify(history))
-    if (!newHistory[current.year]) newHistory[current.year] = {}
-    newHistory[current.year][current.monthIdx] = JSON.parse(JSON.stringify(current))
+
     const { year: ny, monthIdx: nm } = nextMonthOf(current.year, current.monthIdx)
-    save(buildSheet(ny, nm), newHistory, people)
+    const supabase = createClient()
+
+    const { error: archiveErr } = await supabase
+      .from('controle_revisao_sheets')
+      .update({ is_current: false })
+      .eq('id', current.id)
+    if (archiveErr) { console.error('Erro ao finalizar planilha:', archiveErr); return }
+
+    const nextSheet = buildSheet(ny, nm)
+    const { data, error: insertErr } = await supabase
+      .from('controle_revisao_sheets')
+      .upsert(
+        { year: ny, month_idx: nm, is_current: true, revisions: [], schedule: nextSheet.schedule, people },
+        { onConflict: 'year,month_idx' }
+      )
+      .select()
+      .single()
+    if (insertErr) { console.error('Erro ao gerar próximo mês:', insertErr); return }
+
+    const archivedSheet = { ...current }
+    setHistory(prev => {
+      const h = { ...prev }
+      if (!h[current.year]) h[current.year] = {}
+      h[current.year][current.monthIdx] = archivedSheet
+      return h
+    })
+    setCurrent(rowToSheet(data))
   }
 
-  function handleDeleteArchived(year: number, month: number) {
+  async function handleDeleteArchived(year: number, month: number) {
     const sheet = history[year]?.[month]
     if (!sheet) return
     if (!window.confirm(`Excluir ${sheet.name} permanentemente do histórico?\n\nIsso apagará ${sheet.revisions.length} revisão(ões).`)) return
-    const newHistory: HistoryData = JSON.parse(JSON.stringify(history))
-    delete newHistory[year][month]
-    if (Object.keys(newHistory[year]).length === 0) delete newHistory[year]
-    save(current, newHistory, people)
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('controle_revisao_sheets')
+      .delete()
+      .eq('year', year)
+      .eq('month_idx', month)
+      .eq('is_current', false)
+    if (error) { console.error('Erro ao excluir histórico:', error); return }
+
+    setHistory(prev => {
+      const h = { ...prev }
+      const yr = { ...h[year] }
+      delete yr[month]
+      if (Object.keys(yr).length === 0) { delete h[year] } else { h[year] = yr }
+      return h
+    })
     setHistPath({ year: null, month: null })
   }
 
@@ -521,8 +613,12 @@ export default function ControleRevisaoClient() {
     if (e.key !== 'Enter') return
     const name = newPersonInput.trim()
     if (!name || people.includes(name)) return
-    save(current, history, [...people, name])
+    void savePeople([...people, name])
     setNewPersonInput('')
+  }
+
+  function handleRemovePerson(idx: number) {
+    void savePeople(people.filter((_, i) => i !== idx))
   }
 
   // ── Export ────────────────────────────────────────────────────────────────
@@ -680,7 +776,7 @@ export default function ControleRevisaoClient() {
                 {people.map((p, i) => (
                   <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', padding: '3px 4px 3px 10px', borderRadius: 999, border: `1px solid ${BORDER}` }}>
                     {p}
-                    <button onClick={() => save(current, history, people.filter((_, j) => j !== i))} style={{ border: 'none', background: 'none', padding: '2px 6px', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, lineHeight: 1 }}>×</button>
+                    <button onClick={() => handleRemovePerson(i)} style={{ border: 'none', background: 'none', padding: '2px 6px', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, lineHeight: 1 }}>×</button>
                   </span>
                 ))}
                 <input type="text" value={newPersonInput} onChange={e => setNewPersonInput(e.target.value)} onKeyDown={handleAddPerson} placeholder="+ adicionar (Enter)" style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 13, padding: '4px 8px', minWidth: 160, fontFamily: 'inherit', color: INK }} />

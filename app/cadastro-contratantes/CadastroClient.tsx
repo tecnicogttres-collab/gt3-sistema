@@ -2,56 +2,24 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Company, Field, SEGMENT_COLORS } from './types'
-import seedJson from './seedData.json'
+import { createClient } from '../lib/supabase'
 
-const SEED = seedJson as Company[]
-const STORAGE_KEY = 'gt3_cadastro_v1'
-const FAVS_KEY = 'gt3_cadastro_favs_v1'
-
-function migrateCompanies(companies: Company[]): Company[] {
-  // Detecta tabelas com headers corrompidos (dado de linha embutido no header) e repõe pelo seed
-  return companies.map(c => {
-    const seed = SEED.find(s => s.id === c.id)
-    if (!seed) return c
-    const hasBrokenTable = c.fields.some(
-      f => f.type === 'table' && f.headers.length > 6 && /^\d{3}$/.test(f.headers[2] ?? '')
-    )
-    if (!hasBrokenTable) return c
-    // Repõe campos de tabela pelo seed; mantém campos texto que o usuário possa ter editado
-    const fixedFields = c.fields.map(f => {
-      if (f.type !== 'table') return f
-      const seedField = seed.fields.find(
-        sf => sf.type === 'table' && sf.label.startsWith(f.label.split(' - ')[0])
-      )
-      return seedField ? { ...seedField } : f
-    })
-    return { ...c, fields: fixedFields }
-  })
-}
-
-function loadCompanies(): Company[] {
-  if (typeof window === 'undefined') return SEED
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return migrateCompanies(JSON.parse(raw))
-  } catch {}
-  return SEED.map(c => ({ ...c, fields: c.fields.map(f => ({ ...f })) }))
-}
-
-function loadFavorites(): string[] {
-  try {
-    const raw = localStorage.getItem(FAVS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return []
-}
-
-function saveCompanies(companies: Company[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(companies)) } catch {}
-}
-
-function saveFavorites(favs: string[]) {
-  try { localStorage.setItem(FAVS_KEY, JSON.stringify(favs)) } catch {}
+function rowToCompany(row: {
+  id: string
+  name: string
+  sheet_name: string
+  segment: string
+  updated: string
+  fields: unknown
+}): Company {
+  return {
+    id: row.id,
+    name: row.name,
+    sheetName: row.sheet_name,
+    segment: row.segment,
+    updated: row.updated,
+    fields: (row.fields as Field[]) ?? [],
+  }
 }
 
 function getContactName(c: Company) {
@@ -94,8 +62,8 @@ type EditTextModal = { open: true; idx: number; label: string; value: string } |
 type NewCompanyModal = { open: true; mode: 'create' } | { open: true; mode: 'segment'; currentSeg: string } | { open: false }
 
 export default function CadastroClient() {
-  const [hydrated, setHydrated] = useState(false)
-  const [companies, setCompanies] = useState<Company[]>(SEED)
+  const [loading, setLoading] = useState(true)
+  const [companies, setCompanies] = useState<Company[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -107,13 +75,30 @@ export default function CadastroClient() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    setCompanies(loadCompanies())
-    setFavorites(loadFavorites())
-    setHydrated(true)
-  }, [])
+    const supabase = createClient()
+    let cancelled = false
 
-  useEffect(() => { if (hydrated) saveCompanies(companies) }, [companies, hydrated])
-  useEffect(() => { if (hydrated) saveFavorites(favorites) }, [favorites, hydrated])
+    async function init() {
+      try {
+        const [compRes, favsRes] = await Promise.all([
+          supabase.from('contratantes').select('id, name, sheet_name, segment, updated, fields').order('name'),
+          supabase.from('contratantes_favs').select('company_id'),
+        ])
+        if (cancelled) return
+        if (compRes.error) console.error('Erro ao carregar contratantes:', compRes.error)
+        if (favsRes.error) console.error('Erro ao carregar favoritos:', favsRes.error)
+        setCompanies((compRes.data ?? []).map(rowToCompany))
+        setFavorites((favsRes.data ?? []).map(r => r.company_id))
+      } catch (err) {
+        console.error('Erro ao inicializar cadastro:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void init()
+    return () => { cancelled = true }
+  }, [])
 
   const showToast = useCallback((text: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -132,16 +117,54 @@ export default function CadastroClient() {
     showToast('Copiado: ' + (text.length > 60 ? text.slice(0, 60) + '…' : text))
   }, [showToast])
 
-  const toggleFavorite = useCallback((id: string, e: React.MouseEvent) => {
+  const toggleFavorite = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    setFavorites(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
+    const supabase = createClient()
+    const isFav = favorites.includes(id)
+    setFavorites(prev => isFav ? prev.filter(x => x !== id) : [...prev, id])
+    if (isFav) {
+      const { error } = await supabase
+        .from('contratantes_favs')
+        .delete()
+        .eq('company_id', id)
+      if (error) {
+        console.error('Erro ao remover favorito:', error)
+        setFavorites(prev => [...prev, id])
+      }
+    } else {
+      const { error } = await supabase
+        .from('contratantes_favs')
+        .insert({ company_id: id })
+      if (error) {
+        console.error('Erro ao adicionar favorito:', error)
+        setFavorites(prev => prev.filter(x => x !== id))
+      }
+    }
+  }, [favorites])
+
+  const saveCompanyFields = useCallback(async (id: string, updatedCompany: Company) => {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('contratantes')
+      .update({
+        name: updatedCompany.name,
+        sheet_name: updatedCompany.sheetName,
+        segment: updatedCompany.segment,
+        updated: updatedCompany.updated,
+        fields: updatedCompany.fields,
+      })
+      .eq('id', id)
+    if (error) console.error('Erro ao salvar contratante:', error)
   }, [])
 
   const updateCompany = useCallback((id: string, updater: (c: Company) => Company) => {
-    setCompanies(prev => prev.map(c => c.id === id ? updater({ ...c }) : c))
-  }, [])
+    setCompanies(prev => {
+      const updated = prev.map(c => c.id === id ? updater({ ...c, updated: todayBR() }) : c)
+      const updatedCo = updated.find(c => c.id === id)
+      if (updatedCo) void saveCompanyFields(id, updatedCo)
+      return updated
+    })
+  }, [saveCompanyFields])
 
   const currentCompany = companies.find(c => c.id === currentId) ?? null
   const term = searchTerm.trim().toLowerCase()
@@ -250,7 +273,7 @@ export default function CadastroClient() {
     setNewCompanyModal({ open: true, mode: 'segment', currentSeg: currentCompany.segment })
   }
 
-  const confirmModal = () => {
+  const confirmModal = async () => {
     if (!newCompanyModal.open) return
     if (newCompanyModal.mode === 'create') {
       const name = newCompanyName.trim()
@@ -271,6 +294,16 @@ export default function CadastroClient() {
       }
       setCompanies(prev => [newCo, ...prev])
       setCurrentId(id)
+      const supabase = createClient()
+      const { error } = await supabase.from('contratantes').insert({
+        id: newCo.id,
+        name: newCo.name,
+        sheet_name: newCo.sheetName,
+        segment: newCo.segment,
+        updated: newCo.updated,
+        fields: newCo.fields,
+      })
+      if (error) console.error('Erro ao criar contratante:', error)
     } else {
       if (!currentId) return
       updateCompany(currentId, c => ({ ...c, segment: newCompanySeg }))
@@ -284,15 +317,24 @@ export default function CadastroClient() {
     if (novo && novo.trim()) updateCompany(currentId!, c => ({ ...c, name: novo.trim() }))
   }
 
-  const deleteCompany = () => {
+  const deleteCompany = async () => {
     if (!currentCompany) return
     if (!confirm(`Excluir definitivamente "${currentCompany.name}"?\nEsta ação não pode ser desfeita.`)) return
     setFavorites(prev => prev.filter(id => id !== currentId))
     setCompanies(prev => prev.filter(c => c.id !== currentId))
+    const supabase = createClient()
+    const { error } = await supabase.from('contratantes').delete().eq('id', currentId!)
+    if (error) console.error('Erro ao excluir contratante:', error)
     setCurrentId(null)
   }
 
-  if (!hydrated) return null
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#9CA3AF', fontSize: 14 }}>
+        Carregando contratantes…
+      </div>
+    )
+  }
 
   const totalVisible = matchedCompanies.length
 
@@ -352,7 +394,7 @@ export default function CadastroClient() {
                   isActive={c.id === currentId}
                   isFav={true}
                   onSelect={() => setCurrentId(c.id)}
-                  onToggleFav={e => toggleFavorite(c.id, e)}
+                  onToggleFav={e => void toggleFavorite(c.id, e)}
                 />
               ))}
               {otherCompanies.length > 0 && (
@@ -376,7 +418,7 @@ export default function CadastroClient() {
               isActive={c.id === currentId}
               isFav={false}
               onSelect={() => setCurrentId(c.id)}
-              onToggleFav={e => toggleFavorite(c.id, e)}
+              onToggleFav={e => void toggleFavorite(c.id, e)}
             />
           ))}
         </div>
@@ -429,7 +471,7 @@ export default function CadastroClient() {
             onRemoveTableRow={removeTableRow}
             onRename={renameCompany}
             onChangeSegment={openSegmentModal}
-            onDelete={deleteCompany}
+            onDelete={() => void deleteCompany()}
           />
         )}
       </div>
@@ -492,7 +534,7 @@ export default function CadastroClient() {
                 autoFocus
                 value={newCompanyName}
                 onChange={e => setNewCompanyName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') confirmModal() }}
+                onKeyDown={e => { if (e.key === 'Enter') void confirmModal() }}
                 style={{
                   width: '100%', boxSizing: 'border-box', padding: '8px 10px',
                   borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 13, outline: 'none',
@@ -517,7 +559,7 @@ export default function CadastroClient() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button onClick={() => setNewCompanyModal({ open: false })} style={btnSecondary}>Cancelar</button>
-            <button onClick={confirmModal} style={btnPrimary}>
+            <button onClick={() => void confirmModal()} style={btnPrimary}>
               {newCompanyModal.mode === 'create' ? 'Criar' : 'Mover'}
             </button>
           </div>

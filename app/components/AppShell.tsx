@@ -230,7 +230,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           const atual = payload.new as { id: string; pdi_id: string; data_conversa?: string | null }
           if (!anterior.data_conversa && atual.data_conversa) {
             const dismissed = getPdiConversaDismissed(userId)
-            if (!dismissed.includes(atual.id)) {
+            if (!(atual.id in dismissed)) {
               setPdiConversaBanner({ cicloId: atual.id, pdiId: atual.pdi_id, dataConversa: atual.data_conversa! })
             }
           }

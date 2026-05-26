@@ -34,7 +34,6 @@ type Prioridade = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'gt3_prioridades_v1'
 const EDIT_WINDOW_MS = 15 * 60 * 1000
 
 const C = {
@@ -75,40 +74,20 @@ function fmtRelative(ts: number) {
   return fmtDateTime(ts)
 }
 
-function seedExamples(): Prioridade[] {
-  const now = Date.now()
-  return [
-    {
-      id: uid(),
-      empresa: 'Construtora Horizonte Ltda.',
-      contratante: 'Indústria Metalúrgica Sul S.A.',
-      responsavel: 'Rodrigo Balem',
-      criadoEm: now - 86400000 * 3,
-      atualizadoEm: now - 3600000 * 5,
-      statusFeed: [
-        { id: uid(), autor: 'Rodrigo Balem', data: now - 86400000 * 3, texto: 'PGR vencido há 2 meses. Aguardando envio do novo documento pela construtora.' },
-        { id: uid(), autor: 'Rodrigo Balem', data: now - 3600000 * 5, texto: 'Contato realizado com o responsável técnico. Prometeram envio até sexta-feira.' },
-      ],
-      historico: [
-        { data: now - 86400000 * 3, autor: 'Rodrigo Balem', acao: 'Criou a prioridade' },
-        { data: now - 3600000 * 5, autor: 'Rodrigo Balem', acao: 'Adicionou nova entrada de status' },
-      ],
-    },
-    {
-      id: uid(),
-      empresa: 'Serviços Gerais Vértice ME',
-      contratante: 'Frigorífico Boa Vista',
-      responsavel: 'Rodrigo Balem',
-      criadoEm: now - 86400000,
-      atualizadoEm: now - 86400000,
-      statusFeed: [
-        { id: uid(), autor: 'Rodrigo Balem', data: now - 86400000, texto: 'ASOs de 4 colaboradores pendentes. Empresa solicitou prorrogação de prazo.' },
-      ],
-      historico: [
-        { data: now - 86400000, autor: 'Rodrigo Balem', acao: 'Criou a prioridade' },
-      ],
-    },
-  ]
+// ─── Row → Prioridade ─────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToPrioridade(row: any): Prioridade {
+  return {
+    id: row.id,
+    empresa: row.empresa,
+    contratante: row.contratante,
+    responsavel: row.responsavel,
+    criadoEm: new Date(row.created_at).getTime(),
+    atualizadoEm: new Date(row.updated_at).getTime(),
+    statusFeed: row.status_feed ?? [],
+    historico: row.historico ?? [],
+  }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -145,27 +124,30 @@ export default function PrioridadesClient() {
   // Confirm modal
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmText, setConfirmText] = useState('')
-  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null)
+  const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | null>(null)
 
   // Toast
   const [toastMsg, setToastMsg] = useState('')
   const [toastVisible, setToastVisible] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Persistence ──
+  // ── Load from Supabase ──
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setPriorities(JSON.parse(raw))
-      else setPriorities(seedExamples())
-    } catch {
-      setPriorities(seedExamples())
+    async function load() {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('prioridades')
+        .select('*')
+        .order('posicao', { ascending: true })
+      if (error) {
+        console.error('Erro ao carregar prioridades:', error)
+        setPriorities([])
+      } else {
+        setPriorities((data ?? []).map(rowToPrioridade))
+      }
+      setHydrated(true)
     }
-    setHydrated(true)
-  }, [])
-
-  const save = useCallback((updated: Prioridade[]) => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)) } catch { /* noop */ }
+    load()
   }, [])
 
   // ── Toast ──
@@ -202,33 +184,47 @@ export default function PrioridadesClient() {
     const status = formStatus.trim()
     if (!empresa || !contratante) { toast('Preencha empresa e contratante'); return }
     if (!status) { toast('Adicione um status inicial'); return }
+
     const now = Date.now()
-    const newP: Prioridade = {
-      id: uid(), empresa, contratante,
-      responsavel: userName,
-      criadoEm: now, atualizadoEm: now,
-      statusFeed: [{ id: uid(), autor: userName, data: now, texto: status }],
-      historico: [{ data: now, autor: userName, acao: 'Criou a prioridade' }],
+    const initialFeed: StatusEntry[] = [{ id: uid(), autor: userName, data: now, texto: status }]
+    const initialHist: HistoricoItem[] = [{ data: now, autor: userName, acao: 'Criou a prioridade' }]
+
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('prioridades')
+      .insert({
+        empresa,
+        contratante,
+        responsavel: userName,
+        posicao: priorities.length,
+        status_feed: initialFeed,
+        historico: initialHist,
+        criado_por: profile?.id ?? null,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Erro ao criar prioridade:', error)
+      toast('Erro ao criar prioridade')
+      return
     }
-    const updated = [...priorities, newP]
-    setPriorities(updated)
-    save(updated)
+
+    setPriorities(prev => [...prev, rowToPrioridade(data)])
     setFormOpen(false)
     toast('Prioridade criada')
 
     // Broadcast para notificação Realtime — best-effort
     try {
-      const supabase = createClient()
-      const { data } = await supabase
+      const { data: aviso } = await supabase
         .from('prioridades_avisos')
         .insert({ empresa })
         .select('id')
         .single()
-      if (data?.id && profile?.id) {
-        // Marca como vista imediatamente para o criador não receber o popup
-        markPrioridadeVista(data.id, profile.id)
+      if (aviso?.id && profile?.id) {
+        markPrioridadeVista(aviso.id, profile.id)
       }
-    } catch { /* noop — tabela pode ainda não existir */ }
+    } catch { /* noop */ }
   }
 
   // ── Detail ──
@@ -251,43 +247,70 @@ export default function PrioridadesClient() {
 
   const detailDirty = detailEmpresa.trim() !== detailEmpresaOrig || detailContratante.trim() !== detailContratanteOrig
 
-  function saveDetailEdit() {
+  async function saveDetailEdit() {
     const empresa = detailEmpresa.trim()
     const contratante = detailContratante.trim()
     if (!empresa || !contratante) { toast('Empresa e contratante são obrigatórios'); return }
-    const updated = priorities.map(p => {
-      if (p.id !== detailId) return p
-      const changes: string[] = []
-      if (p.empresa !== empresa) changes.push(`Empresa: "${p.empresa}" → "${empresa}"`)
-      if (p.contratante !== contratante) changes.push(`Contratante: "${p.contratante}" → "${contratante}"`)
-      const hist: HistoricoItem[] = changes.length > 0
-        ? [...p.historico, { data: Date.now(), autor: userName, acao: 'Editou: ' + changes.join('; ') }]
-        : p.historico
-      return { ...p, empresa, contratante, atualizadoEm: Date.now(), historico: hist }
-    })
-    setPriorities(updated)
-    save(updated)
+
+    const p = priorities.find(x => x.id === detailId)
+    if (!p) return
+
+    const changes: string[] = []
+    if (p.empresa !== empresa) changes.push(`Empresa: "${p.empresa}" → "${empresa}"`)
+    if (p.contratante !== contratante) changes.push(`Contratante: "${p.contratante}" → "${contratante}"`)
+
+    const now = Date.now()
+    const newHistorico = changes.length > 0
+      ? [...p.historico, { data: now, autor: userName, acao: 'Editou: ' + changes.join('; ') }]
+      : p.historico
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('prioridades')
+      .update({ empresa, contratante, historico: newHistorico, updated_at: new Date(now).toISOString() })
+      .eq('id', detailId)
+
+    if (error) {
+      console.error('Erro ao salvar prioridade:', error)
+      toast('Erro ao salvar')
+      return
+    }
+
+    setPriorities(prev => prev.map(x =>
+      x.id === detailId ? { ...x, empresa, contratante, atualizadoEm: now, historico: newHistorico } : x
+    ))
     setDetailEmpresaOrig(empresa)
     setDetailContratanteOrig(contratante)
     toast('Alterações salvas')
   }
 
   // ── Status feed ──
-  function addStatus() {
+  async function addStatus() {
     const text = newStatus.trim()
     if (!text) { toast('Digite uma atualização'); return }
+
+    const p = priorities.find(x => x.id === detailId)
+    if (!p) return
+
     const now = Date.now()
-    const updated = priorities.map(p => {
-      if (p.id !== detailId) return p
-      return {
-        ...p,
-        atualizadoEm: now,
-        statusFeed: [...p.statusFeed, { id: uid(), autor: userName, data: now, texto: text }],
-        historico: [...p.historico, { data: now, autor: userName, acao: 'Adicionou nova entrada de status' }],
-      }
-    })
-    setPriorities(updated)
-    save(updated)
+    const newFeed: StatusEntry[] = [...p.statusFeed, { id: uid(), autor: userName, data: now, texto: text }]
+    const newHistorico: HistoricoItem[] = [...p.historico, { data: now, autor: userName, acao: 'Adicionou nova entrada de status' }]
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('prioridades')
+      .update({ status_feed: newFeed, historico: newHistorico, updated_at: new Date(now).toISOString() })
+      .eq('id', detailId)
+
+    if (error) {
+      console.error('Erro ao adicionar status:', error)
+      toast('Erro ao adicionar status')
+      return
+    }
+
+    setPriorities(prev => prev.map(x =>
+      x.id === detailId ? { ...x, atualizadoEm: now, statusFeed: newFeed, historico: newHistorico } : x
+    ))
     setNewStatus('')
     toast('Status adicionado')
   }
@@ -301,25 +324,37 @@ export default function PrioridadesClient() {
     setEditingStatusText(entry.texto)
   }
 
-  function saveEditStatus() {
+  async function saveEditStatus() {
     const text = editingStatusText.trim()
     if (!text) { toast('Texto vazio'); return }
-    const entry = detailPriority?.statusFeed.find(s => s.id === editingStatusId)
+
+    const p = priorities.find(x => x.id === detailId)
+    if (!p) return
+    const entry = p.statusFeed.find(s => s.id === editingStatusId)
     if (!entry) return
     if (Date.now() - entry.data >= EDIT_WINDOW_MS) { toast('Prazo expirado'); setEditingStatusId(null); return }
-    const updated = priorities.map(p => {
-      if (p.id !== detailId) return p
-      return {
-        ...p,
-        atualizadoEm: Date.now(),
-        statusFeed: p.statusFeed.map(s =>
-          s.id === editingStatusId ? { ...s, texto: text, editadoEm: Date.now() } : s
-        ),
-        historico: [...p.historico, { data: Date.now(), autor: userName, acao: 'Editou uma entrada de status' }],
-      }
-    })
-    setPriorities(updated)
-    save(updated)
+
+    const now = Date.now()
+    const newFeed = p.statusFeed.map(s =>
+      s.id === editingStatusId ? { ...s, texto: text, editadoEm: now } : s
+    )
+    const newHistorico: HistoricoItem[] = [...p.historico, { data: now, autor: userName, acao: 'Editou uma entrada de status' }]
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('prioridades')
+      .update({ status_feed: newFeed, historico: newHistorico, updated_at: new Date(now).toISOString() })
+      .eq('id', detailId)
+
+    if (error) {
+      console.error('Erro ao editar status:', error)
+      toast('Erro ao editar')
+      return
+    }
+
+    setPriorities(prev => prev.map(x =>
+      x.id === detailId ? { ...x, atualizadoEm: now, statusFeed: newFeed, historico: newHistorico } : x
+    ))
     setEditingStatusId(null)
     toast('Entrada editada')
   }
@@ -329,10 +364,21 @@ export default function PrioridadesClient() {
     const p = priorities.find(x => x.id === id)
     if (!p) return
     setConfirmText(`Tem certeza que deseja excluir "${p.empresa}"? Esta ação é irreversível.`)
-    setConfirmAction(() => () => {
-      const updated = priorities.filter(x => x.id !== id)
-      setPriorities(updated)
-      save(updated)
+    setConfirmAction(() => async () => {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('prioridades')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        console.error('Erro ao excluir prioridade:', error)
+        setConfirmOpen(false)
+        toast('Erro ao excluir')
+        return
+      }
+
+      setPriorities(prev => prev.filter(x => x.id !== id))
       setConfirmOpen(false)
       toast('Prioridade excluída')
     })
@@ -350,19 +396,34 @@ export default function PrioridadesClient() {
     e.dataTransfer.dropEffect = 'move'
   }
 
-  function onDrop(e: React.DragEvent<HTMLDivElement>, targetId: string) {
+  async function onDrop(e: React.DragEvent<HTMLDivElement>, targetId: string) {
     e.preventDefault()
     if (!dragId || dragId === targetId) return
+
     const fromIdx = priorities.findIndex(p => p.id === dragId)
     const toIdx = priorities.findIndex(p => p.id === targetId)
     if (fromIdx === -1 || toIdx === -1) return
+
     const reordered = [...priorities]
     const [moved] = reordered.splice(fromIdx, 1)
     reordered.splice(toIdx, 0, moved)
+
     setPriorities(reordered)
-    save(reordered)
     setDragId(null)
-    toast('Ordem atualizada')
+
+    // Persist new positions — updated_at is intentionally not changed on reorder
+    const supabase = createClient()
+    try {
+      await Promise.all(
+        reordered.map((p, idx) =>
+          supabase.from('prioridades').update({ posicao: idx }).eq('id', p.id)
+        )
+      )
+      toast('Ordem atualizada')
+    } catch (err) {
+      console.error('Erro ao salvar ordem:', err)
+      toast('Erro ao salvar ordem')
+    }
   }
 
   if (!hydrated) return null
@@ -633,7 +694,7 @@ export default function PrioridadesClient() {
         <Modal title="Confirmar exclusão" onClose={() => setConfirmOpen(false)}
           footer={<>
             <button onClick={() => setConfirmOpen(false)} style={btnBase}>Cancelar</button>
-            <button onClick={() => confirmAction?.()} style={{ ...btnBase, background: C.danger, color: '#fff', borderColor: C.danger }}>Excluir</button>
+            <button onClick={() => { void confirmAction?.() }} style={{ ...btnBase, background: C.danger, color: '#fff', borderColor: C.danger }}>Excluir</button>
           </>}
           maxWidth={420}
         >
