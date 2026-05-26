@@ -9,6 +9,7 @@ import { useUser } from './UserContext'
 import { createClient } from '../lib/supabase'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
+import SugestaoNotificacao from './SugestaoNotificacao'
 import QuoteBanner from './QuoteBanner'
 
 function useBreadcrumb(pathname: string): string {
@@ -61,6 +62,21 @@ function dismissBanner(ataId: string, userId: string) {
   } catch { /* noop */ }
 }
 
+// ─── Sugestões helpers ────────────────────────────────────────────────────────
+
+function sugestaoNotifDismissKey(userId: string) { return `sugestoes_notif_dismissed_${userId}` }
+function getSugestaoNotifDismissed(userId: string): string[] {
+  try { return JSON.parse(sessionStorage.getItem(sugestaoNotifDismissKey(userId)) ?? '[]') } catch { return [] }
+}
+function dismissSugestaoNotifStorage(id: string, userId: string) {
+  try {
+    const dismissed = getSugestaoNotifDismissed(userId)
+    if (!dismissed.includes(id)) {
+      sessionStorage.setItem(sugestaoNotifDismissKey(userId), JSON.stringify([...dismissed, id]))
+    }
+  } catch { /* noop */ }
+}
+
 // ─── PDI Conversa helpers ─────────────────────────────────────────────────────
 
 type PdiConversaBanner = { cicloId: string; pdiId: string; dataConversa: string }
@@ -100,6 +116,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const collapsed = manualCollapsed && !sidebarHovered
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
+  const [sugestaoQueue, setSugestaoQueue] = useState<Array<{ id: string }>>([])
+
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
   const [pdiConversaBanner, setPdiConversaBanner] = useState<PdiConversaBanner | null>(null)
   const [pdiNotifBanner, setPdiNotifBanner] = useState<PdiNotifBanner | null>(null)
@@ -195,10 +213,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       } catch { /* noop */ }
     }
 
+    async function checkUnseenSugestoes() {
+      if (isColabOrTrainee) return
+      try {
+        const res = await fetch('/api/sugestoes')
+        if (!mounted || !res.ok) return
+        const data: Array<{ id: string; lida: boolean }> = await res.json()
+        const dismissed = getSugestaoNotifDismissed(userId)
+        const unnotified = data.filter(s => !s.lida && !dismissed.includes(s.id))
+        if (unnotified.length > 0) setSugestaoQueue(unnotified)
+      } catch { /* noop */ }
+    }
+
     checkUnseenPrio()
     checkUnseenAtas()
     checkUnseenPdiConversa()
     checkPdiNotif()
+    checkUnseenSugestoes()
 
     const pollTimer = setInterval(() => {
       checkUnseenPdiConversa()
@@ -226,6 +257,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             if (prev.some(a => a.id === record.id) || dismissed.includes(record.id)) return prev
             return [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
           })
+        }
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sugestoes' },
+        (payload) => {
+          if (isColabOrTrainee) return
+          const record = payload.new as { id: string }
+          if (!record?.id) return
+          setSugestaoQueue(prev => prev.some(s => s.id === record.id) ? prev : [...prev, record])
         }
       )
       .on('postgres_changes',
@@ -325,8 +365,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setPdiNotifBanner(null)
   }
 
+  function dismissTopSugestao() {
+    const top = sugestaoQueue[0]
+    if (!top || !profile) return
+    dismissSugestaoNotifStorage(top.id, profile.id)
+    setSugestaoQueue(prev => prev.slice(1))
+  }
+
+  function handleVerSugestao() {
+    const top = sugestaoQueue[0]
+    if (!top || !profile) return
+    dismissSugestaoNotifStorage(top.id, profile.id)
+    setSugestaoQueue(prev => prev.slice(1))
+    router.push('/sugestoes')
+  }
+
   const showPrioNotif = prioQueue.length > 0
   const showAtaNotif = !showPrioNotif && ataQueue.length > 0
+  const showSugestaoNotif = !showPrioNotif && !showAtaNotif && sugestaoQueue.length > 0
 
   const bannerAta = pathname !== '/atas' && isColabOrTrainee && unreadAtas.length > 0 ? unreadAtas[0] : null
   const bannerPdiConversa = isColabOrTrainee && pdiConversaBanner && !pathname.startsWith('/pdi') ? pdiConversaBanner : null
@@ -470,6 +526,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           titulo={ataQueue[0].titulo}
           onLerAgora={handleLerAgora}
           onVerDepois={() => dismissTopAta(false)}
+        />
+      )}
+      {showSugestaoNotif && (
+        <SugestaoNotificacao
+          onVerSugestao={handleVerSugestao}
+          onVerDepois={dismissTopSugestao}
         />
       )}
 

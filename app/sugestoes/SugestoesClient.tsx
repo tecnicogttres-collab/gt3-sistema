@@ -17,6 +17,8 @@ type Sugestao = {
   texto: string
   created_at: string
   autor_id?: string
+  lida: boolean
+  lida_em: string | null
 }
 
 function formatDate(iso: string) {
@@ -57,6 +59,7 @@ function SubmitView() {
       setSubmitting(false)
       return
     }
+    setText('')
     setSubmitted(true)
     setSubmitting(false)
   }
@@ -65,10 +68,10 @@ function SubmitView() {
     return (
       <div style={{ background: SUCCESS_LIGHT, border: `1px solid #BBF7D0`, borderRadius: 12, padding: '2rem', textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: SUCCESS, marginBottom: 6 }}>Sugestão enviada!</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: SUCCESS, marginBottom: 6 }}>Sugestão enviada com sucesso!</div>
         <div style={{ fontSize: 13, color: '#4ADE80' }}>Obrigado pela contribuição. Sua ideia faz parte da nossa melhoria contínua.</div>
         <button
-          onClick={() => { setText(''); setSubmitted(false); setError('') }}
+          onClick={() => { setSubmitted(false); setError('') }}
           style={{
             marginTop: 20, padding: '8px 20px', borderRadius: 8,
             border: `1.5px solid #BBF7D0`, background: 'transparent',
@@ -155,6 +158,13 @@ function ListView({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  async function handleMarkAsRead(id: string) {
+    await fetch(`/api/sugestoes/${id}`, { method: 'PATCH' })
+    setSugestoes(prev => prev.map(s => s.id === id ? { ...s, lida: true, lida_em: new Date().toISOString() } : s))
+  }
+
+  const novas = sugestoes.filter(s => !s.lida).length
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -163,6 +173,11 @@ function ListView({ isAdmin }: { isAdmin: boolean }) {
           {!loading && (
             <p style={{ margin: '3px 0 0', fontSize: 13, color: MUTED }}>
               {sugestoes.length} sugestão{sugestoes.length !== 1 ? 'ões' : ''} recebida{sugestoes.length !== 1 ? 's' : ''}
+              {novas > 0 && (
+                <span style={{ marginLeft: 8, fontWeight: 600, color: PRIMARY }}>
+                  · {novas} nova{novas !== 1 ? 's' : ''}
+                </span>
+              )}
             </p>
           )}
         </div>
@@ -186,7 +201,8 @@ function ListView({ isAdmin }: { isAdmin: boolean }) {
             <div
               key={s.id}
               style={{
-                background: '#fff', borderRadius: 12, border: `1px solid ${BORDER}`,
+                background: '#fff', borderRadius: 12,
+                border: `1px solid ${s.lida ? BORDER : '#BFDBFE'}`,
                 padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
               }}
             >
@@ -194,30 +210,58 @@ function ListView({ isAdmin }: { isAdmin: boolean }) {
                 {s.texto}
               </p>
 
-              {/* Rodapé: data à direita — clicável para admin revelar autor */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                {isAdmin ? (
-                  revealed[s.id] !== undefined ? (
-                    <span style={{ fontSize: 12, color: MUTED, fontFamily: 'monospace' }}>
-                      {revealed[s.id]}
-                    </span>
-                  ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                {/* Badge de status */}
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 10,
+                  background: s.lida ? '#F1F5F9' : PRIMARY_LIGHT,
+                  color: s.lida ? MUTED : PRIMARY,
+                }}>
+                  {s.lida ? 'Lida' : 'Nova'}
+                </span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {/* Botão marcar como lida */}
+                  {!s.lida && (
                     <button
-                      onClick={() => handleReveal(s.id)}
+                      onClick={() => handleMarkAsRead(s.id)}
                       style={{
-                        background: 'none', border: 'none', padding: 0,
-                        fontSize: 12, color: MUTED, fontFamily: 'inherit',
-                        cursor: 'pointer', transition: 'color 0.15s',
+                        background: 'none', border: `1px solid ${BORDER}`,
+                        borderRadius: 6, padding: '3px 10px',
+                        fontSize: 12, color: MUTED, cursor: 'pointer',
+                        fontFamily: 'inherit', transition: 'all 0.15s',
                       }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = INK }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = PRIMARY; (e.currentTarget as HTMLButtonElement).style.color = PRIMARY }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
                     >
-                      {formatDate(s.created_at)}
+                      Marcar como lida
                     </button>
-                  )
-                ) : (
-                  <span style={{ fontSize: 12, color: MUTED }}>{formatDate(s.created_at)}</span>
-                )}
+                  )}
+
+                  {/* Data — clicável para admin revelar autor */}
+                  {isAdmin ? (
+                    revealed[s.id] !== undefined ? (
+                      <span style={{ fontSize: 12, color: MUTED, fontFamily: 'monospace' }}>
+                        {revealed[s.id]}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleReveal(s.id)}
+                        style={{
+                          background: 'none', border: 'none', padding: 0,
+                          fontSize: 12, color: MUTED, fontFamily: 'inherit',
+                          cursor: 'pointer', transition: 'color 0.15s',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = INK }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
+                      >
+                        {formatDate(s.created_at)}
+                      </button>
+                    )
+                  ) : (
+                    <span style={{ fontSize: 12, color: MUTED }}>{formatDate(s.created_at)}</span>
+                  )}
+                </div>
               </div>
             </div>
           ))}

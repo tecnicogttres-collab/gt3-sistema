@@ -58,6 +58,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'enquetes',
+    label: 'Enquetes',
+    color: '#7C3AED',
+    path: '/enquetes',
+    description: 'Pesquisas e votações internas',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'pdi',
     label: 'PDI',
     color: '#D1AE6E',

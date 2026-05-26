@@ -20,16 +20,17 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('sugestoes')
-    .select('id, texto, created_at, autor_id')
+    .select('id, texto, created_at, autor_id, lida, lida_em')
     .order('created_at', { ascending: false })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  const result = (data ?? []).map((s: { id: string; texto: string; created_at: string; autor_id: string | null }) => ({
+  const result = (data ?? []).map((s: { id: string; texto: string; created_at: string; autor_id: string | null; lida: boolean; lida_em: string | null }) => ({
     id: s.id,
     texto: s.texto,
     created_at: s.created_at,
-    // autor_id só chega para admin — gestor recebe undefined
+    lida: s.lida ?? false,
+    lida_em: s.lida_em ?? null,
     ...(caller.role === 'admin' ? { autor_id: s.autor_id } : {}),
   }))
 
