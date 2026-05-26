@@ -132,7 +132,7 @@ export default function ManuaisClient() {
       const { error } = await supabase.from('manuais_documentos')
         .update({ secoes: { rows: dataRef.current.nrs, obs: dataRef.current.nrsObs } })
         .eq('id', '__nrs__')
-      if (error) console.error('Erro ao salvar NRs:', error)
+      if (error?.message) console.error('Erro ao salvar NRs:', error)
     }, 600)
   }
 
@@ -159,7 +159,7 @@ export default function ManuaisClient() {
       void supabase.from('manuais_documentos')
         .update({ titulo: modalDoc.nome, periodicidade: modalDoc.periodicidade, secoes: modalDoc.sections })
         .eq('id', modalDoc.id)
-        .then(({ error }) => { if (error) console.error('Erro ao salvar documento:', error) })
+        .then(({ error }) => { if (error?.message) console.error('Erro ao salvar documento:', error.message) })
     }
     setModalDoc(null)
   }

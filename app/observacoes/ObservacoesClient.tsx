@@ -467,6 +467,7 @@ export default function ObservacoesClient() {
     () => activeSubtab?.columns.filter(c => c.isFixed) ?? [],
     [activeSubtab]
   )
+  const colWidth = ['Ficha Registro + ASO', 'EPI + Treinamentos'].includes(activeSubtab?.key ?? '') ? 580 : 320
 
   const dbObsForSubtab = useMemo(
     () => dbObs.filter(o => o.subtab === (activeSubtab?.key ?? '')),
@@ -1128,7 +1129,7 @@ export default function ObservacoesClient() {
                       <div
                         key={`${activeSubtab.key}|${col.title}`}
                         style={{
-                          width: 320, minWidth: 320, flexShrink: 0, height: '100%',
+                          width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%',
                           backgroundColor: BG_CARD, borderRadius: 10,
                         }}
                       >
@@ -1205,10 +1206,13 @@ export default function ObservacoesClient() {
                     display: 'flex', flexDirection: 'row',
                     gap: 16, height: '100%', width: 'max-content',
                   }}>
-                    {[...mergedMainCols, ...mergedFixedCols].map(col => (
+                    {(activeSubtab.key === 'Certidões'
+                      ? [...mergedFixedCols, ...mergedMainCols]
+                      : [...mergedMainCols, ...mergedFixedCols]
+                    ).map(col => (
                       <div
                         key={`${activeSubtab.key}|${col.title}`}
-                        style={{ width: 320, minWidth: 320, flexShrink: 0, height: '100%' }}
+                        style={{ width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%' }}
                       >
                         <ObsColumn
                           col={col}

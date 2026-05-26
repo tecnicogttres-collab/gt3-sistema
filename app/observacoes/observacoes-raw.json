@@ -1237,14 +1237,14 @@
             "parecer": "Favor rever: não identificamos a certidão anexada no site do Tribunal Superior do Trabalho"
           }
         ],
-        "Trabalhista MPT": [
+        "Estadual": [
           {
             "motivo": "Outro doc",
-            "parecer": "Favor rever: deve ser anexada a Certidão Negativa de Débitos Trabalhistas. Foi anexado outro doc. \n\nVocê podes emitir a mesma em:\nhttps://www.gov.br/pt-br/servicos/emitir-certidao-de-debitos-e-consulta-de-autos-de-infracao"
+            "parecer": "Favor rever: deve ser anexada a Certidão estadual. Foi anexado outro doc"
           },
           {
             "motivo": "Não encontrada",
-            "parecer": "Favor rever: não identificamos a certidão anexada no site de consulta do documento"
+            "parecer": "Favor rever: não identificamos a certidão anexada no site do estado"
           }
         ],
         "Judicial": [
@@ -1257,14 +1257,14 @@
             "parecer": "Favor rever: não identificamos a certidão anexada no site do TJRS"
           }
         ],
-        "Estadual": [
+        "Trabalhista MPT": [
           {
             "motivo": "Outro doc",
-            "parecer": "Favor rever: deve ser anexada a Certidão estadual. Foi anexado outro doc"
+            "parecer": "Favor rever: deve ser anexada a Certidão Negativa de Débitos Trabalhistas. Foi anexado outro doc. \n\nVocê podes emitir a mesma em:\nhttps://www.gov.br/pt-br/servicos/emitir-certidao-de-debitos-e-consulta-de-autos-de-infracao"
           },
           {
             "motivo": "Não encontrada",
-            "parecer": "Favor rever: não identificamos a certidão anexada no site do estado"
+            "parecer": "Favor rever: não identificamos a certidão anexada no site de consulta do documento"
           }
         ],
         "Negativa de Falência": [

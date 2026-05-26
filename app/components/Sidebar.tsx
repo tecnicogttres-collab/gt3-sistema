@@ -7,7 +7,7 @@ import { MODULES } from '../lib/modules'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
 
-type Props = { collapsed: boolean; onToggle: () => void }
+type Props = { collapsed: boolean; onToggle: () => void; onHoverEnter?: () => void; onHoverLeave?: () => void }
 
 const SIDEBAR_BG = '#1E3A6E'
 const ACCENT = '#D1AE6E'
@@ -18,7 +18,7 @@ const PAPEL_LABELS: Record<string, string> = {
   colaborador: 'Colaborador',
 }
 
-export default function Sidebar({ collapsed, onToggle }: Props) {
+export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeave }: Props) {
   const pathname = usePathname()
   const { profile, loading, signOut } = useUser()
   const [pdiNotifCount, setPdiNotifCount] = useState(0)
@@ -87,6 +87,8 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
 
   return (
     <aside
+      onMouseEnter={onHoverEnter}
+      onMouseLeave={onHoverLeave}
       style={{
         width: collapsed ? 60 : 220,
         backgroundColor: SIDEBAR_BG,

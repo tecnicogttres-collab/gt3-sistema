@@ -12,9 +12,9 @@ const INK = '#1E253D'
 const DANGER = '#DC2626'
 const DANGER_LIGHT = '#FEF2F2'
 
-const CATEGORIES = ['Onboarding', 'Documentação', 'Cobrança', 'Auditoria', 'Conformidade', 'Outros']
+const PASTAS = ['Orientação Inicial', 'Acesso ao Portal']
 
-type FileData = { name: string; size: number; data: string }
+type FileData = { name: string; size: number; data?: string }
 type Template = {
   id: string
   title: string
@@ -31,7 +31,7 @@ type Template = {
 type ModalState = { open: boolean; editId: string | null; title: string; client: string; category: string; subject: string; tags: string; notes: string; file: FileData | null; dragOver: boolean }
 
 const MODAL_INIT: ModalState = {
-  open: false, editId: null, title: '', client: '', category: 'Onboarding',
+  open: false, editId: null, title: '', client: '', category: 'Orientação Inicial',
   subject: '', tags: '', notes: '', file: null, dragOver: false,
 }
 
@@ -45,7 +45,6 @@ function rowToTemplate(row: {
   subject: string
   tags: unknown
   notes: string
-  file: unknown
   created_at: string
   updated_at: string
 }): Template {
@@ -57,7 +56,7 @@ function rowToTemplate(row: {
     subject: row.subject,
     tags: (row.tags as string[]) ?? [],
     notes: row.notes,
-    file: (row.file as FileData | null) ?? null,
+    file: null,
     createdAt: new Date(row.created_at).getTime(),
     updatedAt: new Date(row.updated_at).getTime(),
   }
@@ -75,9 +74,9 @@ export default function EmailsClient() {
   const [loading, setLoading] = useState(true)
   const [templates, setTemplates] = useState<Template[]>([])
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
+  const [activeTab, setActiveTab] = useState('Orientação Inicial')
   const [search, setSearch] = useState('')
   const [filterClient, setFilterClient] = useState('')
-  const [filterCategory, setFilterCategory] = useState('')
   const [toast, setToast] = useState({ msg: '', show: false })
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -87,7 +86,7 @@ export default function EmailsClient() {
     let cancelled = false
     supabase
       .from('email_templates')
-      .select('id, title, client, category, subject, tags, notes, file, created_at, updated_at')
+      .select('id, title, client, category, subject, tags, notes, created_at, updated_at')
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
         if (cancelled) return
@@ -204,32 +203,45 @@ export default function EmailsClient() {
     if (error) console.error('Erro ao excluir template:', error)
   }
 
-  function downloadTemplate(id: string) {
-    const t = templates.find(x => x.id === id)
-    if (!t?.file) { showToast('Arquivo não encontrado'); return }
+  async function downloadTemplate(id: string) {
+    showToast('Carregando arquivo…')
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('email_templates')
+      .select('file')
+      .eq('id', id)
+      .single()
+    if (error || !data?.file) { showToast('Arquivo não encontrado'); return }
+    const f = data.file as FileData
+    if (!f.data) { showToast('Arquivo sem dados'); return }
     const a = document.createElement('a')
-    a.href = t.file.data; a.download = t.file.name
+    a.href = f.data; a.download = f.name
     a.click()
     showToast('Download iniciado')
   }
 
-  const clients = useMemo(() => [...new Set(templates.map(t => t.client))].sort(), [templates])
+  const clients = useMemo(() =>
+    [...new Set(templates.filter(t => t.category === activeTab).map(t => t.client))].sort()
+  , [templates, activeTab])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
     return templates.filter(t => {
+      if (t.category !== activeTab) return false
       if (filterClient && t.client !== filterClient) return false
-      if (filterCategory && t.category !== filterCategory) return false
       if (!q) return true
-      return [t.title, t.client, t.subject, t.notes, t.category, ...t.tags].join(' ').toLowerCase().includes(q)
+      return [t.title, t.client, t.subject, t.notes, ...t.tags].join(' ').toLowerCase().includes(q)
     })
-  }, [templates, search, filterClient, filterCategory])
+  }, [templates, search, filterClient, activeTab])
 
-  const stats = useMemo(() => ({
-    total: templates.length,
-    clients: new Set(templates.map(t => t.client)).size,
-    recent: templates.filter(t => t.createdAt > Date.now() - 7 * 86400000).length,
-  }), [templates])
+  const stats = useMemo(() => {
+    const inTab = templates.filter(t => t.category === activeTab)
+    return {
+      total: inTab.length,
+      clients: new Set(inTab.map(t => t.client)).size,
+      recent: inTab.filter(t => t.createdAt > Date.now() - 7 * 86400000).length,
+    }
+  }, [templates, activeTab])
 
   if (loading) {
     return (
@@ -268,9 +280,9 @@ export default function EmailsClient() {
                 <input style={inputStyle} value={modal.client} onChange={e => setModal(m => ({ ...m, client: e.target.value }))} placeholder="Ex: Marcopolo, CSG, Genérico" />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: MUTED, marginBottom: 6 }}>Categoria</label>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: MUTED, marginBottom: 6 }}>Pasta</label>
                 <select style={{ ...inputStyle, cursor: 'pointer' }} value={modal.category} onChange={e => setModal(m => ({ ...m, category: e.target.value }))}>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {PASTAS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
             </div>
@@ -355,8 +367,28 @@ export default function EmailsClient() {
           </button>
         </div>
 
+        {/* Pasta switch */}
+        <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: 10, padding: 4, marginBottom: 24 }}>
+          {PASTAS.map(pasta => (
+            <button
+              key={pasta}
+              onClick={() => { setActiveTab(pasta); setFilterClient(''); setSearch('') }}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: activeTab === pasta ? 700 : 500,
+                color: activeTab === pasta ? INK : MUTED,
+                background: activeTab === pasta ? '#fff' : 'transparent',
+                boxShadow: activeTab === pasta ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
+                transition: 'all 0.18s',
+              }}
+            >
+              {pasta}
+            </button>
+          ))}
+        </div>
+
         {/* Controls */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, marginBottom: 24 }}>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: MUTED, pointerEvents: 'none' }}>🔍</span>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
@@ -367,11 +399,6 @@ export default function EmailsClient() {
             style={{ ...inputStyle, cursor: 'pointer' }}>
             <option value="">Todos os clientes</option>
             {clients.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
-            style={{ ...inputStyle, cursor: 'pointer' }}>
-            <option value="">Todas as categorias</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
@@ -426,23 +453,20 @@ export default function EmailsClient() {
                     📧 {t.subject}
                   </div>
                 )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, marginTop: 'auto' }}>
-                  <span style={{ fontSize: 10, background: '#F8FAFC', border: `1px solid ${BORDER}`, padding: '3px 7px', borderRadius: 4, color: MUTED }}>
-                    {t.category}
-                  </span>
-                  {t.tags.slice(0, 4).map(tag => (
-                    <span key={tag} style={{ fontSize: 10, background: '#F8FAFC', border: `1px solid ${BORDER}`, padding: '3px 7px', borderRadius: 4, color: MUTED }}>
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                {(t.file || t.createdAt) && (
-                  <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 8, fontVariantNumeric: 'tabular-nums' }}>
-                    {t.file ? `📎 ${t.file.name}` : ''}
-                    {t.file && t.createdAt ? ' · ' : ''}
-                    {t.createdAt ? formatDate(t.createdAt) : ''}
+                {t.tags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, marginTop: 'auto' }}>
+                    {t.tags.slice(0, 4).map(tag => (
+                      <span key={tag} style={{ fontSize: 10, background: '#F8FAFC', border: `1px solid ${BORDER}`, padding: '3px 7px', borderRadius: 4, color: MUTED }}>
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 )}
+                {t.createdAt ? (
+                  <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 8, fontVariantNumeric: 'tabular-nums' }}>
+                    📎 .msg · {formatDate(t.createdAt)}
+                  </div>
+                ) : null}
                 <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
                   <button onClick={() => downloadTemplate(t.id)} style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: `1.5px solid ${BORDER}`, background: '#fff', color: INK, fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}>
                     ↓ Baixar

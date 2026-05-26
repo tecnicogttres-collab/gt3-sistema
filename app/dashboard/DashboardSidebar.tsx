@@ -88,7 +88,7 @@ export default function DashboardSidebar() {
           .from('home_office_sheets')
           .select('year, month_idx, rows')
           .eq('is_current', true)
-          .single()
+          .maybeSingle()
         if (data && data.year === todayYear && data.month_idx === todayMonth) {
           const row = (data.rows as { day: number; type: string; entries?: string[] }[])?.find(
             r => r.day === todayDay && r.type === 'normal'
@@ -110,7 +110,7 @@ export default function DashboardSidebar() {
           .from('controle_revisao_sheets')
           .select('year, month_idx, schedule')
           .eq('is_current', true)
-          .single()
+          .maybeSingle()
         if (data && data.year === todayYear && data.month_idx === todayMonth) {
           const row = (data.schedule as { day: number; type: string; person?: string }[])?.find(
             r => r.day === todayDay && r.type === 'normal'

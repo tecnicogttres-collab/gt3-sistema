@@ -949,6 +949,12 @@ function MbtiTab({ pdi }: { pdi: PdiColaborador }) {
           <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.estiloDecisao}</p>
         </div>
       )}
+      {mbti.relacionamentoAutoridade && (
+        <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🎯 Relação com autoridade e processo</div>
+          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.relacionamentoAutoridade}</p>
+        </div>
+      )}
       {mbti.curvaAprendizado && (
         <div style={{ backgroundColor: '#F0FFF4', borderRadius: 10, padding: '16px 18px', border: '1px solid #BBF7D0' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🔄 Curva de aprendizado</div>
@@ -959,6 +965,12 @@ function MbtiTab({ pdi }: { pdi: PdiColaborador }) {
         <div style={{ backgroundColor: '#EBF4FF', borderRadius: 10, padding: '16px 18px', border: '1px solid #BFDBFE' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🤝 Impacto no clima e no time</div>
           <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.impactoClima}</p>
+        </div>
+      )}
+      {mbti.zonaRisco && (
+        <div style={{ backgroundColor: '#FEF2F2', borderRadius: 10, padding: '16px 18px', border: '1px solid #FECACA' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🚨 Zona de risco comportamental</div>
+          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.zonaRisco}</p>
         </div>
       )}
     </div>

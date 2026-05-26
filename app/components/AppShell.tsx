@@ -95,7 +95,9 @@ function dismissPdiNotifStorage(pdiId: string, userId: string) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(true)
+  const [manualCollapsed, setManualCollapsed] = useState(true)
+  const [sidebarHovered, setSidebarHovered] = useState(false)
+  const collapsed = manualCollapsed && !sidebarHovered
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
@@ -337,7 +339,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={() => setManualCollapsed((c) => !c)}
+          onHoverEnter={() => setSidebarHovered(true)}
+          onHoverLeave={() => setSidebarHovered(false)}
+        />
 
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <header style={{

@@ -27,8 +27,10 @@ export type Mbti = {
   nucleo: string
   veredito: string
   estiloDecisao?: string
+  relacionamentoAutoridade?: string
   curvaAprendizado?: string
   impactoClima?: string
+  zonaRisco?: string
 }
 
 export type PdiColaborador = {
