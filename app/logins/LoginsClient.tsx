@@ -272,7 +272,7 @@ export default function LoginsClient() {
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        alert(`Replicado para ${data.updated ?? '?'} perfis.\nMódulos copiados: ${JSON.stringify(data.modulos_permitidos)}`)
+        alert(`Configuração replicada para ${data.updated ?? '?'} usuário(s).`)
         fetchUsers()
       } else {
         alert(data.error ?? `Erro ${res.status}`)
