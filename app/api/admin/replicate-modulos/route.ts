@@ -39,9 +39,9 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'Nenhuma configuração de módulo encontrada no usuário de origem' }, { status: 400 })
     }
 
-    const { error: updateErr } = await admin
+    const { error: updateErr, count } = await admin
       .from('profiles')
-      .update(payload)
+      .update(payload, { count: 'exact' })
       .eq('papel', target_role)
       .neq('id', source.id)
 
@@ -49,7 +49,11 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: updateErr.message }, { status: 500 })
     }
 
-    return Response.json({ success: true, modulos_permitidos: source.modulos_permitidos ?? null })
+    return Response.json({
+      success: true,
+      updated: count ?? 0,
+      modulos_permitidos: source.modulos_permitidos ?? null,
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return Response.json({ error: msg }, { status: 500 })

@@ -271,8 +271,12 @@ export default function LoginsClient() {
         body: JSON.stringify({ source_id: u.id, target_role: u.papel }),
       })
       const data = await res.json().catch(() => ({}))
-      if (res.ok) alert(`Configuração replicada com sucesso!\n(modulos_permitidos: ${JSON.stringify(data.modulos_permitidos)})`)
-      else alert(data.error ?? `Erro ${res.status}`)
+      if (res.ok) {
+        alert(`Replicado para ${data.updated ?? '?'} perfis.\nMódulos copiados: ${JSON.stringify(data.modulos_permitidos)}`)
+        fetchUsers()
+      } else {
+        alert(data.error ?? `Erro ${res.status}`)
+      }
     } catch (err) {
       alert('Erro ao conectar com o servidor.')
     }
