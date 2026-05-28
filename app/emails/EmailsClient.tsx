@@ -471,7 +471,10 @@ export default function EmailsClient() {
                   <button onClick={() => downloadTemplate(t.id)} style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: `1.5px solid ${BORDER}`, background: '#fff', color: INK, fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}>
                     ↓ Baixar
                   </button>
-                  <button onClick={() => window.open(`/api/emails/${t.id}/open`, '_blank')} style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}>
+                  <button
+                    onClick={() => { window.location.href = `mailto:?subject=${encodeURIComponent(t.subject || t.title)}` }}
+                    style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}
+                  >
                     📨 Abrir no Outlook
                   </button>
                 </div>
