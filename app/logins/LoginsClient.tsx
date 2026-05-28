@@ -268,10 +268,10 @@ export default function LoginsClient() {
       const res = await fetch('/api/admin/replicate-modulos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source_email: u.email, target_role: u.papel }),
+        body: JSON.stringify({ source_id: u.id, target_role: u.papel }),
       })
       const data = await res.json().catch(() => ({}))
-      if (res.ok) alert('Configuração replicada com sucesso!')
+      if (res.ok) alert(`Configuração replicada com sucesso!\n(modulos_permitidos: ${JSON.stringify(data.modulos_permitidos)})`)
       else alert(data.error ?? `Erro ${res.status}`)
     } catch (err) {
       alert('Erro ao conectar com o servidor.')

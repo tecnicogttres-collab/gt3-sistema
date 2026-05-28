@@ -12,22 +12,22 @@ export async function POST(request: NextRequest) {
     const { data: caller } = await admin.from('profiles').select('papel').eq('id', user.id).single()
     if (caller?.papel !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 })
 
-    const body = await request.json() as { source_email: string; target_role: string }
-    const { source_email, target_role } = body
+    const body = await request.json() as { source_id: string; target_role: string }
+    const { source_id, target_role } = body
 
-    if (!source_email || !target_role) {
-      return Response.json({ error: 'source_email e target_role são obrigatórios' }, { status: 400 })
+    if (!source_id || !target_role) {
+      return Response.json({ error: 'source_id e target_role são obrigatórios' }, { status: 400 })
     }
 
-    // Busca perfil de origem com todos os campos
+    // Busca perfil de origem pelo ID (sempre preenchido)
     const { data: source, error: srcErr } = await admin
       .from('profiles')
       .select('*')
-      .eq('email', source_email)
+      .eq('id', source_id)
       .single()
 
     if (srcErr || !source) {
-      return Response.json({ error: `Usuário "${source_email}" não encontrado` }, { status: 404 })
+      return Response.json({ error: `Perfil "${source_id}" não encontrado` }, { status: 404 })
     }
 
     // Monta payload apenas com o que realmente existe no perfil de origem
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: updateErr.message }, { status: 500 })
     }
 
-    return Response.json({ success: true })
+    return Response.json({ success: true, modulos_permitidos: source.modulos_permitidos ?? null })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return Response.json({ error: msg }, { status: 500 })
