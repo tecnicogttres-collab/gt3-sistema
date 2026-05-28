@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       .from('profiles')
       .update(payload)
       .eq('papel', target_role)
-      .neq('email', source_email)
+      .neq('id', source.id)
 
     if (updateErr) {
       return Response.json({ error: updateErr.message }, { status: 500 })
