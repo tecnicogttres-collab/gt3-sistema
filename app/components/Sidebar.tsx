@@ -7,7 +7,14 @@ import { MODULES } from '../lib/modules'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
 
-type Props = { collapsed: boolean; onToggle: () => void; onHoverEnter?: () => void; onHoverLeave?: () => void }
+type Props = {
+  collapsed: boolean
+  onToggle: () => void
+  onHoverEnter?: () => void
+  onHoverLeave?: () => void
+  mode?: 'classic' | 'hover'
+  onModeToggle?: () => void
+}
 
 const SIDEBAR_BG = '#1E3A6E'
 const ACCENT = '#D1AE6E'
@@ -18,7 +25,7 @@ const PAPEL_LABELS: Record<string, string> = {
   colaborador: 'Colaborador',
 }
 
-export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeave }: Props) {
+export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeave, mode = 'classic', onModeToggle }: Props) {
   const pathname = usePathname()
   const { profile, loading, signOut } = useUser()
   const [pdiNotifCount, setPdiNotifCount] = useState(0)
@@ -105,7 +112,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
         overflow: 'hidden',
       }}
     >
-      {/* Logo */}
+      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -117,15 +124,21 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
         }}
       >
         {!collapsed && (
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: 18, letterSpacing: 1 }}>GT3</span>
+          <img
+            src="/logo-gt3.png"
+            alt="GT3"
+            style={{ height: 28, width: 'auto', objectFit: 'contain', display: 'block' }}
+          />
         )}
-        <button
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expandir' : 'Recolher'}
-          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}
-        >
-          {collapsed ? '›' : '‹'}
-        </button>
+        {mode !== 'hover' && (
+          <button
+            onClick={onToggle}
+            aria-label={collapsed ? 'Expandir' : 'Recolher'}
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}
+          >
+            {collapsed ? '›' : '‹'}
+          </button>
+        )}
       </div>
 
       {/* Nav */}
@@ -217,6 +230,23 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
         >
           {collapsed ? '↩' : '← Sair'}
         </button>
+
+        {onModeToggle && (
+          <button
+            onClick={onModeToggle}
+            title={mode === 'hover' ? 'Mudar para modo fixo' : 'Mudar para modo hover'}
+            style={{
+              width: '100%', background: 'none', border: 'none',
+              color: 'rgba(255,255,255,0.25)', fontSize: 11,
+              cursor: 'pointer', padding: collapsed ? '6px 0 10px' : '0 16px 10px',
+              textAlign: collapsed ? 'center' : 'left', display: 'block',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.25)' }}
+          >
+            {collapsed ? '⊟' : (mode === 'hover' ? '⊡ Modo fixo' : '⊟ Modo hover')}
+          </button>
+        )}
       </div>
     </aside>
   )

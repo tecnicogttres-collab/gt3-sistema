@@ -127,6 +127,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [manualCollapsed, setManualCollapsed] = useState(true)
   const [sidebarHovered, setSidebarHovered] = useState(false)
   const collapsed = manualCollapsed && !sidebarHovered
+  const [sidebarMode, setSidebarMode] = useState<'classic' | 'hover'>('classic')
+  const [hoverVisible, setHoverVisible] = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('gt3_sidebar_mode') as 'classic' | 'hover' | null
+    if (saved === 'hover' || saved === 'classic') setSidebarMode(saved)
+  }, [])
+
+  function handleModeToggle() {
+    const next = sidebarMode === 'classic' ? 'hover' : 'classic'
+    setSidebarMode(next)
+    localStorage.setItem('gt3_sidebar_mode', next)
+    setHoverVisible(false)
+  }
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [sugestaoQueue, setSugestaoQueue] = useState<Array<{ id: string }>>([])
@@ -469,12 +483,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <Sidebar
-          collapsed={collapsed}
-          onToggle={() => setManualCollapsed((c) => !c)}
-          onHoverEnter={() => setSidebarHovered(true)}
-          onHoverLeave={() => setSidebarHovered(false)}
-        />
+        {sidebarMode === 'classic' && (
+          <Sidebar
+            collapsed={collapsed}
+            onToggle={() => setManualCollapsed((c) => !c)}
+            onHoverEnter={() => setSidebarHovered(true)}
+            onHoverLeave={() => setSidebarHovered(false)}
+            mode="classic"
+            onModeToggle={handleModeToggle}
+          />
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <header style={{
@@ -630,11 +648,70 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {pathname === '/' && (
         <div style={{
           position: 'fixed', bottom: 0,
-          left: collapsed ? 60 : 220,
+          left: sidebarMode === 'hover' ? 0 : (collapsed ? 60 : 220),
           right: 0, zIndex: 100,
           transition: 'left 0.25s ease',
         }}>
           <QuoteBanner />
+        </div>
+      )}
+
+      {/* Hover-mode sidebar overlay */}
+      {sidebarMode === 'hover' && (
+        <div style={{
+          position: 'fixed',
+          left: 0, top: 0,
+          height: '100vh',
+          width: 220,
+          zIndex: 200,
+          pointerEvents: 'none',
+        }}>
+          {/* Trigger pill — visible when sidebar is hidden */}
+          <div
+            onMouseEnter={() => setHoverVisible(true)}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              pointerEvents: hoverVisible ? 'none' : 'auto',
+              opacity: hoverVisible ? 0 : 1,
+              transition: 'opacity 0.2s',
+              cursor: 'pointer',
+              backgroundColor: '#1E3A6E',
+              borderRadius: '0 20px 20px 0',
+              padding: '10px 10px 10px 6px',
+              boxShadow: '2px 0 10px rgba(0,0,0,0.25)',
+            }}
+          >
+            <img
+              src="/logo-gt3.png"
+              alt="GT3"
+              style={{ width: 30, height: 30, display: 'block', objectFit: 'contain' }}
+            />
+          </div>
+
+          {/* Sidebar overlay — slides in on hover */}
+          <div
+            onMouseLeave={() => setHoverVisible(false)}
+            style={{
+              position: 'absolute',
+              left: 0, top: 0,
+              height: '100%',
+              width: '100%',
+              transform: hoverVisible ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.25s ease',
+              pointerEvents: hoverVisible ? 'auto' : 'none',
+              boxShadow: hoverVisible ? '4px 0 20px rgba(0,0,0,0.3)' : 'none',
+            }}
+          >
+            <Sidebar
+              collapsed={false}
+              onToggle={() => {}}
+              mode="hover"
+              onModeToggle={handleModeToggle}
+            />
+          </div>
         </div>
       )}
     </>
