@@ -680,15 +680,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               cursor: 'pointer',
               backgroundColor: '#1E3A6E',
               borderRadius: '0 20px 20px 0',
-              padding: '10px 10px 10px 6px',
+              padding: '10px 12px 10px 8px',
               boxShadow: '2px 0 10px rgba(0,0,0,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <img
-              src="/logo-gt3.png"
-              alt="GT3"
-              style={{ width: 30, height: 30, display: 'block', objectFit: 'contain' }}
-            />
+            <span style={{
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: 14,
+              letterSpacing: 1,
+              lineHeight: 1,
+            }}>GT3</span>
           </div>
 
           {/* Sidebar overlay — slides in on hover */}
