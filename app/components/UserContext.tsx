@@ -11,6 +11,8 @@ export type Profile = {
   papel: 'colaborador' | 'gestor' | 'admin' | 'trainee' | null
   gestor_id: string | null
   pdi_slug: string | null
+  modulos_permitidos: string[] | null
+  modulos_dashboard: string[] | null
 }
 
 type UserContextType = {

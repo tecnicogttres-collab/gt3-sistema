@@ -4,10 +4,14 @@ import { useEffect, useState, useCallback } from 'react'
 import { useUser } from '../components/UserContext'
 import * as allPdis from '../../data/pdis/index'
 import type { PdiColaborador } from '../../data/pdis/types'
+import { MODULES } from '../lib/modules'
 
 const PDI_OPTIONS = (Object.values(allPdis) as PdiColaborador[])
   .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   .map(p => ({ value: p.id, label: p.nome }))
+
+// All modules are configurable per user (admin can grant any module to any user)
+const CONFIGURABLE_MODULES = MODULES
 
 type UserRow = {
   id: string
@@ -15,6 +19,8 @@ type UserRow = {
   nome: string | null
   papel: string | null
   pdi_slug: string | null
+  modulos_permitidos: string[] | null
+  modulos_dashboard: string[] | null
   banned: boolean
   last_sign_in: string | null
   created_at: string
@@ -75,6 +81,8 @@ export default function LoginsClient() {
   // Edit user modal
   const [editUser, setEditUser] = useState<UserRow | null>(null)
   const [editForm, setEditForm] = useState({ nome: '', papel: '', pdi_slug: '' })
+  const [editModulos, setEditModulos] = useState<string[] | null>(null)
+  const [editModulosDashboard, setEditModulosDashboard] = useState<string[] | null>(null)
   const [editLoading, setEditLoading] = useState(false)
   const [editMsg, setEditMsg] = useState('')
 
@@ -146,7 +154,33 @@ export default function LoginsClient() {
   function openEdit(u: UserRow) {
     setEditUser(u)
     setEditForm({ nome: u.nome ?? '', papel: u.papel ?? 'colaborador', pdi_slug: u.pdi_slug ?? '' })
+    setEditModulos(u.modulos_permitidos ?? null)
+    setEditModulosDashboard(u.modulos_dashboard ?? null)
     setEditMsg('')
+  }
+
+  function toggleEditModulo(modId: string) {
+    const currentList = editModulos ?? CONFIGURABLE_MODULES.map(m => m.id)
+    const isRemoving = currentList.includes(modId)
+    const next = isRemoving
+      ? currentList.filter(id => id !== modId)
+      : [...currentList, modId]
+    setEditModulos(next.length === CONFIGURABLE_MODULES.length ? null : next)
+    // Removing from sidebar also removes from dashboard (subset constraint)
+    if (isRemoving && editModulosDashboard !== null) {
+      setEditModulosDashboard(editModulosDashboard.filter(id => id !== modId))
+    }
+  }
+
+  function toggleEditModuloDashboard(modId: string) {
+    const enabledIds = editModulos ?? CONFIGURABLE_MODULES.map(m => m.id)
+    setEditModulosDashboard(prev => {
+      const currentList = prev ?? enabledIds
+      const next = currentList.includes(modId)
+        ? currentList.filter(id => id !== modId)
+        : [...currentList, modId]
+      return next.length === enabledIds.length ? null : next
+    })
   }
 
   async function handleEditSave(e: React.FormEvent) {
@@ -162,6 +196,8 @@ export default function LoginsClient() {
         nome: editForm.nome,
         papel: editForm.papel,
         pdi_slug: editForm.pdi_slug || null,
+        modulos_permitidos: editModulos,
+        modulos_dashboard: editModulosDashboard,
       }),
     })
 
@@ -175,7 +211,7 @@ export default function LoginsClient() {
     setUsers((prev) =>
       prev.map((u) =>
         u.id === editUser.id
-          ? { ...u, nome: editForm.nome, papel: editForm.papel, pdi_slug: editForm.pdi_slug || null }
+          ? { ...u, nome: editForm.nome, papel: editForm.papel, pdi_slug: editForm.pdi_slug || null, modulos_permitidos: editModulos, modulos_dashboard: editModulosDashboard }
           : u
       )
     )
@@ -223,6 +259,23 @@ export default function LoginsClient() {
       setResetMsg(`Senha alterada para: ${resetPassword}`)
     }
     setResetLoading(false)
+  }
+
+  // ── Replicar módulos ──────────────────────────────────────────
+  async function handleReplicar(u: UserRow) {
+    if (!confirm(`Replicar configuração de módulos de "${u.nome ?? u.email}" para todos os ${u.papel}s?`)) return
+    try {
+      const res = await fetch('/api/admin/replicate-modulos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_email: u.email, target_role: u.papel }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) alert('Configuração replicada com sucesso!')
+      else alert(data.error ?? `Erro ${res.status}`)
+    } catch (err) {
+      alert('Erro ao conectar com o servidor.')
+    }
   }
 
   // ── Toggle ban ────────────────────────────────────────────────
@@ -383,6 +436,15 @@ export default function LoginsClient() {
                             Editar
                           </button>
                         )}
+                        {isAdmin && u.papel !== 'admin' && (
+                          <button
+                            onClick={() => handleReplicar(u)}
+                            title={`Replicar módulos para todos os ${u.papel}s`}
+                            style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #C7D2FE', backgroundColor: '#EEF2FF', color: '#3730A3', fontSize: 12, cursor: 'pointer' }}
+                          >
+                            Replicar
+                          </button>
+                        )}
                         {canManageThisRow && (
                           <>
                             <button
@@ -499,7 +561,7 @@ export default function LoginsClient() {
           style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setEditUser(null) }}
         >
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 500, maxHeight: 'calc(100vh - 80px)', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Editar usuário</h2>
               <button onClick={() => setEditUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
@@ -545,6 +607,81 @@ export default function LoginsClient() {
                   ))}
                 </select>
               </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>Módulos disponíveis</label>
+                  <button
+                    type="button"
+                    onClick={() => setEditModulos(null)}
+                    style={{ fontSize: 11, color: '#2A4F96', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                  >
+                    Selecionar todos
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', backgroundColor: '#F9FAFB', maxHeight: 220, overflowY: 'auto' }}>
+                  {CONFIGURABLE_MODULES.map(mod => {
+                    const checked = editModulos === null || editModulos.includes(mod.id)
+                    return (
+                      <label key={mod.id} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleEditModulo(mod.id)}
+                          style={{ accentColor: mod.color, width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mod.label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {editModulos !== null && (
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: '#6B7A99' }}>
+                    {editModulos.length} de {CONFIGURABLE_MODULES.length} módulos liberados
+                  </p>
+                )}
+              </div>
+
+              {/* ── Dashboard modules (subset of sidebar) ── */}
+              {(() => {
+                const enabledIds = editModulos ?? CONFIGURABLE_MODULES.map(m => m.id)
+                const enabledModules = CONFIGURABLE_MODULES.filter(m => enabledIds.includes(m.id))
+                return (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>Módulos no Dashboard</label>
+                      <button
+                        type="button"
+                        onClick={() => setEditModulosDashboard(null)}
+                        style={{ fontSize: 11, color: '#2A4F96', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                      >
+                        Selecionar todos
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', backgroundColor: '#F9FAFB', maxHeight: 220, overflowY: 'auto' }}>
+                      {enabledModules.map(mod => {
+                        const checked = editModulosDashboard === null || editModulosDashboard.includes(mod.id)
+                        return (
+                          <label key={mod.id} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: '#374151' }}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleEditModuloDashboard(mod.id)}
+                              style={{ accentColor: mod.color, width: 14, height: 14, cursor: 'pointer', flexShrink: 0 }}
+                            />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mod.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {editModulosDashboard !== null && (
+                      <p style={{ margin: '4px 0 0', fontSize: 11, color: '#6B7A99' }}>
+                        {editModulosDashboard.length} de {enabledModules.length} módulos no dashboard
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
 
               {editMsg && (
                 <div style={{ marginBottom: 14, padding: '10px 12px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>

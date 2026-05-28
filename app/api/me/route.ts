@@ -9,7 +9,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data } = await admin
     .from('profiles')
-    .select('id, nome, email, papel, gestor_id, pdi_slug')
+    .select('*')
     .eq('id', user.id)
     .single()
 

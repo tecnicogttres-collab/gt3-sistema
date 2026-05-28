@@ -34,6 +34,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if ('nome' in body) profileUpdates.nome = body.nome
   if ('papel' in body) profileUpdates.papel = body.papel
   if ('pdi_slug' in body) profileUpdates.pdi_slug = body.pdi_slug ?? null
+  if ('modulos_permitidos' in body) profileUpdates.modulos_permitidos = body.modulos_permitidos ?? null
+  if ('modulos_dashboard' in body) profileUpdates.modulos_dashboard = body.modulos_dashboard ?? null
   if (Object.keys(profileUpdates).length > 0) {
     await admin.from('profiles').update(profileUpdates).eq('id', id)
   }

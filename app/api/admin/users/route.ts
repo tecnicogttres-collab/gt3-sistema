@@ -37,6 +37,8 @@ export async function GET() {
       nome: profile?.nome ?? null,
       papel: profile?.papel ?? null,
       pdi_slug: profile?.pdi_slug ?? null,
+      modulos_permitidos: profile?.modulos_permitidos ?? null,
+      modulos_dashboard: profile?.modulos_dashboard ?? null,
     }
   })
 

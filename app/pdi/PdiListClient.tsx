@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import * as allPdis from '../../data/pdis/index'
 import type { PdiColaborador } from '../../data/pdis/types'
@@ -232,6 +233,11 @@ export default function PdiListClient({ dbPdis, papel }: { dbPdis: DbPdi[]; pape
   const [localDbPdis, setLocalDbPdis] = useState<DbPdi[]>(dbPdis)
   const [agendaOpen, setAgendaOpen] = useState(false)
   const [agendaBadge, setAgendaBadge] = useState(0)
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (isGestorAdmin && searchParams.get('agenda') === '1') setAgendaOpen(true)
+  }, [isGestorAdmin, searchParams])
 
   const activeDbPdis = localDbPdis.filter(p => p.status !== 'arquivado')
   const archivedDbPdis = localDbPdis.filter(p => p.status === 'arquivado')

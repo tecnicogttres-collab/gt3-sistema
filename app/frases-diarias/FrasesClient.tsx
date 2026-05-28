@@ -16,6 +16,7 @@ const DANGER = '#DC2626'
 type Quote = { id: string; text: string; author: string; active: boolean; createdAt: string }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
+function isWeekday(d = new Date()) { const day = d.getDay(); return day >= 1 && day <= 5 }
 function formatDateLong(d = new Date()) {
   return d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
@@ -49,6 +50,7 @@ export default function FrasesClient() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function loadTodayQuote(allQuotes: Quote[]) {
+    if (!isWeekday()) return
     try {
       const supabase = createClient()
       const today = todayStr()
@@ -354,7 +356,11 @@ export default function FrasesClient() {
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED }}>Frase do dia</span>
             <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94A3B8' }}>{formatDateLong()}</span>
           </div>
-          {quoteOfDay ? (
+          {!isWeekday() ? (
+            <p style={{ fontSize: 16, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 18px' }}>
+              🌅 Bom fim de semana! As frases voltam na segunda-feira.
+            </p>
+          ) : quoteOfDay ? (
             <>
               <p style={{ fontFamily: 'Georgia, serif', fontSize: 20, lineHeight: 1.55, color: INK, margin: '0 0 12px' }}>
                 &ldquo;{quoteOfDay.text}&rdquo;
@@ -366,9 +372,11 @@ export default function FrasesClient() {
           ) : (
             <p style={{ fontSize: 16, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 18px' }}>Nenhuma frase ativa cadastrada.</p>
           )}
-          <button onClick={() => void handleShuffle()} style={{ padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: '#fff', color: INK, fontSize: 13, cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            ↻ Sortear outra
-          </button>
+          {isWeekday() && (
+            <button onClick={() => void handleShuffle()} style={{ padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: '#fff', color: INK, fontSize: 13, cursor: 'pointer', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              ↻ Sortear outra
+            </button>
+          )}
         </div>
 
         {/* Stats */}

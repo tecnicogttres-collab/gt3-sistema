@@ -30,14 +30,26 @@ export default function DashboardPage() {
   }
 
   const pdi = MODULES.find((m) => m.id === 'pdi')
+  const modulos_permitidos = role === 'admin' ? null : (profile?.modulos_permitidos ?? null)
+  const modulos_dashboard = role === 'admin' ? null : (profile?.modulos_dashboard ?? null)
 
   const dashboardModules = MODULES.filter((m) => {
     if (m.id === 'pdi') return false
-    const visible = m.dashboardRoles ?? m.allowedRoles
-    return visible.includes(role)
+    if (role === 'admin') return (m.dashboardRoles ?? m.allowedRoles).includes(role)
+    if (modulos_dashboard !== null) return modulos_dashboard.includes(m.id)
+    if (modulos_permitidos !== null) return modulos_permitidos.includes(m.id)
+    return (m.dashboardRoles ?? m.allowedRoles).includes(role)
   })
 
-  const showPdi = !!pdi && (pdi.dashboardRoles ?? pdi.allowedRoles).includes(role)
+  const showPdi = !!pdi && (
+    role === 'admin'
+      ? (pdi.dashboardRoles ?? pdi.allowedRoles).includes(role)
+      : modulos_dashboard !== null
+        ? modulos_dashboard.includes('pdi')
+        : modulos_permitidos !== null
+          ? modulos_permitidos.includes('pdi')
+          : (pdi.dashboardRoles ?? pdi.allowedRoles).includes(role)
+  )
 
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', paddingLeft: 216 }}>

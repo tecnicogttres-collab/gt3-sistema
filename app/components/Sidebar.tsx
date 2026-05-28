@@ -26,7 +26,12 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
 
   const papel = profile?.papel as Role | null
   const visibleModules = papel
-    ? MODULES.filter((m) => m.allowedRoles.includes(papel))
+    ? MODULES.filter((m) => {
+        if (papel === 'admin') return true
+        const allowed = profile?.modulos_permitidos ?? null
+        if (allowed !== null) return allowed.includes(m.id)
+        return m.allowedRoles.includes(papel)
+      })
     : loading
     ? []
     : MODULES.filter((m) => m.allowedRoles.includes('colaborador'))

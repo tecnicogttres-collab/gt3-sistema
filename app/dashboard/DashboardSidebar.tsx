@@ -373,7 +373,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                 <span style={{ color: '#6B7280', fontSize: 11 }}>{fmtDateShort(item.data_conversa)}</span>
               </div>
             ))}
-            <Link href="/pdi" style={{ fontSize: 12, color: '#2A4F96', marginTop: 8, display: 'block', textDecoration: 'none', fontWeight: 500 }}>
+            <Link href="/pdi?agenda=1" style={{ fontSize: 12, color: '#2A4F96', marginTop: 8, display: 'block', textDecoration: 'none', fontWeight: 500 }}>
               Ver agenda completa →
             </Link>
           </div>
