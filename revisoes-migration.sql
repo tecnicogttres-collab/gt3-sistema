@@ -98,3 +98,9 @@ CREATE POLICY "rev_trainee_update"
 CREATE POLICY "rev_trainee_service_all"
   ON revisoes_trainee FOR ALL TO service_role
   USING (true) WITH CHECK (true);
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.revisoes_datas TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.revisoes_datas TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.revisoes_trainee TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.revisoes_trainee TO service_role;

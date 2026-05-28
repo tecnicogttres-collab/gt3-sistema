@@ -133,3 +133,9 @@ CREATE POLICY "gestor_admin_read_notificacoes"
       WHERE id = auth.uid() AND papel IN ('gestor', 'admin')
     )
   );
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_acoes TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_acoes TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_notificacoes TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_notificacoes TO service_role;

@@ -77,3 +77,7 @@ CREATE POLICY "cr_delete_gestor"
 
 ALTER TABLE public.controle_revisao_sheets REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.controle_revisao_sheets;
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.controle_revisao_sheets TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.controle_revisao_sheets TO service_role;

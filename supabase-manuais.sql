@@ -166,3 +166,9 @@ FROM (VALUES
 ) AS v(id, slug, titulo, secoes, periodicidade, ativo)
 JOIN public.manuais_categorias c ON c.slug = v.slug
 ON CONFLICT (id) DO NOTHING;
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.manuais_categorias TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.manuais_categorias TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.manuais_documentos TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.manuais_documentos TO service_role;

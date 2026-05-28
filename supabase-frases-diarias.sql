@@ -214,3 +214,9 @@ FROM (VALUES
   ('A satisfação está no esforço, não apenas no resultado.', 'Mahatma Gandhi', '')
 ) AS v(texto, autor, fonte)
 WHERE NOT EXISTS (SELECT 1 FROM public.frases WHERE texto = v.texto);
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.frases TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.frases TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.frases_rotacao TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.frases_rotacao TO service_role;

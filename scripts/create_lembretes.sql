@@ -25,3 +25,7 @@ CREATE POLICY "lembretes_update" ON lembretes
 
 CREATE POLICY "lembretes_delete" ON lembretes
   FOR DELETE TO authenticated USING (true);
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.lembretes TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.lembretes TO service_role;

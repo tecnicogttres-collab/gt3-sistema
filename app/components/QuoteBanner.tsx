@@ -95,7 +95,7 @@ export default function QuoteBanner() {
   return (
     <div style={{
       background: '#1E3A6E',
-      padding: '14px 32px',
+      padding: '7px 32px',
       display: 'flex',
       alignItems: 'center',
       gap: 16,
@@ -114,7 +114,7 @@ export default function QuoteBanner() {
         </p>
         {quote.autor && (
           <p style={{
-            margin: '6px 0 0',
+            margin: '3px 0 0',
             fontSize: 12,
             color: 'rgba(255,255,255,0.65)',
             fontStyle: 'normal',

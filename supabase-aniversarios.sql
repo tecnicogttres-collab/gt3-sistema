@@ -71,3 +71,7 @@ CREATE POLICY "aniv_delete_gestor"
 
 ALTER TABLE public.aniversarios REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.aniversarios;
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.aniversarios TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.aniversarios TO service_role;

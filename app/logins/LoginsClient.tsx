@@ -357,7 +357,7 @@ export default function LoginsClient() {
                 const initials = (u.nome ?? u.email).slice(0, 2).toUpperCase()
                 // Rows belonging to another admin are read-only
                 const isProtectedAdmin = u.papel === 'admin' && user?.id !== u.id
-                const canEditThisRow = isAdmin && !isProtectedAdmin
+                const canEditThisRow = canManage && !isProtectedAdmin
                 const canManageThisRow = canManage && !isProtectedAdmin
                 return (
                   <tr key={u.id} style={{ borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none', opacity: u.banned ? 0.5 : 1 }}>

@@ -46,3 +46,7 @@ CREATE POLICY "pdis_delete_gestor" ON public.pdis FOR DELETE
 ALTER TABLE public.pdi_notificacoes
   ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'atualizado'
     CHECK (tipo IN ('criado', 'atualizado'));
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdis TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdis TO service_role;

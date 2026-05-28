@@ -24,3 +24,7 @@ CREATE POLICY "prioridades_vistas_select"
 CREATE POLICY "prioridades_vistas_insert"
   ON public.prioridades_vistas FOR INSERT TO authenticated
   WITH CHECK (user_id = auth.uid());
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.prioridades_vistas TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.prioridades_vistas TO service_role;

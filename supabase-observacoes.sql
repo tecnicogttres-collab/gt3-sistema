@@ -66,3 +66,7 @@ CREATE POLICY "gestor_admin_delete_observacoes"
       WHERE id = auth.uid() AND papel IN ('gestor', 'admin')
     )
   );
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.observacoes TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.observacoes TO service_role;

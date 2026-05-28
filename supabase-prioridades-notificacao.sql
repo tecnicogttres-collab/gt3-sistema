@@ -18,3 +18,7 @@ CREATE POLICY "prioridades_avisos_insert" ON prioridades_avisos
 
 -- Habilitar Realtime para esta tabela
 ALTER PUBLICATION supabase_realtime ADD TABLE prioridades_avisos;
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.prioridades_avisos TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.prioridades_avisos TO service_role;

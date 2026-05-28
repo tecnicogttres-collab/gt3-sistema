@@ -79,3 +79,7 @@ INSERT INTO public.ramais (nome, numero) VALUES
   ('Carlos Menezes',  '1002'),
   ('Fernanda Lima',   '1003')
 ON CONFLICT DO NOTHING;
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.ramais TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.ramais TO service_role;

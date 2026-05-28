@@ -28,7 +28,7 @@ export const MODULES: Module[] = [
   {
     id: 'cadastro',
     label: 'Cadastro Contratantes',
-    color: '#27AE60',
+    color: '#4A90D9',
     path: '/cadastro-contratantes',
     description: 'Tabela e ficha com campos editáveis inline',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -36,7 +36,7 @@ export const MODULES: Module[] = [
   {
     id: 'emails',
     label: 'E-mails Padrão',
-    color: '#9B59B6',
+    color: '#4A90D9',
     path: '/emails',
     description: 'Templates com preview HTML e download .eml',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -44,7 +44,7 @@ export const MODULES: Module[] = [
   {
     id: 'manuais',
     label: 'Manuais',
-    color: '#E67E22',
+    color: '#4A90D9',
     path: '/manuais',
     description: 'Documentos com seções editáveis',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -52,7 +52,7 @@ export const MODULES: Module[] = [
   {
     id: 'sugestoes',
     label: 'Sugestões',
-    color: '#059669',
+    color: '#4A90D9',
     path: '/sugestoes',
     description: 'Caixa de sugestões anônimas',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -60,7 +60,7 @@ export const MODULES: Module[] = [
   {
     id: 'enquetes',
     label: 'Enquetes',
-    color: '#7C3AED',
+    color: '#4A90D9',
     path: '/enquetes',
     description: 'Pesquisas e votações internas',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -68,7 +68,7 @@ export const MODULES: Module[] = [
   {
     id: 'lembretes',
     label: 'Lembretes',
-    color: '#B85C1A',
+    color: '#4A90D9',
     path: '/lembretes',
     description: 'Lembretes recorrentes e únicos da equipe',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -85,7 +85,7 @@ export const MODULES: Module[] = [
   {
     id: 'revisoes-trainee',
     label: 'Revisões Trainee',
-    color: '#10B981',
+    color: '#4A90D9',
     path: '/revisoes-trainee',
     description: 'Acompanhamento diário de documentos por trainee',
     allowedRoles: ['trainee', 'gestor', 'admin'],
@@ -94,7 +94,7 @@ export const MODULES: Module[] = [
   {
     id: 'prioridades',
     label: 'Prioridades',
-    color: '#F97316',
+    color: '#4A90D9',
     path: '/prioridades',
     description: 'Empresas em análise prioritária de documentação',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -104,7 +104,7 @@ export const MODULES: Module[] = [
   {
     id: 'homeoffice',
     label: 'Home Office',
-    color: '#1ABC9C',
+    color: '#4A90D9',
     path: '/home-office',
     description: 'Tabela mensal de dias por colaborador',
     allowedRoles: ['gestor', 'admin'],
@@ -113,7 +113,7 @@ export const MODULES: Module[] = [
   {
     id: 'revisao',
     label: 'Revisões BSA',
-    color: '#E74C3C',
+    color: '#4A90D9',
     path: '/controle-revisao',
     description: 'Registro de inconsistências e escala de revisores',
     allowedRoles: ['gestor', 'admin'],
@@ -122,7 +122,7 @@ export const MODULES: Module[] = [
   {
     id: 'atas',
     label: 'Atas',
-    color: '#5B8DEF',
+    color: '#4A90D9',
     path: '/atas',
     description: 'Atas por hierarquia Ano › Mês › Data',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
@@ -132,7 +132,7 @@ export const MODULES: Module[] = [
   {
     id: 'notificacoes',
     label: 'Notificações',
-    color: '#EF4444',
+    color: '#4A90D9',
     path: '/notificacoes',
     description: 'Configuração de alertas por módulo',
     allowedRoles: ['admin'],
@@ -140,15 +140,15 @@ export const MODULES: Module[] = [
   {
     id: 'logins',
     label: 'Usuários',
-    color: '#EC4899',
+    color: '#4A90D9',
     path: '/logins',
     description: 'Gestão de usuários e acessos',
-    allowedRoles: ['admin'],
+    allowedRoles: ['admin', 'gestor'],
   },
   {
     id: 'aniversarios',
     label: 'Aniversários',
-    color: '#F472B6',
+    color: '#4A90D9',
     path: '/aniversarios',
     description: 'Calendário de aniversários dos colaboradores',
     allowedRoles: ['admin'],
@@ -156,7 +156,7 @@ export const MODULES: Module[] = [
   {
     id: 'ramais',
     label: 'Ramais',
-    color: '#0EA5E9',
+    color: '#4A90D9',
     path: '/ramais',
     description: 'Lista de ramais internos da GT3',
     allowedRoles: ['admin'],
@@ -164,7 +164,7 @@ export const MODULES: Module[] = [
   {
     id: 'frases',
     label: 'Frases Diárias',
-    color: '#8B5CF6',
+    color: '#4A90D9',
     path: '/frases-diarias',
     description: 'Gestão de frases motivacionais diárias',
     allowedRoles: ['admin'],

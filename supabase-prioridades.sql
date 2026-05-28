@@ -62,3 +62,7 @@ CREATE POLICY "prioridades_delete_gestor"
 
 ALTER TABLE public.prioridades REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.prioridades;
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.prioridades TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.prioridades TO service_role;

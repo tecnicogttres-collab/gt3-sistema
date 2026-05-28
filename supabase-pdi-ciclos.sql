@@ -74,3 +74,9 @@ CREATE POLICY "pdi_conversa_avisos_insert" ON pdi_conversa_avisos FOR INSERT
 -- Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE pdi_ciclos;
 ALTER PUBLICATION supabase_realtime ADD TABLE pdi_conversa_avisos;
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_ciclos TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_ciclos TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_conversa_avisos TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.pdi_conversa_avisos TO service_role;

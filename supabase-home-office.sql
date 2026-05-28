@@ -76,3 +76,7 @@ CREATE POLICY "ho_delete_gestor"
 
 ALTER TABLE public.home_office_sheets REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.home_office_sheets;
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.home_office_sheets TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.home_office_sheets TO service_role;

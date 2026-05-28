@@ -75,3 +75,7 @@ CREATE POLICY "et_delete_gestor"
 
 ALTER TABLE public.email_templates REPLICA IDENTITY FULL;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.email_templates;
+
+-- ── GRANTs ───────────────────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.email_templates TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.email_templates TO service_role;

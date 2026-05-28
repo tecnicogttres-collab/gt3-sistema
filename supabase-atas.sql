@@ -42,3 +42,9 @@ CREATE POLICY "atas_leituras_insert" ON atas_leituras FOR INSERT TO authenticate
 -- 4. Habilitar Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE atas;
 ALTER PUBLICATION supabase_realtime ADD TABLE atas_leituras;
+
+-- ── GRANTs ───────────────────────────────────────────────────────
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.atas TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.atas TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.atas_leituras TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.atas_leituras TO service_role;
