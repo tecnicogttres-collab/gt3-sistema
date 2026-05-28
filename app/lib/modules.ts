@@ -66,6 +66,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'lembretes',
+    label: 'Lembretes',
+    color: '#B85C1A',
+    path: '/lembretes',
+    description: 'Lembretes recorrentes e únicos da equipe',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'pdi',
     label: 'PDI',
     color: '#D1AE6E',

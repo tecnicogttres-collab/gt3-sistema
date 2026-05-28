@@ -5,6 +5,16 @@ import PdiListClient from './PdiListClient'
 
 export const metadata = { title: 'PDI — GT3 Sistema' }
 
+export type DbPdi = {
+  id: string
+  nome: string
+  funcao: string
+  data_inicio: string | null
+  colaborador_id: string | null
+  created_at: string
+  status: string
+}
+
 export default async function PdiPage() {
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
@@ -20,10 +30,9 @@ export default async function PdiPage() {
   const papel = (profile?.papel as string) ?? null
 
   // Colaborador vê apenas o próprio PDI
-  if (papel === 'colaborador') {
+  if (papel === 'colaborador' || papel === 'trainee') {
     const slug = profile?.pdi_slug as string | null
     if (slug) redirect(`/pdi/${slug}`)
-    // Sem PDI vinculado — mostra mensagem
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, gap: 12, color: '#6B7A99', textAlign: 'center' }}>
         <div style={{ fontSize: 40 }}>📋</div>
@@ -33,6 +42,11 @@ export default async function PdiPage() {
     )
   }
 
-  // Gestor e admin veem a lista completa
-  return <PdiListClient />
+  // Gestor e admin: busca PDIs do banco além dos estáticos
+  const { data: dbPdis } = await admin
+    .from('pdis')
+    .select('id, nome, funcao, data_inicio, colaborador_id, created_at, status')
+    .order('created_at', { ascending: true })
+
+  return <PdiListClient dbPdis={(dbPdis ?? []) as DbPdi[]} papel={papel ?? 'gestor'} />
 }

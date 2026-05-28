@@ -93,6 +93,7 @@ export default function RevisoesTraineeClient() {
 
   const [data, setData] = useState<ApiData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [activeTraineeId, setActiveTraineeId] = useState<string>('')
   const activeTraineeIdRef = useRef('')
@@ -159,6 +160,12 @@ export default function RevisoesTraineeClient() {
     setLoading(false)
     setFetchError('')
   }, [])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await fetchData()
+    setRefreshing(false)
+  }
 
   useEffect(() => {
     if (!profileLoading) fetchData()
@@ -479,25 +486,35 @@ export default function RevisoesTraineeClient() {
             {activeDate ? formatDateLong(activeDate) : 'Nenhuma data ativa'}
           </p>
         </div>
-        {!isTrainee && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            {activeDate && !isFinalized && (
-              <button onClick={openFinalizar} style={{ padding: '8px 16px', backgroundColor: '#DC2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                Finalizar dia
-              </button>
-            )}
-            {!activeDate && (
-              <button onClick={() => { setNovaDataOpen(true); setNovaDataInput(todayISO()); setNovaDataError('') }} style={{ padding: '8px 16px', backgroundColor: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                + Nova data
-              </button>
-            )}
-            {activeDate && (
-              <button onClick={exportCSV} style={{ padding: '8px 16px', backgroundColor: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-                Exportar CSV
-              </button>
-            )}
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {!isTrainee && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {activeDate && !isFinalized && (
+                <button onClick={openFinalizar} style={{ padding: '8px 16px', backgroundColor: '#DC2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Finalizar dia
+                </button>
+              )}
+              {!activeDate && (
+                <button onClick={() => { setNovaDataOpen(true); setNovaDataInput(todayISO()); setNovaDataError('') }} style={{ padding: '8px 16px', backgroundColor: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  + Nova data
+                </button>
+              )}
+              {activeDate && (
+                <button onClick={exportCSV} style={{ padding: '8px 16px', backgroundColor: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                  Exportar CSV
+                </button>
+              )}
+            </div>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            style={{ padding: '7px 14px', background: '#fff', color: '#2A4F96', border: '1px solid #2A4F96', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: refreshing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: refreshing ? 0.7 : 1, fontFamily: 'inherit' }}
+          >
+            <span className={refreshing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>🔄</span>
+            Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

@@ -64,6 +64,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     })
   }
 
+  // Notifica colaborador quando gestor agenda/reagenda conversa
+  if (isGestorAdmin && body.data_conversa !== undefined && body.data_conversa !== null && colaboradorId) {
+    await admin.from('pdi_notificacoes').insert({
+      pdi_id: id,
+      colaborador_id: colaboradorId,
+      visto: false,
+    })
+  }
+
   return Response.json(data)
 }
 

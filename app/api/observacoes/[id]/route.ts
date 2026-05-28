@@ -46,6 +46,53 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return Response.json(data)
 }
 
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { user, papel } = await getCallerAndRole()
+  if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const body = await req.json()
+  const admin = createAdminClient()
+
+  async function withProfile(row: Record<string, unknown>) {
+    if (!row.atualizado_por) return { ...row, atualizado_por_profile: null }
+    const { data: prof } = await admin.from('profiles').select('nome').eq('id', row.atualizado_por as string).single()
+    return { ...row, atualizado_por_profile: prof ? { nome: prof.nome } : null }
+  }
+
+  if (body.action === 'validate') {
+    if (!['gestor', 'admin'].includes(papel ?? '')) {
+      return Response.json({ error: 'Sem permissão' }, { status: 403 })
+    }
+    const { data, error } = await admin
+      .from('observacoes')
+      .update({ status_edicao: 'validado' })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    return Response.json(await withProfile(data))
+  }
+
+  const { parecer } = body
+  if (!parecer?.trim()) return Response.json({ error: 'parecer obrigatório' }, { status: 400 })
+
+  const { data, error } = await admin
+    .from('observacoes')
+    .update({
+      parecer: parecer.trim(),
+      atualizado_por: user.id,
+      atualizado_em: new Date().toISOString(),
+      status_edicao: 'pendente_validacao',
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+  return Response.json(await withProfile(data))
+}
+
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { user, papel } = await getCallerAndRole()

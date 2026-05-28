@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '../../lib/supabase-server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import * as allPdis from '../../../data/pdis/index'
-import type { PdiColaborador } from '../../../data/pdis/types'
+import type { PdiColaborador, EneagramaRank, Animal } from '../../../data/pdis/types'
 import PdiDetailClient from './PdiDetailClient'
 
 const pdisMap = Object.values(allPdis).reduce<Record<string, PdiColaborador>>((acc, pdi) => {
@@ -20,10 +20,43 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: pdi ? `PDI — ${pdi.nome}` : 'PDI — GT3 Sistema' }
 }
 
+type DbPdiRow = {
+  id: string
+  nome: string
+  funcao: string
+  data_inicio?: string | null
+  eneagrama?: unknown
+  animais?: unknown
+  conclusoes?: unknown
+  competencias?: unknown
+}
+
+function dbRowToColaborador(row: DbPdiRow): PdiColaborador {
+  const en = row.eneagrama as { ranking?: EneagramaRank[]; pontosFortes?: string[]; pontosAtencao?: string[]; comoDesenvolver?: string[] } | null
+  return {
+    id: row.id,
+    nome: row.nome,
+    funcao: row.funcao,
+    periodo: row.data_inicio ? new Date(row.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR') : '',
+    matrizAvaliacao: { competencias: (row.competencias as string[] | null) ?? [], diretiva: [], auto: [], ambicao: [], totais: { diretiva: 0, auto: 0, ambicao: 0, max: 0 } },
+    planoDeAcao: [],
+    perfilComportamental: {
+      eneagrama: {
+        ranking: en?.ranking ?? [],
+        pontosFortes: en?.pontosFortes ?? [],
+        pontosAtencao: en?.pontosAtencao ?? [],
+        comoDesenvolver: en?.comoDesenvolver ?? [],
+      },
+      animais: (row.animais as Animal[] | null) ?? [],
+    },
+    conclusoes: (row.conclusoes as PdiColaborador['conclusoes'] | null) ?? {
+      forcas: [], pontosAtencao: [], ondeAgrega: [], comoPodeApoiar: [], riscos: [], comoLiderar: [],
+    },
+  }
+}
+
 export default async function PdiDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const pdi = pdisMap[id]
-  if (!pdi) notFound()
 
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
@@ -45,7 +78,23 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
     redirect('/pdi')
   }
 
-  // Seed ciclo 1 na primeira abertura de qualquer usuário
+  // Try static PDI first, then DB
+  let pdi: PdiColaborador | undefined = pdisMap[id]
+  let isDbPdi = false
+
+  if (!pdi) {
+    const { data: dbRow } = await admin
+      .from('pdis')
+      .select('id, nome, funcao, data_inicio, eneagrama, animais, conclusoes, competencias')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (!dbRow) notFound()
+    pdi = dbRowToColaborador(dbRow as DbPdiRow)
+    isDbPdi = true
+  }
+
+  // Seed ciclo 1 on first visit (skip if already seeded during creation)
   const { data: existingCiclo } = await admin
     .from('pdi_ciclos')
     .select('id')
@@ -54,7 +103,6 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
     .maybeSingle()
 
   if (!existingCiclo) {
-    // Encontra o colaborador dono deste PDI
     const { data: colab } = await admin
       .from('profiles')
       .select('id')
@@ -69,10 +117,10 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
       avaliacao_diretiva: pdi.matrizAvaliacao.diretiva,
       autoavaliacao: pdi.matrizAvaliacao.auto,
       ambicao: pdi.matrizAvaliacao.ambicao,
-      autoavaliacao_salva: true,
+      autoavaliacao_salva: pdi.matrizAvaliacao.diretiva.length > 0,
       criado_por: user.id,
     })
   }
 
-  return <PdiDetailClient pdi={pdi} papel={papel} />
+  return <PdiDetailClient pdi={pdi} papel={papel} isDbPdi={isDbPdi} />
 }

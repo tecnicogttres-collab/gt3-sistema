@@ -10,7 +10,7 @@ type Doc = { id: string; nome: string; periodicidade: string; sections: DocSecti
 type NRRow = { origem: string; treinamento: string; ch: string; periodicidade: string; reciclagem: string; instrutor: string; resp: string }
 type NRObs = { tag: string; texto: string }
 
-type DocTab = 'funcionarios' | 'empresas' | 'veiculos' | 'alimentar' | 'bsa' | 'rescissorios' | 'geral'
+type DocTab = 'funcionarios' | 'empresas' | 'veiculos' | 'alimentar' | 'bsa' | 'rescissorios' | 'geral' | 'variacoes'
 type TabKey = DocTab | 'nrs'
 
 type ManuaisData = Record<DocTab, Doc[]> & { nrs: NRRow[]; nrsObs: NRObs[] }
@@ -26,6 +26,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'bsa', label: 'BSA' },
   { key: 'rescissorios', label: 'Rescisórios' },
   { key: 'geral', label: 'Geral' },
+  { key: 'variacoes', label: 'Variações' },
 ]
 
 const TAB_TITLES: Record<TabKey, { title: string; sub: string }> = {
@@ -37,6 +38,7 @@ const TAB_TITLES: Record<TabKey, { title: string; sub: string }> = {
   bsa: { title: 'Manuais — BSA', sub: 'Documentos BSA' },
   rescissorios: { title: 'Manuais — Rescisórios', sub: 'Documentos rescisórios — GPF / Marcopolo / Ciferal / Volare' },
   geral: { title: 'Manuais — Geral', sub: 'Definições e rotinas operacionais' },
+  variacoes: { title: 'Manuais — Variações', sub: 'Critérios de validação por contratante' },
 }
 
 const PILL: Record<string, { bg: string; color: string }> = {
@@ -60,7 +62,7 @@ function deepCopy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 
 const EMPTY_DATA: ManuaisData = {
   funcionarios: [], empresas: [], veiculos: [], alimentar: [],
-  bsa: [], rescissorios: [], geral: [], nrs: [], nrsObs: [],
+  bsa: [], rescissorios: [], geral: [], variacoes: [], nrs: [], nrsObs: [],
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -117,6 +119,10 @@ export default function ManuaisClient() {
             sections: (doc.secoes as DocSection[]) ?? [],
           })
         }
+      }
+      const docKeys = Object.keys(EMPTY_DATA).filter(k => k !== 'nrs' && k !== 'nrsObs') as DocTab[]
+      for (const key of docKeys) {
+        built[key].sort((a, b) => a.nome.toLowerCase() < b.nome.toLowerCase() ? -1 : 1)
       }
       setData(built)
       setLoading(false)

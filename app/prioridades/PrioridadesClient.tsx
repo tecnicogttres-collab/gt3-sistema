@@ -101,6 +101,7 @@ export default function PrioridadesClient() {
   // ── State ──
   const [priorities, setPriorities] = useState<Prioridade[]>([])
   const [hydrated, setHydrated] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
   const [filterResp, setFilterResp] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
@@ -132,23 +133,28 @@ export default function PrioridadesClient() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load from Supabase ──
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('prioridades')
-        .select('*')
-        .order('posicao', { ascending: true })
-      if (error) {
-        console.error('Erro ao carregar prioridades:', error)
-        setPriorities([])
-      } else {
-        setPriorities((data ?? []).map(rowToPrioridade))
-      }
-      setHydrated(true)
+  const loadData = useCallback(async () => {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('prioridades')
+      .select('*')
+      .order('posicao', { ascending: true })
+    if (error) {
+      console.error('Erro ao carregar prioridades:', error)
+      setPriorities([])
+    } else {
+      setPriorities((data ?? []).map(rowToPrioridade))
     }
-    load()
+    setHydrated(true)
   }, [])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await loadData()
+    setRefreshing(false)
+  }
 
   // ── Toast ──
   function toast(msg: string) {
@@ -458,7 +464,17 @@ export default function PrioridadesClient() {
             {responsaveis.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
-        <button onClick={openCreate} style={btnPrimary}>+ Nova prioridade</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            style={{ padding: '7px 14px', background: '#fff', color: '#2A4F96', border: '1px solid #2A4F96', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: refreshing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: refreshing ? 0.7 : 1, fontFamily: 'inherit' }}
+          >
+            <span className={refreshing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>🔄</span>
+            Atualizar
+          </button>
+          <button onClick={openCreate} style={btnPrimary}>+ Nova prioridade</button>
+        </div>
       </div>
 
       {/* List */}

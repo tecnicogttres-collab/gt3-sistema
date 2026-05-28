@@ -31,7 +31,19 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(data ?? [])
+
+  const rows = data ?? []
+  const ids = [...new Set(rows.map(r => r.atualizado_por).filter(Boolean))] as string[]
+  let nameMap: Record<string, string> = {}
+  if (ids.length > 0) {
+    const { data: profiles } = await admin.from('profiles').select('id, nome').in('id', ids)
+    nameMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p.nome]))
+  }
+  const enriched = rows.map(r => ({
+    ...r,
+    atualizado_por_profile: r.atualizado_por ? { nome: nameMap[r.atualizado_por] ?? null } : null,
+  }))
+  return Response.json(enriched)
 }
 
 export async function POST(req: NextRequest) {
@@ -42,7 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { categoria, subtab, coluna, motivo, parecer, group_name, imagem_url } = body
+  const { categoria, subtab, coluna, motivo, parecer, group_name, imagem_url, status_edicao } = body
   if (!categoria || !subtab || !coluna || !motivo?.trim() || !parecer?.trim()) {
     return Response.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
   }
@@ -59,6 +71,8 @@ export async function POST(req: NextRequest) {
       group_name: group_name ?? null,
       imagem_url: imagem_url ?? null,
       criado_por: user.id,
+      ...(status_edicao ? { status_edicao } : {}),
+      ...(status_edicao === 'pendente_validacao' ? { atualizado_por: user.id, atualizado_em: new Date().toISOString() } : {}),
     })
     .select()
     .single()

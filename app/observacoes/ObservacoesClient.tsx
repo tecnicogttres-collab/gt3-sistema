@@ -16,7 +16,15 @@ const BG_PAGE = '#F4F6FA'
 
 // ─── Extended types ────────────────────────────────────────────────────────────
 
-type CardUI = Card & { _id?: string; _source: 'static' | 'db'; _imagem_url?: string }
+type CardUI = Card & {
+  _id?: string
+  _source: 'static' | 'db'
+  _imagem_url?: string
+  _atualizado_por?: string | null
+  _atualizado_em?: string | null
+  _status_edicao?: string | null
+  _atualizado_por_nome?: string | null
+}
 type ColumnUI = Omit<Column, 'cards'> & { cards: CardUI[] }
 
 type DbObservacao = {
@@ -30,6 +38,10 @@ type DbObservacao = {
   imagem_url: string | null
   criado_por: string | null
   editado_por: string | null
+  atualizado_por: string | null
+  atualizado_em: string | null
+  status_edicao: 'original' | 'pendente_validacao' | 'validado' | null
+  atualizado_por_profile: { nome: string } | null
   created_at: string
   updated_at: string
 }
@@ -98,22 +110,52 @@ function highlight(text: string, term: string): React.ReactNode {
 }
 
 function buildColumnUI(col: Column, dbRows: DbObservacao[]): ColumnUI {
-  const staticCards: CardUI[] = col.cards.map(c => ({ ...c, _source: 'static' as const }))
-  const dbCards: CardUI[] = dbRows
-    .filter(o => o.coluna === col.title)
-    .map(o => ({
-      motivo: o.motivo, parecer: o.parecer,
-      group: o.group_name ?? undefined,
-      _id: o.id, _source: 'db' as const,
+  const colDbRows = dbRows.filter(o => o.coluna === col.title)
+
+  function toCardUI(o: DbObservacao, staticFallback?: Card): CardUI {
+    return {
+      motivo: o.motivo,
+      parecer: o.parecer,
+      group: o.group_name ?? staticFallback?.group ?? undefined,
+      _id: o.id,
+      _source: 'db' as const,
       _imagem_url: o.imagem_url ?? undefined,
-    }))
-  return { ...col, cards: [...staticCards, ...dbCards] }
+      _atualizado_por: o.atualizado_por,
+      _atualizado_em: o.atualizado_em,
+      _status_edicao: o.status_edicao,
+      _atualizado_por_nome: o.atualizado_por_profile?.nome ?? null,
+    }
+  }
+
+  // Index DB rows by motivo so static cards can be replaced in-place
+  const dbByMotivo = new Map<string, DbObservacao>()
+  const dbOrphan: DbObservacao[] = []
+  for (const row of colDbRows) {
+    if (col.cards.some(c => c.motivo === row.motivo)) {
+      dbByMotivo.set(row.motivo, row)
+    } else {
+      dbOrphan.push(row)
+    }
+  }
+
+  const cards: CardUI[] = col.cards.map(c => {
+    const override = dbByMotivo.get(c.motivo)
+    return override ? toCardUI(override, c) : { ...c, _source: 'static' as const }
+  })
+
+  // Truly new DB cards (no static counterpart) go at the end
+  for (const row of dbOrphan) {
+    cards.push(toCardUI(row))
+  }
+
+  return { ...col, cards }
 }
 
 // ─── Card Component ────────────────────────────────────────────────────────────
 
 function ObsCard({
   card, id, isCopied, onCopy, search, canManage, onEdit, onDelete, isFixed,
+  onInlineSave, onValidate, canValidate, onInlineCreate,
 }: {
   card: CardUI
   id: string
@@ -124,23 +166,65 @@ function ObsCard({
   onEdit?: () => void
   onDelete?: () => void
   isFixed?: boolean
+  onInlineSave?: (id: string, parecer: string) => Promise<void>
+  onValidate?: (id: string) => Promise<void>
+  canValidate?: boolean
+  onInlineCreate?: (motivo: string, parecer: string) => Promise<void>
 }) {
+  const [editingInline, setEditingInline] = useState(false)
+  const [inlineText, setInlineText] = useState('')
+  const [inlineSaving, setInlineSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  const isPendente = card._status_edicao === 'pendente_validacao'
   const accentColor = isFixed ? ACCENT : PRIMARY
   const tagBg = isFixed ? 'rgba(209,174,110,0.15)' : 'rgba(42,79,150,0.08)'
   const borderColor = isCopied ? '#22C55E' : accentColor
 
+  function startInlineEdit() {
+    setInlineText(card.parecer)
+    setEditingInline(true)
+  }
+
+  async function saveInlineEdit() {
+    if (!inlineText.trim()) return
+    setInlineSaving(true)
+    setSaveError('')
+    try {
+      if (card._id) {
+        await onInlineSave?.(card._id, inlineText.trim())
+      } else {
+        await onInlineCreate?.(card.motivo, inlineText.trim())
+      }
+      setEditingInline(false)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Erro ao salvar')
+    } finally {
+      setInlineSaving(false)
+    }
+  }
+
+  function formatEditDate(iso: string | null | undefined): string {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} às ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onCopy(id, card.parecer)}
-      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onCopy(id, card.parecer)}
+      role={editingInline ? undefined : 'button'}
+      tabIndex={editingInline ? undefined : 0}
+      onClick={editingInline ? undefined : () => onCopy(id, card.parecer)}
+      onKeyDown={editingInline ? undefined : e => (e.key === 'Enter' || e.key === ' ') && onCopy(id, card.parecer)}
       style={{
-        background: BG_CARD,
-        border: `1.5px solid ${borderColor}`,
+        background: isPendente ? '#EFF6FF' : BG_CARD,
+        borderTop: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
+        borderRight: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
+        borderBottom: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
+        borderLeft: isPendente ? '3px solid #2A4F96' : `1.5px solid ${borderColor}`,
         borderRadius: 8,
         padding: '10px 12px',
-        cursor: 'pointer',
+        cursor: editingInline ? 'default' : 'pointer',
         transition: 'border-color 0.2s, box-shadow 0.15s, transform 0.1s',
         boxShadow: isCopied
           ? '0 0 0 3px rgba(34,197,94,0.15)'
@@ -149,15 +233,17 @@ function ObsCard({
             : '0 1px 3px rgba(42,79,150,0.08)',
         transform: isCopied ? 'scale(0.99)' : undefined,
         position: 'relative',
-        userSelect: 'none',
+        userSelect: editingInline ? 'text' : 'none',
       }}
     >
-      <div style={{
-        position: 'absolute', top: 8, right: 10, fontSize: 11, fontWeight: 600,
-        color: isCopied ? '#16A34A' : MUTED, transition: 'color 0.2s', letterSpacing: 0.3,
-      }}>
-        {isCopied ? '✓ Copiado' : '⧉'}
-      </div>
+      {!editingInline && (
+        <div style={{
+          position: 'absolute', top: 8, right: 10, fontSize: 11, fontWeight: 600,
+          color: isCopied ? '#16A34A' : MUTED, transition: 'color 0.2s', letterSpacing: 0.3,
+        }}>
+          {isCopied ? '✓ Copiado' : '⧉'}
+        </div>
+      )}
 
       <div style={{
         display: 'inline-block', fontSize: 12, fontWeight: 700, color: accentColor,
@@ -166,11 +252,27 @@ function ObsCard({
       }}>
         {highlight(card.motivo, search)}
       </div>
-      <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-        {highlight(card.parecer, search)}
-      </div>
 
-      {card._imagem_url && (
+      {editingInline ? (
+        <textarea
+          value={inlineText}
+          onChange={e => setInlineText(e.target.value)}
+          autoFocus
+          rows={4}
+          onClick={e => e.stopPropagation()}
+          style={{
+            width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 12,
+            border: `1.5px solid ${PRIMARY}`, outline: 'none', resize: 'vertical',
+            fontFamily: 'inherit', color: INK, boxSizing: 'border-box', display: 'block',
+          }}
+        />
+      ) : (
+        <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {highlight(card.parecer, search)}
+        </div>
+      )}
+
+      {!editingInline && card._imagem_url && (
         <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
           <img
             src={card._imagem_url}
@@ -180,31 +282,100 @@ function ObsCard({
         </div>
       )}
 
-      {canManage && card._source === 'db' && (
+      {!editingInline && isPendente && (
         <div
-          style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}` }}
+          style={{ marginTop: 8, fontSize: 11, color: '#4B72C4', lineHeight: 1.6 }}
           onClick={e => e.stopPropagation()}
         >
-          <button
-            onClick={onEdit}
-            style={{
-              fontSize: 11, padding: '2px 8px', borderRadius: 5, border: `1px solid ${BORDER}`,
-              background: '#F0F4FA', color: PRIMARY, cursor: 'pointer', fontWeight: 600,
-            }}
-          >
-            ✎ Editar
-          </button>
-          <button
-            onClick={onDelete}
-            style={{
-              fontSize: 11, padding: '2px 8px', borderRadius: 5, border: '1px solid #FCA5A5',
-              background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600,
-            }}
-          >
-            🗑 Excluir
-          </button>
+          {(() => {
+            const parts = [
+              card._atualizado_por_nome && `por ${card._atualizado_por_nome}`,
+              card._atualizado_em && `em ${formatEditDate(card._atualizado_em)}`,
+            ].filter(Boolean).join(' ')
+            return `✏️ ${parts ? `Atualizado ${parts} — ` : ''}Aguardando validação`
+          })()}
+          {canValidate && (
+            <button
+              onClick={() => card._id && onValidate?.(card._id)}
+              style={{
+                display: 'block', marginTop: 5, fontSize: 11, padding: '3px 10px', borderRadius: 5,
+                border: '1px solid #2A4F96', background: '#fff', color: '#2A4F96',
+                cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              ✓ Validar atualização
+            </button>
+          )}
         </div>
       )}
+
+      <div
+        style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${isPendente ? '#BFDBFE' : BORDER}`, flexWrap: 'wrap' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {editingInline ? (
+          <>
+            <button
+              onClick={saveInlineEdit}
+              disabled={inlineSaving || !inlineText.trim()}
+              style={{
+                fontSize: 11, padding: '2px 10px', borderRadius: 5, border: 'none',
+                background: PRIMARY, color: '#fff', cursor: inlineSaving ? 'default' : 'pointer',
+                fontWeight: 600, opacity: (!inlineText.trim() || inlineSaving) ? 0.6 : 1,
+              }}
+            >
+              {inlineSaving ? 'Salvando…' : 'Salvar'}
+            </button>
+            <button
+              onClick={() => { setEditingInline(false); setSaveError('') }}
+              disabled={inlineSaving}
+              style={{
+                fontSize: 11, padding: '2px 10px', borderRadius: 5, border: `1px solid ${BORDER}`,
+                background: '#fff', color: MUTED, cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              Cancelar
+            </button>
+            {saveError && (
+              <span style={{ fontSize: 11, color: '#DC2626', marginLeft: 4 }}>{saveError}</span>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              onClick={startInlineEdit}
+              style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 5, border: '1px solid #BFDBFE',
+                background: '#EFF6FF', color: '#2A4F96', cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              ✏️ Editar
+            </button>
+            {canManage && card._source === 'db' && (
+              <>
+                <button
+                  onClick={onEdit}
+                  style={{
+                    fontSize: 11, padding: '2px 8px', borderRadius: 5, border: `1px solid ${BORDER}`,
+                    background: '#F0F4FA', color: PRIMARY, cursor: 'pointer', fontWeight: 600,
+                  }}
+                >
+                  ✎ Editar completo
+                </button>
+                <button
+                  onClick={onDelete}
+                  style={{
+                    fontSize: 11, padding: '2px 8px', borderRadius: 5, border: '1px solid #FCA5A5',
+                    background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600,
+                  }}
+                >
+                  🗑 Excluir
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -213,7 +384,7 @@ function ObsCard({
 
 function ObsColumn({
   col, catKey, subtabKey, search, copiedId, onCopy,
-  papel, onAdd, onEdit, onDelete,
+  papel, onAdd, onEdit, onDelete, onInlineSave, onValidate, onInlineCreate,
 }: {
   col: ColumnUI
   catKey: string
@@ -225,6 +396,9 @@ function ObsColumn({
   onAdd: (coluna: string, subtabKey: string) => void
   onEdit: (id: string, motivo: string, parecer: string, coluna: string, subtabKey: string, imagemUrl: string) => void
   onDelete: (id: string) => void
+  onInlineSave: (id: string, parecer: string) => Promise<void>
+  onValidate: (id: string) => Promise<void>
+  onInlineCreate: (catKey: string, subtabKey: string, coluna: string, motivo: string, parecer: string) => Promise<void>
 }) {
   const { ungrouped, groups } = useMemo(() => {
     const ungrouped: { card: CardUI; idx: number }[] = []
@@ -321,6 +495,10 @@ function ObsColumn({
               isFixed={col.isFixed}
               onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
               onDelete={() => card._id && onDelete(card._id)}
+              onInlineSave={onInlineSave}
+              onValidate={onValidate}
+              canValidate={canManage}
+              onInlineCreate={async (motivo, parecer) => onInlineCreate(catKey, subtabKey, col.title, motivo, parecer)}
             />
           )
         })}
@@ -348,6 +526,9 @@ function ObsColumn({
                   isFixed={col.isFixed}
                   onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
                   onDelete={() => card._id && onDelete(card._id)}
+                  onInlineSave={onInlineSave}
+                  onValidate={onValidate}
+                  canValidate={canManage}
                 />
               )
             })}
@@ -564,6 +745,49 @@ export default function ObservacoesClient() {
 
   const handleDeleteRequest = useCallback((id: string) => {
     setConfirm({ open: true, type: 'delete', id })
+  }, [])
+
+  const handleInlineCreate = useCallback(async (catKey: string, subtabKey: string, coluna: string, motivo: string, parecer: string) => {
+    const res = await fetch('/api/observacoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoria: catKey, subtab: subtabKey, coluna, motivo, parecer, status_edicao: 'pendente_validacao' }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error ?? `HTTP ${res.status}`)
+    }
+    const created: DbObservacao = await res.json()
+    setDbObs(prev => [...prev, {
+      ...created,
+      atualizado_por_profile: created.atualizado_por ? { nome: profile?.nome ?? '' } : null,
+    }])
+  }, [profile])
+
+  const handleInlineSave = useCallback(async (id: string, parecer: string) => {
+    const res = await fetch(`/api/observacoes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parecer }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error ?? `HTTP ${res.status}`)
+    }
+    const updated: DbObservacao = await res.json()
+    setDbObs(prev => prev.map(o => o.id === updated.id ? updated : o))
+  }, [])
+
+  const handleValidate = useCallback(async (id: string) => {
+    const res = await fetch(`/api/observacoes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'validate' }),
+    })
+    if (res.ok) {
+      const updated: DbObservacao = await res.json()
+      setDbObs(prev => prev.map(o => o.id === updated.id ? updated : o))
+    }
   }, [])
 
   function buildParecer(): string {
@@ -1144,6 +1368,9 @@ export default function ObservacoesClient() {
                           onAdd={handleAdd}
                           onEdit={handleEditOpen}
                           onDelete={handleDeleteRequest}
+                          onInlineSave={handleInlineSave}
+                          onValidate={handleValidate}
+                          onInlineCreate={handleInlineCreate}
                         />
                       </div>
                     ))}
@@ -1178,6 +1405,9 @@ export default function ObservacoesClient() {
                       onAdd={handleAdd}
                       onEdit={handleEditOpen}
                       onDelete={handleDeleteRequest}
+                      onInlineSave={handleInlineSave}
+                      onValidate={handleValidate}
+                      onInlineCreate={handleInlineCreate}
                     />
                   </div>
                 )}
@@ -1225,6 +1455,9 @@ export default function ObservacoesClient() {
                           onAdd={handleAdd}
                           onEdit={handleEditOpen}
                           onDelete={handleDeleteRequest}
+                          onInlineSave={handleInlineSave}
+                          onValidate={handleValidate}
+                          onInlineCreate={handleInlineCreate}
                         />
                       </div>
                     ))}

@@ -89,7 +89,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Right panel */}
-      <DashboardSidebar />
+      <DashboardSidebar role={role} />
     </div>
   )
 }

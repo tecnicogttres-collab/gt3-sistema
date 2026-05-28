@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -27,6 +28,38 @@ type BdayItem = {
   daysLeft: number
 }
 
+type LembreteItem = {
+  titulo: string
+  daysLeft: number
+}
+
+type PdiAgendaEntry = {
+  colaborador_nome: string
+  data_conversa: string
+  numero_ciclo: number
+}
+
+function fmtDateShort(iso: string) {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} às ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function nextOccStr(periodo: string, dataInicio: string): Date {
+  const parse = (s: string) => new Date(s + 'T00:00:00')
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const start = parse(dataInicio)
+  if (periodo === 'unico') return start
+  if (periodo === 'diario') return today < start ? start : today
+  const d = new Date(start)
+  if (periodo === 'semanal') { while (d < today) d.setDate(d.getDate() + 7) }
+  else if (periodo === 'mensal') { while (d < today) d.setMonth(d.getMonth() + 1) }
+  else if (periodo === 'trimestral') { while (d < today) d.setMonth(d.getMonth() + 3) }
+  else if (periodo === 'semestral') { while (d < today) d.setMonth(d.getMonth() + 6) }
+  else if (periodo === 'anual') { while (d < today) d.setFullYear(d.getFullYear() + 1) }
+  return d
+}
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -45,12 +78,14 @@ function fmtTs(ts: number) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function DashboardSidebar() {
+export default function DashboardSidebar({ role }: { role?: string }) {
   const [priorities, setPriorities] = useState<Prioridade[]>([])
   const [hoNames, setHoNames] = useState<string[]>([])
   const [bsaPerson, setBsaPerson] = useState('')
   const [bdayItems, setBdayItems] = useState<BdayItem[]>([])
+  const [lembreteItems, setLembreteItems] = useState<LembreteItem[]>([])
   const [modalPrio, setModalPrio] = useState<Prioridade | null>(null)
+  const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
 
   async function loadPrioridades() {
     const supabase = createClient()
@@ -152,6 +187,31 @@ export default function DashboardSidebar() {
         setBdayItems([])
       }
     })()
+
+    // Lembretes próximos (próximos 3 dias, inclusive hoje)
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('lembretes')
+          .select('titulo, periodo, data_inicio, concluido')
+        if (!data) { setLembreteItems([]); return }
+        const todayBase = new Date(); todayBase.setHours(0, 0, 0, 0)
+        const items: LembreteItem[] = []
+        for (const r of data) {
+          if (r.concluido && r.periodo === 'unico') continue
+          const next = nextOccStr(r.periodo, r.data_inicio as string)
+          const diff = Math.round((next.getTime() - todayBase.getTime()) / 86400000)
+          if (diff >= 0 && diff <= 3) {
+            items.push({ titulo: r.titulo as string, daysLeft: diff })
+          }
+        }
+        items.sort((a, b) => a.daysLeft - b.daysLeft)
+        setLembreteItems(items)
+      } catch {
+        setLembreteItems([])
+      }
+    })()
   }
 
   useEffect(() => {
@@ -164,6 +224,28 @@ export default function DashboardSidebar() {
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!role || !['gestor', 'admin'].includes(role)) return
+    async function loadPdiAgenda() {
+      try {
+        const res = await fetch('/api/pdi/agenda')
+        if (!res.ok) return
+        const items = await res.json() as PdiAgendaEntry[]
+        const now = Date.now()
+        const in30 = now + 30 * 86400000
+        setPdiAgenda(
+          items
+            .filter(i => {
+              const t = new Date(i.data_conversa).getTime()
+              return t >= now && t <= in30
+            })
+            .slice(0, 5)
+        )
+      } catch { /* noop */ }
+    }
+    void loadPdiAgenda()
+  }, [role])
 
   return (
     <>
@@ -263,7 +345,74 @@ export default function DashboardSidebar() {
           </div>
         </div>
 
-        {/* ── Block 3: Aniversários (conditional) ──────────────────────── */}
+        {/* ── Block 3: Próximas Conversas PDI (conditional, gestor/admin) ── */}
+        {pdiAgenda.length > 0 && (
+          <div style={{
+            background: '#EFF6FF',
+            borderRadius: 8,
+            borderLeft: '4px solid #2A4F96',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#2A4F96', marginBottom: 10 }}>
+              📅 Próximas Conversas PDI
+            </div>
+            {pdiAgenda.map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  fontSize: 13, color: '#1E293B',
+                  padding: '5px 0',
+                  borderBottom: i < pdiAgenda.length - 1 ? '1px solid #DBEAFE' : 'none',
+                  lineHeight: 1.5,
+                }}
+              >
+                <span style={{ fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.colaborador_nome}
+                </span>
+                <span style={{ color: '#6B7280', fontSize: 11 }}>{fmtDateShort(item.data_conversa)}</span>
+              </div>
+            ))}
+            <Link href="/pdi" style={{ fontSize: 12, color: '#2A4F96', marginTop: 8, display: 'block', textDecoration: 'none', fontWeight: 500 }}>
+              Ver agenda completa →
+            </Link>
+          </div>
+        )}
+
+        {/* ── Block 4: Lembretes próximos (conditional) ────────────────── */}
+        {lembreteItems.length > 0 && (
+          <div style={{
+            background: '#FFF8F0',
+            borderRadius: 8,
+            borderLeft: '4px solid #B85C1A',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#7A3A0E', marginBottom: 10 }}>
+              📌 Lembretes
+            </div>
+            {lembreteItems.map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  fontSize: 13, color: '#1E293B',
+                  padding: '5px 0',
+                  borderBottom: i < lembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none',
+                  lineHeight: 1.5,
+                }}
+              >
+                <span style={{ fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.titulo}
+                </span>
+                <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
+                  {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Block 5: Aniversários (conditional) ─────────────────────── */}
         {bdayItems.length > 0 && (
           <div style={{
             background: '#FFF5F5',

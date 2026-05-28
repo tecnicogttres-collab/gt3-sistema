@@ -183,8 +183,10 @@ function ListView({ isAdmin }: { isAdmin: boolean }) {
         </div>
         <button
           onClick={fetchList}
-          style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+          disabled={loading}
+          style={{ padding: '7px 14px', background: '#fff', color: '#2A4F96', border: '1px solid #2A4F96', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: loading ? 0.7 : 1, fontFamily: 'inherit' }}
         >
+          <span className={loading ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>🔄</span>
           Atualizar
         </button>
       </div>

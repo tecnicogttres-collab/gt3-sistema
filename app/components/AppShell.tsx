@@ -11,6 +11,8 @@ import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
 import SugestaoNotificacao from './SugestaoNotificacao'
 import EnqueteNotificacao from './EnqueteNotificacao'
+import LembreteNotificacao from './LembreteNotificacao'
+import PdiCriadoNotificacao from './PdiCriadoNotificacao'
 import QuoteBanner from './QuoteBanner'
 
 function useBreadcrumb(pathname: string): string {
@@ -109,6 +111,16 @@ function dismissPdiNotifStorage(pdiId: string, userId: string) {
   } catch { /* noop */ }
 }
 
+// ─── Lembretes helpers ────────────────────────────────────────────────────────
+
+function lembreteDismissKey(userId: string) { return `lembretes_notif_dismissed_${userId}` }
+function getLembreteDismissDate(userId: string): string {
+  try { return sessionStorage.getItem(lembreteDismissKey(userId)) ?? '' } catch { return '' }
+}
+function dismissLembreteNotifStorage(userId: string) {
+  try { sessionStorage.setItem(lembreteDismissKey(userId), new Date().toISOString().split('T')[0]) } catch { /* noop */ }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -119,10 +131,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [sugestaoQueue, setSugestaoQueue] = useState<Array<{ id: string }>>([])
   const [enqueteQueue, setEnqueteQueue] = useState<Array<{ id: string; titulo: string }>>([])
+  const [lembreteCount, setLembreteCount] = useState(0)
+  const [showLembreteNotif, setShowLembreteNotif] = useState(false)
 
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
   const [pdiConversaBanner, setPdiConversaBanner] = useState<PdiConversaBanner | null>(null)
   const [pdiNotifBanner, setPdiNotifBanner] = useState<PdiNotifBanner | null>(null)
+  const [pdiCriadoNotif, setPdiCriadoNotif] = useState<PdiNotifBanner | null>(null)
   const pathname = usePathname()
   const breadcrumb = useBreadcrumb(pathname)
   const { profile, loading } = useUser()
@@ -207,10 +222,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/pdi/notificacoes')
         if (!mounted || !res.ok) return
-        const { count, pdiId } = await res.json() as { count: number; pdiId: string | null }
+        const { count, pdiId, tipo } = await res.json() as { count: number; pdiId: string | null; tipo: string }
         if (count > 0 && pdiId) {
           const dismissed = getPdiNotifDismissed(userId)
-          if (!dismissed.includes(pdiId)) setPdiNotifBanner({ pdiId })
+          if (!dismissed.includes(pdiId)) {
+            if (tipo === 'criado') {
+              setPdiCriadoNotif({ pdiId })
+            } else {
+              setPdiNotifBanner({ pdiId })
+            }
+          }
         }
       } catch { /* noop */ }
     }
@@ -237,12 +258,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       } catch { /* noop */ }
     }
 
+    async function checkLembretesPendentes() {
+      try {
+        const res = await fetch('/api/lembretes')
+        if (!mounted || !res.ok) return
+        const data: Array<{ data_inicio: string; periodo: string; concluido: boolean }> = await res.json()
+        const today = new Date().toISOString().split('T')[0]
+        const dismissedDate = getLembreteDismissDate(userId)
+        if (dismissedDate === today) return
+        const count = data.filter(r => !(r.concluido && r.periodo === 'unico') && r.data_inicio <= today).length
+        if (count > 0) { setLembreteCount(count); setShowLembreteNotif(true) }
+      } catch { /* noop */ }
+    }
+
     checkUnseenPrio()
     checkUnseenAtas()
     checkUnseenPdiConversa()
     checkPdiNotif()
     checkUnseenSugestoes()
     checkUnseenEnquetes()
+    checkLembretesPendentes()
 
     const pollTimer = setInterval(() => {
       checkUnseenPdiConversa()
@@ -386,6 +421,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setPdiNotifBanner(null)
   }
 
+  function handleVerPdiCriado() {
+    if (!pdiCriadoNotif || !profile) return
+    dismissPdiNotifStorage(pdiCriadoNotif.pdiId, profile.id)
+    setPdiCriadoNotif(null)
+    router.push('/pdi')
+  }
+
   function dismissTopSugestao() {
     const top = sugestaoQueue[0]
     if (!top || !profile) return
@@ -414,10 +456,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showAtaNotif = !showPrioNotif && ataQueue.length > 0
   const showSugestaoNotif = !showPrioNotif && !showAtaNotif && sugestaoQueue.length > 0
   const showEnqueteNotif = !showPrioNotif && !showAtaNotif && !showSugestaoNotif && enqueteQueue.length > 0
+  const showLembrete = !showPrioNotif && !showAtaNotif && !showSugestaoNotif && !showEnqueteNotif && showLembreteNotif
 
   const bannerAta = pathname !== '/atas' && isColabOrTrainee && unreadAtas.length > 0 ? unreadAtas[0] : null
   const bannerPdiConversa = isColabOrTrainee && pdiConversaBanner && !pathname.startsWith('/pdi') ? pdiConversaBanner : null
-  const bannerPdiNotif = isColabOrTrainee && pdiNotifBanner && !pathname.startsWith('/pdi') ? pdiNotifBanner : null
+  const bannerPdiNotif = isColabOrTrainee && pdiNotifBanner && !pdiCriadoNotif && !pathname.startsWith('/pdi') ? pdiNotifBanner : null
 
   const dtPdi = bannerPdiConversa ? new Date(bannerPdiConversa.dataConversa) : null
   const dataPdi = dtPdi?.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -571,6 +614,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onResponderAgora={handleResponderAgora}
           onVerDepois={dismissTopEnquete}
         />
+      )}
+      {showLembrete && profile && (
+        <LembreteNotificacao
+          count={lembreteCount}
+          onVerAgora={() => { setShowLembreteNotif(false); dismissLembreteNotifStorage(profile.id); router.push('/lembretes') }}
+          onVerDepois={() => { setShowLembreteNotif(false); dismissLembreteNotifStorage(profile.id) }}
+        />
+      )}
+
+      {pdiCriadoNotif && (
+        <PdiCriadoNotificacao onVerAgora={handleVerPdiCriado} />
       )}
 
       {pathname === '/' && (

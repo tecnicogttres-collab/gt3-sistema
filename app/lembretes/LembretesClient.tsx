@@ -1,0 +1,791 @@
+'use client'
+
+import { useState, useEffect, useCallback, useMemo } from 'react'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+const PERIODS = ['unico', 'diario', 'semanal', 'mensal', 'trimestral', 'semestral', 'anual'] as const
+type Period = typeof PERIODS[number]
+
+const PERIOD_LABEL: Record<Period, string> = {
+  unico: 'Único', diario: 'Diário', semanal: 'Semanal', mensal: 'Mensal',
+  trimestral: 'Trimestral', semestral: 'Semestral', anual: 'Anual',
+}
+
+const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+
+type Lembrete = {
+  id: string
+  titulo: string
+  descricao: string | null
+  periodo: Period
+  data_inicio: string
+  concluido: boolean
+  criado_por: string | null
+  created_at: string
+}
+
+type Filter = 'todos' | 'pendentes' | 'hoje' | 'atrasados' | 'concluidos'
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+function todayLocal(): Date {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function parseDate(s: string): Date {
+  return new Date(s + 'T00:00:00')
+}
+
+function fmtDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function fmtBR(s: string): string {
+  const [y, m, d] = s.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function nextOccurrence(r: Lembrete): Date {
+  const start = parseDate(r.data_inicio)
+  const today = todayLocal()
+  if (r.periodo === 'unico') return start
+  if (r.periodo === 'diario') return today < start ? start : today
+  const d = new Date(start)
+  if (r.periodo === 'semanal') { while (d < today) d.setDate(d.getDate() + 7) }
+  else if (r.periodo === 'mensal') { while (d < today) d.setMonth(d.getMonth() + 1) }
+  else if (r.periodo === 'trimestral') { while (d < today) d.setMonth(d.getMonth() + 3) }
+  else if (r.periodo === 'semestral') { while (d < today) d.setMonth(d.getMonth() + 6) }
+  else if (r.periodo === 'anual') { while (d < today) d.setFullYear(d.getFullYear() + 1) }
+  return d
+}
+
+function isDone(r: Lembrete) { return r.concluido && r.periodo === 'unico' }
+function isOverdue(r: Lembrete) {
+  if (isDone(r)) return false
+  return nextOccurrence(r) < todayLocal()
+}
+function isToday(r: Lembrete) {
+  if (isDone(r)) return false
+  return fmtDateStr(nextOccurrence(r)) === fmtDateStr(todayLocal())
+}
+
+// Retorna a data (YYYY-MM-DD) da ocorrência deste lembrete no mês/ano dado, ou null se não houver
+function findMonthOccurrence(r: Lembrete, year: number, month: number): string | null {
+  const mStart = new Date(year, month, 1)
+  const mEnd = new Date(year, month + 1, 0)
+  const start = parseDate(r.data_inicio)
+
+  if (r.periodo === 'unico') {
+    if (start.getFullYear() === year && start.getMonth() === month) return fmtDateStr(start)
+    return null
+  }
+
+  if (r.periodo === 'diario') {
+    const day = start > mStart ? start : new Date(mStart)
+    return day <= mEnd ? fmtDateStr(day) : null
+  }
+
+  let cur = new Date(start)
+  while (cur < mStart) {
+    if (r.periodo === 'semanal') cur.setDate(cur.getDate() + 7)
+    else if (r.periodo === 'mensal') cur.setMonth(cur.getMonth() + 1)
+    else if (r.periodo === 'trimestral') cur.setMonth(cur.getMonth() + 3)
+    else if (r.periodo === 'semestral') cur.setMonth(cur.getMonth() + 6)
+    else if (r.periodo === 'anual') cur.setFullYear(cur.getFullYear() + 1)
+    else break
+  }
+  return cur <= mEnd ? fmtDateStr(cur) : null
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()) }
+
+export default function LembretesClient() {
+  const [lembretes, setLembretes] = useState<Lembrete[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<Filter>('todos')
+  const [search, setSearch] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyForm)
+  const [saving, setSaving] = useState(false)
+  const [calYear, setCalYear] = useState(new Date().getFullYear())
+  const [calMonth, setCalMonth] = useState(new Date().getMonth())
+  const [historyTarget, setHistoryTarget] = useState<{ id: string; titulo: string } | null>(null)
+  const [history, setHistory] = useState<Array<{ id: string; usuario_nome: string; created_at: string }>>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/lembretes')
+      if (!res.ok) return
+      const data: Lembrete[] = await res.json()
+      setLembretes(data)
+    } catch { /* noop */ } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
+
+  const total = lembretes.length
+  const atrasados = lembretes.filter(r => isOverdue(r)).length
+  const hoje = lembretes.filter(r => isToday(r)).length
+  const concluidos = lembretes.filter(r => isDone(r)).length
+
+  // ── Filtered list ──────────────────────────────────────────────────────────
+
+  const filtered = lembretes
+    .filter(r => {
+      if (search) {
+        const q = search.toLowerCase()
+        if (!r.titulo.toLowerCase().includes(q) && !(r.descricao ?? '').toLowerCase().includes(q)) return false
+      }
+      if (filter === 'pendentes') return !isDone(r)
+      if (filter === 'hoje') return isToday(r)
+      if (filter === 'atrasados') return isOverdue(r)
+      if (filter === 'concluidos') return isDone(r)
+      return true
+    })
+    .sort((a, b) => {
+      const ao = isOverdue(a), bo = isOverdue(b)
+      const at = isToday(a), bt = isToday(b)
+      const ad = isDone(a), bd = isDone(b)
+      if (ao && !bo) return -1; if (!ao && bo) return 1
+      if (at && !bt) return -1; if (!at && bt) return 1
+      if (ad && !bd) return 1; if (!ad && bd) return -1
+      return fmtDateStr(nextOccurrence(a)).localeCompare(fmtDateStr(nextOccurrence(b)))
+    })
+
+  // ── CRUD ───────────────────────────────────────────────────────────────────
+
+  async function handleSave() {
+    if (!form.titulo.trim()) return
+    setSaving(true)
+    try {
+      if (editingId) {
+        const res = await fetch(`/api/lembretes/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio }),
+        })
+        if (res.ok) {
+          const updated: Lembrete = await res.json()
+          setLembretes(prev => prev.map(r => r.id === editingId ? updated : r))
+        }
+      } else {
+        const res = await fetch('/api/lembretes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio }),
+        })
+        if (res.ok) {
+          const created: Lembrete = await res.json()
+          setLembretes(prev => [...prev, created])
+        }
+      }
+      setModalOpen(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleToggle(r: Lembrete) {
+    if (r.periodo === 'unico') {
+      const res = await fetch(`/api/lembretes/${r.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concluido: !r.concluido }),
+      })
+      if (res.ok) {
+        const updated: Lembrete = await res.json()
+        setLembretes(prev => prev.map(x => x.id === r.id ? updated : x))
+      }
+    } else {
+      // Recorrente: avança data para próxima ocorrência
+      const next = new Date(nextOccurrence(r))
+      if (r.periodo === 'diario') next.setDate(next.getDate() + 1)
+      else if (r.periodo === 'semanal') next.setDate(next.getDate() + 7)
+      else if (r.periodo === 'mensal') next.setMonth(next.getMonth() + 1)
+      else if (r.periodo === 'trimestral') next.setMonth(next.getMonth() + 3)
+      else if (r.periodo === 'semestral') next.setMonth(next.getMonth() + 6)
+      else if (r.periodo === 'anual') next.setFullYear(next.getFullYear() + 1)
+      const res = await fetch(`/api/lembretes/${r.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data_inicio: fmtDateStr(next) }),
+      })
+      if (res.ok) {
+        const updated: Lembrete = await res.json()
+        setLembretes(prev => prev.map(x => x.id === r.id ? updated : x))
+      }
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Excluir este lembrete?')) return
+    const res = await fetch(`/api/lembretes/${id}`, { method: 'DELETE' })
+    if (res.ok) setLembretes(prev => prev.filter(r => r.id !== id))
+  }
+
+  function openNew() {
+    setEditingId(null)
+    setForm({ ...emptyForm, data_inicio: fmtDateStr(new Date()) })
+    setModalOpen(true)
+  }
+
+  function openEdit(r: Lembrete) {
+    setEditingId(r.id)
+    setForm({ titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio })
+    setModalOpen(true)
+  }
+
+  async function openHistory(r: Lembrete) {
+    setHistoryTarget({ id: r.id, titulo: r.titulo })
+    setHistory([])
+    setLoadingHistory(true)
+    try {
+      const res = await fetch(`/api/lembretes/${r.id}/historico`)
+      if (res.ok) setHistory(await res.json())
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  // ── Calendar ───────────────────────────────────────────────────────────────
+
+  // Mapa dia -> lembretes apenas para o mês visível no calendário
+  const calDayMap = useMemo(() => {
+    const map = new Map<string, Lembrete[]>()
+    for (const r of lembretes) {
+      const ds = findMonthOccurrence(r, calYear, calMonth)
+      if (ds) {
+        const arr = map.get(ds) ?? []
+        arr.push(r)
+        map.set(ds, arr)
+      }
+    }
+    return map
+  }, [lembretes, calYear, calMonth])
+
+  const calFirstDay = new Date(calYear, calMonth, 1).getDay()
+  const calTotalDays = new Date(calYear, calMonth + 1, 0).getDate()
+  const todayStr = fmtDateStr(todayLocal())
+
+  function calDateStr(d: number): string {
+    return `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+
+  // ── Colors ─────────────────────────────────────────────────────────────────
+
+  const INK = '#2A4F96'
+  const WARN = '#B85C1A'
+  const GOLD = '#D1AE6E'
+  const OK = '#3A7D52'
+  const BORDER = '#E0DDD6'
+  const TEXT = '#1C1B18'
+  const TEXT_MID = '#5C5A54'
+  const TEXT_FAINT = '#A8A59D'
+  const SURFACE2 = '#EFEFEB'
+
+  function cardBorderColor(r: Lembrete): string {
+    if (isDone(r)) return '#C8C5BC'
+    if (isOverdue(r)) return WARN
+    if (isToday(r)) return GOLD
+    return INK
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div style={{ maxWidth: 960, margin: '0 auto', paddingTop: 48, textAlign: 'center', color: TEXT_FAINT, fontSize: 14 }}>
+        Carregando lembretes...
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: 960, margin: '0 auto' }}>
+
+      {/* ── Header ── */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+        paddingBottom: 20, borderBottom: `1.5px solid ${BORDER}`, marginBottom: 24,
+      }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: INK }}>
+            GT3 Consultoria
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: TEXT, letterSpacing: -0.5, lineHeight: 1, marginTop: 4 }}>
+            Lembretes
+          </div>
+        </div>
+        <button
+          onClick={openNew}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: INK, color: '#fff', border: 'none', borderRadius: 6,
+            padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#4A6DB5' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = INK }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Novo lembrete
+        </button>
+      </div>
+
+      {/* ── Stats ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
+        {[
+          { label: 'Total', value: total, highlight: false },
+          { label: 'Atrasados', value: atrasados, highlight: atrasados > 0 },
+          { label: 'Hoje', value: hoje, highlight: false },
+          { label: 'Concluídos', value: concluidos, highlight: false },
+        ].map(s => (
+          <div key={s.label} style={{
+            background: s.highlight ? '#FBF0E8' : '#fff',
+            border: `1px solid ${s.highlight ? WARN : BORDER}`,
+            borderRadius: 10, padding: '12px 16px',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: s.highlight ? WARN : TEXT_FAINT }}>
+              {s.label}
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: s.highlight ? '#7A3A0E' : TEXT, lineHeight: 1, marginTop: 4 }}>
+              {s.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filter bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        {(['todos','pendentes','hoje','atrasados','concluidos'] as Filter[]).map(f => {
+          const labels: Record<Filter, string> = { todos: 'Todos', pendentes: 'Pendentes', hoje: 'Hoje', atrasados: 'Atrasados', concluidos: 'Concluídos' }
+          const active = filter === f
+          return (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              padding: '5px 14px', borderRadius: 100,
+              border: `1px solid ${active ? INK : '#C8C5BC'}`,
+              background: active ? INK : '#fff',
+              color: active ? '#fff' : TEXT_MID,
+              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            }}>
+              {labels[f]}
+            </button>
+          )
+        })}
+        <div style={{ flex: 1 }} />
+        <div style={{ position: 'relative' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TEXT_FAINT} strokeWidth="2" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Buscar lembrete..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              padding: '6px 12px 6px 32px', border: `1px solid ${BORDER}`, borderRadius: 100,
+              fontSize: 13, background: '#fff', color: TEXT, outline: 'none', width: 200,
+            }}
+            onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK }}
+            onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER }}
+          />
+        </div>
+      </div>
+
+      {/* ── List ── */}
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: TEXT_FAINT, marginBottom: 10 }}>
+        {filtered.length} lembrete{filtered.length !== 1 ? 's' : ''}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 32 }}>
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: TEXT_FAINT, fontSize: 14 }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C8C5BC" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 12px' }}>
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>
+            </svg>
+            Nenhum lembrete encontrado.
+          </div>
+        ) : filtered.map(r => {
+          const done = isDone(r)
+          const overdue = isOverdue(r)
+          const todayFlag = isToday(r)
+          const next = nextOccurrence(r)
+          const nextStr = fmtDateStr(next)
+
+          return (
+            <div key={r.id} style={{
+              background: '#fff',
+              border: `1px solid ${BORDER}`,
+              borderLeft: `3px solid ${cardBorderColor(r)}`,
+              borderRadius: 10,
+              padding: '14px 16px',
+              display: 'flex', alignItems: 'flex-start', gap: 14,
+              opacity: done ? 0.55 : 1,
+            }}>
+              {/* Check button */}
+              <button
+                onClick={() => void handleToggle(r)}
+                title={done ? 'Marcar como pendente' : r.periodo === 'unico' ? 'Marcar como concluído' : 'Avançar para próxima ocorrência'}
+                style={{
+                  width: 22, height: 22, minWidth: 22, borderRadius: '50%',
+                  border: `1.5px solid ${done ? OK : '#C8C5BC'}`,
+                  background: done ? '#E8F4EE' : '#fff',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginTop: 1,
+                }}
+                onMouseEnter={e => { const b = e.currentTarget as HTMLElement; b.style.borderColor = OK; b.style.background = '#E8F4EE' }}
+                onMouseLeave={e => { const b = e.currentTarget as HTMLElement; b.style.borderColor = done ? OK : '#C8C5BC'; b.style.background = done ? '#E8F4EE' : '#fff' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={OK} strokeWidth="2.5" style={{ opacity: done ? 1 : 0 }}>
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
+
+              {/* Body */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 15, fontWeight: 600, color: done ? TEXT_FAINT : TEXT,
+                  marginBottom: 4, lineHeight: 1.3,
+                  textDecoration: done ? 'line-through' : 'none',
+                }}>
+                  {r.titulo}
+                </div>
+                {r.descricao && (
+                  <div style={{ fontSize: 13, color: TEXT_MID, lineHeight: 1.5, marginBottom: 8 }}>
+                    {r.descricao}
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* Period badge */}
+                  <span style={{
+                    padding: '2px 9px', borderRadius: 100,
+                    background: '#EBF0FA', color: '#1A3266',
+                    fontSize: 11, fontWeight: 500,
+                  }}>
+                    {PERIOD_LABEL[r.periodo]}
+                  </span>
+                  {/* Date badge */}
+                  {done ? (
+                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#E8F4EE', color: '#1E4D30', fontSize: 11, fontWeight: 500 }}>
+                      Concluído
+                    </span>
+                  ) : overdue ? (
+                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FBF0E8', color: '#7A3A0E', fontSize: 11, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                      Atrasado · {fmtBR(nextStr)}
+                    </span>
+                  ) : todayFlag ? (
+                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FAF4E8', color: '#7A5A1E', fontSize: 11, fontWeight: 500 }}>
+                      Hoje
+                    </span>
+                  ) : (
+                    <span style={{ padding: '2px 9px', borderRadius: 100, background: SURFACE2, color: TEXT_MID, fontSize: 11, fontWeight: 500 }}>
+                      {fmtBR(nextStr)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                <IconBtn onClick={() => openEdit(r)} title="Editar" danger={false}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </IconBtn>
+                <IconBtn onClick={() => void openHistory(r)} title="Ver histórico" danger={false}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </IconBtn>
+                <IconBtn onClick={() => void handleDelete(r.id)} title="Excluir" danger>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6M9 6V4h6v2"/>
+                  </svg>
+                </IconBtn>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Calendar ── */}
+      <hr style={{ border: 'none', borderTop: `1px solid ${BORDER}`, marginBottom: 28 }} />
+      <div>
+        {/* Cal nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1) } else setCalMonth(m => m - 1) }}
+            style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: TEXT_MID }}>
+            ←
+          </button>
+          <span style={{ fontWeight: 700, fontSize: 16, color: TEXT, minWidth: 180 }}>
+            {MONTHS[calMonth]} {calYear}
+          </span>
+          <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1) } else setCalMonth(m => m + 1) }}
+            style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: TEXT_MID }}>
+            →
+          </button>
+        </div>
+
+        {/* Weekday headers */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
+          {WEEKDAYS.map(d => (
+            <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: TEXT_FAINT, padding: '6px 0' }}>
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Day grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+          {Array.from({ length: calFirstDay }).map((_, i) => (
+            <div key={`e${i}`} style={{ minHeight: 72 }} />
+          ))}
+          {Array.from({ length: calTotalDays }, (_, i) => i + 1).map(d => {
+            const ds = calDateStr(d)
+            const isT = ds === todayStr
+            const hits = calDayMap.get(ds) ?? []
+            return (
+              <div key={d} style={{
+                minHeight: 72,
+                background: '#fff',
+                border: `${isT ? 2 : 1}px solid ${isT ? GOLD : hits.length > 0 ? '#4A6DB5' : BORDER}`,
+                borderRadius: 6, padding: 6, fontSize: 12,
+              }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: isT ? '#7A5A1E' : TEXT_FAINT, marginBottom: 3 }}>
+                  {d}
+                </div>
+                {hits.slice(0, 3).map((r, i) => {
+                  const over = parseDate(ds) < todayLocal() && !r.concluido
+                  return (
+                    <div key={i} style={{
+                      fontSize: 10, borderRadius: 3, padding: '1px 4px', marginBottom: 2,
+                      background: over ? '#FBF0E8' : '#EBF0FA',
+                      color: over ? '#7A3A0E' : '#1A3266',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      opacity: isDone(r) ? 0.4 : 1,
+                    }}>
+                      {r.titulo}
+                    </div>
+                  )
+                })}
+                {hits.length > 3 && (
+                  <div style={{ fontSize: 10, color: TEXT_FAINT, padding: '1px 4px', opacity: 0.5 }}>
+                    +{hits.length - 3}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Modal histórico ── */}
+      {historyTarget && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setHistoryTarget(null) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,24,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+        >
+          <div style={{ background: '#fff', borderRadius: 14, width: 460, maxWidth: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>Histórico de confirmações</div>
+                <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 340 }}>
+                  {historyTarget.titulo}
+                </div>
+              </div>
+              <button onClick={() => setHistoryTarget(null)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                ×
+              </button>
+            </div>
+            <div style={{ padding: '16px 24px 24px', overflowY: 'auto', flex: 1 }}>
+              {loadingHistory ? (
+                <div style={{ color: TEXT_FAINT, fontSize: 13, textAlign: 'center', padding: '2rem 0' }}>Carregando...</div>
+              ) : history.length === 0 ? (
+                <div style={{ color: TEXT_FAINT, fontSize: 13, textAlign: 'center', padding: '2rem 0' }}>
+                  Nenhuma confirmação registrada ainda.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {history.map(h => {
+                    const dt = new Date(h.created_at)
+                    const dateLabel = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    const timeLabel = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    return (
+                      <div key={h.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: '#F8F7F4', borderRadius: 8, borderLeft: `3px solid ${OK}` }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={OK} strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: TEXT }}>{h.usuario_nome}</span>
+                          <span style={{ fontSize: 12, color: TEXT_FAINT, marginLeft: 8 }}>{dateLabel} às {timeLabel}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal edição ── */}
+      {modalOpen && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,24,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+        >
+          <div style={{ background: '#fff', borderRadius: 14, width: 500, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: `1px solid ${BORDER}` }}>
+              <h2 style={{ fontWeight: 700, fontSize: 18, color: TEXT, letterSpacing: -0.3, margin: 0 }}>
+                {editingId ? 'Editar lembrete' : 'Novo lembrete'}
+              </h2>
+              <button onClick={() => setModalOpen(false)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Título */}
+              <Field label="Título">
+                <input
+                  type="text" maxLength={100} autoFocus
+                  value={form.titulo}
+                  onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') void handleSave() }}
+                  placeholder="Ex: Verificar vencimento dos contratos"
+                  style={inputStyle}
+                  onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK; (e.target as HTMLInputElement).style.boxShadow = `0 0 0 3px #EBF0FA` }}
+                  onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER; (e.target as HTMLInputElement).style.boxShadow = 'none' }}
+                />
+              </Field>
+
+              {/* Descrição */}
+              <Field label="Descrição / Observação">
+                <textarea
+                  value={form.descricao}
+                  onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+                  placeholder="Detalhe o que deve ser verificado ou feito..."
+                  style={{ ...inputStyle, minHeight: 90, resize: 'vertical', lineHeight: 1.5 }}
+                  onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = INK; (e.target as HTMLTextAreaElement).style.boxShadow = `0 0 0 3px #EBF0FA` }}
+                  onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = BORDER; (e.target as HTMLTextAreaElement).style.boxShadow = 'none' }}
+                />
+              </Field>
+
+              {/* Periodicidade + Data */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Field label="Periodicidade">
+                  <select
+                    value={form.periodo}
+                    onChange={e => setForm(f => ({ ...f, periodo: e.target.value as Period }))}
+                    style={{ ...inputStyle, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A8A59D' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: 32, appearance: 'none' }}
+                    onFocus={e => { (e.target as HTMLSelectElement).style.borderColor = INK }}
+                    onBlur={e => { (e.target as HTMLSelectElement).style.borderColor = BORDER }}
+                  >
+                    {PERIODS.map(p => <option key={p} value={p}>{PERIOD_LABEL[p]}</option>)}
+                  </select>
+                </Field>
+                <Field label="Data de início">
+                  <input
+                    type="date"
+                    value={form.data_inicio}
+                    onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))}
+                    style={inputStyle}
+                    onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK }}
+                    onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER }}
+                  />
+                </Field>
+              </div>
+
+              {/* Info sobre periodicidade */}
+              {form.periodo !== 'unico' && (
+                <div style={{ background: SURFACE2, borderRadius: 6, padding: 12, fontSize: 13, color: TEXT_MID }}>
+                  {form.periodo === 'diario' && 'O lembrete aparecerá todos os dias a partir da data de início.'}
+                  {form.periodo === 'semanal' && 'O lembrete será repetido semanalmente na mesma data de início.'}
+                  {form.periodo === 'mensal' && 'O lembrete será repetido mensalmente na mesma data de início.'}
+                  {form.periodo === 'trimestral' && 'O lembrete será repetido a cada 3 meses.'}
+                  {form.periodo === 'semestral' && 'O lembrete será repetido a cada 6 meses.'}
+                  {form.periodo === 'anual' && 'O lembrete será repetido anualmente na mesma data de início.'}
+                </div>
+              )}
+
+              {/* Footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
+                <button onClick={() => setModalOpen(false)} style={{ padding: '9px 18px', border: `1px solid #C8C5BC`, borderRadius: 6, background: '#fff', color: TEXT_MID, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button onClick={() => void handleSave()} disabled={saving || !form.titulo.trim()} style={{ padding: '9px 22px', border: 'none', borderRadius: 6, background: saving ? '#C8C5BC' : INK, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer' }}>
+                  {saving ? 'Salvando...' : 'Salvar lembrete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Small helpers ────────────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  border: '1px solid #E0DDD6', borderRadius: 6, padding: '10px 12px',
+  fontSize: 14, background: '#fff', color: '#1C1B18',
+  outline: 'none', width: '100%', boxSizing: 'border-box',
+  fontFamily: 'inherit',
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5C5A54' }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function IconBtn({ onClick, title, danger, children }: { onClick: () => void; title: string; danger: boolean; children: React.ReactNode }) {
+  const [hov, setHov] = useState(false)
+  const INK = '#2A4F96'
+  const WARN = '#B85C1A'
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: 28, height: 28, borderRadius: 6, cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: `1px solid ${hov ? (danger ? WARN : INK) : '#E0DDD6'}`,
+        background: hov ? (danger ? '#FBF0E8' : '#EBF0FA') : '#fff',
+        color: hov ? (danger ? WARN : INK) : '#A8A59D',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
