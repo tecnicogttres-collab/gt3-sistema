@@ -203,7 +203,7 @@ export default function EmailsClient() {
     if (error) console.error('Erro ao excluir template:', error)
   }
 
-  async function downloadTemplate(id: string) {
+  async function downloadTemplate(id: string, successMsg?: string) {
     showToast('Carregando arquivo…')
     const supabase = createClient()
     const { data, error } = await supabase
@@ -217,7 +217,7 @@ export default function EmailsClient() {
     const a = document.createElement('a')
     a.href = f.data; a.download = f.name
     a.click()
-    showToast('Download iniciado')
+    showToast(successMsg ?? 'Download iniciado')
   }
 
   const clients = useMemo(() =>
@@ -472,7 +472,7 @@ export default function EmailsClient() {
                     ↓ Baixar
                   </button>
                   <button
-                    onClick={() => { window.location.href = `mailto:?subject=${encodeURIComponent(t.subject || t.title)}` }}
+                    onClick={() => downloadTemplate(t.id, 'Arquivo baixado — clique nele na barra do Chrome para abrir no Outlook ↓')}
                     style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}
                   >
                     📨 Abrir no Outlook
