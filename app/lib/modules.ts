@@ -26,6 +26,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'terceiras',
+    label: 'Cadastro Terceiras',
+    color: '#4A90D9',
+    path: '/cadastro-terceiras',
+    description: 'Acompanhamento por etapas do cadastro de empresas terceiras',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'cadastro',
     label: 'Cadastro Contratantes',
     color: '#4A90D9',
