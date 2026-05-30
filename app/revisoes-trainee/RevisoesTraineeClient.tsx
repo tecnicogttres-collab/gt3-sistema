@@ -140,13 +140,16 @@ export default function RevisoesTraineeClient() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
 
   const [toast, setToast] = useState('')
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => { return () => { clearTimeout(toastTimerRef.current) } }, [])
 
   const isTrainee = profile?.papel === 'trainee'
   activeTraineeIdRef.current = activeTraineeId
 
   function showToast(msg: string) {
     setToast(msg)
-    setTimeout(() => setToast(''), 3000)
+    clearTimeout(toastTimerRef.current!)
+    toastTimerRef.current = setTimeout(() => setToast(''), 3000)
   }
 
   const fetchData = useCallback(async () => {

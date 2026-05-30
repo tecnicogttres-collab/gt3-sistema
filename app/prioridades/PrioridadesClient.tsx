@@ -133,12 +133,16 @@ export default function PrioridadesClient() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load from Supabase ──
+  const mountedRef = useRef(true)
+  useEffect(() => { return () => { mountedRef.current = false } }, [])
+
   const loadData = useCallback(async () => {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('prioridades')
       .select('*')
       .order('posicao', { ascending: true })
+    if (!mountedRef.current) return
     if (error) {
       console.error('Erro ao carregar prioridades:', error)
       setPriorities([])

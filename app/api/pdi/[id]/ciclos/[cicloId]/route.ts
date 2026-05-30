@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const isGestorAdmin = ['gestor', 'admin'].includes(papel ?? '')
-  const isColab = papel === 'colaborador'
+  const isColab = papel === 'colaborador' || papel === 'trainee'
 
   const body = await req.json() as Record<string, unknown>
   const updates: Record<string, unknown> = {}
@@ -48,6 +48,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .from('pdi_ciclos')
     .update(updates)
     .eq('id', cicloId)
+    .eq('pdi_id', id)
     .select('id, pdi_id, colaborador_id')
     .single()
 

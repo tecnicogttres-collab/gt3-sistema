@@ -3,9 +3,13 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wfvdqugioatzjlpjyiyu.supabase.co'
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY
+if (!SUPABASE_KEY) { console.error('Defina SUPABASE_SECRET_KEY no ambiente'); process.exit(1) }
+
 const admin = createClient(
-  'https://wfvdqugioatzjlpjyiyu.supabase.co',
-  'sb_secret_xXRdNj2igFtRW82KIPubkA_-v-D7oRE',
+  SUPABASE_URL,
+  SUPABASE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 

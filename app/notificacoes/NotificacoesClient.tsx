@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MODULES } from '../lib/modules'
 
 const PRIMARY = '#2A4F96'
@@ -100,6 +100,15 @@ export default function NotificacoesClient() {
   const [showSql, setShowSql] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => {
+    return () => {
+      clearTimeout(savedTimer.current)
+      clearTimeout(copiedTimer.current)
+    }
+  }, [])
+
   const modules = MODULES.filter(m => !MODULOS_SKIP.has(m.id))
 
   useEffect(() => {
@@ -127,7 +136,8 @@ export default function NotificacoesClient() {
     }).catch(() => {})
     setSaving(prev => ({ ...prev, [config.modulo]: false }))
     setSaved(prev => ({ ...prev, [config.modulo]: true }))
-    setTimeout(() => setSaved(prev => ({ ...prev, [config.modulo]: false })), 1500)
+    clearTimeout(savedTimer.current!)
+    savedTimer.current = setTimeout(() => setSaved(prev => ({ ...prev, [config.modulo]: false })), 1500)
   }
 
   function toggleAtivo(modulo: string) {
@@ -153,7 +163,8 @@ export default function NotificacoesClient() {
   function copySQL() {
     navigator.clipboard.writeText(SQL_SCHEMA + '\n\n' + SQL_TRIGGER).catch(() => {})
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    clearTimeout(copiedTimer.current!)
+    copiedTimer.current = setTimeout(() => setCopied(false), 2000)
   }
 
   return (

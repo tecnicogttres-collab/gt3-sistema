@@ -1,8 +1,9 @@
 // Script: divide "WOODBRIDGE MULTIUNIDADES" em 4 contratantes distintas
 // Execução: node scripts/split-woodbridge.mjs
 
-const URL = 'https://wfvdqugioatzjlpjyiyu.supabase.co'
-const KEY  = 'sb_secret_xXRdNj2igFtRW82KIPubkA_-v-D7oRE'
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wfvdqugioatzjlpjyiyu.supabase.co'
+const KEY = process.env.SUPABASE_SECRET_KEY
+if (!KEY) { console.error('Defina SUPABASE_SECRET_KEY no ambiente'); process.exit(1) }
 
 const headers = {
   'Content-Type': 'application/json',

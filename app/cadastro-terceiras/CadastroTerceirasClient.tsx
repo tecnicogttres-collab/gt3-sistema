@@ -330,7 +330,7 @@ export default function CadastroTerceirasClient() {
 
     async function executar() {
       // Optimistic update — fecha o modal e reflete a mudança imediatamente
-      const etapasOtimistas = { ...(terceira.etapas as Record<string, string>), [etapa!.id]: estado }
+      const etapasOtimistas = { ...(terceira!.etapas as Record<string, string>), [etapa!.id]: estado }
       setModalEtapa(p => ({ ...p, open: false }))
       setTerceiras(prev => prev.map(t => t.id === terceira!.id ? { ...t, etapas: etapasOtimistas } : t))
 

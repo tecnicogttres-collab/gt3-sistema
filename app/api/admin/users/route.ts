@@ -20,7 +20,7 @@ export async function GET() {
   const { data: { users }, error } = await admin.auth.admin.listUsers({ perPage: 1000 })
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  const { data: profiles } = await admin.from('profiles').select('*')
+  const { data: profiles } = await admin.from('profiles').select('id, nome, papel, pdi_slug, modulos_permitidos, modulos_dashboard')
   const profileMap = new Map(
     (profiles ?? []).map((p: Record<string, unknown>) => [p.id as string, p])
   )

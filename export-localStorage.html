@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>GT3 — Export localStorage → SQL</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #F8FAFC; color: #1E293B; padding: 32px; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #64748B; margin-bottom: 32px; }
+    .section { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .section-title { font-size: 15px; font-weight: 600; }
+    .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+    .badge-found { background: #DCFCE7; color: #166534; }
+    .badge-empty { background: #FEE2E2; color: #991B1B; }
+    .badge-info { background: #E0F2FE; color: #075985; }
+    .key-label { font-size: 12px; font-family: monospace; color: #7C3AED; background: #F3F0FF; padding: 1px 6px; border-radius: 4px; }
+    textarea {
+      width: 100%; min-height: 300px; font-family: monospace; font-size: 12px;
+      border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px;
+      background: #F8FAFC; color: #1E293B; resize: vertical; line-height: 1.5;
+    }
+    .meta { font-size: 12px; color: #64748B; margin-bottom: 8px; }
+    button {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600; transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+    .btn-primary { background: #2A4F96; color: #fff; }
+    .btn-copy-all { background: #0F172A; color: #fff; margin-bottom: 24px; }
+    .empty-msg { font-size: 13px; color: #94A3B8; padding: 12px 0; }
+    .info-msg { font-size: 13px; color: #0369A1; background: #E0F2FE; border-radius: 8px; padding: 10px 14px; }
+    .actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+    .copied { color: #16A34A; font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<h1>GT3 — Export localStorage → SQL</h1>
+<p class="subtitle">
+  Abra este arquivo no navegador onde os dados foram cadastrados. O SQL gerado pode ser colado diretamente no Supabase SQL Editor.
+</p>
+
+<button class="btn-copy-all" onclick="copyAll()">Copiar tudo (todos os módulos)</button>
+<span id="copied-all" class="copied" style="display:none">Copiado!</span>
+
+<div id="root"></div>
+
+<script>
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  if (s == null) return ''
+  return String(s).replace(/'/g, "''")
+}
+
+function jsonb(val) {
+  return "'" + JSON.stringify(val).replace(/'/g, "''") + "'::jsonb"
+}
+
+function str(val) {
+  return "'" + esc(val) + "'"
+}
+
+function renderSection(id, title, keyLabel, status, meta, sql, note) {
+  const root = document.getElementById('root')
+  const div = document.createElement('div')
+  div.className = 'section'
+  div.id = 'section-' + id
+
+  const badgeClass = status === 'found' ? 'badge-found' : status === 'empty' ? 'badge-empty' : 'badge-info'
+  const badgeText  = status === 'found' ? 'Dados encontrados' : status === 'empty' ? 'Chave vazia / não encontrada' : 'Info'
+
+  div.innerHTML = `
+    <div class="section-header">
+      <div>
+        <span class="section-title">${title}</span>
+        &nbsp;<span class="key-label">${keyLabel}</span>
+      </div>
+      <span class="badge ${badgeClass}">${badgeText}</span>
+    </div>
+    ${note ? `<p class="info-msg" style="margin-bottom:12px">${note}</p>` : ''}
+    ${meta ? `<p class="meta">${meta}</p>` : ''}
+    ${sql
+      ? `<textarea id="sql-${id}" readonly>${sql}</textarea>
+         <div class="actions">
+           <button class="btn-primary" onclick="copySql('${id}')">Copiar SQL</button>
+           <span id="copied-${id}" class="copied" style="display:none">Copiado!</span>
+         </div>`
+      : `<p class="empty-msg">Nenhum dado encontrado para exportar.</p>`
+    }
+  `
+  root.appendChild(div)
+}
+
+function copySql(id) {
+  const ta = document.getElementById('sql-' + id)
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const el = document.getElementById('copied-' + id)
+    el.style.display = 'inline'
+    setTimeout(() => el.style.display = 'none', 2000)
+  })
+}
+
+function copyAll() {
+  const all = []
+  document.querySelectorAll('textarea[id^="sql-"]').forEach(ta => {
+    if (ta.value.trim()) all.push(ta.value.trim())
+  })
+  if (!all.length) { alert('Nenhum SQL gerado.'); return }
+  navigator.clipboard.writeText(all.join('\n\n-- ─────────────────────────────────────────────────────────\n\n')).then(() => {
+    const el = document.getElementById('copied-all')
+    el.style.display = 'inline'
+    setTimeout(() => el.style.display = 'none', 2500)
+  })
+}
+
+// ── Módulo 1: Cadastro Contratantes ───────────────────────────────────────
+
+function exportCadastro() {
+  let raw = null
+  try { raw = localStorage.getItem('gt3_cadastro_v1') } catch {}
+
+  if (!raw) {
+    renderSection('cadastro', 'Cadastro Contratantes', 'gt3_cadastro_v1', 'empty', null, null, null)
+    return
+  }
+
+  let companies
+  try { companies = JSON.parse(raw) } catch {
+    renderSection('cadastro', 'Cadastro Contratantes', 'gt3_cadastro_v1', 'empty', 'Erro ao parsear JSON.', null, null)
+    return
+  }
+
+  if (!Array.isArray(companies) || !companies.length) {
+    renderSection('cadastro', 'Cadastro Contratantes', 'gt3_cadastro_v1', 'empty', null, null, null)
+    return
+  }
+
+  const lines = []
+  lines.push('-- ── Cadastro Contratantes ─────────────────────────────────────')
+  lines.push('INSERT INTO public.contratantes (id, name, sheet_name, segment, updated, fields)')
+  lines.push('VALUES')
+
+  const rows = companies.map(c => {
+    const id       = esc(c.id)
+    const name     = esc(c.name)
+    const sheet    = esc(c.sheetName ?? '')
+    const segment  = esc(c.segment ?? '')
+    const updated  = esc(c.updated ?? '')
+    const fields   = jsonb(c.fields ?? [])
+    return `  ('${id}', '${name}', '${sheet}', '${segment}', '${updated}', ${fields})`
+  })
+
+  lines.push(rows.join(',\n'))
+  lines.push('ON CONFLICT (id) DO UPDATE SET')
+  lines.push('  name       = EXCLUDED.name,')
+  lines.push('  sheet_name = EXCLUDED.sheet_name,')
+  lines.push('  segment    = EXCLUDED.segment,')
+  lines.push('  updated    = EXCLUDED.updated,')
+  lines.push('  fields     = EXCLUDED.fields;')
+
+  // Favorites
+  let favsRaw = null
+  try { favsRaw = localStorage.getItem('gt3_cadastro_favs_v1') } catch {}
+  let favsNote = ''
+  if (favsRaw) {
+    try {
+      const favs = JSON.parse(favsRaw)
+      if (Array.isArray(favs) && favs.length) {
+        favsNote = `<br><br><strong>Favoritos:</strong> A tabela <code>contratantes_favs</code> requer o <code>user_id</code> do usuário logado — não é possível exportar automaticamente. IDs favoritados encontrados: <code>${favs.join(', ')}</code>`
+      }
+    } catch {}
+  }
+
+  renderSection(
+    'cadastro',
+    'Cadastro Contratantes',
+    'gt3_cadastro_v1',
+    'found',
+    `${companies.length} empresa(s) encontrada(s).`,
+    lines.join('\n'),
+    favsNote || null
+  )
+}
+
+// ── Módulo 2: Manuais ─────────────────────────────────────────────────────
+
+const SLUG_MAP = {
+  funcionarios: 'funcionarios',
+  empresas:     'empresas',
+  veiculos:     'veiculos',
+  alimentar:    'alimentar',
+  bsa:          'bsa',
+  rescissorios: 'rescissorios',
+  geral:        'geral',
+}
+
+function exportManuais() {
+  let raw = null
+  try { raw = localStorage.getItem('gt3_manuais_v1') } catch {}
+
+  if (!raw) {
+    renderSection('manuais', 'Manuais', 'gt3_manuais_v1', 'empty', null, null, null)
+    return
+  }
+
+  let data
+  try { data = JSON.parse(raw) } catch {
+    renderSection('manuais', 'Manuais', 'gt3_manuais_v1', 'empty', 'Erro ao parsear JSON.', null, null)
+    return
+  }
+
+  const docLines  = []
+  let totalDocs   = 0
+
+  docLines.push('-- ── Manuais — Documentos ──────────────────────────────────────')
+  docLines.push('-- Requer que as categorias já existam em public.manuais_categorias')
+  docLines.push('')
+
+  // Doc tabs
+  for (const [tab, slug] of Object.entries(SLUG_MAP)) {
+    const docs = data[tab]
+    if (!Array.isArray(docs) || !docs.length) continue
+
+    docs.forEach(doc => {
+      if (!doc.id || !doc.nome) return
+      totalDocs++
+      const secoes = jsonb(doc.sections ?? [])
+      const perio  = esc(doc.periodicidade ?? '')
+      docLines.push(
+        `INSERT INTO public.manuais_documentos (id, categoria_id, titulo, secoes, periodicidade, ativo)` +
+        `\nSELECT '${esc(doc.id)}', c.id, '${esc(doc.nome)}', ${secoes}, '${perio}', true` +
+        `\nFROM public.manuais_categorias c WHERE c.slug = '${slug}'` +
+        `\nON CONFLICT (id) DO UPDATE SET` +
+        `\n  titulo = EXCLUDED.titulo,` +
+        `\n  secoes = EXCLUDED.secoes,` +
+        `\n  periodicidade = EXCLUDED.periodicidade;`
+      )
+    })
+  }
+
+  // NRs: merge nrs + nrsObs into __nrs__ row
+  const nrsRows = Array.isArray(data.nrs) ? data.nrs : []
+  const nrsObs  = Array.isArray(data.nrsObs) ? data.nrsObs : []
+  if (nrsRows.length || nrsObs.length) {
+    totalDocs++
+    const nrsJson = jsonb({ rows: nrsRows, obs: nrsObs })
+    docLines.push(
+      `INSERT INTO public.manuais_documentos (id, categoria_id, titulo, secoes, periodicidade, ativo)` +
+      `\nSELECT '__nrs__', c.id, 'NRs', ${nrsJson}, '', true` +
+      `\nFROM public.manuais_categorias c WHERE c.slug = 'nrs'` +
+      `\nON CONFLICT (id) DO UPDATE SET` +
+      `\n  secoes = EXCLUDED.secoes;`
+    )
+  }
+
+  if (!totalDocs) {
+    renderSection('manuais', 'Manuais', 'gt3_manuais_v1', 'empty', 'Estrutura encontrada mas sem documentos.', null, null)
+    return
+  }
+
+  renderSection(
+    'manuais',
+    'Manuais',
+    'gt3_manuais_v1',
+    'found',
+    `${totalDocs} documento(s) encontrado(s). Cole o SQL no Supabase SQL Editor — pode ser tudo de uma vez ou dividido por blocos.`,
+    docLines.join('\n'),
+    null
+  )
+}
+
+// ── Módulo 3: PDI ────────────────────────────────────────────────────────
+
+function exportPdi() {
+  // PDI nunca usou localStorage — os dados estão em arquivos TypeScript estáticos em data/pdis/
+  // Verificar também por qualquer chave gt3_pdi_* que possa existir
+  const pdiKeys = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.toLowerCase().includes('pdi')) pdiKeys.push(k)
+    }
+  } catch {}
+
+  if (pdiKeys.length) {
+    // Encontrou algo — listar as chaves mas avisar que o formato pode variar
+    const lines = []
+    lines.push('-- ── PDI: chaves encontradas ────────────────────────────────────')
+    lines.push('-- ATENÇÃO: o formato abaixo pode precisar de ajustes manuais.')
+    lines.push('')
+    pdiKeys.forEach(key => {
+      try {
+        const val = JSON.parse(localStorage.getItem(key) || 'null')
+        if (val && typeof val === 'object') {
+          lines.push(`-- Chave: ${key}`)
+          lines.push('-- ' + JSON.stringify(val).substring(0, 200) + '...')
+          lines.push('')
+        }
+      } catch {}
+    })
+    renderSection(
+      'pdi', 'PDI', pdiKeys.join(', '), 'found',
+      `Chaves PDI encontradas: ${pdiKeys.join(', ')}. Conteúdo listado abaixo — verifique antes de usar.`,
+      lines.join('\n'),
+      null
+    )
+  } else {
+    renderSection(
+      'pdi', 'PDI', 'nenhuma chave gt3_pdi_* encontrada', 'info', null, null,
+      'O módulo PDI nunca usou localStorage. Os dados dos colaboradores estão nos arquivos ' +
+      '<code>data/pdis/*.ts</code> do projeto e foram migrados para o Supabase via interface do sistema. ' +
+      'Nenhum SQL precisa ser gerado aqui.'
+    )
+  }
+}
+
+// ── Scan completo (bonus) ─────────────────────────────────────────────────
+
+function scanAll() {
+  const known = new Set(['gt3_cadastro_v1','gt3_cadastro_favs_v1','gt3_manuais_v1'])
+  const others = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith('gt3_') && !known.has(k)) {
+        others.push(k)
+      }
+    }
+  } catch {}
+
+  if (others.length) {
+    const lines = others.map(k => {
+      try {
+        const raw = localStorage.getItem(k) || ''
+        return `-- ${k} (${raw.length} bytes)\n-- ${raw.substring(0, 300)}${raw.length > 300 ? '...' : ''}`
+      } catch {
+        return `-- ${k} (erro ao ler)`
+      }
+    })
+    renderSection(
+      'others', 'Outras chaves gt3_*', others.join(', '), 'info',
+      `${others.length} chave(s) adicional(is) encontrada(s) com prefixo gt3_. Conteúdo bruto abaixo para inspeção manual.`,
+      lines.join('\n\n'),
+      null
+    )
+  }
+}
+
+// ── Run ───────────────────────────────────────────────────────────────────
+
+exportCadastro()
+exportManuais()
+exportPdi()
+scanAll()
+</script>
+</body>
+</html>

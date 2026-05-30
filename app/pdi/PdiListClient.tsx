@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import * as allPdis from '../../data/pdis/index'
 import type { PdiColaborador } from '../../data/pdis/types'
-import type { DbPdi } from './page'
+import type { DbPdi, DbCicloScore } from './page'
 import PdiAgendaDrawer from './PdiAgendaDrawer'
 
 const staticPdis = Object.values(allPdis) as PdiColaborador[]
@@ -179,38 +179,42 @@ function StaticPdiCard({ pdi }: { pdi: PdiColaborador }) {
 type CicloScores = { avaliacao_diretiva: number[]; autoavaliacao: number[]; ambicao: number[]; status: string }
 type CardExtra = { eneagrama: DbPdi['eneagrama']; animais: DbPdi['animais']; conclusoes: DbPdi['conclusoes'] }
 
-function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
+function DbPdiCard({ pdi, initialScores, isGestorAdmin, onEdit, onArchive, onDelete }: {
   pdi: DbPdi
+  initialScores: CicloScores | null
   isGestorAdmin: boolean
   onEdit: () => void
   onArchive: () => void
   onDelete: () => void
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [scores, setScores] = useState<CicloScores | null>(null)
+  const [scores, setScores] = useState<CicloScores | null>(initialScores)
   const [extra, setExtra] = useState<CardExtra>({ eneagrama: pdi.eneagrama, animais: pdi.animais, conclusoes: pdi.conclusoes })
   const isArchived = pdi.status === 'arquivado'
 
-  function fetchData() {
-    fetch(`/api/pdi/${pdi.id}/ciclos`)
-      .then(r => r.ok ? r.json() : [])
-      .then((ciclos: CicloScores[]) => {
-        const comDados = ciclos.filter(c => c.avaliacao_diretiva?.length > 0)
-        const c = comDados.find(c => c.status === 'ativo') ?? comDados[0] ?? ciclos.find(c => c.status === 'ativo') ?? ciclos[0]
-        if (c) setScores(c)
-      })
-      .catch(() => {})
-    fetch(`/api/pdi/${pdi.id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((d: CardExtra | null) => { if (d) setExtra(d) })
-      .catch(() => {})
-  }
-
+  // Só refaz fetch quando a janela volta ao foco (para reflectir edições recentes)
   useEffect(() => {
-    fetchData()
-    window.addEventListener('focus', fetchData)
-    return () => window.removeEventListener('focus', fetchData)
-  }, [pdi.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    let cancelled = false
+
+    function doFetch() {
+      Promise.all([
+        fetch(`/api/pdi/${pdi.id}/ciclos`).then(r => r.ok ? r.json() : []),
+        fetch(`/api/pdi/${pdi.id}`).then(r => r.ok ? r.json() : null),
+      ]).then(([ciclos, extraData]: [CicloScores[], CardExtra | null]) => {
+        if (cancelled) return
+        const comDados = (ciclos as CicloScores[]).filter(c => c.avaliacao_diretiva?.length > 0)
+        const c = comDados.find(c => c.status === 'ativo') ?? comDados[0] ?? (ciclos as CicloScores[]).find(c => c.status === 'ativo') ?? ciclos[0]
+        if (c) setScores(c as CicloScores)
+        if (extraData) setExtra(extraData as CardExtra)
+      }).catch(() => {})
+    }
+
+    window.addEventListener('focus', doFetch)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', doFetch)
+    }
+  }, [pdi.id])
 
   const totais = scores && scores.avaliacao_diretiva.length > 0 ? {
     diretiva: scores.avaliacao_diretiva.reduce((s, v) => s + v, 0),
@@ -260,8 +264,16 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
   )
 }
 
-export default function PdiListClient({ dbPdis, papel }: { dbPdis: DbPdi[]; papel: string }) {
+export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis: DbPdi[]; ciclosScores: DbCicloScore[]; papel: string }) {
   const isGestorAdmin = ['gestor', 'admin'].includes(papel)
+
+  // Mapeia pdi_id → melhor ciclo com score (pré-buscado server-side)
+  const ciclosByPdi = new Map<string, CicloScores>()
+  for (const c of ciclosScores) {
+    if (!c.avaliacao_diretiva?.length) continue
+    const existing = ciclosByPdi.get(c.pdi_id)
+    if (!existing || c.status === 'ativo') ciclosByPdi.set(c.pdi_id, c as CicloScores)
+  }
 
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [editModal, setEditModal] = useState<EditModalState>(EDIT_INIT)
@@ -423,7 +435,7 @@ export default function PdiListClient({ dbPdis, papel }: { dbPdis: DbPdi[]; pape
         {sorted.map(pdi => <StaticPdiCard key={pdi.id} pdi={pdi} />)}
         {activeDbPdis.map(pdi => (
           <DbPdiCard
-            key={pdi.id} pdi={pdi} isGestorAdmin={isGestorAdmin}
+            key={pdi.id} pdi={pdi} initialScores={ciclosByPdi.get(pdi.id) ?? null} isGestorAdmin={isGestorAdmin}
             onEdit={() => setEditModal({ open: true, pdiId: pdi.id, nome: pdi.nome, funcao: pdi.funcao, saving: false, error: '' })}
             onArchive={() => handleArchive(pdi)}
             onDelete={() => handleDelete(pdi.id)}
@@ -437,7 +449,7 @@ export default function PdiListClient({ dbPdis, papel }: { dbPdis: DbPdi[]; pape
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {archivedDbPdis.map(pdi => (
               <DbPdiCard
-                key={pdi.id} pdi={pdi} isGestorAdmin={isGestorAdmin}
+                key={pdi.id} pdi={pdi} initialScores={ciclosByPdi.get(pdi.id) ?? null} isGestorAdmin={isGestorAdmin}
                 onEdit={() => setEditModal({ open: true, pdiId: pdi.id, nome: pdi.nome, funcao: pdi.funcao, saving: false, error: '' })}
                 onArchive={() => handleArchive(pdi)}
                 onDelete={() => handleDelete(pdi.id)}

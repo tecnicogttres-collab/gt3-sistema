@@ -238,7 +238,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           const dismissed = getPdiNotifDismissed(userId)
           if (!dismissed.includes(pdiId)) {
             if (tipo === 'criado') {
-              setPdiCriadoNotif({ pdiId })
+              setPdiCriadoNotif({ pdiId, dataAcao: null })
             } else {
               setPdiNotifBanner({ pdiId, dataAcao })
             }
@@ -282,13 +282,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       } catch { /* noop */ }
     }
 
-    checkUnseenPrio()
-    checkUnseenAtas()
-    checkUnseenPdiConversa()
-    checkPdiNotif()
-    checkUnseenSugestoes()
-    checkUnseenEnquetes()
-    checkLembretesPendentes()
+    void Promise.all([
+      checkUnseenPrio(),
+      checkUnseenAtas(),
+      checkUnseenPdiConversa(),
+      checkPdiNotif(),
+      checkUnseenSugestoes(),
+      checkUnseenEnquetes(),
+      checkLembretesPendentes(),
+    ])
 
     const pollTimer = setInterval(() => {
       checkUnseenPdiConversa()

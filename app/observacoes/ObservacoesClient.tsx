@@ -577,15 +577,17 @@ export default function ObservacoesClient() {
   // Fetch DB observations and dynamic subtabs whenever category changes
   useEffect(() => {
     if (!activeCatKey) return
+    let cancelled = false
     const cat = encodeURIComponent(activeCatKey)
     fetch(`/api/observacoes?categoria=${cat}`)
       .then(r => r.ok ? r.json() : [])
-      .then(data => setDbObs(data))
+      .then(data => { if (!cancelled) setDbObs(data) })
       .catch(() => {})
     fetch(`/api/observacoes/subtabs?categoria=${cat}`)
       .then(r => r.ok ? r.json() : [])
-      .then(data => setDbSubtabs(data))
+      .then(data => { if (!cancelled) setDbSubtabs(data) })
       .catch(() => {})
+    return () => { cancelled = true }
   }, [activeCatKey])
 
   useEffect(() => {

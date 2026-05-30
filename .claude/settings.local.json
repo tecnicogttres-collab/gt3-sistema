@@ -71,7 +71,10 @@
       "Bash(Test-Path *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\lib\" -Filter \"supabase*\")",
       "Bash(npx playwright *)",
-      "PowerShell(Get-Content \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\.next\\\\dev\\\\logs\\\\next-development.log\" | ConvertFrom-Json | Where-Object { $_.level -eq \"ERROR\" -or $_.message -match \"Error|error|fail|FAIL\" } | Select-Object -Last 30 | ForEach-Object { $_.timestamp + \" [\" + $_.source + \"] \" + $_.message })"
+      "PowerShell(Get-Content \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\.next\\\\dev\\\\logs\\\\next-development.log\" | ConvertFrom-Json | Where-Object { $_.level -eq \"ERROR\" -or $_.message -match \"Error|error|fail|FAIL\" } | Select-Object -Last 30 | ForEach-Object { $_.timestamp + \" [\" + $_.source + \"] \" + $_.message })",
+      "Bash(npx supabase *)",
+      "Bash(grep -E \"\\(^[^/]*page\\\\.tsx$|dashboard|root\\)\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\" -Directory)"
     ]
   }
 }

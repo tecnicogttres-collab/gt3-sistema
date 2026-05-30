@@ -535,9 +535,12 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
   const [dataConversa, setDataConversa] = useState(ciclo.data_conversa ? ciclo.data_conversa.slice(0, 16) : '')
   const [saving, setSaving] = useState<'diretiva' | 'auto' | 'conversa' | null>(null)
   const [savedDiretiva, setSavedDiretiva] = useState(false)
+  const savedDiritivaTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [open, setOpen] = useState(isAtivo)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [err, setErr] = useState('')
+
+  useEffect(() => { return () => { clearTimeout(savedDiritivaTimer.current) } }, [])
 
   function applyComps() {
     const newComps = compsText.split('\n').map(s => s.trim()).filter(Boolean)
@@ -573,7 +576,8 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
       if (!res.ok) throw new Error()
       onUpdate({ ...ciclo, avaliacao_diretiva: diretiva, ...(isFirst ? { ambicao } : {}) })
       setSavedDiretiva(true)
-      setTimeout(() => setSavedDiretiva(false), 2500)
+      clearTimeout(savedDiritivaTimer.current!)
+      savedDiritivaTimer.current = setTimeout(() => setSavedDiretiva(false), 2500)
     } catch { setErr('Erro ao salvar avaliação diretiva.') } finally { setSaving(null) }
   }
 

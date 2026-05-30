@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadastro de Terceiras v2 — Híbrido | GT3 Sistema</title>
+<style>
+  :root {
+    --primary: #2A4F96;
+    --primary-dark: #1f3d75;
+    --primary-light: #eaf0fa;
+    --accent: #D1AE6E;
+    --accent-dark: #b8945a;
+    --bg: #F4F6FA;
+    --surface: #ffffff;
+    --border: #e2e6ee;
+    --border-strong: #cbd2dd;
+    --text: #1f2937;
+    --text-muted: #6b7280;
+    --text-soft: #9ca3af;
+    --ok: #16a34a;
+    --ok-bg: #dcfce7;
+    --pendente: #d97706;
+    --pendente-bg: #fef3c7;
+    --na: #6b7280;
+    --na-bg: #f3f4f6;
+    --validar: #7c3aed;
+    --validar-bg: #ede9fe;
+    --validado: #2563eb;
+    --validado-bg: #dbeafe;
+    --danger: #dc2626;
+    --danger-bg: #fee2e2;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow: 0 2px 8px rgba(15,23,42,0.06);
+    --shadow-lg: 0 12px 32px rgba(15,23,42,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+    display: flex; min-height: 100vh;
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+    padding: 20px 14px; position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto;
+  }
+  .logo {
+    font-size: 17px; font-weight: 700; color: var(--primary);
+    padding: 0 8px 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+  }
+  .logo small { display: block; font-size: 10px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.5px; margin-top: 2px; }
+  .nav-section { font-size: 10px; font-weight: 600; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.5px; padding: 12px 8px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm);
+    font-size: 13px; color: var(--text); cursor: pointer; transition: background 0.15s;
+  }
+  .nav-item:hover { background: var(--bg); }
+  .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+  .nav-item .ico { width: 16px; text-align: center; font-size: 14px; }
+
+  /* ===== Main ===== */
+  .main { margin-left: 220px; flex: 1; padding: 20px 24px; max-width: calc(100% - 220px); }
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; color: var(--primary); }
+  .header p { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .role-switch {
+    display: flex; align-items: center; gap: 8px; background: var(--surface); padding: 5px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px;
+  }
+  .role-switch select { border: none; background: transparent; font-weight: 500; color: var(--primary); cursor: pointer; outline: none; font-size: 12px; }
+
+  /* ===== Tabs Ativos/Histórico ===== */
+  .tabs {
+    display: flex; border-bottom: 2px solid var(--border); margin-bottom: 14px;
+  }
+  .tab {
+    padding: 10px 18px; cursor: pointer; font-size: 13px; font-weight: 600;
+    color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab .badge {
+    display: inline-block; background: var(--bg); color: var(--text-muted);
+    padding: 1px 7px; border-radius: 10px; font-size: 11px; margin-left: 6px;
+  }
+  .tab.active .badge { background: var(--primary-light); color: var(--primary); }
+
+  /* ===== KPIs ===== */
+  .kpis { display: grid; gap: 10px; margin-bottom: 16px; }
+  .kpis.k-3 { grid-template-columns: repeat(3, 1fr); }
+  .kpis.k-4 { grid-template-columns: repeat(4, 1fr); }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 16px; box-shadow: var(--shadow-sm);
+  }
+  .kpi .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .kpi .value { font-size: 22px; font-weight: 600; margin-top: 2px; color: var(--primary); }
+  .kpi.alert .value { color: var(--pendente); }
+  .kpi.ok .value { color: var(--ok); }
+  .kpi.danger .value { color: var(--danger); }
+
+  /* ===== Filters ===== */
+  .filters {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 14px; margin-bottom: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .filters input, .filters select {
+    padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    font-size: 12px; font-family: inherit; background: var(--surface); outline: none;
+  }
+  .filters input:focus, .filters select:focus { border-color: var(--primary); }
+  .filters input[type="search"] { flex: 1; min-width: 140px; max-width: 240px; }
+  .filters label {
+    font-size: 11px; color: var(--text-muted); font-weight: 500;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .btn {
+    background: var(--primary); color: white; border: none; padding: 7px 12px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .btn:hover { background: var(--primary-dark); }
+  .btn-secondary { background: var(--surface); color: var(--primary); border: 1px solid var(--primary); }
+  .btn-secondary:hover { background: var(--primary-light); }
+  .btn-danger { background: var(--danger); }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-sm { padding: 4px 8px; font-size: 11px; }
+
+  /* ===== Tabela ===== */
+  .table-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; box-shadow: var(--shadow-sm);
+  }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: #f8f9fc; }
+  th {
+    text-align: left; padding: 9px 12px; font-size: 11px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border);
+    white-space: nowrap; position: sticky; top: 0; background: #f8f9fc;
+  }
+  th.center, td.center { text-align: center; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr { cursor: pointer; transition: background 0.12s; }
+  tbody tr:hover { background: #f8f9fc; }
+  tbody tr.selected { background: var(--primary-light); }
+  tbody tr.row-concluido { background: #f6fdf8; }
+  tbody tr.row-concluido:hover { background: #ecfaf0; }
+  tbody tr.row-nao-evoluiu { background: #fef9f9; }
+  tbody tr.row-nao-evoluiu:hover { background: #fef2f2; }
+  tbody tr.row-pendente { background: #fffbf2; }
+  tbody tr.row-pendente:hover { background: #fef6e3; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .razao { font-weight: 500; color: var(--text); max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .razao .sub-mini { display: block; font-size: 10px; color: #92400e; font-weight: 500; margin-top: 2px; }
+  .badge-contratante {
+    display: inline-block; background: var(--primary-light); color: var(--primary);
+    padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  }
+  .status-pill {
+    font-size: 10px; padding: 3px 8px; border-radius: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; display: inline-block;
+  }
+  .status-pill.pendente { background: var(--pendente-bg); color: var(--pendente); }
+  .status-pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .status-pill.validar { background: var(--validar-bg); color: var(--validar); }
+  .status-pill.nao-evoluiu { background: var(--danger-bg); color: var(--danger); }
+
+  .row-prog { display: flex; align-items: center; gap: 8px; min-width: 100px; }
+  .row-prog .bar { flex: 1; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .row-prog .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.3s; }
+  .row-prog .pct { font-size: 11px; font-weight: 600; color: var(--text-muted); min-width: 30px; text-align: right; }
+
+  .group-dots { display: flex; gap: 3px; }
+  .group-dots .d {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong);
+  }
+  .group-dots .d.ok { background: var(--ok); }
+  .group-dots .d.pendente { background: var(--pendente); }
+  .group-dots .d.validar { background: var(--validar); }
+  .group-dots .d.na { background: var(--text-soft); }
+  .group-dots .d.validado { background: var(--validado); }
+
+  /* ===== Drawer ===== */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,0.4); display: none; z-index: 90;
+  }
+  .overlay.show { display: block; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 560px; max-width: 100%;
+    background: var(--surface); box-shadow: var(--shadow-lg); z-index: 100;
+    transform: translateX(100%); transition: transform 0.25s ease; display: flex; flex-direction: column;
+  }
+  .drawer.show { transform: translateX(0); }
+  .drawer-head {
+    padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  }
+  .drawer-head h3 { font-size: 15px; font-weight: 600; color: var(--text); line-height: 1.3; }
+  .drawer-head .sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .close-btn {
+    background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;
+    padding: 4px 8px; border-radius: var(--radius-sm);
+  }
+  .close-btn:hover { background: var(--bg); color: var(--text); }
+
+  .drawer-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px;
+  }
+  .drawer-tab {
+    padding: 9px 14px; cursor: pointer; font-size: 12px; font-weight: 600;
+    color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .drawer-tab:hover { color: var(--text); }
+  .drawer-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  .drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .drawer-section { margin-bottom: 20px; }
+  .drawer-section h4 {
+    font-size: 10px; font-weight: 700; color: var(--text-soft); text-transform: uppercase;
+    letter-spacing: 0.6px; margin-bottom: 10px;
+  }
+
+  /* Campos editáveis */
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 10px; }
+  .field { display: flex; flex-direction: column; }
+  .field label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    font-size: 13px; font-family: inherit; background: var(--surface); outline: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--primary); }
+  .field-full { grid-column: 1 / -1; }
+  .field-check { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+  .field-check input { width: 16px; height: 16px; cursor: pointer; }
+  .field-check label { font-size: 13px; font-weight: 500; color: var(--text); margin: 0; cursor: pointer; text-transform: none; letter-spacing: 0; }
+
+  .prog-big {
+    background: var(--bg); padding: 12px 14px; border-radius: var(--radius); margin-bottom: 16px;
+  }
+  .prog-big .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .prog-big .pct-big { font-size: 22px; font-weight: 700; color: var(--primary); }
+  .prog-big .bar { height: 7px; background: var(--surface); border-radius: 4px; overflow: hidden; }
+  .prog-big .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.3s; border-radius: 4px; }
+  .prog-big.concluido .pct-big, .prog-big.concluido .bar > span { color: var(--ok); background: var(--ok); }
+  .prog-big.nao-evoluiu .pct-big { color: var(--danger); }
+
+  /* Checklist */
+  .checklist { display: flex; flex-direction: column; gap: 7px; }
+  .check-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;
+    transition: all 0.15s; background: var(--surface);
+  }
+  .check-item:hover { border-color: var(--primary); background: var(--primary-light); }
+  .check-item .ico-state {
+    width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: bold; flex-shrink: 0;
+  }
+  .check-item.s-ok .ico-state, .check-item.s-sob_demanda .ico-state, .check-item.s-liberado .ico-state { background: var(--ok-bg); color: var(--ok); }
+  .check-item.s-mensal .ico-state { background: var(--validado-bg); color: var(--validado); }
+  .check-item.s-pendente .ico-state, .check-item.s-nao_liberado .ico-state { background: var(--pendente-bg); color: var(--pendente); }
+  .check-item.s-na .ico-state { background: var(--na-bg); color: var(--na); }
+  .check-item.s-validar .ico-state { background: var(--validar-bg); color: var(--validar); }
+  .check-item.s-validado .ico-state { background: var(--validado-bg); color: var(--validado); }
+  .check-item.s-nao_evoluiu .ico-state { background: var(--danger-bg); color: var(--danger); }
+  .check-item .name { flex: 1; font-size: 13px; font-weight: 500; }
+  .check-item .state-label { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .check-item.s-ok .state-label, .check-item.s-sob_demanda .state-label, .check-item.s-liberado .state-label { background: var(--ok-bg); color: var(--ok); }
+  .check-item.s-mensal .state-label { background: var(--validado-bg); color: var(--validado); }
+  .check-item.s-pendente .state-label, .check-item.s-nao_liberado .state-label { background: var(--pendente-bg); color: var(--pendente); }
+  .check-item.s-na .state-label { background: var(--na-bg); color: var(--na); }
+  .check-item.s-validar .state-label { background: var(--validar-bg); color: var(--validar); }
+  .check-item.s-validado .state-label { background: var(--validado-bg); color: var(--validado); }
+  .check-item.s-nao_evoluiu .state-label { background: var(--danger-bg); color: var(--danger); }
+  .check-item .lock { font-size: 10px; color: var(--text-soft); margin-left: 4px; }
+
+  /* Histórico de mudanças no drawer */
+  .hist-list { display: flex; flex-direction: column; gap: 8px; }
+  .hist-entry {
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); font-size: 12px;
+  }
+  .hist-entry .time { font-size: 10px; color: var(--text-soft); }
+  .hist-entry .who { font-weight: 600; color: var(--primary); margin: 0 4px; }
+  .hist-entry .what { color: var(--text); margin-top: 3px; }
+  .hist-entry .change { color: var(--text-muted); }
+  .hist-entry .change strong { color: var(--text); }
+
+  .drawer-foot {
+    padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 10px;
+    background: #fafbfd; flex-wrap: wrap;
+  }
+
+  /* ===== Modais ===== */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: none;
+    align-items: center; justify-content: center; z-index: 110; padding: 20px;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: var(--radius); max-width: 500px; width: 100%;
+    padding: 20px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal.modal-wide { max-width: 640px; }
+  .modal h3 { font-size: 16px; color: var(--primary); margin-bottom: 4px; }
+  .modal p.sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+  .modal label { font-size: 11px; font-weight: 700; color: var(--text); display: block; margin-top: 10px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .modal .opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .modal .opt {
+    padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 12px; cursor: pointer; text-align: left; background: var(--surface);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .modal .opt:hover { border-color: var(--primary); }
+  .modal .opt.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .modal .opt.danger-opt { border-color: #fca5a5; }
+  .modal .opt.danger-opt:hover { background: var(--danger-bg); color: var(--danger); }
+  .modal .opt.active.danger-opt { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+  .modal textarea, .modal input, .modal select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); font-family: inherit; font-size: 13px;
+    resize: vertical; outline: none;
+  }
+  .modal textarea { min-height: 60px; }
+  .modal-foot { display: flex; justify-content: flex-end; margin-top: 18px; gap: 10px; }
+  .modal-foot.justify-between { justify-content: space-between; }
+
+  .alert-warn {
+    background: #fef3c7; border: 1px solid #fcd34d; color: #78350f;
+    padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; margin-top: 10px;
+  }
+  .alert-danger {
+    background: var(--danger-bg); border: 1px solid #fca5a5; color: var(--danger);
+    padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 10px;
+    line-height: 1.55;
+  }
+  .alert-info {
+    background: var(--primary-light); border: 1px solid #93c5fd; color: var(--primary);
+    padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; margin-top: 10px;
+  }
+
+  .empty { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+  .empty h3 { font-size: 14px; color: var(--text); margin-bottom: 4px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: var(--text); color: white;
+    padding: 12px 18px; border-radius: var(--radius); font-size: 13px; z-index: 200;
+    box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 8px;
+    transform: translateY(100px); opacity: 0; transition: all 0.3s ease;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { background: var(--ok); }
+  .toast.danger { background: var(--danger); }
+
+  /* Contratantes list */
+  .contratantes-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 280px; overflow-y: auto; }
+  .contratante-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px;
+  }
+  .contratante-row .nome { flex: 1; font-weight: 500; }
+  .contratante-row .flag-cc {
+    font-size: 10px; background: var(--accent); color: white;
+    padding: 2px 7px; border-radius: 10px; font-weight: 600;
+  }
+
+  @media (max-width: 1100px) {
+    .kpis.k-3, .kpis.k-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .sidebar { width: 180px; }
+    .main { margin-left: 180px; padding: 14px; max-width: calc(100% - 180px); }
+    .drawer { width: 100%; }
+    .field-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="logo">GT3 Sistema <small>Versão Híbrida v2</small></div>
+  <div class="nav-section">Principal</div>
+  <div class="nav-item"><span class="ico">📊</span> Dashboard</div>
+  <div class="nav-item"><span class="ico">📝</span> Observações</div>
+  <div class="nav-item active"><span class="ico">🏢</span> Cadastro Terceiras</div>
+  <div class="nav-item"><span class="ico">✉️</span> E-mails Padrão</div>
+  <div class="nav-item"><span class="ico">📚</span> Manuais</div>
+  <div class="nav-item"><span class="ico">🏠</span> Home Office</div>
+  <div class="nav-section">Gestão</div>
+  <div class="nav-item"><span class="ico">🎯</span> PDI</div>
+  <div class="nav-item"><span class="ico">📅</span> Aniversários</div>
+  <div class="nav-item"><span class="ico">📞</span> Ramais</div>
+  <div class="nav-item"><span class="ico">💡</span> Sugestões</div>
+</aside>
+
+<main class="main">
+  <div class="header">
+    <div>
+      <h1>Cadastro de Terceiras</h1>
+      <p>Acompanhamento por etapas. Empresas com 100% ou marcadas como "Não evoluiu" vão automaticamente para o histórico.</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn-secondary btn" id="btnContratantes" title="Gerenciar contratantes">⚙️ Contratantes</button>
+      <button class="btn" id="btnNova">+ Nova terceira</button>
+      <div class="role-switch">
+        <span>Logado:</span>
+        <select id="roleSel">
+          <option value="admin">RODRIGO (admin)</option>
+          <option value="gestor">MARCIO (gestor)</option>
+          <option value="colaborador">ISABELA (colab)</option>
+          <option value="trainee">NOVATO (trainee)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs Ativos / Histórico -->
+  <div class="tabs">
+    <div class="tab active" data-tab="ativos">Ativos <span class="badge" id="tabBadgeAtivos">0</span></div>
+    <div class="tab" data-tab="historico">Histórico <span class="badge" id="tabBadgeHist">0</span></div>
+  </div>
+
+  <!-- ===== ATIVOS ===== -->
+  <div id="paneAtivos">
+    <div class="kpis k-3">
+      <div class="kpi"><div class="label">Total ativas</div><div class="value" id="kTotal">—</div></div>
+      <div class="kpi alert"><div class="label">Pendentes</div><div class="value" id="kPend">—</div></div>
+      <div class="kpi"><div class="label">Progresso médio</div><div class="value" id="kProg">—</div></div>
+    </div>
+
+    <div class="filters">
+      <input type="search" id="busca" placeholder="🔎 Buscar…">
+      <select id="fContratante"><option value="">Todos contratantes</option></select>
+      <select id="fSubcontratante"><option value="">Todos subcontratantes</option></select>
+      <select id="fContrato180">
+        <option value="">GT0180: todos</option>
+        <option value="sob_demanda">Sob demanda</option>
+        <option value="mensal">Mensal</option>
+      </select>
+      <label><input type="checkbox" id="fSoSub"> Só subcontratadas</label>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Contratante</th>
+              <th>Razão social</th>
+              <th class="center" title="Status visual das 2 guias: Cadastro · Contato">Guias</th>
+              <th>Progresso</th>
+              <th>Contato</th>
+              <th>Data</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyAtivos"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== HISTÓRICO ===== -->
+  <div id="paneHist" style="display:none">
+    <div class="kpis k-4">
+      <div class="kpi"><div class="label">No período</div><div class="value" id="hTotal">—</div></div>
+      <div class="kpi ok"><div class="label">Evoluíram</div><div class="value" id="hOk">—</div></div>
+      <div class="kpi danger"><div class="label">Não evoluíram</div><div class="value" id="hNao">—</div></div>
+      <div class="kpi alert"><div class="label">Pendentes (ativas)</div><div class="value" id="hPend">—</div></div>
+    </div>
+    <div id="hPeriodoLabel" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;font-weight:500"></div>
+
+    <div class="filters">
+      <input type="search" id="hBusca" placeholder="🔎 Buscar…">
+      <select id="hContratante"><option value="">Todos contratantes</option></select>
+      <select id="hSubcontratante"><option value="">Todos subcontratantes</option></select>
+      <select id="hContrato180">
+        <option value="">GT0180: todos</option>
+        <option value="sob_demanda">Sob demanda</option>
+        <option value="mensal">Mensal</option>
+      </select>
+      <select id="hTipo">
+        <option value="todas">Todas (evoluíram, não evoluíram e pendentes)</option>
+        <option value="arquivadas">Evoluíram + Não evoluíram</option>
+        <option value="concluido">Apenas Evoluíram</option>
+        <option value="nao_evoluiu">Apenas Não evoluíram</option>
+        <option value="ativo">Apenas Pendentes (ativas)</option>
+      </select>
+      <label>De <input type="date" id="hDe"></label>
+      <label>Até <input type="date" id="hAte"></label>
+      <label><input type="checkbox" id="hSoSub"> Só subcontratadas</label>
+      <button class="btn-secondary btn btn-sm" id="hLimpar">Limpar período</button>
+    </div>
+
+    <div class="alert-info" style="margin-bottom: 12px;">
+      ℹ️ Histórico mantido por 1 ano a partir da data de arquivamento. Registros mais antigos são removidos automaticamente.
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Contratante</th>
+              <th>Razão social</th>
+              <th class="center">Resultado</th>
+              <th>Progresso</th>
+              <th>Data ref.</th>
+              <th class="center">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyHist"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Drawer -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div style="flex:1;min-width:0">
+      <h3 id="dRazao">—</h3>
+      <div class="sub" id="dSub"></div>
+    </div>
+    <button class="close-btn" onclick="closeDrawer()">×</button>
+  </div>
+  <div class="drawer-tabs">
+    <div class="drawer-tab active" data-dtab="detalhes">Detalhes</div>
+    <div class="drawer-tab" data-dtab="historico">Histórico de alterações</div>
+  </div>
+  <div class="drawer-body" id="dBody"></div>
+  <div class="drawer-foot" id="dFoot"></div>
+</aside>
+
+<!-- Modal etapa -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="mTitle">Atualizar etapa</h3>
+    <p class="sub" id="mSub"></p>
+    <div id="mLockWarn"></div>
+    <label>Estado da etapa</label>
+    <div class="opts" id="mOpts"></div>
+    <label>Observação (opcional)</label>
+    <textarea id="mObs" placeholder="Ex.: aguardando retorno, documento incompleto…"></textarea>
+    <div id="mNaoEvoluiuWarn"></div>
+    <div class="modal-foot">
+      <button class="btn-secondary btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn" id="mSalvar">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmação Não Evoluiu -->
+<div class="modal-bg" id="modalConfirm">
+  <div class="modal">
+    <h3 style="color: var(--danger)">⚠ Confirmar arquivamento</h3>
+    <div class="alert-danger" id="confirmText"></div>
+    <div class="modal-foot">
+      <button class="btn-secondary btn" onclick="closeConfirm()">Cancelar</button>
+      <button class="btn btn-danger" id="confirmOk">Sim, arquivar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nova terceira -->
+<div class="modal-bg" id="modalNova">
+  <div class="modal modal-wide">
+    <h3>Nova terceira</h3>
+    <p class="sub">Cadastre uma terceira para começar o acompanhamento.</p>
+    <div class="field-row">
+      <div class="field">
+        <label>Contratante *</label>
+        <select id="nContratante"></select>
+      </div>
+      <div class="field">
+        <label>Razão social *</label>
+        <input type="text" id="nRazao" placeholder="Ex.: EMPRESA EXEMPLO LTDA">
+      </div>
+      <div class="field">
+        <label>Contato (opcional)</label>
+        <input type="text" id="nContato" placeholder="Nome da pessoa de contato">
+      </div>
+      <div class="field">
+        <label>Data</label>
+        <input type="date" id="nData">
+      </div>
+      <div class="field field-full field-check">
+        <input type="checkbox" id="nTemSub">
+        <label for="nTemSub">É uma empresa subcontratada</label>
+      </div>
+      <div class="field field-full" id="nSubcontratanteWrap" style="display:none">
+        <label>Nome da empresa que subcontrata *</label>
+        <input type="text" id="nSubcontratante" placeholder="Ex.: LDA, Global Prest, Abaservice…">
+      </div>
+      <div class="field field-full">
+        <label>Observação (opcional)</label>
+        <textarea id="nObservacao" placeholder="Anotações livres — não conta para o progresso"
+          style="width:100%;padding:8px 10px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;resize:vertical;min-height:60px;outline:none"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary btn" onclick="closeNova()">Cancelar</button>
+      <button class="btn" id="nSalvar">Criar terceira</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal contratantes -->
+<div class="modal-bg" id="modalContratantes">
+  <div class="modal modal-wide">
+    <h3>Gerenciar contratantes</h3>
+    <p class="sub">Marque "Requer CC" para contratantes que precisam da etapa "CC / Notificação" no cadastro.</p>
+    <div class="contratantes-list" id="contratantesList"></div>
+    <label>Novo contratante</label>
+    <div class="field-row">
+      <div class="field">
+        <input type="text" id="newContratanteNome" placeholder="Nome do contratante">
+      </div>
+      <div class="field field-check">
+        <input type="checkbox" id="newContratanteCC">
+        <label for="newContratanteCC">Requer etapa CC/Notificação</label>
+      </div>
+    </div>
+    <div class="modal-foot justify-between">
+      <button class="btn-secondary btn" onclick="closeContratantes()">Fechar</button>
+      <button class="btn" id="btnAddContratante">+ Adicionar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ====================================================
+// ===== CONFIGURAÇÃO ESTRUTURAL =====================
+// ====================================================
+
+// Estados possíveis por etapa
+const STATES = {
+  pendente:     { label: 'Pendente',          ico: '○', cls: 's-pendente',    completa: false },
+  ok:           { label: 'OK',                ico: '✓', cls: 's-ok',          completa: true  },
+  na:           { label: 'Não aplica',        ico: '—', cls: 's-na',          completa: true  },
+  sob_demanda:  { label: 'Sob demanda',       ico: '✓', cls: 's-sob_demanda', completa: true  },
+  mensal:       { label: 'Mensal',            ico: '↻', cls: 's-mensal',      completa: true  },
+  validar:      { label: 'Aguard. validação', ico: '⏳', cls: 's-validar',     completa: false },
+  validado:     { label: 'Validado',          ico: '✓✓',cls: 's-validado',    completa: true  },
+  nao_liberado: { label: 'Não liberado',      ico: '○', cls: 's-nao_liberado',completa: false },
+  liberado:     { label: 'Liberado',          ico: '✓', cls: 's-liberado',    completa: true  },
+  nao_evoluiu:  { label: 'Não evoluiu',       ico: '✕', cls: 's-nao_evoluiu', completa: false }
+};
+
+// Repositório de contratantes (admin pode adicionar/editar via modal ⚙️)
+let CONTRATANTES = [
+  { id: 'pettenati',   nome: 'PETTENATI',                requerCC: false },
+  { id: 'salton',      nome: 'SALTON',                   requerCC: false },
+  { id: 'imec',        nome: 'IMEC',                     requerCC: false },
+  { id: 'jungheinrich',nome: 'JUNGHEINRICH',             requerCC: false },
+  { id: 'pls',         nome: 'PLS',                      requerCC: false },
+  { id: 'csg',         nome: 'CSG',                      requerCC: false },
+  { id: 'marcopolo',   nome: 'MARCOPOLO',                requerCC: true  },
+  { id: 'marcopolo_sc',nome: 'MARCOPOLO SÃO CRISTÓVÃO',  requerCC: true  },
+  { id: 'volare',      nome: 'VOLARE',                   requerCC: true  }
+];
+
+// Definição das guias e suas etapas (com estados permitidos por etapa)
+const GUIAS = [
+  { id: 'cadastro', label: 'Cadastro', etapas: [
+    { id: 'gt0100',         label: 'GT0100',           estados: ['pendente', 'ok', 'na'] },
+    { id: 'cc_notif',       label: 'CC / Notificação', estados: ['pendente', 'ok', 'na'], condicional: true },
+    { id: 'pasta_rede',     label: 'Pasta Rede',       estados: ['pendente', 'ok', 'na'] },
+    { id: 'gt0180',         label: 'GT0180',           estados: ['pendente', 'sob_demanda', 'mensal', 'na', 'validado'] },
+    { id: 'cnpj_liberado',  label: 'CNPJ Liberado',    estados: ['nao_liberado', 'liberado', 'na', 'nao_evoluiu'] },
+    { id: 'gt8005',         label: 'Cadastro GT8005',  estados: ['pendente', 'ok', 'na'] }
+  ]},
+  { id: 'contato', label: 'Contato inicial', etapas: [
+    { id: 'email',          label: 'Recebeu e-mail',   estados: ['pendente', 'ok', 'na'] }
+  ]}
+];
+
+// Etapas que só gestor/admin pode marcar como "validado"
+const ETAPAS_VALIDACAO_GESTOR = ['gt0180'];
+
+// Etapa especial que arquiva ao receber estado "nao_evoluiu"
+const ESTADO_ARQUIVA = { etapa: 'cnpj_liberado', estado: 'nao_evoluiu' };
+
+// Retenção do histórico (em dias)
+const RETENCAO_HISTORICO_DIAS = 365;
+
+// ====================================================
+// ===== DADOS INICIAIS (semente) =====================
+// ====================================================
+
+const hoje = new Date().toISOString().slice(0,10);
+const ontem = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+const semanaAtras = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+const mesAtras = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+
+function novaEtapasPadrao(contratanteId) {
+  const ct = CONTRATANTES.find(c => c.id === contratanteId);
+  const etapas = {};
+  GUIAS.forEach(g => g.etapas.forEach(e => {
+    if (e.condicional && !ct?.requerCC) return; // ignora CC se contratante não exige
+    etapas[e.id] = e.estados[0]; // primeiro estado = mais pendente
+  }));
+  return etapas;
+}
+
+let proximoId = 100;
+function gerarId() { return ++proximoId; }
+
+let dados = [
+  {id:1,contratanteId:'pettenati',razao:'TECNICA MONT DE ESTR PRE FABR E MET LTDA',contato:'Isabela Souza',data:'2026-05-25',
+    temSub:true, subcontratante:'LDA', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:2,contratanteId:'pettenati',razao:'GHEDINI MONT E ESTRUTURAS METALICAS LTDA',contato:'Isabela Souza',data:'2026-05-25',
+    temSub:true, subcontratante:'LDA', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:3,contratanteId:'salton',razao:'CORE ENGENHARIA LTDA',contato:'Elizeu Pereira',data:'2026-05-25',
+    temSub:false, subcontratante:'', observacao:'Empresa já trabalhou com a GT3 em 2024. Bom relacionamento, retornos rápidos.', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'sob_demanda',cnpj_liberado:'liberado',gt8005:'pendente',email:'ok'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:4,contratanteId:'imec',razao:'YASMANY CASTRO MARQUEZ - MEI',contato:'Nelvi Costa',data:'2026-05-25',
+    temSub:true, subcontratante:'Global Prest', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:5,contratanteId:'imec',razao:'DAIANE CAROLINE SCHUSSLER - MEI',contato:'Nelvi Costa',data:'2026-05-25',
+    temSub:true, subcontratante:'Global Prest', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:6,contratanteId:'salton',razao:'ALEX SANDRO FERREIRA ALVARES - GRAN SERVICOS',contato:'Vitória Lima',data:'2026-05-25',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'mensal',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:7,contratanteId:'jungheinrich',razao:'ALVES DIVISORIAS LTDA',contato:'Jaqueline Souza',data:'2026-05-25',
+    temSub:true, subcontratante:'Abaservice', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:8,contratanteId:'jungheinrich',razao:'ELMIKS COM E SERV DE FORROS E DIV LTDA',contato:'Jaqueline Souza',data:'2026-05-25',
+    temSub:true, subcontratante:'Abaservice', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:9,contratanteId:'pettenati',razao:'SOLUSERV INSTALACAO E MANUTENCAO LTDA',contato:'André Schmidt',data:'2026-05-25',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'mensal',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:10,contratanteId:'csg',razao:'ELETRO SERRA COM DE MAT ELETRICOS LTDA',contato:'Mateus Ribeiro',data:'2026-05-25',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-25T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:11,contratanteId:'pettenati',razao:'PAMELA B DALZOCHIO ZUCCOLOTTO APOIO ADM LTDA',contato:'Isabela Souza',data:'2026-05-26',
+    temSub:true, subcontratante:'LDA', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-26T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:12,contratanteId:'pls',razao:'MIRIELLE COSTA ARQUITETURA LTDA',contato:'Mirielle Costa',data:'2026-05-26',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'validado',cnpj_liberado:'liberado',gt8005:'ok',email:'ok'},
+    historico:[{ts:'2026-05-26T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:13,contratanteId:'salton',razao:'ALFA ASSESSORIA EM PROD CONTROLADOS LTDA',contato:'Thayse Mota',data:'2026-05-26',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-26T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:14,contratanteId:'salton',razao:'TDM SERVICO E COMERCIO LTDA',contato:'Elizabeth Reis',data:'2026-05-26',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-26T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:15,contratanteId:'salton',razao:'CONICA ASSES E SUP TECNICO PARA EVENTOS LTDA',contato:'Elizabeth Reis',data:'2026-05-26',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-26T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:16,contratanteId:'jungheinrich',razao:'INSERVICE LIMPEZA E INFRA-ESTRUTURA LTDA',contato:'Vanessa Pires',data:'2026-05-26',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-26T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:17,contratanteId:'jungheinrich',razao:'HB MONTAGENS LTDA',contato:'Jaqueline Souza',data:'2026-05-26',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-26T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  {id:18,contratanteId:'imec',razao:'ANDERSON ALEX DREY - MEI',contato:'Nelvi Costa',data:'2026-05-27',
+    temSub:true, subcontratante:'Global Prest', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-27T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  // Exemplo de terceira Marcopolo (com CC obrigatório)
+  {id:19,contratanteId:'marcopolo',razao:'METALÚRGICA EXEMPLO LTDA',contato:'Cláudio Bertotti',data:'2026-05-27',
+    temSub:false, subcontratante:'', status:'ativo', arquivadoEm:null,
+    etapas:{gt0100:'ok',cc_notif:'pendente',pasta_rede:'ok',gt0180:'pendente',cnpj_liberado:'nao_liberado',gt8005:'pendente',email:'pendente'},
+    historico:[{ts:'2026-05-27T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'}]},
+  // Exemplos no HISTÓRICO
+  {id:20,contratanteId:'salton',razao:'EXEMPLO CONCLUÍDA LTDA',contato:'Marina Souza',data:mesAtras,
+    temSub:false, subcontratante:'', status:'concluido', arquivadoEm: semanaAtras + 'T15:30:00',
+    etapas:{gt0100:'ok',pasta_rede:'ok',gt0180:'validado',cnpj_liberado:'liberado',gt8005:'ok',email:'ok'},
+    historico:[
+      {ts: mesAtras+'T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'},
+      {ts: semanaAtras+'T15:30:00',who:'GT3.MARCIO',what:'Cadastro concluído (100%) — arquivado automaticamente'}
+    ]},
+  {id:21,contratanteId:'jungheinrich',razao:'EXEMPLO QUE NÃO EVOLUIU SA',contato:'Carlos Andrade',data:mesAtras,
+    temSub:true, subcontratante:'Abaservice', status:'nao_evoluiu', arquivadoEm: ontem + 'T11:00:00',
+    etapas:{gt0100:'ok',pasta_rede:'pendente',gt0180:'pendente',cnpj_liberado:'nao_evoluiu',gt8005:'pendente',email:'pendente'},
+    historico:[
+      {ts: mesAtras+'T09:00:00',who:'GT3.RODRIGO',what:'Terceira cadastrada no sistema'},
+      {ts: ontem+'T11:00:00',who:'GT3.MARCIO',what:'CNPJ Liberado marcado como "Não evoluiu" — arquivado'}
+    ]}
+];
+
+// ====================================================
+// ===== ESTADO DA UI ================================
+// ====================================================
+
+let currentRole = 'admin';
+let currentTab = 'ativos';
+let selectedId = null;
+let drawerTab = 'detalhes';
+let modalCtx = { cardId: null, etapa: null, novoEstado: null };
+let confirmCtx = null;
+
+// ====================================================
+// ===== HELPERS =====================================
+// ====================================================
+
+function getContratante(id) { return CONTRATANTES.find(c => c.id === id) || { nome: id, requerCC: false }; }
+function userName() {
+  const m = { admin:'GT3.RODRIGO', gestor:'GT3.MARCIO', colaborador:'GT3.ISABELA', trainee:'GT3.NOVATO' };
+  return m[currentRole] || 'usuário';
+}
+
+function etapasAplicaveis(card) {
+  const ct = getContratante(card.contratanteId);
+  const lista = [];
+  GUIAS.forEach(g => g.etapas.forEach(e => {
+    if (e.condicional && !ct.requerCC) return;
+    lista.push(e);
+  }));
+  return lista;
+}
+
+function calcProgresso(card) {
+  const etapas = etapasAplicaveis(card);
+  let total = 0, ok = 0;
+  etapas.forEach(e => {
+    total++;
+    const st = card.etapas[e.id];
+    if (st && STATES[st] && STATES[st].completa) ok++;
+  });
+  return total === 0 ? 0 : Math.round((ok / total) * 100);
+}
+
+function calcStatusGlobal(card) {
+  if (card.status === 'concluido') return 'ok';
+  if (card.status === 'nao_evoluiu') return 'nao-evoluiu';
+  const prog = calcProgresso(card);
+  if (prog === 100) return 'ok';
+  const temValidar = Object.values(card.etapas).some(v => v === 'validar');
+  if (temValidar) return 'validar';
+  return 'pendente';
+}
+
+function statusDaGuia(card, guia) {
+  const etapas = guia.etapas.filter(e => !e.condicional || getContratante(card.contratanteId).requerCC);
+  if (etapas.length === 0) return 'na';
+  const estados = etapas.map(e => card.etapas[e.id]);
+  if (estados.every(s => s && STATES[s] && STATES[s].completa)) return 'ok';
+  if (estados.some(s => s === 'validar')) return 'validar';
+  return 'pendente';
+}
+
+function podeMarcarValidado(etapaId) {
+  if (!ETAPAS_VALIDACAO_GESTOR.includes(etapaId)) return true;
+  return currentRole === 'admin' || currentRole === 'gestor';
+}
+
+function dadosAtivos() { return dados.filter(d => d.status === 'ativo'); }
+function dadosHistorico() {
+  // Aplica retenção de 1 ano automaticamente
+  const limite = new Date(Date.now() - RETENCAO_HISTORICO_DIAS * 86400000);
+  return dados.filter(d => {
+    if (d.status === 'ativo') return false;
+    if (!d.arquivadoEm) return true;
+    return new Date(d.arquivadoEm) >= limite;
+  });
+}
+
+function fmtData(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
+function fmtDataHora(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+function showToast(msg, tipo) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (tipo || '');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function logHist(card, what) {
+  card.historico = card.historico || [];
+  card.historico.unshift({ ts: new Date().toISOString(), who: userName(), what });
+}
+
+function arquivarCard(card, motivo) {
+  card.status = motivo === 'concluido' ? 'concluido' : 'nao_evoluiu';
+  card.arquivadoEm = new Date().toISOString();
+  logHist(card,
+    motivo === 'concluido'
+      ? 'Cadastro concluído (100%) — arquivado automaticamente'
+      : 'CNPJ Liberado marcado como "Não evoluiu" — arquivado'
+  );
+  showToast(
+    motivo === 'concluido'
+      ? '✓ Cadastro concluído! Movido para o histórico.'
+      : '✕ Terceira arquivada como "Não evoluiu".',
+    motivo === 'concluido' ? 'success' : 'danger'
+  );
+}
+
+function reativar(card) {
+  card.status = 'ativo';
+  card.arquivadoEm = null;
+  // Se foi arquivado por "nao_evoluiu", reverte essa etapa para nao_liberado
+  if (card.etapas.cnpj_liberado === 'nao_evoluiu') card.etapas.cnpj_liberado = 'nao_liberado';
+  logHist(card, 'Terceira reativada — voltou para a lista de ativos');
+  showToast('↺ Terceira reativada.', 'success');
+}
+
+// ====================================================
+// ===== RENDER =====================================
+// ====================================================
+
+function renderTabBadges() {
+  document.getElementById('tabBadgeAtivos').textContent = dadosAtivos().length;
+  document.getElementById('tabBadgeHist').textContent = dadosHistorico().length;
+}
+
+function renderKPIsAtivos() {
+  const ativas = dadosAtivos();
+  document.getElementById('kTotal').textContent = ativas.length;
+  let pend = 0, somaProg = 0;
+  ativas.forEach(c => {
+    const st = calcStatusGlobal(c);
+    if (st === 'pendente' || st === 'validar') pend++;
+    somaProg += calcProgresso(c);
+  });
+  document.getElementById('kPend').textContent = pend;
+  document.getElementById('kProg').textContent = ativas.length === 0 ? '—' : Math.round(somaProg / ativas.length) + '%';
+}
+
+function renderContratantesNosFiltros() {
+  const opt = '<option value="">Todos contratantes</option>' +
+    [...CONTRATANTES].sort((a,b)=>a.nome.localeCompare(b.nome))
+      .map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  document.getElementById('fContratante').innerHTML = opt;
+  document.getElementById('hContratante').innerHTML = opt;
+
+  // Select de nova terceira
+  document.getElementById('nContratante').innerHTML =
+    '<option value="">Selecione…</option>' +
+    [...CONTRATANTES].sort((a,b)=>a.nome.localeCompare(b.nome))
+      .map(c => `<option value="${c.id}">${c.nome}${c.requerCC ? ' (requer CC)' : ''}</option>`).join('');
+}
+
+function renderSubcontratantesFiltro() {
+  // Para o filtro de Ativos: subcontratantes das terceiras ativas
+  const subsAtivos = [...new Set(dadosAtivos().filter(d => d.temSub).map(d => d.subcontratante).filter(Boolean))].sort();
+  document.getElementById('fSubcontratante').innerHTML =
+    '<option value="">Todos subcontratantes</option>' +
+    subsAtivos.map(s => `<option value="${s}">${s}</option>`).join('');
+
+  // Para o filtro do Histórico: subcontratantes de TUDO (ativos + arquivados),
+  // porque o tab Histórico pode mostrar pendentes também via filtro "Todas".
+  const subsTodos = [...new Set(dados.filter(d => d.temSub).map(d => d.subcontratante).filter(Boolean))].sort();
+  document.getElementById('hSubcontratante').innerHTML =
+    '<option value="">Todos subcontratantes</option>' +
+    subsTodos.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+function renderAtivos() {
+  const busca = document.getElementById('busca').value.toLowerCase();
+  const fContrat = document.getElementById('fContratante').value;
+  const fSub = document.getElementById('fSubcontratante').value;
+  const fSoSub = document.getElementById('fSoSub').checked;
+  const fContrato180 = document.getElementById('fContrato180').value;
+  const tbody = document.getElementById('tbodyAtivos');
+
+  const filtrados = dadosAtivos().filter(c => {
+    if (busca && !(c.razao.toLowerCase().includes(busca) ||
+                    getContratante(c.contratanteId).nome.toLowerCase().includes(busca) ||
+                    (c.contato||'').toLowerCase().includes(busca) ||
+                    (c.subcontratante||'').toLowerCase().includes(busca))) return false;
+    if (fContrat && c.contratanteId !== fContrat) return false;
+    if (fSub && c.subcontratante !== fSub) return false;
+    if (fSoSub && !c.temSub) return false;
+    if (fContrato180 && c.etapas.gt0180 !== fContrato180) return false;
+    return true;
+  });
+
+  // Ordena por data de cadastro decrescente (mais recente primeiro).
+  // Critério de desempate: id desc (cadastros mais novos têm id maior).
+  filtrados.sort((a, b) => {
+    const cmp = (b.data || '').localeCompare(a.data || '');
+    return cmp !== 0 ? cmp : (b.id - a.id);
+  });
+
+  if (filtrados.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty"><h3>Nenhuma terceira encontrada</h3><p>Ajuste os filtros ou cadastre uma nova.</p></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(c => {
+    const prog = calcProgresso(c);
+    const status = calcStatusGlobal(c);
+    const ct = getContratante(c.contratanteId);
+    const dots = GUIAS.map(g => {
+      const s = statusDaGuia(c, g);
+      return `<span class="d ${s}" title="${g.label}: ${s}"></span>`;
+    }).join('');
+    return `
+      <tr class="${c.id === selectedId ? 'selected' : ''}" onclick="openDrawer(${c.id})">
+        <td><span class="badge-contratante">${ct.nome}</span></td>
+        <td>
+          <div class="razao" title="${c.razao}">${c.razao}</div>
+          ${c.temSub && c.subcontratante ? `<span class="sub-mini">⚠ Subcontratada: ${c.subcontratante}</span>` : ''}
+        </td>
+        <td class="center"><div class="group-dots" title="Cadastro · Contato">${dots}</div></td>
+        <td>
+          <div class="row-prog">
+            <div class="bar"><span style="width:${prog}%"></span></div>
+            <span class="pct">${prog}%</span>
+          </div>
+        </td>
+        <td>${c.contato || '—'}</td>
+        <td>${fmtData(c.data)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderHistorico() {
+  const busca = document.getElementById('hBusca').value.toLowerCase();
+  const fContrat = document.getElementById('hContratante').value;
+  const fSub = document.getElementById('hSubcontratante').value;
+  const fSoSub = document.getElementById('hSoSub').checked;
+  const fContrato180 = document.getElementById('hContrato180').value;
+  const fTipo = document.getElementById('hTipo').value || 'todas';
+  const de = document.getElementById('hDe').value;
+  const ate = document.getElementById('hAte').value;
+
+  // Decide a base de dados a considerar conforme o filtro de tipo
+  let base = [];
+  if (fTipo === 'todas') {
+    base = [...dadosHistorico(), ...dadosAtivos()];
+  } else if (fTipo === 'arquivadas') {
+    base = dadosHistorico();
+  } else if (fTipo === 'concluido' || fTipo === 'nao_evoluiu') {
+    base = dadosHistorico().filter(c => c.status === fTipo);
+  } else if (fTipo === 'ativo') {
+    base = dadosAtivos();
+  }
+
+  function dataRef(c) {
+    if (c.status === 'ativo') return c.data || '';
+    return c.arquivadoEm ? c.arquivadoEm.slice(0,10) : '';
+  }
+
+  let filtrados = base.filter(c => {
+    if (busca && !(c.razao.toLowerCase().includes(busca) ||
+                    getContratante(c.contratanteId).nome.toLowerCase().includes(busca) ||
+                    (c.contato||'').toLowerCase().includes(busca) ||
+                    (c.subcontratante||'').toLowerCase().includes(busca))) return false;
+    if (fContrat && c.contratanteId !== fContrat) return false;
+    if (fSub && c.subcontratante !== fSub) return false;
+    if (fSoSub && !c.temSub) return false;
+    if (fContrato180 && c.etapas.gt0180 !== fContrato180) return false;
+    if (de) {
+      if (dataRef(c) < de) return false;
+    }
+    if (ate) {
+      if (dataRef(c) > ate) return false;
+    }
+    return true;
+  });
+
+  // Ordena por data de referência desc (arquivamento ou cadastro)
+  filtrados.sort((a,b) => dataRef(b).localeCompare(dataRef(a)));
+
+  // KPIs (sempre refletem o que está na tabela atual)
+  const okCount = filtrados.filter(c => c.status === 'concluido').length;
+  const naoCount = filtrados.filter(c => c.status === 'nao_evoluiu').length;
+  const pendCount = filtrados.filter(c => c.status === 'ativo').length;
+  document.getElementById('hTotal').textContent = filtrados.length;
+  document.getElementById('hOk').textContent = okCount;
+  document.getElementById('hNao').textContent = naoCount;
+  document.getElementById('hPend').textContent = pendCount;
+
+  // Label do período acima da tabela
+  const periodoLabel = (de || ate)
+    ? `📅 Período: ${de ? fmtData(de) : 'início'} até ${ate ? fmtData(ate) : 'hoje'}`
+    : '📅 Período: todo o histórico disponível';
+  document.getElementById('hPeriodoLabel').textContent = periodoLabel;
+
+  const tbody = document.getElementById('tbodyHist');
+  if (filtrados.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty"><h3>Nenhum registro encontrado</h3><p>Ajuste os filtros — ou nenhuma empresa se enquadra no critério atual.</p></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(c => {
+    const prog = calcProgresso(c);
+    const ct = getContratante(c.contratanteId);
+    let rowCls, pillHtml, barStyle, dataLabel, acoesHtml;
+
+    if (c.status === 'concluido') {
+      rowCls = 'row-concluido';
+      pillHtml = '<span class="status-pill ok">✓ Evoluiu</span>';
+      barStyle = '';
+      dataLabel = `Arquivada em ${fmtDataHora(c.arquivadoEm)}`;
+      acoesHtml = `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();onReativar(${c.id})">↺ Reativar</button>`;
+    } else if (c.status === 'nao_evoluiu') {
+      rowCls = 'row-nao-evoluiu';
+      pillHtml = '<span class="status-pill nao-evoluiu">✕ Não evoluiu</span>';
+      barStyle = 'background:linear-gradient(90deg,var(--danger),var(--pendente))';
+      dataLabel = `Arquivada em ${fmtDataHora(c.arquivadoEm)}`;
+      acoesHtml = `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();onReativar(${c.id})">↺ Reativar</button>`;
+    } else {
+      // ativo (pendente)
+      rowCls = 'row-pendente';
+      pillHtml = '<span class="status-pill pendente">● Pendente</span>';
+      barStyle = '';
+      dataLabel = `Cadastrada em ${fmtData(c.data)}`;
+      acoesHtml = `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();openDrawer(${c.id})">→ Ver</button>`;
+    }
+
+    return `
+      <tr class="${rowCls} ${c.id === selectedId ? 'selected' : ''}" onclick="openDrawer(${c.id})">
+        <td><span class="badge-contratante">${ct.nome}</span></td>
+        <td><div class="razao" title="${c.razao}">${c.razao}</div></td>
+        <td class="center">${pillHtml}</td>
+        <td>
+          <div class="row-prog">
+            <div class="bar"><span style="width:${prog}%;${barStyle}"></span></div>
+            <span class="pct">${prog}%</span>
+          </div>
+        </td>
+        <td style="font-size:12px;color:var(--text-muted)">${dataLabel}</td>
+        <td class="center">${acoesHtml}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ====================================================
+// ===== DRAWER ======================================
+// ====================================================
+
+function openDrawer(id) {
+  selectedId = id;
+  drawerTab = 'detalhes';
+  document.querySelectorAll('.drawer-tab').forEach(t => t.classList.toggle('active', t.dataset.dtab === 'detalhes'));
+  renderDrawer();
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('drawer').classList.add('show');
+  renderAtivos();
+  renderHistorico();
+}
+
+function closeDrawer() {
+  selectedId = null;
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('drawer').classList.remove('show');
+  renderAtivos();
+  renderHistorico();
+}
+
+function renderDrawer() {
+  const c = dados.find(x => x.id === selectedId);
+  if (!c) return;
+  const ct = getContratante(c.contratanteId);
+
+  document.getElementById('dRazao').textContent = c.razao;
+  const status = calcStatusGlobal(c);
+  const statusLabel = status === 'ok' ? 'Concluído'
+                    : status === 'validar' ? 'Aguard. validação'
+                    : status === 'nao-evoluiu' ? 'Não evoluiu'
+                    : 'Pendente';
+  document.getElementById('dSub').innerHTML = `
+    <span class="badge-contratante">${ct.nome}</span>
+    <span class="status-pill ${status}">${statusLabel}</span>
+    ${c.temSub && c.subcontratante ? `<span style="font-size:11px;color:#92400e;">⚠ Sub: ${c.subcontratante}</span>` : ''}
+  `;
+
+  const body = document.getElementById('dBody');
+  const foot = document.getElementById('dFoot');
+
+  if (drawerTab === 'historico') {
+    body.innerHTML = `
+      <div class="drawer-section">
+        <h4>Histórico de alterações</h4>
+        <div class="hist-list">
+          ${(c.historico||[]).map(h => `
+            <div class="hist-entry">
+              <div class="time">${fmtDataHora(h.ts)}</div>
+              <div class="what"><span class="who">${h.who}</span> · ${h.what}</div>
+              ${h.change ? `<div class="change">${h.change}</div>` : ''}
+            </div>
+          `).join('') || '<p style="font-size:12px;color:var(--text-muted)">Nenhuma alteração registrada.</p>'}
+        </div>
+      </div>
+    `;
+    foot.innerHTML = `<button class="btn-secondary btn" onclick="closeDrawer()">Fechar</button>`;
+    return;
+  }
+
+  const prog = calcProgresso(c);
+  const progCls = c.status === 'concluido' ? 'concluido' : c.status === 'nao_evoluiu' ? 'nao-evoluiu' : '';
+  const isArchived = c.status !== 'ativo';
+
+  body.innerHTML = `
+    <div class="prog-big ${progCls}">
+      <div class="top">
+        <span style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.4px">Progresso geral</span>
+        <span class="pct-big">${prog}%</span>
+      </div>
+      <div class="bar"><span style="width:${prog}%"></span></div>
+    </div>
+
+    ${isArchived ? `<div class="alert-info">📂 Esta terceira está arquivada (${c.status === 'concluido' ? 'concluída' : 'não evoluiu'}). Reative para voltar a editar.</div>` : ''}
+
+    <div class="drawer-section">
+      <h4>Informações gerais</h4>
+      <div class="field-row">
+        <div class="field">
+          <label>Contratante</label>
+          <select id="eContratante" ${isArchived?'disabled':''}>
+            ${CONTRATANTES.map(x => `<option value="${x.id}" ${x.id===c.contratanteId?'selected':''}>${x.nome}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input type="date" id="eData" value="${c.data||''}" ${isArchived?'disabled':''}>
+        </div>
+        <div class="field field-full">
+          <label>Razão social</label>
+          <input type="text" id="eRazao" value="${c.razao||''}" ${isArchived?'disabled':''}>
+        </div>
+        <div class="field field-full">
+          <label>Contato (nome da pessoa)</label>
+          <input type="text" id="eContato" value="${c.contato||''}" placeholder="Opcional" ${isArchived?'disabled':''}>
+        </div>
+        <div class="field field-full field-check">
+          <input type="checkbox" id="eTemSub" ${c.temSub?'checked':''} ${isArchived?'disabled':''}>
+          <label for="eTemSub">É empresa subcontratada</label>
+        </div>
+        <div class="field field-full" id="eSubWrap" style="display:${c.temSub?'flex':'none'}">
+          <label>Nome da empresa que subcontrata</label>
+          <input type="text" id="eSubcontratante" value="${c.subcontratante||''}" placeholder="Ex.: LDA, Global Prest…" ${isArchived?'disabled':''}>
+        </div>
+      </div>
+    </div>
+
+    ${GUIAS.map(g => {
+      const etapasG = g.etapas.filter(e => !e.condicional || ct.requerCC);
+      if (etapasG.length === 0) return '';
+      return `
+        <div class="drawer-section">
+          <h4>Guia ${g.label}</h4>
+          <div class="checklist">
+            ${etapasG.map(e => {
+              const st = c.etapas[e.id] || e.estados[0];
+              const S = STATES[st] || STATES.pendente;
+              const reqGestor = ETAPAS_VALIDACAO_GESTOR.includes(e.id);
+              return `
+                <div class="check-item ${S.cls}" onclick="${isArchived?'':`openModal(${c.id}, '${e.id}', '${e.label}')`}" ${isArchived?'style="cursor:not-allowed;opacity:0.7"':''}>
+                  <span class="ico-state">${S.ico}</span>
+                  <span class="name">${e.label}${reqGestor ? '<span class="lock"> 🔒 valid. gestor</span>' : ''}</span>
+                  <span class="state-label">${S.label}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }).join('')}
+
+    <div class="drawer-section">
+      <h4>Observação <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--text-soft);font-size:11px">— opcional, não conta para o progresso</span></h4>
+      <textarea id="eObservacao" placeholder="Anotações livres sobre esta terceira (alertas, contexto, lembretes, particularidades…)"
+        style="width:100%;padding:9px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;resize:vertical;min-height:70px;outline:none"
+        ${isArchived?'disabled':''}>${c.observacao||''}</textarea>
+    </div>
+  `;
+
+  // Listeners pros campos editáveis (info gerais)
+  if (!isArchived) {
+    document.getElementById('eContratante').onchange = (ev) => onUpdateInfo(c.id, 'contratanteId', ev.target.value);
+    document.getElementById('eData').onchange = (ev) => onUpdateInfo(c.id, 'data', ev.target.value);
+    document.getElementById('eRazao').onchange = (ev) => onUpdateInfo(c.id, 'razao', ev.target.value);
+    document.getElementById('eContato').onchange = (ev) => onUpdateInfo(c.id, 'contato', ev.target.value);
+    document.getElementById('eTemSub').onchange = (ev) => {
+      onUpdateInfo(c.id, 'temSub', ev.target.checked);
+      document.getElementById('eSubWrap').style.display = ev.target.checked ? 'flex' : 'none';
+      if (!ev.target.checked) onUpdateInfo(c.id, 'subcontratante', '');
+    };
+    document.getElementById('eSubcontratante').onchange = (ev) => onUpdateInfo(c.id, 'subcontratante', ev.target.value);
+    document.getElementById('eObservacao').onchange = (ev) => onUpdateInfo(c.id, 'observacao', ev.target.value);
+  }
+
+  // Foot
+  if (isArchived) {
+    foot.innerHTML = `
+      <button class="btn-secondary btn" onclick="closeDrawer()">Fechar</button>
+      <button class="btn" onclick="onReativar(${c.id})">↺ Reativar</button>
+    `;
+  } else {
+    foot.innerHTML = `
+      <button class="btn-secondary btn" onclick="closeDrawer()">Fechar</button>
+    `;
+  }
+}
+
+function onUpdateInfo(id, campo, valor) {
+  const c = dados.find(x => x.id === id);
+  if (!c) return;
+  const valorAntigo = c[campo];
+  if (valorAntigo === valor) return;
+  c[campo] = valor;
+
+  // Reset etapa cc_notif se contratante mudou
+  if (campo === 'contratanteId') {
+    const ct = getContratante(valor);
+    if (ct.requerCC && !c.etapas.cc_notif) c.etapas.cc_notif = 'pendente';
+    if (!ct.requerCC && c.etapas.cc_notif !== undefined) delete c.etapas.cc_notif;
+  }
+
+  const labelCampo = {
+    contratanteId: 'Contratante',
+    data: 'Data',
+    razao: 'Razão social',
+    contato: 'Contato',
+    temSub: 'É subcontratada',
+    subcontratante: 'Empresa subcontratante',
+    observacao: 'Observação'
+  }[campo] || campo;
+
+  logHist(c, `${labelCampo} alterado`, );
+  // Re-renderiza pra refletir mudanças (especialmente CC condicional)
+  renderAtivos();
+  renderHistorico();
+  renderTabBadges();
+  renderSubcontratantesFiltro();
+  renderKPIsAtivos();
+  if (campo === 'contratanteId') renderDrawer();
+}
+
+function onReativar(id) {
+  const c = dados.find(x => x.id === id);
+  if (!c) return;
+  reativar(c);
+  renderAll();
+  if (selectedId === id) renderDrawer();
+}
+
+// ====================================================
+// ===== MODAL ETAPA =================================
+// ====================================================
+
+function openModal(cardId, etapaId, etapaLabel) {
+  const card = dados.find(c => c.id === cardId);
+  if (!card) return;
+  const etapaDef = etapasAplicaveis(card).find(e => e.id === etapaId);
+  if (!etapaDef) return;
+
+  modalCtx = { cardId, etapa: etapaId, etapaLabel, novoEstado: card.etapas[etapaId] };
+  document.getElementById('mTitle').textContent = etapaLabel;
+  document.getElementById('mSub').textContent = `${getContratante(card.contratanteId).nome} · ${card.razao}`;
+  document.getElementById('mObs').value = '';
+  document.getElementById('mNaoEvoluiuWarn').innerHTML = '';
+
+  const podeValidado = podeMarcarValidado(etapaId);
+  const lockWarn = document.getElementById('mLockWarn');
+  if (ETAPAS_VALIDACAO_GESTOR.includes(etapaId) && !podeValidado) {
+    lockWarn.innerHTML = `<div class="alert-warn">🔒 Esta etapa requer validação de gestor. Você pode marcar como "Aguardando validação" — gestor/admin confirmará depois.</div>`;
+  } else {
+    lockWarn.innerHTML = '';
+  }
+
+  // Filtra os estados que esse role pode escolher
+  const estadosDisponiveis = etapaDef.estados.filter(s => {
+    if (s === 'validado') return podeValidado;
+    return true;
+  });
+
+  const opts = document.getElementById('mOpts');
+  opts.innerHTML = estadosDisponiveis.map(s => {
+    const S = STATES[s];
+    const isActive = card.etapas[etapaId] === s;
+    const isDanger = s === 'nao_evoluiu';
+    return `<div class="opt ${isActive ? 'active' : ''} ${isDanger ? 'danger-opt' : ''}" onclick="selectState('${s}', this)">
+      <span style="font-weight:bold">${S.ico}</span> ${S.label}
+    </div>`;
+  }).join('');
+
+  document.getElementById('modal').classList.add('show');
+}
+
+function selectState(s, el) {
+  modalCtx.novoEstado = s;
+  document.querySelectorAll('#mOpts .opt').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+
+  // Aviso pré-arquivamento
+  const warn = document.getElementById('mNaoEvoluiuWarn');
+  if (s === 'nao_evoluiu') {
+    warn.innerHTML = `<div class="alert-danger">⚠ Ao salvar, esta terceira será <strong>arquivada automaticamente</strong> no histórico. Será necessário confirmar a ação.</div>`;
+  } else {
+    warn.innerHTML = '';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+document.getElementById('mSalvar').onclick = () => {
+  if (!modalCtx.cardId || !modalCtx.etapa || !modalCtx.novoEstado) { closeModal(); return; }
+  const card = dados.find(c => c.id === modalCtx.cardId);
+  if (!card) { closeModal(); return; }
+
+  const estadoAntigo = card.etapas[modalCtx.etapa];
+  const novoEstado = modalCtx.novoEstado;
+  const obs = document.getElementById('mObs').value.trim();
+
+  // Caso especial: arquivamento por "Não evoluiu"
+  if (modalCtx.etapa === ESTADO_ARQUIVA.etapa && novoEstado === ESTADO_ARQUIVA.estado) {
+    closeModal();
+    abrirConfirmacao({
+      texto: `Ao confirmar, a terceira <strong>${card.razao}</strong> será marcada como "Não evoluiu" e movida imediatamente para o histórico.<br><br>Esta ação pode ser revertida posteriormente pelo botão "Reativar".`,
+      onConfirm: () => {
+        card.etapas[modalCtx.etapa] = novoEstado;
+        logHist(card, `${modalCtx.etapaLabel}: ${STATES[estadoAntigo]?.label||estadoAntigo} → ${STATES[novoEstado].label}` + (obs?` · obs: ${obs}`:''));
+        arquivarCard(card, 'nao_evoluiu');
+        renderAll();
+        if (selectedId === card.id) renderDrawer();
+        closeConfirm();
+      }
+    });
+    return;
+  }
+
+  // Atualização normal
+  card.etapas[modalCtx.etapa] = novoEstado;
+  logHist(card, `${modalCtx.etapaLabel}: ${STATES[estadoAntigo]?.label||estadoAntigo} → ${STATES[novoEstado].label}` + (obs?` · obs: ${obs}`:''));
+
+  // Checar se ficou 100% → arquiva automaticamente
+  if (card.status === 'ativo' && calcProgresso(card) === 100) {
+    arquivarCard(card, 'concluido');
+    closeDrawer();
+  }
+
+  renderAll();
+  if (selectedId === card.id && card.status === 'ativo') renderDrawer();
+  closeModal();
+};
+
+document.getElementById('modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+
+// ====================================================
+// ===== MODAL CONFIRMAÇÃO ===========================
+// ====================================================
+
+function abrirConfirmacao({ texto, onConfirm }) {
+  document.getElementById('confirmText').innerHTML = texto;
+  document.getElementById('confirmOk').onclick = onConfirm;
+  document.getElementById('modalConfirm').classList.add('show');
+}
+function closeConfirm() {
+  document.getElementById('modalConfirm').classList.remove('show');
+}
+document.getElementById('modalConfirm').onclick = (e) => { if (e.target.id === 'modalConfirm') closeConfirm(); };
+
+// ====================================================
+// ===== MODAL NOVA TERCEIRA =========================
+// ====================================================
+
+document.getElementById('btnNova').onclick = () => {
+  document.getElementById('nContratante').value = '';
+  document.getElementById('nRazao').value = '';
+  document.getElementById('nContato').value = '';
+  document.getElementById('nData').value = hoje;
+  document.getElementById('nTemSub').checked = false;
+  document.getElementById('nSubcontratante').value = '';
+  document.getElementById('nSubcontratanteWrap').style.display = 'none';
+  document.getElementById('nObservacao').value = '';
+  document.getElementById('modalNova').classList.add('show');
+};
+document.getElementById('nTemSub').onchange = (e) => {
+  document.getElementById('nSubcontratanteWrap').style.display = e.target.checked ? 'flex' : 'none';
+};
+function closeNova() { document.getElementById('modalNova').classList.remove('show'); }
+document.getElementById('modalNova').onclick = (e) => { if (e.target.id === 'modalNova') closeNova(); };
+
+document.getElementById('nSalvar').onclick = () => {
+  const contratanteId = document.getElementById('nContratante').value;
+  const razao = document.getElementById('nRazao').value.trim();
+  const contato = document.getElementById('nContato').value.trim();
+  const data = document.getElementById('nData').value;
+  const temSub = document.getElementById('nTemSub').checked;
+  const subcontratante = document.getElementById('nSubcontratante').value.trim();
+  const observacao = document.getElementById('nObservacao').value.trim();
+
+  if (!contratanteId) { alert('Selecione um contratante.'); return; }
+  if (!razao) { alert('Informe a razão social.'); return; }
+  if (temSub && !subcontratante) { alert('Informe o nome da empresa que subcontrata.'); return; }
+
+  const novo = {
+    id: gerarId(),
+    contratanteId, razao, contato, data: data || hoje,
+    temSub, subcontratante: temSub ? subcontratante : '',
+    observacao,
+    status: 'ativo', arquivadoEm: null,
+    etapas: novaEtapasPadrao(contratanteId),
+    historico: [{ ts: new Date().toISOString(), who: userName(), what: 'Terceira cadastrada no sistema' }]
+  };
+  dados.push(novo);
+  closeNova();
+  showToast('✓ Terceira cadastrada.', 'success');
+  renderAll();
+  openDrawer(novo.id);
+};
+
+// ====================================================
+// ===== MODAL CONTRATANTES ==========================
+// ====================================================
+
+document.getElementById('btnContratantes').onclick = () => {
+  renderListaContratantes();
+  document.getElementById('newContratanteNome').value = '';
+  document.getElementById('newContratanteCC').checked = false;
+  document.getElementById('modalContratantes').classList.add('show');
+};
+function closeContratantes() { document.getElementById('modalContratantes').classList.remove('show'); }
+document.getElementById('modalContratantes').onclick = (e) => { if (e.target.id === 'modalContratantes') closeContratantes(); };
+
+function renderListaContratantes() {
+  const list = document.getElementById('contratantesList');
+  list.innerHTML = CONTRATANTES.map((c, i) => `
+    <div class="contratante-row">
+      <span class="nome">${c.nome}</span>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" ${c.requerCC?'checked':''} onchange="toggleRequerCC(${i})">
+        Requer CC
+      </label>
+      ${c.requerCC ? '<span class="flag-cc">CC</span>' : ''}
+    </div>
+  `).join('');
+}
+function toggleRequerCC(i) {
+  CONTRATANTES[i].requerCC = !CONTRATANTES[i].requerCC;
+  // Atualiza etapas das terceiras desse contratante
+  dados.filter(d => d.contratanteId === CONTRATANTES[i].id).forEach(d => {
+    if (CONTRATANTES[i].requerCC && !d.etapas.cc_notif) d.etapas.cc_notif = 'pendente';
+    if (!CONTRATANTES[i].requerCC && d.etapas.cc_notif !== undefined) delete d.etapas.cc_notif;
+  });
+  renderListaContratantes();
+  renderAll();
+}
+
+document.getElementById('btnAddContratante').onclick = () => {
+  const nome = document.getElementById('newContratanteNome').value.trim();
+  const requerCC = document.getElementById('newContratanteCC').checked;
+  if (!nome) { alert('Informe o nome do contratante.'); return; }
+  const id = nome.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  if (CONTRATANTES.find(c => c.id === id || c.nome.toLowerCase() === nome.toLowerCase())) {
+    alert('Já existe um contratante com este nome.');
+    return;
+  }
+  CONTRATANTES.push({ id, nome: nome.toUpperCase(), requerCC });
+  document.getElementById('newContratanteNome').value = '';
+  document.getElementById('newContratanteCC').checked = false;
+  renderListaContratantes();
+  renderContratantesNosFiltros();
+  showToast('✓ Contratante adicionado.', 'success');
+};
+
+// ====================================================
+// ===== TABS E EVENTOS GERAIS =======================
+// ====================================================
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    currentTab = t.dataset.tab;
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+    document.getElementById('paneAtivos').style.display = currentTab === 'ativos' ? '' : 'none';
+    document.getElementById('paneHist').style.display = currentTab === 'historico' ? '' : 'none';
+  };
+});
+
+document.querySelectorAll('.drawer-tab').forEach(t => {
+  t.onclick = () => {
+    drawerTab = t.dataset.dtab;
+    document.querySelectorAll('.drawer-tab').forEach(x => x.classList.toggle('active', x === t));
+    renderDrawer();
+  };
+});
+
+// Filtros ativos
+['busca','fContratante','fSubcontratante','fSoSub','fContrato180'].forEach(id => {
+  const el = document.getElementById(id);
+  const ev = (el.tagName === 'INPUT' && el.type !== 'checkbox') ? 'input' : 'change';
+  el.addEventListener(ev, renderAtivos);
+});
+
+// Filtros histórico
+['hBusca','hContratante','hSubcontratante','hSoSub','hContrato180','hTipo','hDe','hAte'].forEach(id => {
+  const el = document.getElementById(id);
+  const ev = (el.tagName === 'INPUT' && el.type !== 'checkbox') ? 'input' : 'change';
+  el.addEventListener(ev, renderHistorico);
+});
+document.getElementById('hLimpar').onclick = () => {
+  document.getElementById('hDe').value = '';
+  document.getElementById('hAte').value = '';
+  renderHistorico();
+};
+
+document.getElementById('roleSel').addEventListener('change', e => { currentRole = e.target.value; });
+
+// ESC fecha modais e drawer
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('modalConfirm').classList.contains('show')) { closeConfirm(); return; }
+  if (document.getElementById('modal').classList.contains('show')) { closeModal(); return; }
+  if (document.getElementById('modalNova').classList.contains('show')) { closeNova(); return; }
+  if (document.getElementById('modalContratantes').classList.contains('show')) { closeContratantes(); return; }
+  if (selectedId !== null) closeDrawer();
+});
+
+// ====================================================
+// ===== BOOTSTRAP ==================================
+// ====================================================
+
+function renderAll() {
+  renderTabBadges();
+  renderKPIsAtivos();
+  renderSubcontratantesFiltro();
+  renderAtivos();
+  renderHistorico();
+}
+
+renderContratantesNosFiltros();
+renderAll();
+</script>
+
+</body>
+</html>

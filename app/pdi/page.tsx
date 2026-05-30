@@ -18,6 +18,14 @@ export type DbPdi = {
   animais: { animal: string; emoji: string; percentual?: number }[] | null
 }
 
+export type DbCicloScore = {
+  pdi_id: string
+  status: string
+  avaliacao_diretiva: number[]
+  autoavaliacao: number[]
+  ambicao: number[]
+}
+
 export default async function PdiPage() {
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
@@ -45,11 +53,23 @@ export default async function PdiPage() {
     )
   }
 
-  // Gestor e admin: busca PDIs do banco além dos estáticos
-  const { data: dbPdis } = await admin
-    .from('pdis')
-    .select('id, nome, funcao, data_inicio, colaborador_id, created_at, status, conclusoes, eneagrama, animais')
-    .order('created_at', { ascending: true })
+  // Gestor e admin: busca PDIs do banco e ciclos com scores em paralelo
+  const [{ data: dbPdis }, { data: ciclos }] = await Promise.all([
+    admin
+      .from('pdis')
+      .select('id, nome, funcao, data_inicio, colaborador_id, created_at, status, conclusoes, eneagrama, animais')
+      .order('created_at', { ascending: true }),
+    admin
+      .from('pdi_ciclos')
+      .select('pdi_id, status, avaliacao_diretiva, autoavaliacao, ambicao')
+      .order('numero_ciclo', { ascending: false }),
+  ])
 
-  return <PdiListClient dbPdis={(dbPdis ?? []) as DbPdi[]} papel={papel ?? 'gestor'} />
+  return (
+    <PdiListClient
+      dbPdis={(dbPdis ?? []) as DbPdi[]}
+      ciclosScores={(ciclos ?? []) as DbCicloScore[]}
+      papel={papel ?? 'gestor'}
+    />
+  )
 }

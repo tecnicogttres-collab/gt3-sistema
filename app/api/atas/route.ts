@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     .from('atas')
     .select(selectFields)
     .order('data', { ascending: false })
+    .limit(200)
 
   if (isColabOrTrainee) query = query.eq('status', 'Validada')
   if (q) query = query.or(`titulo.ilike.%${escaped}%,conteudo.ilike.%${escaped}%`)
