@@ -1383,7 +1383,7 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
         <span style={{ color: '#1E293B', fontWeight: 500 }}>{displayNome}</span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 24 }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 24 }}>
         <div style={{ width: 56, height: 56, borderRadius: '50%', backgroundColor: '#1E3A6E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D1AE6E', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>
           {avatarInitials(displayNome)}
         </div>
@@ -1393,19 +1393,14 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
               <input value={headerNome} onChange={e => setHeaderNome(e.target.value)} placeholder="Nome" style={{ ...INPUT_ST, fontSize: 16, fontWeight: 700 }} />
               <input value={headerFuncao} onChange={e => setHeaderFuncao(e.target.value)} placeholder="Cargo / Função" style={{ ...INPUT_ST, fontSize: 13 }} />
               {headerErr && <div style={{ fontSize: 12, color: '#DC2626' }}>{headerErr}</div>}
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button style={{ ...BTN_CANCEL, fontSize: 12, padding: '5px 14px' }} onClick={() => { setHeaderNome(displayNome); setHeaderFuncao(displayFuncao); setEditHeader(false) }} disabled={headerSaving}>Cancelar</button>
                 <button style={{ ...BTN_SAVE, fontSize: 12, padding: '5px 14px', opacity: headerSaving ? 0.7 : 1 }} onClick={saveHeader} disabled={headerSaving}>{headerSaving ? 'Salvando…' : 'Salvar'}</button>
               </div>
             </div>
           ) : (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1E293B' }}>{displayNome}</h1>
-                {isDbPdi && canEdit && (
-                  <button onClick={() => setEditHeader(true)} style={{ fontSize: 12, padding: '3px 10px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#F8FAFC', color: '#6B7A99', cursor: 'pointer' }}>✏️</button>
-                )}
-              </div>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1E293B' }}>{displayNome}</h1>
               <div style={{ display: 'flex', gap: 14, marginTop: 4, flexWrap: 'wrap' }}>
                 {displayFuncao && <span style={{ fontSize: 13, color: '#6B7A99' }}>{displayFuncao}</span>}
                 {pdi.periodo && <span style={{ fontSize: 13, color: '#94A3B8' }}>📅 {pdi.periodo}</span>}
@@ -1422,6 +1417,24 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
             </>
           )}
         </div>
+
+        {canEdit && !editHeader && (
+          <button
+            onClick={() => setEditHeader(true)}
+            title="Editar nome e cargo"
+            style={{
+              position: 'absolute', top: 0, right: 0,
+              background: 'none', border: '1px solid #E2E8F0',
+              borderRadius: 6, padding: '4px 7px',
+              cursor: 'pointer', color: '#94A3B8', fontSize: 14, lineHeight: 1,
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { const b = e.currentTarget; b.style.color = '#2A4F96'; b.style.borderColor = '#2A4F96' }}
+            onMouseLeave={e => { const b = e.currentTarget; b.style.color = '#94A3B8'; b.style.borderColor = '#E2E8F0' }}
+          >
+            ✏
+          </button>
+        )}
       </div>
 
       <div style={{ borderBottom: '1px solid #E2E8F0', marginBottom: 24 }}>
