@@ -70,99 +70,113 @@ function ScoreBar({ label, value, max, color }: { label: string; value: number; 
   )
 }
 
-function StaticPdiCard({ pdi }: { pdi: PdiColaborador }) {
-  const { pct, concluidos, total } = progresso(pdi)
-  const totais = pdi.matrizAvaliacao.totais
-  const hasData = totais.max > 0 && (totais.diretiva > 0 || totais.auto > 0)
-  const semDados = !pdi.funcao && !pdi.periodo
+// ── Card unificado ────────────────────────────────────────────────────────────
+
+type PdiCardData = {
+  nome: string
+  funcao: string
+  periodo?: string | null
+  totais?: { diretiva: number; auto: number; ambicao: number; max: number } | null
+  eneagramaRanking: { rank: number; tipo: string; pontuacao: string }[]
+  topAnimal?: { emoji: string; animal: string; percentual?: number } | null
+  mbtiTipo?: string | null
+  isArchived?: boolean
+}
+
+function PdiCardInner({ data, href, footer }: { data: PdiCardData; href: string; footer?: React.ReactNode }) {
+  const { nome, funcao, periodo, totais, eneagramaRanking, topAnimal, mbtiTipo, isArchived } = data
+  const hasScores = !!totais && totais.max > 0 && (totais.diretiva > 0 || totais.auto > 0 || totais.ambicao > 0)
 
   return (
-    <Link href={`/pdi/${pdi.id}`} style={{ textDecoration: 'none' }}>
-      <div
-        style={{
-          backgroundColor: '#fff', borderRadius: 12,
-          boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
-          border: '1px solid #E2E8F0', overflow: 'hidden',
-          cursor: 'pointer', transition: 'box-shadow 0.15s, transform 0.15s',
-        }}
-        onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = '0 4px 16px rgba(42,79,150,0.13)'; el.style.transform = 'translateY(-1px)' }}
-        onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)'; el.style.transform = 'translateY(0)' }}
-      >
-        <div style={{ height: 3, backgroundColor: '#D1AE6E' }} />
-        <div style={{ padding: '16px 18px 18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: '#1E3A6E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D1AE6E', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-              {avatarInitials(pdi.nome).toUpperCase()}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pdi.nome}</div>
-              <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>{pdi.funcao || 'Função não informada'}</div>
-            </div>
+    <div style={{ backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', border: '1px solid #E2E8F0', overflow: 'hidden', opacity: isArchived ? 0.75 : 1, transition: 'box-shadow 0.15s, transform 0.15s' }}
+      onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = '0 4px 16px rgba(42,79,150,0.13)'; el.style.transform = 'translateY(-1px)' }}
+      onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)'; el.style.transform = 'translateY(0)' }}
+    >
+      <div style={{ height: 3, backgroundColor: isArchived ? '#94A3B8' : '#D1AE6E' }} />
+      <Link href={href} style={{ textDecoration: 'none', display: 'block', padding: '16px 18px 14px' }}>
+        {/* Avatar + nome */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: isArchived ? '#94A3B8' : '#1E3A6E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D1AE6E', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+            {avatarInitials(nome).toUpperCase()}
           </div>
-
-          {pdi.periodo && (
-            <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span>📅</span><span>{pdi.periodo}</span>
-            </div>
-          )}
-
-          {semDados ? (
-            <div style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
-              Dados pendentes de preenchimento
-            </div>
-          ) : (
-            <>
-              {hasData && (
-                <div style={{ marginBottom: 12 }}>
-                  <ScoreBar label="Avaliação diretiva" value={totais.diretiva} max={totais.max} color="#2A4F96" />
-                  <ScoreBar label="Autoavaliação" value={totais.auto} max={totais.max} color="#D1AE6E" />
-                  <ScoreBar label="Ambição realista" value={totais.ambicao} max={totais.max} color="#16A34A" />
-                </div>
-              )}
-              {total > 0 && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7A99', marginBottom: 4 }}>
-                    <span>Plano de ações</span>
-                    <span style={{ fontWeight: 600, color: '#1E293B' }}>{concluidos}/{total} concluídas</span>
-                  </div>
-                  <div style={{ height: 6, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, backgroundColor: '#16A34A', borderRadius: 3 }} />
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {pdi.perfilComportamental.eneagrama.ranking.length > 0 && (
-            <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
-              {pdi.perfilComportamental.eneagrama.ranking.slice(0, 3).map((e, i) => (
-                <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, backgroundColor: i === 0 ? '#FEF3C7' : i === 1 ? '#EBF4FF' : '#F0FFF4', color: i === 0 ? '#92400E' : i === 1 ? '#1E40AF' : '#166534' }}>
-                  {e.tipo.replace('Tipo ', 'T')}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {(pdi.perfilComportamental.animais.length > 0 || pdi.perfilComportamental.mbti?.tipo) && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              {pdi.perfilComportamental.animais.length > 0 && (() => {
-                const top = [...pdi.perfilComportamental.animais].sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0]
-                return <span style={{ fontSize: 11, color: '#475569' }}>{top.emoji} {top.animal}{top.percentual ? ` ${top.percentual}%` : ''}</span>
-              })()}
-              {pdi.perfilComportamental.mbti?.tipo && (
-                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, backgroundColor: '#1E3A6E', color: '#D1AE6E', letterSpacing: '0.05em' }}>
-                  {pdi.perfilComportamental.mbti.tipo}
-                </span>
-              )}
-            </div>
-          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nome}</div>
+            <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>{funcao || 'Função não informada'}</div>
+          </div>
         </div>
-      </div>
-    </Link>
+
+        {/* Período */}
+        {periodo && (
+          <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>📅</span><span>{periodo}</span>
+          </div>
+        )}
+
+        {/* Scores */}
+        {hasScores ? (
+          <div style={{ marginBottom: 12 }}>
+            <ScoreBar label="Avaliação diretiva" value={totais!.diretiva} max={totais!.max} color="#2A4F96" />
+            <ScoreBar label="Autoavaliação"       value={totais!.auto}     max={totais!.max} color="#D1AE6E" />
+            <ScoreBar label="Ambição realista"    value={totais!.ambicao}  max={totais!.max} color="#16A34A" />
+          </div>
+        ) : !periodo && !eneagramaRanking.length && !topAnimal ? (
+          <div style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
+            Dados pendentes de preenchimento
+          </div>
+        ) : null}
+
+        {/* Eneagrama */}
+        {eneagramaRanking.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
+            {eneagramaRanking.slice(0, 3).map((e, i) => (
+              <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, backgroundColor: i === 0 ? '#FEF3C7' : i === 1 ? '#EBF4FF' : '#F0FFF4', color: i === 0 ? '#92400E' : i === 1 ? '#1E40AF' : '#166534' }}>
+                {e.tipo.replace('Tipo ', 'T')}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Animal + MBTI */}
+        {(topAnimal || mbtiTipo) && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {topAnimal && (
+              <span style={{ fontSize: 11, color: '#475569' }}>
+                {topAnimal.emoji} {topAnimal.animal}{topAnimal.percentual ? ` ${topAnimal.percentual}%` : ''}
+              </span>
+            )}
+            {mbtiTipo && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, backgroundColor: '#1E3A6E', color: '#D1AE6E', letterSpacing: '0.05em' }}>
+                {mbtiTipo}
+              </span>
+            )}
+          </div>
+        )}
+      </Link>
+      {footer}
+    </div>
   )
 }
 
-type CicloScores = { avaliacao_diretiva: number[]; autoavaliacao: number[]; ambicao: number[] }
+function StaticPdiCard({ pdi }: { pdi: PdiColaborador }) {
+  const totais = pdi.matrizAvaliacao.totais
+  const topAnimal = [...pdi.perfilComportamental.animais].sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0] ?? null
+  return (
+    <PdiCardInner
+      href={`/pdi/${pdi.id}`}
+      data={{
+        nome: pdi.nome,
+        funcao: pdi.funcao,
+        periodo: pdi.periodo,
+        totais: totais.max > 0 ? totais : null,
+        eneagramaRanking: pdi.perfilComportamental.eneagrama.ranking,
+        topAnimal,
+        mbtiTipo: pdi.perfilComportamental.mbti?.tipo ?? null,
+      }}
+    />
+  )
+}
+
+type CicloScores = { avaliacao_diretiva: number[]; autoavaliacao: number[]; ambicao: number[]; status: string }
 type CardExtra = { eneagrama: DbPdi['eneagrama']; animais: DbPdi['animais']; conclusoes: DbPdi['conclusoes'] }
 
 function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
@@ -174,22 +188,18 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [scores, setScores] = useState<CicloScores | null>(null)
-  const [extra, setExtra] = useState<CardExtra>({
-    eneagrama: pdi.eneagrama,
-    animais:   pdi.animais,
-    conclusoes: pdi.conclusoes,
-  })
+  const [extra, setExtra] = useState<CardExtra>({ eneagrama: pdi.eneagrama, animais: pdi.animais, conclusoes: pdi.conclusoes })
   const isArchived = pdi.status === 'arquivado'
 
   function fetchData() {
     fetch(`/api/pdi/${pdi.id}/ciclos`)
       .then(r => r.ok ? r.json() : [])
-      .then((ciclos: (CicloScores & { status: string })[]) => {
-        const c = ciclos.find(c => c.status === 'ativo') ?? ciclos[0]
+      .then((ciclos: CicloScores[]) => {
+        const comDados = ciclos.filter(c => c.avaliacao_diretiva?.length > 0)
+        const c = comDados.find(c => c.status === 'ativo') ?? comDados[0] ?? ciclos.find(c => c.status === 'ativo') ?? ciclos[0]
         if (c) setScores(c)
       })
       .catch(() => {})
-
     fetch(`/api/pdi/${pdi.id}`)
       .then(r => r.ok ? r.json() : null)
       .then((d: CardExtra | null) => { if (d) setExtra(d) })
@@ -198,110 +208,55 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
 
   useEffect(() => {
     fetchData()
-    const onFocus = () => fetchData()
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
+    window.addEventListener('focus', fetchData)
+    return () => window.removeEventListener('focus', fetchData)
   }, [pdi.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totais = scores ? {
+  const totais = scores && scores.avaliacao_diretiva.length > 0 ? {
     diretiva: scores.avaliacao_diretiva.reduce((s, v) => s + v, 0),
     auto:     scores.autoavaliacao.reduce((s, v) => s + v, 0),
     ambicao:  scores.ambicao.reduce((s, v) => s + v, 0),
     max:      scores.avaliacao_diretiva.length * 5,
   } : null
 
-  const hasScores = totais && totais.max > 0 && (totais.diretiva > 0 || totais.auto > 0)
-  const ranking = (extra.eneagrama?.ranking ?? []).slice(0, 3)
-  const topAnimal = (extra.animais ?? []).sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0]
+  const topAnimal = [...(extra.animais ?? [])].sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0] ?? null
+  const periodo = pdi.data_inicio ? new Date(pdi.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR') : null
 
-  const periodo = pdi.data_inicio
-    ? new Date(pdi.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')
-    : null
-
-  return (
-    <div style={{ backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', border: '1px solid #E2E8F0', overflow: 'hidden', opacity: isArchived ? 0.75 : 1 }}
-      onMouseEnter={e => { const el = e.currentTarget; el.style.boxShadow = '0 4px 16px rgba(42,79,150,0.13)'; el.style.transform = 'translateY(-1px)' }}
-      onMouseLeave={e => { const el = e.currentTarget; el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)'; el.style.transform = 'translateY(0)' }}
-    >
-      <div style={{ height: 3, backgroundColor: isArchived ? '#94A3B8' : '#D1AE6E' }} />
-
-      <Link href={`/pdi/${pdi.id}`} style={{ textDecoration: 'none', display: 'block', padding: '16px 18px 14px' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: isArchived ? '#94A3B8' : '#1E3A6E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D1AE6E', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-            {avatarInitials(pdi.nome).toUpperCase()}
+  const actions = isGestorAdmin ? (
+    <div style={{ padding: '10px 18px 14px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 6, justifyContent: confirmDelete ? 'space-between' : 'flex-end' }}>
+      {confirmDelete ? (
+        <>
+          <span style={{ fontSize: 12, color: '#DC2626', fontWeight: 600 }}>Excluir este PDI?</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setConfirmDelete(false)} style={{ fontSize: 12, padding: '4px 12px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#fff', color: '#475569', cursor: 'pointer' }}>Não</button>
+            <button onClick={() => { onDelete(); setConfirmDelete(false) }} style={{ fontSize: 12, padding: '4px 12px', border: 'none', borderRadius: 6, backgroundColor: '#DC2626', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Sim, excluir</button>
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pdi.nome}</div>
-            <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>{pdi.funcao || 'Função não informada'}</div>
-          </div>
-        </div>
-
-        {/* Período */}
-        {periodo && (
-          <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span>📅</span><span>{periodo}</span>
-          </div>
-        )}
-
-        {/* Score bars */}
-        {hasScores && (
-          <div style={{ marginBottom: 12 }}>
-            <ScoreBar label="Avaliação diretiva" value={totais!.diretiva} max={totais!.max} color="#2A4F96" />
-            <ScoreBar label="Autoavaliação"       value={totais!.auto}     max={totais!.max} color="#D1AE6E" />
-            <ScoreBar label="Ambição realista"    value={totais!.ambicao}  max={totais!.max} color="#16A34A" />
-          </div>
-        )}
-
-        {/* Eneagrama tags */}
-        {ranking.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
-            {ranking.map((e, i) => (
-              <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, backgroundColor: i === 0 ? '#FEF3C7' : i === 1 ? '#EBF4FF' : '#F0FFF4', color: i === 0 ? '#92400E' : i === 1 ? '#1E40AF' : '#166534' }}>
-                {e.tipo.replace('Tipo ', 'T')}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Animal + MBTI — mesma linha, igual ao card estático */}
-        {(topAnimal || extra.conclusoes?._mbti_tipo) && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {topAnimal && (
-              <span style={{ fontSize: 11, color: '#475569' }}>
-                {topAnimal.emoji} {topAnimal.animal}{topAnimal.percentual ? ` ${topAnimal.percentual}%` : ''}
-              </span>
-            )}
-            {extra.conclusoes?._mbti_tipo && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, backgroundColor: '#1E3A6E', color: '#D1AE6E', letterSpacing: '0.05em' }}>
-                {extra.conclusoes._mbti_tipo}
-              </span>
-            )}
-          </div>
-        )}
-      </Link>
-
-      {/* Actions */}
-      {isGestorAdmin && (
-        <div style={{ padding: '10px 18px 14px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 6, justifyContent: confirmDelete ? 'space-between' : 'flex-end' }}>
-          {confirmDelete ? (
-            <>
-              <span style={{ fontSize: 12, color: '#DC2626', fontWeight: 600 }}>Excluir este PDI?</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setConfirmDelete(false)} style={{ fontSize: 12, padding: '4px 12px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#fff', color: '#475569', cursor: 'pointer' }}>Não</button>
-                <button onClick={() => { onDelete(); setConfirmDelete(false) }} style={{ fontSize: 12, padding: '4px 12px', border: 'none', borderRadius: 6, backgroundColor: '#DC2626', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Sim, excluir</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <button onClick={onEdit} title="Editar nome e cargo" style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#F8FAFC', color: '#475569', cursor: 'pointer' }}>✏️ Editar</button>
-              <button onClick={onArchive} title={isArchived ? 'Reativar PDI' : 'Arquivar PDI'} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#F8FAFC', color: '#475569', cursor: 'pointer' }}>{isArchived ? '📂 Reativar' : '📦 Arquivar'}</button>
-              <button onClick={() => setConfirmDelete(true)} title="Excluir PDI" style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FECACA', borderRadius: 6, backgroundColor: '#FEF2F2', color: '#DC2626', cursor: 'pointer' }}>🗑️</button>
-            </>
-          )}
-        </div>
+        </>
+      ) : (
+        <>
+          <button onClick={onEdit} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#F8FAFC', color: '#475569', cursor: 'pointer' }}>✏️ Editar</button>
+          <button onClick={onArchive} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#F8FAFC', color: '#475569', cursor: 'pointer' }}>{isArchived ? '📂 Reativar' : '📦 Arquivar'}</button>
+          <button onClick={() => setConfirmDelete(true)} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FECACA', borderRadius: 6, backgroundColor: '#FEF2F2', color: '#DC2626', cursor: 'pointer' }}>🗑️</button>
+        </>
       )}
     </div>
+  ) : null
+
+  return (
+    <PdiCardInner
+      href={`/pdi/${pdi.id}`}
+      footer={actions}
+      data={{
+        nome: pdi.nome,
+        funcao: pdi.funcao,
+        periodo,
+        totais,
+        eneagramaRanking: extra.eneagrama?.ranking ?? [],
+        topAnimal,
+        mbtiTipo: extra.conclusoes?._mbti_tipo ?? null,
+        isArchived,
+      }}
+    />
   )
 }
 
