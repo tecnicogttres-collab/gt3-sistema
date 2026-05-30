@@ -534,6 +534,7 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
   const [autoSalva, setAutoSalva] = useState(ciclo.autoavaliacao_salva)
   const [dataConversa, setDataConversa] = useState(ciclo.data_conversa ? ciclo.data_conversa.slice(0, 16) : '')
   const [saving, setSaving] = useState<'diretiva' | 'auto' | 'conversa' | null>(null)
+  const [savedDiretiva, setSavedDiretiva] = useState(false)
   const [open, setOpen] = useState(isAtivo)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [err, setErr] = useState('')
@@ -571,6 +572,8 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
       })
       if (!res.ok) throw new Error()
       onUpdate({ ...ciclo, avaliacao_diretiva: diretiva, ...(isFirst ? { ambicao } : {}) })
+      setSavedDiretiva(true)
+      setTimeout(() => setSavedDiretiva(false), 2500)
     } catch { setErr('Erro ao salvar avaliação diretiva.') } finally { setSaving(null) }
   }
 
@@ -732,13 +735,20 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {isGestorAdmin && isAtivo && (
-                  <button
-                    onClick={saveDiretiva}
-                    disabled={saving === 'diretiva'}
-                    style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving === 'diretiva' ? 0.7 : 1 }}
-                  >
-                    {saving === 'diretiva' ? 'Salvando…' : 'Salvar Avaliação Diretiva'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      onClick={saveDiretiva}
+                      disabled={saving === 'diretiva'}
+                      style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving === 'diretiva' ? 'not-allowed' : 'pointer', opacity: saving === 'diretiva' ? 0.7 : 1 }}
+                    >
+                      {saving === 'diretiva' ? 'Salvando…' : 'Salvar Avaliação Diretiva'}
+                    </button>
+                    {savedDiretiva && (
+                      <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        ✓ Salvo
+                      </span>
+                    )}
+                  </div>
                 )}
                 {isColab && isAtivo && !autoSalva && (
                   <button
