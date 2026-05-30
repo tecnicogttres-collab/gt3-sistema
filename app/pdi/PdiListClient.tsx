@@ -225,12 +225,19 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
 
 export default function PdiListClient({ dbPdis, papel }: { dbPdis: DbPdi[]; papel: string }) {
   const isGestorAdmin = ['gestor', 'admin'].includes(papel)
-  const sorted = [...staticPdis].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [editModal, setEditModal] = useState<EditModalState>(EDIT_INIT)
   const [colabs, setColabs] = useState<Colab[]>([])
   const [localDbPdis, setLocalDbPdis] = useState<DbPdi[]>(dbPdis)
+
+  // Slugs estáticos que já foram migrados para o banco — não mostrar o card estático duplicado
+  const migratedSlugs = new Set(
+    localDbPdis.map(p => p.conclusoes?._original_slug).filter(Boolean) as string[]
+  )
+  const sorted = [...staticPdis]
+    .filter(p => !migratedSlugs.has(p.id))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   const [agendaOpen, setAgendaOpen] = useState(false)
   const [agendaBadge, setAgendaBadge] = useState(0)
   const searchParams = useSearchParams()

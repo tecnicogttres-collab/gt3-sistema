@@ -49,9 +49,17 @@ function dbRowToColaborador(row: DbPdiRow): PdiColaborador {
       },
       animais: (row.animais as Animal[] | null) ?? [],
     },
-    conclusoes: (row.conclusoes as PdiColaborador['conclusoes'] | null) ?? {
-      forcas: [], pontosAtencao: [], ondeAgrega: [], comoPodeApoiar: [], riscos: [], comoLiderar: [],
-    },
+    conclusoes: (() => {
+      const c = row.conclusoes as Record<string, unknown> | null
+      return {
+        forcas: (c?.forcas as string[] | null) ?? [],
+        pontosAtencao: (c?.pontosAtencao as string[] | null) ?? [],
+        ondeAgrega: (c?.ondeAgrega as string[] | null) ?? [],
+        comoPodeApoiar: (c?.comoPodeApoiar as string[] | null) ?? [],
+        riscos: (c?.riscos as string[] | null) ?? [],
+        comoLiderar: (c?.comoLiderar as string[] | null) ?? [],
+      }
+    })(),
   }
 }
 

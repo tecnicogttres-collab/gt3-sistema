@@ -16,10 +16,27 @@ export async function POST(req: NextRequest) {
   if (!staticId || !nome?.trim())
     return Response.json({ error: 'staticId e nome obrigatórios' }, { status: 400 })
 
-  // Cria o registro definitivo no banco
+  // Evita migração duplicada: verifica se já existe um registro para esse slug
+  const { data: existing } = await admin
+    .from('pdis')
+    .select('id')
+    .contains('conclusoes', { _original_slug: staticId })
+    .maybeSingle()
+
+  if (existing) {
+    // Já migrado — só garante que profiles está apontando para o UUID e retorna
+    await admin.from('profiles').update({ pdi_slug: existing.id }).eq('pdi_slug', staticId)
+    return Response.json({ id: existing.id })
+  }
+
+  // Cria o registro definitivo no banco, gravando o slug original para filtrar a lista
   const { data: newPdi, error: insertErr } = await admin
     .from('pdis')
-    .insert({ nome: nome.trim(), funcao: (funcao ?? '').trim() })
+    .insert({
+      nome: nome.trim(),
+      funcao: (funcao ?? '').trim(),
+      conclusoes: { _original_slug: staticId },
+    })
     .select('id')
     .single()
 

@@ -1368,6 +1368,10 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
           throw new Error(b.error ?? 'Erro ao migrar PDI')
         }
         const { id: newId } = await res.json() as { id: string }
+        // Atualiza display local imediatamente antes de navegar
+        setDisplayNome(headerNome.trim())
+        setDisplayFuncao(headerFuncao.trim())
+        setEditHeader(false)
         router.replace(`/pdi/${newId}`)
         return
       }
