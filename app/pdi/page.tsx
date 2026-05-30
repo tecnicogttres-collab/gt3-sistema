@@ -13,7 +13,7 @@ export type DbPdi = {
   colaborador_id: string | null
   created_at: string
   status: string
-  conclusoes: { _original_slug?: string } | null
+  conclusoes: { _original_slug?: string; _mbti_tipo?: string } | null
   eneagrama: { ranking: { rank: number; tipo: string; pontuacao: string }[] } | null
   animais: { animal: string; emoji: string; percentual?: number }[] | null
 }

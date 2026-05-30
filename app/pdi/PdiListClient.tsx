@@ -237,19 +237,28 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
 
         {/* Eneagrama tags */}
         {ranking.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
             {ranking.map((e, i) => (
               <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, backgroundColor: i === 0 ? '#FEF3C7' : i === 1 ? '#EBF4FF' : '#F0FFF4', color: i === 0 ? '#92400E' : i === 1 ? '#1E40AF' : '#166534' }}>
-                {e.tipo.replace('Tipo ', 'T').replace(' —', '')}
+                {e.tipo.replace('Tipo ', 'T')}
               </span>
             ))}
           </div>
         )}
 
-        {/* Top animal */}
-        {topAnimal && (
-          <div style={{ fontSize: 11, color: '#475569' }}>
-            {topAnimal.emoji} {topAnimal.animal}{topAnimal.percentual ? ` ${topAnimal.percentual}%` : ''}
+        {/* Animal + MBTI — mesma linha, igual ao card estático */}
+        {(topAnimal || pdi.conclusoes?._mbti_tipo) && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {topAnimal && (
+              <span style={{ fontSize: 11, color: '#475569' }}>
+                {topAnimal.emoji} {topAnimal.animal}{topAnimal.percentual ? ` ${topAnimal.percentual}%` : ''}
+              </span>
+            )}
+            {pdi.conclusoes?._mbti_tipo && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, backgroundColor: '#1E3A6E', color: '#D1AE6E', letterSpacing: '0.05em' }}>
+                {pdi.conclusoes._mbti_tipo}
+              </span>
+            )}
           </div>
         )}
       </Link>
