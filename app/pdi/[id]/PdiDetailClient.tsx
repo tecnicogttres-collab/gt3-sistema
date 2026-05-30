@@ -560,7 +560,8 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ competencias: localComps }),
         })
-        if (compRes.ok) onCompsUpdated?.(localComps)
+        if (!compRes.ok) throw new Error('Erro ao salvar competências')
+        onCompsUpdated?.(localComps)
       }
       const payload: Record<string, unknown> = { avaliacao_diretiva: diretiva }
       if (isFirst) payload.ambicao = ambicao

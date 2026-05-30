@@ -48,7 +48,7 @@ export async function PATCH(
   if (!auth.ok) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json() as Record<string, unknown>
-  const allowed = ['nome', 'funcao', 'status', 'eneagrama', 'animais', 'conclusoes', 'data_inicio']
+  const allowed = ['nome', 'funcao', 'status', 'eneagrama', 'animais', 'conclusoes', 'data_inicio', 'competencias']
   const updates: Record<string, unknown> = {}
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
