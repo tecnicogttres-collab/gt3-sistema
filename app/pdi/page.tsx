@@ -14,6 +14,8 @@ export type DbPdi = {
   created_at: string
   status: string
   conclusoes: { _original_slug?: string } | null
+  eneagrama: { ranking: { rank: number; tipo: string; pontuacao: string }[] } | null
+  animais: { animal: string; emoji: string; percentual?: number }[] | null
 }
 
 export default async function PdiPage() {
@@ -46,7 +48,7 @@ export default async function PdiPage() {
   // Gestor e admin: busca PDIs do banco além dos estáticos
   const { data: dbPdis } = await admin
     .from('pdis')
-    .select('id, nome, funcao, data_inicio, colaborador_id, created_at, status, conclusoes')
+    .select('id, nome, funcao, data_inicio, colaborador_id, created_at, status, conclusoes, eneagrama, animais')
     .order('created_at', { ascending: true })
 
   return <PdiListClient dbPdis={(dbPdis ?? []) as DbPdi[]} papel={papel ?? 'gestor'} />

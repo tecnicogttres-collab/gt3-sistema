@@ -162,6 +162,8 @@ function StaticPdiCard({ pdi }: { pdi: PdiColaborador }) {
   )
 }
 
+type CicloScores = { avaliacao_diretiva: number[]; autoavaliacao: number[]; ambicao: number[] }
+
 function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
   pdi: DbPdi
   isGestorAdmin: boolean
@@ -170,14 +172,44 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
   onDelete: () => void
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [scores, setScores] = useState<CicloScores | null>(null)
   const isArchived = pdi.status === 'arquivado'
 
+  useEffect(() => {
+    fetch(`/api/pdi/${pdi.id}/ciclos`)
+      .then(r => r.ok ? r.json() : [])
+      .then((ciclos: (CicloScores & { status: string })[]) => {
+        const c = ciclos.find(c => c.status === 'ativo') ?? ciclos[0]
+        if (c) setScores(c)
+      })
+      .catch(() => {})
+  }, [pdi.id])
+
+  const totais = scores ? {
+    diretiva: scores.avaliacao_diretiva.reduce((s, v) => s + v, 0),
+    auto:     scores.autoavaliacao.reduce((s, v) => s + v, 0),
+    ambicao:  scores.ambicao.reduce((s, v) => s + v, 0),
+    max:      scores.avaliacao_diretiva.length * 5,
+  } : null
+
+  const hasScores = totais && totais.max > 0 && (totais.diretiva > 0 || totais.auto > 0)
+  const ranking = (pdi.eneagrama?.ranking ?? []).slice(0, 3)
+  const topAnimal = (pdi.animais ?? []).sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0]
+
+  const periodo = pdi.data_inicio
+    ? new Date(pdi.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')
+    : null
+
   return (
-    <div style={{ backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', border: `1px solid ${isArchived ? '#E2E8F0' : '#E2E8F0'}`, overflow: 'hidden', opacity: isArchived ? 0.75 : 1 }}>
-      <div style={{ height: 3, backgroundColor: isArchived ? '#94A3B8' : '#2A4F96' }} />
-      {/* Clickable area */}
-      <Link href={`/pdi/${pdi.id}`} style={{ textDecoration: 'none', display: 'block', padding: '16px 18px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+    <div style={{ backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', border: '1px solid #E2E8F0', overflow: 'hidden', opacity: isArchived ? 0.75 : 1 }}
+      onMouseEnter={e => { const el = e.currentTarget; el.style.boxShadow = '0 4px 16px rgba(42,79,150,0.13)'; el.style.transform = 'translateY(-1px)' }}
+      onMouseLeave={e => { const el = e.currentTarget; el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)'; el.style.transform = 'translateY(0)' }}
+    >
+      <div style={{ height: 3, backgroundColor: isArchived ? '#94A3B8' : '#D1AE6E' }} />
+
+      <Link href={`/pdi/${pdi.id}`} style={{ textDecoration: 'none', display: 'block', padding: '16px 18px 14px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: isArchived ? '#94A3B8' : '#1E3A6E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D1AE6E', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
             {avatarInitials(pdi.nome).toUpperCase()}
           </div>
@@ -186,22 +218,45 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
             <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>{pdi.funcao || 'Função não informada'}</div>
           </div>
         </div>
-        {pdi.data_inicio && (
-          <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span>📅</span>
-            <span>Início: {new Date(pdi.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+
+        {/* Período */}
+        {periodo && (
+          <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>📅</span><span>{periodo}</span>
           </div>
         )}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, backgroundColor: isArchived ? '#F1F5F9' : '#EBF0FB', color: isArchived ? '#64748B' : '#2A4F96' }}>
-            {isArchived ? 'Arquivado' : 'Novo PDI'}
-          </span>
-        </div>
+
+        {/* Score bars */}
+        {hasScores && (
+          <div style={{ marginBottom: 12 }}>
+            <ScoreBar label="Avaliação diretiva" value={totais!.diretiva} max={totais!.max} color="#2A4F96" />
+            <ScoreBar label="Autoavaliação"       value={totais!.auto}     max={totais!.max} color="#D1AE6E" />
+            <ScoreBar label="Ambição realista"    value={totais!.ambicao}  max={totais!.max} color="#16A34A" />
+          </div>
+        )}
+
+        {/* Eneagrama tags */}
+        {ranking.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
+            {ranking.map((e, i) => (
+              <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, backgroundColor: i === 0 ? '#FEF3C7' : i === 1 ? '#EBF4FF' : '#F0FFF4', color: i === 0 ? '#92400E' : i === 1 ? '#1E40AF' : '#166534' }}>
+                {e.tipo.replace('Tipo ', 'T').replace(' —', '')}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Top animal */}
+        {topAnimal && (
+          <div style={{ fontSize: 11, color: '#475569' }}>
+            {topAnimal.emoji} {topAnimal.animal}{topAnimal.percentual ? ` ${topAnimal.percentual}%` : ''}
+          </div>
+        )}
       </Link>
 
       {/* Actions */}
       {isGestorAdmin && (
-        <div style={{ padding: '0 18px 14px', borderTop: '1px solid #F1F5F9', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 6, justifyContent: confirmDelete ? 'space-between' : 'flex-end' }}>
+        <div style={{ padding: '10px 18px 14px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 6, justifyContent: confirmDelete ? 'space-between' : 'flex-end' }}>
           {confirmDelete ? (
             <>
               <span style={{ fontSize: 12, color: '#DC2626', fontWeight: 600 }}>Excluir este PDI?</span>
