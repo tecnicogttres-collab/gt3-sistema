@@ -934,7 +934,17 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
 type RankEntry = { tipo: string; pontuacao: string }
 type AnimalEntry = { emoji: string; animal: string; percentual: string; pontoForte: string; tendencia: string }
 
-const TIPOS_ENEAGRAMA = ['Tipo 1','Tipo 2','Tipo 3','Tipo 4','Tipo 5','Tipo 6','Tipo 7','Tipo 8','Tipo 9']
+const TIPOS_ENEAGRAMA = [
+  'Tipo 1 — Perfeccionista',
+  'Tipo 2 — Ajudante',
+  'Tipo 3 — Vencedor',
+  'Tipo 4 — Romântico',
+  'Tipo 5 — Observador',
+  'Tipo 6 — Precavido',
+  'Tipo 7 — Entusiasta',
+  'Tipo 8 — Poderoso',
+  'Tipo 9 — Pacificador',
+]
 const INPUT_ST: React.CSSProperties = { padding: '7px 10px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, color: '#1E293B', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
 const TA_ST: React.CSSProperties = { ...INPUT_ST, width: '100%', resize: 'vertical', minHeight: 90 }
 const BTN_EDIT: React.CSSProperties = { fontSize: 13, padding: '6px 16px', border: '1px solid #2A4F96', borderRadius: 8, backgroundColor: '#EBF0FB', color: '#2A4F96', cursor: 'pointer', fontWeight: 600 }
