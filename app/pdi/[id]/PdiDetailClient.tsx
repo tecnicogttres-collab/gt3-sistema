@@ -302,7 +302,7 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
               {activeAcoes.map((a, i) => {
                 const st = STATUS_STYLE[a.status] ?? STATUS_STYLE['Não iniciado']
                 return (
-                  <tr key={a.id ?? i} style={{ borderBottom: i < activeAcoes.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                  <tr key={a.id ?? i} style={{ borderBottom: i < activeAcoes.length - 1 ? '1px solid rgba(42,79,150,0.18)' : 'none' }}>
                     <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap' }}>{a.competencia}</td>
                     <td style={{ padding: '11px 14px', color: '#374151', maxWidth: 200 }}>{a.desenvolver || '—'}</td>
                     <td style={{ padding: '11px 14px', color: '#374151', maxWidth: 240 }}>{a.acoes || '—'}</td>
@@ -361,7 +361,7 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
                 </thead>
                 <tbody>
                   {historico.map((a, i) => (
-                    <tr key={a.id ?? i} style={{ borderBottom: i < historico.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                    <tr key={a.id ?? i} style={{ borderBottom: i < historico.length - 1 ? '1px solid rgba(42,79,150,0.18)' : 'none' }}>
                       <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap' }}>{a.competencia}</td>
                       <td style={{ padding: '11px 14px', color: '#374151', maxWidth: 300 }}>{a.resultadosEsperados || '—'}</td>
                       <td style={{ padding: '11px 14px', color: '#166534', fontWeight: 500, whiteSpace: 'nowrap' }}>{a.concluido_em ? formatDate(a.concluido_em) : '—'}</td>

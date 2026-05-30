@@ -83,7 +83,7 @@ function dismissSugestaoNotifStorage(id: string, userId: string) {
 // ─── PDI Conversa helpers ─────────────────────────────────────────────────────
 
 type PdiConversaBanner = { cicloId: string; pdiId: string; dataConversa: string }
-type PdiNotifBanner = { pdiId: string }
+type PdiNotifBanner = { pdiId: string; dataAcao: string | null }
 
 function pdiConversaDismissKey(userId: string) { return `pdi_conversa_dismissed_${userId}` }
 // Armazena { [cicloId]: dataConversa } — invalida automaticamente ao reagendar
@@ -224,10 +224,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         if (!mounted || !res.ok) return
         const row = await res.json() as { cicloId: string; pdiId: string; dataConversa: string } | null
         if (!row) { if (mounted) setPdiConversaBanner(null); return }
-        const dismissed = getPdiConversaDismissed(userId)
-        if (dismissed[row.cicloId] !== row.dataConversa) {
-          setPdiConversaBanner(row)
-        }
+        if (mounted) setPdiConversaBanner(row)
       } catch { /* noop */ }
     }
 
@@ -236,14 +233,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/pdi/notificacoes')
         if (!mounted || !res.ok) return
-        const { count, pdiId, tipo } = await res.json() as { count: number; pdiId: string | null; tipo: string }
+        const { count, pdiId, tipo, dataAcao } = await res.json() as { count: number; pdiId: string | null; tipo: string; dataAcao: string | null }
         if (count > 0 && pdiId) {
           const dismissed = getPdiNotifDismissed(userId)
           if (!dismissed.includes(pdiId)) {
             if (tipo === 'criado') {
               setPdiCriadoNotif({ pdiId })
             } else {
-              setPdiNotifBanner({ pdiId })
+              setPdiNotifBanner({ pdiId, dataAcao })
             }
           }
         }
@@ -342,13 +339,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         { event: 'UPDATE', schema: 'public', table: 'pdi_ciclos' },
         (payload) => {
           if (!isColabOrTrainee) return
-          const anterior = payload.old as { data_conversa?: string | null }
-          const atual = payload.new as { id: string; pdi_id: string; data_conversa?: string | null }
+          const anterior = payload.old as { data_conversa?: string | null; autoavaliacao_salva?: boolean }
+          const atual = payload.new as { id: string; pdi_id: string; data_conversa?: string | null; autoavaliacao_salva?: boolean }
+          // Nova conversa agendada
           if (!anterior.data_conversa && atual.data_conversa) {
-            const dismissed = getPdiConversaDismissed(userId)
-            if (!(atual.id in dismissed)) {
-              setPdiConversaBanner({ cicloId: atual.id, pdiId: atual.pdi_id, dataConversa: atual.data_conversa! })
-            }
+            setPdiConversaBanner({ cicloId: atual.id, pdiId: atual.pdi_id, dataConversa: atual.data_conversa! })
+          }
+          // Autoavaliação salva → limpa o banner imediatamente
+          if (!anterior.autoavaliacao_salva && atual.autoavaliacao_salva) {
+            setPdiConversaBanner(prev => prev?.cicloId === atual.id ? null : prev)
           }
         }
       )
@@ -400,9 +399,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleVerPdi() {
     if (!pdiConversaBanner) return
-    const { cicloId, pdiId, dataConversa } = pdiConversaBanner
-    setPdiConversaBanner(null)
-    if (profile) dismissPdiConversaBannerStorage(cicloId, dataConversa, profile.id)
+    const { cicloId, pdiId } = pdiConversaBanner
+    // Não dispensa o banner — ele some apenas quando autoavaliação for salva
     try {
       await fetch(`/api/pdi/ciclos/${cicloId}/confirmar`, {
         method: 'POST',
@@ -411,12 +409,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       })
     } catch { /* noop */ }
     router.push(`/pdi/${pdiId}?tab=avaliacoes`)
-  }
-
-  function dispensarPdiConversa() {
-    if (!pdiConversaBanner || !profile) return
-    dismissPdiConversaBannerStorage(pdiConversaBanner.cicloId, pdiConversaBanner.dataConversa, profile.id)
-    setPdiConversaBanner(null)
   }
 
   async function handleVerPdiNotif() {
@@ -534,6 +526,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             }}>
               <span style={{ fontSize: 13, color: '#065F46' }}>
                 📝 Seu PDI foi atualizado pelo gestor — verifique as notas e ações
+                {bannerPdiNotif.dataAcao && (
+                  <span style={{ marginLeft: 6, color: '#047857', fontWeight: 600 }}>
+                    · adicionado em {new Date(bannerPdiNotif.dataAcao).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  </span>
+                )}
               </span>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                 <button onClick={handleVerPdiNotif} style={{
@@ -546,18 +543,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {bannerPdiConversa && (
             <div style={{
-              backgroundColor: '#EBF0FB', borderBottom: '1px solid #93C5FD',
+              backgroundColor: '#FEF2F2', borderBottom: '2px solid #FCA5A5',
               padding: '10px 24px', display: 'flex', alignItems: 'center',
               justifyContent: 'space-between', flexShrink: 0, gap: 12,
             }}>
-              <span style={{ fontSize: 13, color: '#1A2340' }}>
-                📅 Conversa de PDI agendada para <strong>{dataPdi} às {horaPdi}</strong>
+              <span style={{ fontSize: 13, color: '#7F1D1D', fontWeight: 500 }}>
+                🔴 Conversa de PDI agendada para <strong>{dataPdi} às {horaPdi}</strong>
                 {' — '}preencha sua autoavaliação antes da conversa
               </span>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                 <button onClick={handleVerPdi} style={{
                   padding: '4px 14px', borderRadius: 6, border: 'none',
-                  background: '#2A4F96', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  background: '#DC2626', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>Ver PDI</button>
               </div>
             </div>

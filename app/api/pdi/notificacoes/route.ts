@@ -9,14 +9,17 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, count } = await admin
     .from('pdi_notificacoes')
-    .select('pdi_id, tipo', { count: 'exact' })
+    .select('pdi_id, tipo, created_at', { count: 'exact' })
     .eq('colaborador_id', user.id)
     .eq('visto', false)
+    .order('created_at', { ascending: false })
     .limit(1)
 
+  const row = data?.[0] as Record<string, string> | undefined
   return Response.json({
     count: count ?? 0,
-    pdiId: data?.[0]?.pdi_id ?? null,
-    tipo: (data?.[0] as Record<string, string> | undefined)?.tipo ?? 'atualizado',
+    pdiId: row?.pdi_id ?? null,
+    tipo: row?.tipo ?? 'atualizado',
+    dataAcao: row?.created_at ?? null,
   })
 }

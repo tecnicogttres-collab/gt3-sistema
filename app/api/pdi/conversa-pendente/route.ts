@@ -22,7 +22,7 @@ export async function GET() {
     .select('id, pdi_id, data_conversa')
     .eq('colaborador_id', user.id)
     .not('data_conversa', 'is', null)
-    .is('conversa_confirmada_em', null)
+    .or('autoavaliacao_salva.is.null,autoavaliacao_salva.eq.false')
     .limit(1)
 
   if (!data || data.length === 0) return Response.json(null)
