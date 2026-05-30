@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { PdiColaborador, AcaoPdi } from '../../../data/pdis/types'
 
@@ -1326,6 +1327,7 @@ function ConclusoesTab({ pdi, isDbPdi, canEdit }: { pdi: PdiColaborador; isDbPdi
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: string; isDbPdi?: boolean }) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('acoes')
   const canEdit = ['gestor', 'admin'].includes(papel)
   const hasMbti = !!pdi.perfilComportamental.mbti
@@ -1354,6 +1356,22 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
     if (!headerNome.trim()) return
     setHeaderSaving(true); setHeaderErr('')
     try {
+      if (!isDbPdi) {
+        // PDI estático: migra para o banco e redireciona para o novo UUID
+        const res = await fetch('/api/pdi/migrar-estatico', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ staticId: pdi.id, nome: headerNome.trim(), funcao: headerFuncao.trim() }),
+        })
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({})) as { error?: string }
+          throw new Error(b.error ?? 'Erro ao migrar PDI')
+        }
+        const { id: newId } = await res.json() as { id: string }
+        router.replace(`/pdi/${newId}`)
+        return
+      }
+
       const res = await fetch(`/api/pdi/${pdi.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
