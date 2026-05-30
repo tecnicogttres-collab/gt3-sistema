@@ -1,6 +1,13 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
+import * as allPdis from '../../../../data/pdis/index'
+import type { PdiColaborador } from '../../../../data/pdis/types'
+
+const pdisMap = Object.values(allPdis).reduce<Record<string, PdiColaborador>>((acc, pdi) => {
+  acc[(pdi as PdiColaborador).id] = pdi as PdiColaborador
+  return acc
+}, {})
 
 export async function POST(req: NextRequest) {
   const serverClient = await createClient()
@@ -16,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!staticId || !nome?.trim())
     return Response.json({ error: 'staticId e nome obrigatórios' }, { status: 400 })
 
-  // Evita migração duplicada: verifica se já existe um registro para esse slug
+  // Idempotente: se já foi migrado, só garante que pdi_slug aponta pro UUID e retorna
   const { data: existing } = await admin
     .from('pdis')
     .select('id')
@@ -24,18 +31,25 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    // Já migrado — só garante que profiles está apontando para o UUID e retorna
     await admin.from('profiles').update({ pdi_slug: existing.id }).eq('pdi_slug', staticId)
     return Response.json({ id: existing.id })
   }
 
-  // Cria o registro definitivo no banco, gravando o slug original para filtrar a lista
+  // Dados do arquivo estático — copia tudo para o novo registro
+  const staticPdi = pdisMap[staticId]
+
   const { data: newPdi, error: insertErr } = await admin
     .from('pdis')
     .insert({
       nome: nome.trim(),
       funcao: (funcao ?? '').trim(),
-      conclusoes: { _original_slug: staticId },
+      eneagrama:    staticPdi?.perfilComportamental.eneagrama ?? null,
+      animais:      staticPdi?.perfilComportamental.animais ?? null,
+      competencias: staticPdi?.matrizAvaliacao.competencias ?? [],
+      conclusoes: {
+        ...(staticPdi?.conclusoes ?? {}),
+        _original_slug: staticId,
+      },
     })
     .select('id')
     .single()
@@ -45,13 +59,40 @@ export async function POST(req: NextRequest) {
 
   const newId = newPdi.id as string
 
-  // Migra todas as referências do slug estático para o novo UUID em paralelo
+  // Migra referências (text vs uuid — pode falhar silenciosamente para uuid, tudo bem)
   await Promise.all([
     admin.from('profiles').update({ pdi_slug: newId }).eq('pdi_slug', staticId),
     admin.from('pdi_ciclos').update({ pdi_id: newId }).eq('pdi_id', staticId),
     admin.from('pdi_acoes').update({ pdi_id: newId }).eq('pdi_id', staticId),
     admin.from('pdi_notificacoes').update({ pdi_id: newId }).eq('pdi_id', staticId),
   ])
+
+  // Verifica se ciclos existem para o novo UUID (update pode ter falhado por tipo uuid)
+  const { data: ciclosExistentes } = await admin
+    .from('pdi_ciclos')
+    .select('id')
+    .eq('pdi_id', newId)
+    .limit(1)
+
+  if (!ciclosExistentes?.length && staticPdi) {
+    // Recria o ciclo 1 com os dados de avaliação do arquivo estático
+    const { data: colab } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('pdi_slug', newId)
+      .maybeSingle()
+
+    await admin.from('pdi_ciclos').insert({
+      pdi_id: newId,
+      colaborador_id: colab?.id ?? null,
+      numero_ciclo: 1,
+      status: 'ativo',
+      avaliacao_diretiva: staticPdi.matrizAvaliacao.diretiva,
+      autoavaliacao:      staticPdi.matrizAvaliacao.auto,
+      ambicao:            staticPdi.matrizAvaliacao.ambicao,
+      autoavaliacao_salva: staticPdi.matrizAvaliacao.diretiva.length > 0,
+    })
+  }
 
   return Response.json({ id: newId })
 }
