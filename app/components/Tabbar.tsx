@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { MODULES } from '../lib/modules'
 
 type Tab = {
@@ -21,6 +21,7 @@ const HOME_TAB: Tab = {
 
 export default function Tabbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [tabs, setTabs] = useState<Tab[]>([HOME_TAB])
 
   useEffect(() => {
@@ -34,10 +35,11 @@ export default function Tabbar() {
     })
   }, [pathname])
 
-  function closeTab(tabId: string, e: React.MouseEvent) {
+  function closeTab(tabId: string, tabPath: string, e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
     setTabs((prev) => prev.filter((t) => t.id !== tabId))
+    if (pathname === tabPath) router.push('/')
   }
 
   return (
@@ -87,7 +89,7 @@ export default function Tabbar() {
             {tab.label}
             {tab.id !== 'home' && (
               <button
-                onClick={(e) => closeTab(tab.id, e)}
+                onClick={(e) => closeTab(tab.id, tab.path, e)}
                 aria-label={`Fechar ${tab.label}`}
                 style={{
                   background: 'none',

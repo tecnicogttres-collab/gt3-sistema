@@ -191,6 +191,7 @@ export default function CadastroTerceirasClient() {
   const [modalContratantes, setModalContratantes] = useState(false)
   const [novoContratante, setNovoContratante] = useState({ nome: '', requer_cc: false })
   const [salvandoContratante, setSalvandoContratante] = useState(false)
+  const [modoEdicao, setModoEdicao] = useState(false)
 
   // Toast
   const [toast, setToast] = useState<{ msg: string; tipo: string } | null>(null)
@@ -226,7 +227,7 @@ export default function CadastroTerceirasClient() {
       if (modalConfirm.open) { setModalConfirm(p => ({ ...p, open: false })); return }
       if (modalEtapa.open) { setModalEtapa(p => ({ ...p, open: false })); return }
       if (modalNova) { setModalNova(false); return }
-      if (modalContratantes) { setModalContratantes(false); return }
+      if (modalContratantes) { setModalContratantes(false); setModoEdicao(false); return }
       if (selectedId) setSelectedId(null)
     }
     window.addEventListener('keydown', onKey)
@@ -323,27 +324,37 @@ export default function CadastroTerceirasClient() {
     }
   }
 
-  async function handleSalvarEtapa() {
-    const { terceira, etapa, novoEstado, obs } = modalEtapa
-    if (!terceira || !etapa || !novoEstado) return
+  async function handleSalvarEtapa(estado: EtapaEstado) {
+    const { terceira, etapa, obs } = modalEtapa
+    if (!terceira || !etapa) return
 
     async function executar() {
+      // Optimistic update — fecha o modal e reflete a mudança imediatamente
+      const etapasOtimistas = { ...(terceira.etapas as Record<string, string>), [etapa!.id]: estado }
+      setModalEtapa(p => ({ ...p, open: false }))
+      setTerceiras(prev => prev.map(t => t.id === terceira!.id ? { ...t, etapas: etapasOtimistas } : t))
+
       const res = await fetch(`/api/terceiras/${terceira!.id}/etapa`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ etapa_id: etapa!.id, novo_estado: novoEstado, obs }),
+        body: JSON.stringify({ etapa_id: etapa!.id, novo_estado: estado, obs }),
       })
-      if (!res.ok) { showToast('Erro ao salvar', 'danger'); return }
+      if (!res.ok) {
+        // Reverte em caso de erro
+        setTerceiras(prev => prev.map(t => t.id === terceira!.id ? terceira! : t))
+        showToast('Erro ao salvar', 'danger')
+        return
+      }
       const { terceira: atualizada, arquivada, motivo } = await res.json()
+      // Substitui com dados completos do servidor (historico, status, etc.)
       setTerceiras(prev => prev.map(t => t.id === atualizada.id ? atualizada : t))
-      setModalEtapa(p => ({ ...p, open: false }))
       if (arquivada) {
         setSelectedId(null)
         showToast(motivo === 'nao_evoluiu' ? '✕ Terceira arquivada como "Não evoluiu"' : '✓ Cadastro concluído! Movido para o histórico.', motivo === 'nao_evoluiu' ? 'danger' : 'success')
       }
     }
 
-    if (etapa.id === 'cnpj_liberado' && novoEstado === 'nao_evoluiu') {
+    if (etapa.id === 'cnpj_liberado' && estado === 'nao_evoluiu') {
       setModalEtapa(p => ({ ...p, open: false }))
       setModalConfirm({
         open: true,
@@ -398,6 +409,21 @@ export default function CadastroTerceirasClient() {
     setContratantes(prev => prev.map(c => c.id === ct.id ? atualizado : c))
   }
 
+  async function handleRenomearContratante(ct: Contratante, novoNome: string) {
+    const nome = novoNome.trim()
+    if (!nome || nome.toUpperCase() === ct.nome) return
+    const res = await fetch(`/api/terceiras/contratantes/${ct.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome }),
+    })
+    if (!res.ok) { showToast('Erro ao renomear contratante', 'danger'); return }
+    const atualizado: Contratante = await res.json()
+    setContratantes(prev => prev.map(c => c.id === ct.id ? atualizado : c).sort((a, b) => a.nome.localeCompare(b.nome)))
+    setTerceiras(prev => prev.map(t => t.contratante_id === ct.id ? { ...t, contratante: atualizado } : t))
+    showToast('✓ Nome atualizado', 'success')
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -443,8 +469,10 @@ export default function CadastroTerceirasClient() {
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             padding: '10px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
             color: activeTab === tab ? S.primary : S.textMuted,
-            borderBottom: activeTab === tab ? `2px solid ${S.primary}` : '2px solid transparent',
-            background: 'none', border: 'none', borderBottomWidth: 2,
+            borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+            borderBottomWidth: 2, borderBottomStyle: 'solid',
+            borderBottomColor: activeTab === tab ? S.primary : 'transparent',
+            background: 'none',
             marginBottom: -2, transition: 'all 0.15s', fontFamily: 'inherit',
           }}>
             {tab === 'ativos' ? 'Ativos' : 'Histórico'}
@@ -591,11 +619,11 @@ export default function CadastroTerceirasClient() {
                 .filter(s => s !== 'validado' || podeValidarGestor)
                 .map(s => {
                   const info = ESTADOS[s]
-                  const isActive = modalEtapa.novoEstado === s
+                  const isActive = modalEtapa.estadoAtual === s
                   const isDanger = s === 'nao_evoluiu'
                   return (
                     <button key={s}
-                      onClick={() => setModalEtapa(p => ({ ...p, novoEstado: s }))}
+                      onClick={() => handleSalvarEtapa(s)}
                       style={{
                         padding: '9px 11px', border: `1px solid ${isActive ? (isDanger ? S.danger : S.primary) : (isDanger ? '#fca5a5' : S.border)}`,
                         borderRadius: S.radiusSm, fontSize: 12, cursor: 'pointer', textAlign: 'left',
@@ -608,18 +636,12 @@ export default function CadastroTerceirasClient() {
                   )
                 })}
             </div>
-            {modalEtapa.novoEstado === 'nao_evoluiu' && (
-              <div style={{ background: S.dangerBg, border: `1px solid #fca5a5`, color: S.danger, padding: '12px 14px', borderRadius: S.radiusSm, fontSize: 13, marginBottom: 12, lineHeight: 1.55 }}>
-                ⚠ Ao salvar, esta terceira será <strong>arquivada automaticamente</strong>. Será necessário confirmar a ação.
-              </div>
-            )}
             <label style={{ fontSize: 11, fontWeight: 700, color: S.text, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Observação (opcional)</label>
             <textarea value={modalEtapa.obs} onChange={e => setModalEtapa(p => ({ ...p, obs: e.target.value }))}
               placeholder="Ex.: aguardando retorno, documento incompleto…"
               style={{ width: '100%', padding: '8px 10px', border: `1px solid ${S.borderStrong}`, borderRadius: S.radiusSm, fontFamily: 'inherit', fontSize: 13, resize: 'vertical', outline: 'none', minHeight: 60 }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18, gap: 10 }}>
               <button style={btnSecondary} onClick={() => setModalEtapa(p => ({ ...p, open: false }))}>Cancelar</button>
-              <button style={btnPrimary} onClick={handleSalvarEtapa}>Salvar</button>
             </div>
           </div>
         </div>
@@ -701,15 +723,25 @@ export default function CadastroTerceirasClient() {
 
       {/* ── Modal Contratantes ── */}
       {modalContratantes && (
-        <div onClick={e => { if (e.target === e.currentTarget) setModalContratantes(false) }}
+        <div onClick={e => { if (e.target === e.currentTarget) { setModalContratantes(false); setModoEdicao(false) } }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: 20 }}>
           <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 580, width: '100%', padding: 20, maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ fontSize: 16, color: S.primary, marginBottom: 4 }}>Gerenciar contratantes</h3>
-            <p style={{ fontSize: 12, color: S.textMuted, marginBottom: 14 }}>Marque "Requer CC" para contratantes que precisam da etapa "CC / Notificação".</p>
+            <p style={{ fontSize: 12, color: S.textMuted, marginBottom: 14 }}>
+              {modoEdicao ? 'Edite os nomes diretamente. Salvo ao sair do campo.' : 'Marque "Requer CC" para contratantes que precisam da etapa "CC / Notificação".'}
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto', marginBottom: 12 }}>
               {contratantes.map(ct => (
                 <div key={ct.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', border: `1px solid ${S.border}`, borderRadius: S.radiusSm }}>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{ct.nome}</span>
+                  {modoEdicao ? (
+                    <input
+                      style={{ ...inputStyle, flex: 1 }}
+                      defaultValue={ct.nome}
+                      onBlur={e => handleRenomearContratante(ct, e.target.value)}
+                    />
+                  ) : (
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{ct.nome}</span>
+                  )}
                   <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input type="checkbox" checked={ct.requer_cc} onChange={() => handleToggleRequerCC(ct)} /> Requer CC
                   </label>
@@ -717,21 +749,32 @@ export default function CadastroTerceirasClient() {
                 </div>
               ))}
             </div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: S.text, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Novo contratante</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px 14px', alignItems: 'center' }}>
-              <input style={{ ...inputStyle, width: '100%' }} type="text" placeholder="Nome do contratante"
-                value={novoContratante.nome} onChange={e => setNovoContratante(p => ({ ...p, nome: e.target.value }))} />
-              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                <input type="checkbox" checked={novoContratante.requer_cc}
-                  onChange={e => setNovoContratante(p => ({ ...p, requer_cc: e.target.checked }))} />
-                Requer CC/Notificação
-              </label>
-            </div>
+            {!modoEdicao && (
+              <>
+                <label style={{ fontSize: 11, fontWeight: 700, color: S.text, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Novo contratante</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px 14px', alignItems: 'center' }}>
+                  <input style={{ ...inputStyle, width: '100%' }} type="text" placeholder="Nome do contratante"
+                    value={novoContratante.nome} onChange={e => setNovoContratante(p => ({ ...p, nome: e.target.value }))} />
+                  <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                    <input type="checkbox" checked={novoContratante.requer_cc}
+                      onChange={e => setNovoContratante(p => ({ ...p, requer_cc: e.target.checked }))} />
+                    Requer CC/Notificação
+                  </label>
+                </div>
+              </>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18, gap: 10 }}>
-              <button style={btnSecondary} onClick={() => setModalContratantes(false)}>Fechar</button>
-              <button style={btnPrimary} disabled={salvandoContratante} onClick={handleAdicionarContratante}>
-                {salvandoContratante ? 'Salvando…' : '+ Adicionar'}
-              </button>
+              <button style={btnSecondary} onClick={() => { setModalContratantes(false); setModoEdicao(false) }}>Fechar</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={btnSecondary} onClick={() => setModoEdicao(p => !p)}>
+                  {modoEdicao ? '✓ Concluir edição' : 'Editar'}
+                </button>
+                {!modoEdicao && (
+                  <button style={btnPrimary} disabled={salvandoContratante} onClick={handleAdicionarContratante}>
+                    {salvandoContratante ? 'Salvando…' : '+ Adicionar'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

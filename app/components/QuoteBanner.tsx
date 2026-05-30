@@ -7,6 +7,8 @@ type Quote = { id: string; texto: string; autor: string }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
+function isWeekday() { const d = new Date().getDay(); return d >= 1 && d <= 5 }
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -83,13 +85,31 @@ async function fetchOrCreateTodayQuote(): Promise<Quote | null> {
   }
 }
 
+const WEEKEND_BANNER = (
+  <div style={{
+    background: '#1E3A6E',
+    padding: '7px 32px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 16,
+    boxShadow: '0 -2px 12px rgba(0,0,0,0.15)',
+  }}>
+    <span style={{ fontSize: 16, flexShrink: 0 }}>🌅</span>
+    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#fff', fontStyle: 'italic' }}>
+      Bom fim de semana! As frases voltam na segunda-feira.
+    </p>
+  </div>
+)
+
 export default function QuoteBanner() {
   const [quote, setQuote] = useState<Quote | null>(null)
 
   useEffect(() => {
+    if (!isWeekday()) return
     void fetchOrCreateTodayQuote().then(setQuote)
   }, [])
 
+  if (!isWeekday()) return WEEKEND_BANNER
   if (!quote) return null
 
   return (
