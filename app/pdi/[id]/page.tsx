@@ -48,6 +48,20 @@ function dbRowToColaborador(row: DbPdiRow): PdiColaborador {
         comoDesenvolver: en?.comoDesenvolver ?? [],
       },
       animais: (row.animais as Animal[] | null) ?? [],
+      mbti: (() => {
+        const m = (row.conclusoes as Record<string, unknown> | null)?._mbti as Record<string, string> | null
+        if (!m?.tipo) return undefined
+        return {
+          tipo: m.tipo ?? '',
+          nucleo: m.nucleo ?? '',
+          veredito: m.veredito ?? '',
+          estiloDecisao: m.estiloDecisao ?? '',
+          relacionamentoAutoridade: m.relacionamentoAutoridade ?? '',
+          curvaAprendizado: m.curvaAprendizado ?? '',
+          impactoClima: m.impactoClima ?? '',
+          zonaRisco: m.zonaRisco ?? '',
+        }
+      })(),
     },
     conclusoes: (() => {
       const c = row.conclusoes as Record<string, unknown> | null

@@ -54,11 +54,24 @@ export async function PATCH(
     if (key in body) updates[key] = body[key]
   }
 
+  const admin = createAdminClient()
+
+  // mbti é armazenado dentro de conclusoes para não precisar de nova coluna
+  if ('mbti' in body) {
+    const mbtiData = body.mbti as Record<string, unknown>
+    const { data: current } = await admin.from('pdis').select('conclusoes').eq('id', id).single()
+    const existing = (current?.conclusoes as Record<string, unknown>) ?? {}
+    updates.conclusoes = {
+      ...existing,
+      _mbti: mbtiData,
+      _mbti_tipo: (mbtiData.tipo as string) || existing._mbti_tipo || null,
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
     return Response.json({ error: 'Nada para atualizar' }, { status: 400 })
   }
 
-  const admin = createAdminClient()
   const { data, error } = await admin.from('pdis').update(updates).eq('id', id).select().single()
   if (error) return Response.json({ error: error.message }, { status: 400 })
   return Response.json(data)

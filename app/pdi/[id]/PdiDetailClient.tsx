@@ -1161,59 +1161,96 @@ function EneagramaTab({ pdi, isDbPdi, canEdit }: { pdi: PdiColaborador; isDbPdi?
   )
 }
 
-function MbtiTab({ pdi }: { pdi: PdiColaborador }) {
-  const mbti = pdi.perfilComportamental.mbti
-  if (!mbti) return <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>Avaliação MBTI não disponível para este colaborador.</div>
+const MBTI_TIPOS = ['ISTJ','ISFJ','INFJ','INTJ','ISTP','ISFP','INFP','INTP','ESTP','ESFP','ENFP','ENTP','ESTJ','ESFJ','ENFJ','ENTJ']
+
+type MbtiForm = {
+  tipo: string; nucleo: string; veredito: string; estiloDecisao: string
+  relacionamentoAutoridade: string; curvaAprendizado: string; impactoClima: string; zonaRisco: string
+}
+const MBTI_EMPTY: MbtiForm = { tipo: '', nucleo: '', veredito: '', estiloDecisao: '', relacionamentoAutoridade: '', curvaAprendizado: '', impactoClima: '', zonaRisco: '' }
+
+function MbtiTab({ pdi, isDbPdi, canEdit }: { pdi: PdiColaborador; isDbPdi?: boolean; canEdit?: boolean }) {
+  const initial = pdi.perfilComportamental.mbti
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveErr, setSaveErr] = useState('')
+  const [display, setDisplay] = useState(initial ?? null)
+  const [form, setForm] = useState<MbtiForm>(MBTI_EMPTY)
+  const f = (k: keyof MbtiForm) => (e: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement>) => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  function startEdit() {
+    setForm({ tipo: display?.tipo ?? '', nucleo: display?.nucleo ?? '', veredito: display?.veredito ?? '', estiloDecisao: display?.estiloDecisao ?? '', relacionamentoAutoridade: (display as Record<string, string> | null)?.relacionamentoAutoridade ?? '', curvaAprendizado: display?.curvaAprendizado ?? '', impactoClima: display?.impactoClima ?? '', zonaRisco: (display as Record<string, string> | null)?.zonaRisco ?? '' })
+    setSaveErr(''); setEditing(true)
+  }
+
+  async function save() {
+    setSaving(true); setSaveErr('')
+    try {
+      const res = await fetch(`/api/pdi/${pdi.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mbti: form }) })
+      if (!res.ok) { const b = await res.json().catch(() => ({})) as { error?: string }; throw new Error(b.error ?? 'Erro ao salvar') }
+      setDisplay(form as typeof display)
+      setEditing(false)
+    } catch (e) { setSaveErr(e instanceof Error ? e.message : 'Erro ao salvar') } finally { setSaving(false) }
+  }
+
+  const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }
+  const CAMPOS: { key: keyof MbtiForm; label: string }[] = [
+    { key: 'nucleo',                  label: '🧭 Núcleo de funcionamento' },
+    { key: 'veredito',                label: '🧠 Veredito organizacional' },
+    { key: 'estiloDecisao',           label: '🧩 Estilo de tomada de decisão' },
+    { key: 'relacionamentoAutoridade',label: '🎯 Relação com autoridade e processo' },
+    { key: 'curvaAprendizado',        label: '🔄 Curva de aprendizado' },
+    { key: 'impactoClima',            label: '🤝 Impacto no clima e no time' },
+    { key: 'zonaRisco',              label: '🚨 Zona de risco comportamental' },
+  ]
+
+  if (editing) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <label style={lbl}>Tipo MBTI</label>
+        <select value={form.tipo} onChange={f('tipo')} style={{ ...INPUT_ST, backgroundColor: '#fff', width: 140 }}>
+          <option value="">Selecione…</option>
+          {MBTI_TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+      {CAMPOS.map(({ key, label }) => (
+        <div key={key}>
+          <label style={lbl}>{label}</label>
+          <textarea value={form[key]} onChange={f(key)} style={TA_ST} rows={3} />
+        </div>
+      ))}
+      {saveErr && <div style={{ fontSize: 12, color: '#DC2626' }}>{saveErr}</div>}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button style={BTN_CANCEL} onClick={() => setEditing(false)} disabled={saving}>Cancelar</button>
+        <button style={BTN_SAVE} onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</button>
+      </div>
+    </div>
+  )
+
+  const hasData = !!(display?.tipo || display?.nucleo || display?.veredito)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {mbti.tipo && (
+      {isDbPdi && canEdit && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button style={BTN_EDIT} onClick={startEdit}>✎ Editar</button></div>}
+
+      {!hasData ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>
+          {isDbPdi && canEdit ? 'Clique em "Editar" para preencher os dados MBTI.' : 'Avaliação MBTI não disponível para este colaborador.'}
+        </div>
+      ) : (<>
+      {display?.tipo && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ backgroundColor: '#1E3A6E', color: '#D1AE6E', borderRadius: 12, padding: '10px 22px', fontSize: 28, fontWeight: 800, letterSpacing: 4 }}>{mbti.tipo}</div>
+          <div style={{ backgroundColor: '#1E3A6E', color: '#D1AE6E', borderRadius: 12, padding: '10px 22px', fontSize: 28, fontWeight: 800, letterSpacing: 4 }}>{display.tipo}</div>
           <div style={{ fontSize: 13, color: '#6B7A99' }}>Tipo predominante</div>
         </div>
       )}
-      {mbti.nucleo && (
-        <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🧭 Núcleo de funcionamento</div>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7 }}>{mbti.nucleo}</p>
-        </div>
-      )}
-      {mbti.veredito && (
-        <div style={{ backgroundColor: '#FEF9EC', borderRadius: 10, padding: '20px 22px', border: '2px solid #D1AE6E', borderLeft: '5px solid #D1AE6E', boxShadow: '0 2px 8px rgba(209,174,110,0.15)' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>🧠 Veredito organizacional</div>
-          <p style={{ margin: 0, fontSize: 14, color: '#1E293B', lineHeight: 1.8, fontWeight: 500 }}>{mbti.veredito}</p>
-        </div>
-      )}
-      {mbti.estiloDecisao && (
-        <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🧩 Estilo de tomada de decisão</div>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.estiloDecisao}</p>
-        </div>
-      )}
-      {mbti.relacionamentoAutoridade && (
-        <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🎯 Relação com autoridade e processo</div>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.relacionamentoAutoridade}</p>
-        </div>
-      )}
-      {mbti.curvaAprendizado && (
-        <div style={{ backgroundColor: '#F0FFF4', borderRadius: 10, padding: '16px 18px', border: '1px solid #BBF7D0' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🔄 Curva de aprendizado</div>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.curvaAprendizado}</p>
-        </div>
-      )}
-      {mbti.impactoClima && (
-        <div style={{ backgroundColor: '#EBF4FF', borderRadius: 10, padding: '16px 18px', border: '1px solid #BFDBFE' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🤝 Impacto no clima e no time</div>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.impactoClima}</p>
-        </div>
-      )}
-      {mbti.zonaRisco && (
-        <div style={{ backgroundColor: '#FEF2F2', borderRadius: 10, padding: '16px 18px', border: '1px solid #FECACA' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🚨 Zona de risco comportamental</div>
-          <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{mbti.zonaRisco}</p>
-        </div>
-      )}
+      {display?.nucleo && <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🧭 Núcleo de funcionamento</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7 }}>{display.nucleo}</p></div>}
+      {display?.veredito && <div style={{ backgroundColor: '#FEF9EC', borderRadius: 10, padding: '20px 22px', border: '2px solid #D1AE6E', borderLeft: '5px solid #D1AE6E', boxShadow: '0 2px 8px rgba(209,174,110,0.15)' }}><div style={{ fontSize: 13, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>🧠 Veredito organizacional</div><p style={{ margin: 0, fontSize: 14, color: '#1E293B', lineHeight: 1.8, fontWeight: 500 }}>{display.veredito}</p></div>}
+      {display?.estiloDecisao && <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🧩 Estilo de tomada de decisão</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{display.estiloDecisao}</p></div>}
+      {(display as Record<string, string> | null)?.relacionamentoAutoridade && <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🎯 Relação com autoridade e processo</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{(display as Record<string, string>).relacionamentoAutoridade}</p></div>}
+      {display?.curvaAprendizado && <div style={{ backgroundColor: '#F0FFF4', borderRadius: 10, padding: '16px 18px', border: '1px solid #BBF7D0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🔄 Curva de aprendizado</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{display.curvaAprendizado}</p></div>}
+      {display?.impactoClima && <div style={{ backgroundColor: '#EBF4FF', borderRadius: 10, padding: '16px 18px', border: '1px solid #BFDBFE' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🤝 Impacto no clima e no time</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{display.impactoClima}</p></div>}
+      {(display as Record<string, string> | null)?.zonaRisco && <div style={{ backgroundColor: '#FEF2F2', borderRadius: 10, padding: '16px 18px', border: '1px solid #FECACA' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🚨 Zona de risco comportamental</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{(display as Record<string, string>).zonaRisco}</p></div>}
+      </>)}
     </div>
   )
 }
@@ -1340,7 +1377,6 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>('acoes')
   const canEdit = ['gestor', 'admin'].includes(papel)
-  const hasMbti = !!pdi.perfilComportamental.mbti
 
   const [editHeader, setEditHeader] = useState(false)
   const [headerNome, setHeaderNome] = useState(pdi.nome)
@@ -1405,7 +1441,7 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
     }
   }
 
-  const visibleTabs = TABS.filter(t => t.id !== 'mbti' || hasMbti)
+  const visibleTabs = TABS
 
   return (
     <div>
@@ -1483,7 +1519,7 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
         {activeTab === 'acoes' && <AcoesTab pdi={pdi} canEdit={canEdit} />}
         {activeTab === 'avaliacoes' && <AvaliacoesTab pdi={pdi} papel={papel} isDbPdi={isDbPdi} />}
         {activeTab === 'eneagrama' && <EneagramaTab pdi={pdi} isDbPdi={isDbPdi} canEdit={canEdit} />}
-        {activeTab === 'mbti' && <MbtiTab pdi={pdi} />}
+        {activeTab === 'mbti' && <MbtiTab pdi={pdi} isDbPdi={isDbPdi} canEdit={canEdit} />}
         {activeTab === 'conclusoes' && <ConclusoesTab pdi={pdi} isDbPdi={isDbPdi} canEdit={canEdit} />}
       </div>
     </div>
