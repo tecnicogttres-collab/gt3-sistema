@@ -31,7 +31,11 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    await admin.from('profiles').update({ pdi_slug: existing.id }).eq('pdi_slug', staticId)
+    // Já migrado — aplica as edições de nome/funcao e garante pdi_slug correto
+    await Promise.all([
+      admin.from('pdis').update({ nome: nome.trim(), funcao: (funcao ?? '').trim() }).eq('id', existing.id),
+      admin.from('profiles').update({ pdi_slug: existing.id }).eq('pdi_slug', staticId),
+    ])
     return Response.json({ id: existing.id })
   }
 
