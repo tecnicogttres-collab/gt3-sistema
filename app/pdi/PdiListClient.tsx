@@ -163,6 +163,7 @@ function StaticPdiCard({ pdi }: { pdi: PdiColaborador }) {
 }
 
 type CicloScores = { avaliacao_diretiva: number[]; autoavaliacao: number[]; ambicao: number[] }
+type CardExtra = { eneagrama: DbPdi['eneagrama']; animais: DbPdi['animais']; conclusoes: DbPdi['conclusoes'] }
 
 function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
   pdi: DbPdi
@@ -173,9 +174,14 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [scores, setScores] = useState<CicloScores | null>(null)
+  const [extra, setExtra] = useState<CardExtra>({
+    eneagrama: pdi.eneagrama,
+    animais:   pdi.animais,
+    conclusoes: pdi.conclusoes,
+  })
   const isArchived = pdi.status === 'arquivado'
 
-  useEffect(() => {
+  function fetchData() {
     fetch(`/api/pdi/${pdi.id}/ciclos`)
       .then(r => r.ok ? r.json() : [])
       .then((ciclos: (CicloScores & { status: string })[]) => {
@@ -183,7 +189,19 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
         if (c) setScores(c)
       })
       .catch(() => {})
-  }, [pdi.id])
+
+    fetch(`/api/pdi/${pdi.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((d: CardExtra | null) => { if (d) setExtra(d) })
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    fetchData()
+    const onFocus = () => fetchData()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [pdi.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totais = scores ? {
     diretiva: scores.avaliacao_diretiva.reduce((s, v) => s + v, 0),
@@ -193,8 +211,8 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
   } : null
 
   const hasScores = totais && totais.max > 0 && (totais.diretiva > 0 || totais.auto > 0)
-  const ranking = (pdi.eneagrama?.ranking ?? []).slice(0, 3)
-  const topAnimal = (pdi.animais ?? []).sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0]
+  const ranking = (extra.eneagrama?.ranking ?? []).slice(0, 3)
+  const topAnimal = (extra.animais ?? []).sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0]
 
   const periodo = pdi.data_inicio
     ? new Date(pdi.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')
@@ -247,16 +265,16 @@ function DbPdiCard({ pdi, isGestorAdmin, onEdit, onArchive, onDelete }: {
         )}
 
         {/* Animal + MBTI — mesma linha, igual ao card estático */}
-        {(topAnimal || pdi.conclusoes?._mbti_tipo) && (
+        {(topAnimal || extra.conclusoes?._mbti_tipo) && (
           <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {topAnimal && (
               <span style={{ fontSize: 11, color: '#475569' }}>
                 {topAnimal.emoji} {topAnimal.animal}{topAnimal.percentual ? ` ${topAnimal.percentual}%` : ''}
               </span>
             )}
-            {pdi.conclusoes?._mbti_tipo && (
+            {extra.conclusoes?._mbti_tipo && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, backgroundColor: '#1E3A6E', color: '#D1AE6E', letterSpacing: '0.05em' }}>
-                {pdi.conclusoes._mbti_tipo}
+                {extra.conclusoes._mbti_tipo}
               </span>
             )}
           </div>

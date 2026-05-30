@@ -2,6 +2,13 @@ import { NextRequest } from 'next/server'
 import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
 
+async function requireAuth() {
+  const serverClient = await createClient()
+  const { data: { user } } = await serverClient.auth.getUser()
+  if (!user) return null
+  return user
+}
+
 async function requireGestorAdmin() {
   const serverClient = await createClient()
   const { data: { user } } = await serverClient.auth.getUser()
@@ -11,6 +18,25 @@ async function requireGestorAdmin() {
   const papel = profile?.papel as string | null
   if (!papel || !['gestor', 'admin'].includes(papel)) return { user, ok: false as const }
   return { user, ok: true as const, admin }
+}
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const user = await requireAuth()
+  if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('pdis')
+    .select('id, nome, funcao, data_inicio, eneagrama, animais, conclusoes')
+    .eq('id', id)
+    .single()
+
+  if (error || !data) return Response.json({ error: 'PDI não encontrado' }, { status: 404 })
+  return Response.json(data)
 }
 
 export async function PATCH(

@@ -49,6 +49,9 @@ export async function POST(req: NextRequest) {
       conclusoes: {
         ...(staticPdi?.conclusoes ?? {}),
         _original_slug: staticId,
+        ...(staticPdi?.perfilComportamental.mbti?.tipo
+          ? { _mbti_tipo: staticPdi.perfilComportamental.mbti.tipo }
+          : {}),
       },
     })
     .select('id')
