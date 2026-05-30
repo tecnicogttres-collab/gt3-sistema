@@ -35,11 +35,15 @@ export default function Tabbar() {
     })
   }, [pathname])
 
+  function isUnderTab(tabPath: string) {
+    return pathname === tabPath || pathname.startsWith(tabPath + '/')
+  }
+
   function closeTab(tabId: string, tabPath: string, e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
     setTabs((prev) => prev.filter((t) => t.id !== tabId))
-    if (pathname === tabPath) router.push('/')
+    if (isUnderTab(tabPath)) router.push('/')
   }
 
   return (
@@ -55,7 +59,7 @@ export default function Tabbar() {
       }}
     >
       {tabs.map((tab) => {
-        const isActive = tab.path === pathname
+        const isActive = isUnderTab(tab.path)
         return (
           <Link
             key={tab.id}
