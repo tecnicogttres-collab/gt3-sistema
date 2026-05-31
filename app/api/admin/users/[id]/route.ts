@@ -32,6 +32,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const profileUpdates: Record<string, unknown> = {}
   if ('nome' in body) profileUpdates.nome = body.nome
+  if ('usuario' in body) profileUpdates.usuario = body.usuario
   if ('papel' in body) profileUpdates.papel = body.papel
   if ('pdi_slug' in body) profileUpdates.pdi_slug = body.pdi_slug ?? null
   if ('modulos_permitidos' in body) profileUpdates.modulos_permitidos = body.modulos_permitidos ?? null

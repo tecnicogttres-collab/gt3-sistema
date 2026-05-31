@@ -17,6 +17,7 @@ type UserRow = {
   id: string
   email: string
   nome: string | null
+  usuario: string | null
   papel: string | null
   pdi_slug: string | null
   modulos_permitidos: string[] | null
@@ -80,7 +81,7 @@ export default function LoginsClient() {
 
   // Edit user modal
   const [editUser, setEditUser] = useState<UserRow | null>(null)
-  const [editForm, setEditForm] = useState({ nome: '', papel: '', pdi_slug: '' })
+  const [editForm, setEditForm] = useState({ nome: '', usuario: '', papel: '', pdi_slug: '' })
   const [editModulos, setEditModulos] = useState<string[] | null>(null)
   const [editModulosDashboard, setEditModulosDashboard] = useState<string[] | null>(null)
   const [editLoading, setEditLoading] = useState(false)
@@ -120,6 +121,7 @@ export default function LoginsClient() {
     return (
       u.email.toLowerCase().includes(q) ||
       (u.nome ?? '').toLowerCase().includes(q) ||
+      (u.usuario ?? '').toLowerCase().includes(q) ||
       (u.papel ?? '').toLowerCase().includes(q)
     )
   })
@@ -153,7 +155,7 @@ export default function LoginsClient() {
   // ── Edit user ─────────────────────────────────────────────────
   function openEdit(u: UserRow) {
     setEditUser(u)
-    setEditForm({ nome: u.nome ?? '', papel: u.papel ?? 'colaborador', pdi_slug: u.pdi_slug ?? '' })
+    setEditForm({ nome: u.nome ?? '', usuario: u.usuario ?? '', papel: u.papel ?? 'colaborador', pdi_slug: u.pdi_slug ?? '' })
     setEditModulos(u.modulos_permitidos ?? null)
     setEditModulosDashboard(u.modulos_dashboard ?? null)
     setEditMsg('')
@@ -194,6 +196,7 @@ export default function LoginsClient() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nome: editForm.nome,
+        usuario: editForm.usuario,
         papel: editForm.papel,
         pdi_slug: editForm.pdi_slug || null,
         modulos_permitidos: editModulos,
@@ -211,7 +214,7 @@ export default function LoginsClient() {
     setUsers((prev) =>
       prev.map((u) =>
         u.id === editUser.id
-          ? { ...u, nome: editForm.nome, papel: editForm.papel, pdi_slug: editForm.pdi_slug || null, modulos_permitidos: editModulos, modulos_dashboard: editModulosDashboard }
+          ? { ...u, nome: editForm.nome, usuario: editForm.usuario, papel: editForm.papel, pdi_slug: editForm.pdi_slug || null, modulos_permitidos: editModulos, modulos_dashboard: editModulosDashboard }
           : u
       )
     )
@@ -263,7 +266,7 @@ export default function LoginsClient() {
 
   // ── Replicar módulos ──────────────────────────────────────────
   async function handleReplicar(u: UserRow) {
-    if (!confirm(`Replicar configuração de módulos de "${u.nome ?? u.email}" para todos os ${u.papel}s?`)) return
+    if (!confirm(`Replicar configuração de módulos de "${u.nome || u.usuario || u.email}" para todos os ${u.papel}s?`)) return
     try {
       const res = await fetch('/api/admin/replicate-modulos', {
         method: 'POST',
@@ -354,7 +357,7 @@ export default function LoginsClient() {
             <tbody>
               {filtered.map((u, i) => {
                 const colors = PAPEL_COLORS[u.papel ?? ''] ?? { bg: '#F3F4F6', color: '#374151' }
-                const initials = (u.nome ?? u.email).slice(0, 2).toUpperCase()
+                const initials = (u.usuario || u.nome || u.email).slice(0, 2).toUpperCase()
                 // Rows belonging to another admin are read-only
                 const isProtectedAdmin = u.papel === 'admin' && user?.id !== u.id
                 const canEditThisRow = canManage && !isProtectedAdmin
@@ -375,7 +378,7 @@ export default function LoginsClient() {
                     </td>
 
                     {/* Usuário */}
-                    <td style={{ padding: '13px 16px', fontSize: 13, color: '#6B7A99' }}>{toUsername(u.email)}</td>
+                    <td style={{ padding: '13px 16px', fontSize: 13, color: '#6B7A99' }}>{u.usuario || toUsername(u.email)}</td>
 
                     {/* Papel */}
                     <td style={{ padding: '13px 16px' }}>
@@ -573,10 +576,25 @@ export default function LoginsClient() {
 
             <form onSubmit={handleEditSave}>
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 5 }}>Nome</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 5 }}>
+                  Usuário <span style={{ fontSize: 11, color: '#6B7A99', fontWeight: 400 }}>(identificador de login)</span>
+                </label>
                 <input
                   type="text"
                   required
+                  value={editForm.usuario}
+                  onChange={(e) => setEditForm((f) => ({ ...f, usuario: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box' }}
+                  onFocus={(e) => { e.target.style.borderColor = '#2A4F96' }}
+                  onBlur={(e) => { e.target.style.borderColor = '#D1D5DB' }}
+                />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 5 }}>
+                  Nome <span style={{ fontSize: 11, color: '#6B7A99', fontWeight: 400 }}>(nome real — pode deixar em branco)</span>
+                </label>
+                <input
+                  type="text"
                   value={editForm.nome}
                   onChange={(e) => setEditForm((f) => ({ ...f, nome: e.target.value }))}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box' }}

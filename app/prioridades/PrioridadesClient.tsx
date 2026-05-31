@@ -95,7 +95,7 @@ function rowToPrioridade(row: any): Prioridade {
 export default function PrioridadesClient() {
   const { profile } = useUser()
 
-  const userName = profile?.nome ?? 'Usuário'
+  const userName = profile?.nome?.trim() || profile?.usuario?.trim() || 'Usuário'
   const isGestor = profile?.papel === 'gestor' || profile?.papel === 'admin'
 
   // ── State ──

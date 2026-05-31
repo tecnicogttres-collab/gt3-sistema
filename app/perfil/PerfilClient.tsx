@@ -56,7 +56,7 @@ export default function PerfilClient() {
     setConfirmPassword('')
   }
 
-  const username = profile?.nome ?? user?.email?.split('@')[0].toUpperCase() ?? '—'
+  const username = profile?.usuario?.trim() || profile?.nome?.trim() || user?.email?.split('@')[0].toUpperCase() ?? '—'
   const papel = profile?.papel ? PAPEL_LABELS[profile.papel] ?? profile.papel : '—'
   const initials = username.replace('GT3.', '').slice(0, 2)
 

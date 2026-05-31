@@ -7,12 +7,18 @@ import { createClient } from '../lib/supabase'
 export type Profile = {
   id: string
   nome: string | null
+  usuario: string | null
   email: string | null
   papel: 'colaborador' | 'gestor' | 'admin' | 'trainee' | null
   gestor_id: string | null
   pdi_slug: string | null
   modulos_permitidos: string[] | null
   modulos_dashboard: string[] | null
+}
+
+/** Retorna o nome de exibição: nome real se preenchido, senão usuario */
+export function displayName(profile: Profile | null, fallback = 'Usuário'): string {
+  return profile?.nome?.trim() || profile?.usuario?.trim() || fallback
 }
 
 type UserContextType = {

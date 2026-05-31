@@ -95,7 +95,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
     }
   }
 
-  const displayName = profile?.nome ?? '—'
+  const displayName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
   const initials = displayName.replace(/^GT3\./, '').slice(0, 2) || '?'
 
   return (
