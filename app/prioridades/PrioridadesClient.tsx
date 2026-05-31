@@ -140,7 +140,7 @@ export default function PrioridadesClient() {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('prioridades')
-      .select('*')
+      .select('id, empresa, contratante, responsavel, status_feed, historico, posicao, created_at, updated_at')
       .order('posicao', { ascending: true })
     if (!mountedRef.current) return
     if (error) {

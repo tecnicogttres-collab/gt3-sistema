@@ -441,7 +441,7 @@ export default function HomeOfficeClient() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('home_office_sheets')
-        .select('*')
+        .select('id, year, month_idx, is_current, rows, people')
         .order('year', { ascending: false })
         .order('month_idx', { ascending: false })
 
