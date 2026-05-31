@@ -10,12 +10,20 @@ import DashboardSidebar from './dashboard/DashboardSidebar'
 
 function greeting(profile: ReturnType<typeof useUser>['profile']): string {
   const first = profile?.nome?.trim().split(' ')[0] || ''
+  const n = first ? `, ${first}` : ''
 
-  const total = new Date().getHours() * 60 + new Date().getMinutes()
-  if (total >= 360 && total < 720)  return first ? `Bom dia, ${first}.`  : 'Bom dia.'
-  if (total >= 720 && total < 1080) return first ? `Boa tarde, ${first}.` : 'Boa tarde.'
-  if (total >= 1080 && total <= 1260) return first ? `Boa noite, ${first}.` : 'Boa noite.'
-  return first ? `Essa hora, você aqui, ${first}.` : 'Essa hora, você aqui.'
+  const now = new Date()
+  const day = now.getDay() // 0=dom, 1=seg, ..., 5=sex, 6=sáb
+  const total = now.getHours() * 60 + now.getMinutes()
+
+  if (day === 0 || day === 6) return `Não seria dia de estar aqui${n}...`
+
+  if (day === 5) return `Sextou${n}!!`
+
+  if (total >= 360 && total < 720)  return day === 1 ? `Boa semana${n}!` : `Bom dia${n}!`
+  if (total >= 720 && total < 1080) return `Boa tarde${n}!`
+  if (total >= 1080 && total <= 1260) return `Boa noite${n}!`
+  return `Essa hora, você aqui${n}!`
 }
 
 export default function DashboardPage() {
