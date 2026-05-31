@@ -28,6 +28,68 @@ const PAPEL_LABELS: Record<string, string> = {
   trainee: 'Trainee',
 }
 
+// ─── UserMenu ─────────────────────────────────────────────────────────────────
+
+function UserMenu({ name, onSignOut, onAlterarSenha }: { name: string; onSignOut: () => void; onAlterarSenha: () => void }) {
+  const [open, setOpen] = useState(false)
+
+  const btnStyle: React.CSSProperties = {
+    display: 'block', width: '100%', padding: '9px 16px',
+    background: 'transparent', border: 'none', textAlign: 'left',
+    fontSize: 13, color: '#1E293B', cursor: 'pointer',
+    transition: 'background 0.12s',
+  }
+
+  return (
+    <div
+      style={{ position: 'relative' }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      {/* Trigger */}
+      <div style={{
+        fontSize: 13, fontWeight: 500, color: '#1E293B',
+        padding: '4px 10px', borderRadius: 6, cursor: 'default', userSelect: 'none',
+        background: open ? '#F1F5F9' : 'transparent',
+        transition: 'background 0.15s',
+      }}>
+        {name}
+      </div>
+
+      {/* Dropdown */}
+      <div style={{
+        position: 'absolute', right: 0, top: 'calc(100% + 4px)',
+        background: '#fff', borderRadius: 8,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.12)', border: '1px solid #E2E8F0',
+        minWidth: 180, zIndex: 200,
+        opacity: open ? 1 : 0,
+        transform: open ? 'translateY(0)' : 'translateY(-6px)',
+        pointerEvents: open ? 'auto' : 'none',
+        transition: 'opacity 0.18s, transform 0.18s',
+        overflow: 'hidden',
+      }}>
+        <button
+          onClick={onAlterarSenha}
+          style={btnStyle}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F8FAFC' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+        >
+          🔑 Alterar senha
+        </button>
+        <div style={{ height: 1, background: '#F1F5F9' }} />
+        <button
+          onClick={onSignOut}
+          style={{ ...btnStyle, color: '#DC2626' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FEF2F2' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+        >
+          ← Sair
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Prioridades helpers ──────────────────────────────────────────────────────
 
 type PrioridadeNotif = { id: string; empresa: string }
@@ -154,7 +216,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [pdiCriadoNotif, setPdiCriadoNotif] = useState<PdiNotifBanner | null>(null)
   const pathname = usePathname()
   const breadcrumb = useBreadcrumb(pathname)
-  const { profile, loading } = useUser()
+  const { profile, loading, signOut } = useUser()
   const router = useRouter()
 
   const isColabOrTrainee = profile?.papel === 'colaborador' || profile?.papel === 'trainee'
@@ -384,7 +446,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (pathname === '/login') return <>{children}</>
 
-  const papelLabel = loading ? '...' : profile?.papel ? PAPEL_LABELS[profile.papel] ?? profile.papel : '—'
+  const fullName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
 
   function dismissTopPrio() {
     const top = prioQueue[0]
@@ -526,12 +588,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
               <span style={{ fontSize: 13, color: '#6B7A99' }}>{breadcrumb}</span>
             </div>
-            <span style={{
-              fontSize: 12, fontWeight: 500, padding: '3px 12px',
-              borderRadius: 999, backgroundColor: '#EBF0FB', color: '#2A4F96',
-            }}>
-              {papelLabel}
-            </span>
+            <UserMenu name={fullName} onSignOut={signOut} onAlterarSenha={() => router.push('/perfil')} />
           </header>
 
           {bannerPdiNotif && (

@@ -19,15 +19,9 @@ type Props = {
 const SIDEBAR_BG = '#1E3A6E'
 const ACCENT = '#D1AE6E'
 
-const PAPEL_LABELS: Record<string, string> = {
-  admin: 'Admin',
-  gestor: 'Gestor',
-  colaborador: 'Colaborador',
-}
-
 export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeave, mode = 'classic', onModeToggle }: Props) {
   const pathname = usePathname()
-  const { profile, loading, signOut } = useUser()
+  const { profile, loading } = useUser()
   const [pdiNotifCount, setPdiNotifCount] = useState(0)
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
 
@@ -94,9 +88,6 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       cursor: 'pointer',
     }
   }
-
-  const displayName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
-  const initials = displayName.replace(/^GT3\./, '').slice(0, 2) || '?'
 
   return (
     <aside
@@ -179,67 +170,15 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       </nav>
 
       {/* Footer */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-        {profile && (
-          <Link
-            href="/perfil"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: collapsed ? 0 : 10,
-              padding: collapsed ? '10px 0' : '12px 16px 8px',
-              justifyContent: collapsed ? 'center' : undefined,
-              textDecoration: 'none',
-            }}
-            title={collapsed ? displayName : undefined}
-          >
-            <div
-              style={{
-                width: 30, height: 30, borderRadius: '50%',
-                backgroundColor: 'rgba(209,174,110,0.20)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: ACCENT, fontSize: 11, fontWeight: 700, flexShrink: 0,
-              }}
-            >
-              {initials}
-            </div>
-            {!collapsed && (
-              <div style={{ minWidth: 0 }}>
-                <div style={{ color: '#fff', fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {displayName}
-                </div>
-                {profile.papel && (
-                  <div style={{ color: ACCENT, fontSize: 11 }}>
-                    {PAPEL_LABELS[profile.papel] ?? profile.papel}
-                  </div>
-                )}
-              </div>
-            )}
-          </Link>
-        )}
-
-        <button
-          onClick={signOut}
-          style={{
-            width: '100%', background: 'none', border: 'none',
-            color: 'rgba(255,255,255,0.45)', fontSize: collapsed ? 15 : 13,
-            cursor: 'pointer', padding: collapsed ? '10px 0' : '6px 16px 12px',
-            textAlign: collapsed ? 'center' : 'left', display: 'block',
-          }}
-          onMouseEnter={(e) => { (e.currentTarget).style.color = 'rgba(255,255,255,0.85)' }}
-          onMouseLeave={(e) => { (e.currentTarget).style.color = 'rgba(255,255,255,0.45)' }}
-        >
-          {collapsed ? '↩' : '← Sair'}
-        </button>
-
-        {onModeToggle && (
+      {onModeToggle && (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
           <button
             onClick={onModeToggle}
             title={mode === 'hover' ? 'Mudar para modo fixo' : 'Mudar para modo hover'}
             style={{
               width: '100%', background: 'none', border: 'none',
               color: 'rgba(255,255,255,0.25)', fontSize: 11,
-              cursor: 'pointer', padding: collapsed ? '6px 0 10px' : '0 16px 10px',
+              cursor: 'pointer', padding: collapsed ? '8px 0' : '8px 16px',
               textAlign: collapsed ? 'center' : 'left', display: 'block',
             }}
             onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}
@@ -247,8 +186,8 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
           >
             {collapsed ? '⊟' : (mode === 'hover' ? '⊡ Modo fixo' : '⊟ Modo hover')}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   )
 }
