@@ -215,13 +215,17 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   }
 
   useEffect(() => {
-    void loadPrioridades()
-    loadData()
     const interval = setInterval(() => {
       void loadPrioridades()
       loadData()
     }, 300_000)
     return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    void loadPrioridades()
+    loadData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
 
