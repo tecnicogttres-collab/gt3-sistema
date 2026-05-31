@@ -286,27 +286,41 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             <div style={{ fontSize: 13, color: '#9CA3AF', fontStyle: 'italic' }}>
               Nenhuma prioridade no momento
             </div>
-          ) : (
-            <div>
-              {priorities.map((p, i) => (
-                <div
-                  key={p.id}
-                  onDoubleClick={() => setModalPrio(p)}
-                  title="Clique duplo para ver detalhes"
-                  style={{
-                    fontSize: 13,
-                    color: '#1E293B',
-                    padding: '6px 0',
-                    borderBottom: i < priorities.length - 1 ? '1px solid #F1F5F9' : 'none',
-                    cursor: 'default',
-                    userSelect: 'none',
-                  }}
-                >
-                  {p.empresa}
-                </div>
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            const maxLen = Math.max(...priorities.map(p => p.empresa.length))
+            const cols = maxLen <= 7 ? 4 : maxLen <= 12 ? 3 : maxLen <= 18 ? 2 : 1
+            return (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                gap: 6,
+              }}>
+                {priorities.map(p => (
+                  <div
+                    key={p.id}
+                    onDoubleClick={() => setModalPrio(p)}
+                    title={`${p.empresa}\n${p.contratante}${p.responsavel ? ' · ' + p.responsavel : ''}\n\nDuplo clique para detalhes`}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: '#1E253D',
+                      background: '#FFFBF0',
+                      border: '1px solid rgba(209,174,110,0.45)',
+                      borderRadius: 6,
+                      padding: '5px 8px',
+                      cursor: 'default',
+                      userSelect: 'none',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {p.empresa}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
 
         {/* ── Block 2: Home Office + BSA ────────────────────────────────── */}
