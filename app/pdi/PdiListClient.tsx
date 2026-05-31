@@ -264,6 +264,156 @@ function DbPdiCard({ pdi, initialScores, isGestorAdmin, onEdit, onArchive, onDel
   )
 }
 
+// ── Avaliações agregadas — data-driven ───────────────────────────────────────
+
+type CicloAgregado = {
+  numero: number
+  competencias: string[]
+  pessoas: { nome: string; diretiva: number[]; auto: number[]; ambicao: number[] }[]
+}
+
+function scoreColor(v: number): string {
+  if (!v) return '#D1D5DB'
+  if (v <= 1) return '#EF4444'
+  if (v <= 2) return '#F97316'
+  if (v <= 3) return '#EAB308'
+  if (v <= 4) return '#22C55E'
+  return '#16A34A'
+}
+
+function CicloAgregadoCard({ ciclo }: { ciclo: CicloAgregado }) {
+  const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<'diretiva' | 'auto' | 'ambicao'>('diretiva')
+
+  const tabLabel = { diretiva: 'Avaliação Diretiva', auto: 'Autoavaliação', ambicao: 'Ambição' }
+  const tabColor = { diretiva: '#2A4F96', auto: '#D1AE6E', ambicao: '#16A34A' }
+  const max = ciclo.competencias.length * 5
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
+          padding: '14px 20px', cursor: 'pointer', userSelect: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)', borderLeft: '4px solid #2A4F96',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#1E293B' }}>Ciclo {ciclo.numero}</div>
+          <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>
+            {ciclo.pessoas.length} colaboradores · {ciclo.competencias.length} competências
+          </div>
+        </div>
+        <span style={{ fontSize: 18, color: '#6B7A99', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 8, background: '#fff', borderRadius: 10, border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+            {(['diretiva', 'auto', 'ambicao'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                padding: '10px 20px', border: 'none', background: 'transparent',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                color: tab === t ? tabColor[t] : '#94A3B8',
+                borderBottom: tab === t ? `2px solid ${tabColor[t]}` : '2px solid transparent',
+                transition: 'all 0.15s',
+              }}>
+                {tabLabel[t]}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ overflowX: 'auto', padding: '16px' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 700 }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6B7A99', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #E2E8F0' }}>
+                    Colaborador
+                  </th>
+                  {ciclo.competencias.map(c => (
+                    <th key={c} style={{ padding: '8px 6px', textAlign: 'center', color: '#6B7A99', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #E2E8F0' }}>
+                      {c}
+                    </th>
+                  ))}
+                  <th style={{ padding: '8px 12px', textAlign: 'center', color: '#1E293B', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', borderBottom: '2px solid #E2E8F0', whiteSpace: 'nowrap' }}>
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ciclo.pessoas.map((p, pi) => {
+                  const scores = p[tab]
+                  const total = scores.reduce((a, b) => a + b, 0)
+                  const hasData = scores.length > 0
+                  return (
+                    <tr key={p.nome} style={{ borderBottom: pi < ciclo.pessoas.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                      <td style={{ padding: '9px 12px', fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap' }}>{p.nome}</td>
+                      {ciclo.competencias.map((_, ci) => {
+                        const v = scores[ci]
+                        return (
+                          <td key={ci} style={{ padding: '9px 6px', textAlign: 'center' }}>
+                            {hasData && v != null ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                width: 26, height: 26, borderRadius: 6,
+                                background: `${scoreColor(v)}22`, color: scoreColor(v),
+                                fontWeight: 700, fontSize: 13,
+                              }}>
+                                {v}
+                              </span>
+                            ) : <span style={{ color: '#D1D5DB' }}>—</span>}
+                          </td>
+                        )
+                      })}
+                      <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                        {hasData ? (
+                          <span style={{ fontWeight: 700, fontSize: 13, color: tabColor[tab] }}>
+                            {total}<span style={{ fontSize: 10, fontWeight: 400, color: '#94A3B8', marginLeft: 2 }}>/{max}</span>
+                          </span>
+                        ) : <span style={{ color: '#D1D5DB' }}>—</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AvaliacoesAgregadasView() {
+  const [ciclos, setCiclos] = useState<CicloAgregado[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/pdi/avaliacoes-agregadas')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: CicloAgregado[]) => { setCiclos(data); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div style={{ padding: '20px 0', color: '#94A3B8', fontSize: 13 }}>Carregando avaliações…</div>
+  )
+
+  if (!ciclos.length) return (
+    <div style={{ padding: '20px 0', color: '#94A3B8', fontSize: 13, fontStyle: 'italic' }}>
+      Nenhum dado de avaliação encontrado.
+    </div>
+  )
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      {ciclos.map(c => <CicloAgregadoCard key={c.numero} ciclo={c} />)}
+    </div>
+  )
+}
+
 export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis: DbPdi[]; ciclosScores: DbCicloScore[]; papel: string }) {
   const isGestorAdmin = ['gestor', 'admin'].includes(papel)
 
@@ -275,6 +425,7 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
     if (!existing || c.status === 'ativo') ciclosByPdi.set(c.pdi_id, c as CicloScores)
   }
 
+  const [showAvaliacoes, setShowAvaliacoes] = useState(false)
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [editModal, setEditModal] = useState<EditModalState>(EDIT_INIT)
   const [colabs, setColabs] = useState<Colab[]>([])
@@ -296,8 +447,14 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
   }, [isGestorAdmin, searchParams])
 
   const activeDbPdis = localDbPdis.filter(p => p.status !== 'arquivado')
-  const archivedDbPdis = localDbPdis.filter(p => p.status === 'arquivado')
-  const totalCount = sorted.length + activeDbPdis.length + archivedDbPdis.length
+  const archivedDbPdis = [...localDbPdis.filter(p => p.status === 'arquivado')]
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+  const allActive: ({ type: 'static'; pdi: PdiColaborador } | { type: 'db'; pdi: DbPdi })[] = [
+    ...sorted.map(p => ({ type: 'static' as const, pdi: p })),
+    ...activeDbPdis.map(p => ({ type: 'db' as const, pdi: p })),
+  ].sort((a, b) => a.pdi.nome.localeCompare(b.pdi.nome, 'pt-BR'))
+  const totalCount = allActive.length + archivedDbPdis.length
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8,
@@ -400,7 +557,25 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
           </p>
         </div>
         {isGestorAdmin && (
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            {/* Toggle Avaliações */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: showAvaliacoes ? '#2A4F96' : '#94A3B8' }}>Avaliações</span>
+              <div
+                onClick={() => setShowAvaliacoes(v => !v)}
+                style={{
+                  width: 40, height: 22, borderRadius: 11,
+                  background: showAvaliacoes ? '#2A4F96' : '#D1D5DB',
+                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  position: 'absolute', top: 3, left: showAvaliacoes ? 21 : 3,
+                  width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s',
+                }} />
+              </div>
+            </label>
             <button
               onClick={() => setAgendaOpen(true)}
               style={{
@@ -431,16 +606,20 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
         )}
       </div>
 
+      {isGestorAdmin && showAvaliacoes && <AvaliacoesAgregadasView />}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-        {sorted.map(pdi => <StaticPdiCard key={pdi.id} pdi={pdi} />)}
-        {activeDbPdis.map(pdi => (
-          <DbPdiCard
-            key={pdi.id} pdi={pdi} initialScores={ciclosByPdi.get(pdi.id) ?? null} isGestorAdmin={isGestorAdmin}
-            onEdit={() => setEditModal({ open: true, pdiId: pdi.id, nome: pdi.nome, funcao: pdi.funcao, saving: false, error: '' })}
-            onArchive={() => handleArchive(pdi)}
-            onDelete={() => handleDelete(pdi.id)}
-          />
-        ))}
+        {allActive.map(item => item.type === 'static'
+          ? <StaticPdiCard key={item.pdi.id} pdi={item.pdi} />
+          : (
+            <DbPdiCard
+              key={item.pdi.id} pdi={item.pdi} initialScores={ciclosByPdi.get(item.pdi.id) ?? null} isGestorAdmin={isGestorAdmin}
+              onEdit={() => setEditModal({ open: true, pdiId: item.pdi.id, nome: item.pdi.nome, funcao: item.pdi.funcao, saving: false, error: '' })}
+              onArchive={() => handleArchive(item.pdi)}
+              onDelete={() => handleDelete(item.pdi.id)}
+            />
+          )
+        )}
       </div>
 
       {archivedDbPdis.length > 0 && (

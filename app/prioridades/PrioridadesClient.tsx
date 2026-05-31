@@ -104,8 +104,6 @@ export default function PrioridadesClient() {
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
   const [filterResp, setFilterResp] = useState('')
-  const [dragId, setDragId] = useState<string | null>(null)
-
   // Form modal
   const [formOpen, setFormOpen] = useState(false)
   const [formEmpresa, setFormEmpresa] = useState('')
@@ -140,8 +138,8 @@ export default function PrioridadesClient() {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('prioridades')
-      .select('id, empresa, contratante, responsavel, status_feed, historico, posicao, created_at, updated_at')
-      .order('posicao', { ascending: true })
+      .select('id, empresa, contratante, responsavel, status_feed, historico, created_at, updated_at')
+      .order('updated_at', { ascending: false })
     if (!mountedRef.current) return
     if (error) {
       console.error('Erro ao carregar prioridades:', error.message, error.code)
@@ -395,47 +393,6 @@ export default function PrioridadesClient() {
     setConfirmOpen(true)
   }
 
-  // ── Drag & Drop ──
-  function onDragStart(e: React.DragEvent<HTMLDivElement>, id: string) {
-    setDragId(id)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
-
-  async function onDrop(e: React.DragEvent<HTMLDivElement>, targetId: string) {
-    e.preventDefault()
-    if (!dragId || dragId === targetId) return
-
-    const fromIdx = priorities.findIndex(p => p.id === dragId)
-    const toIdx = priorities.findIndex(p => p.id === targetId)
-    if (fromIdx === -1 || toIdx === -1) return
-
-    const reordered = [...priorities]
-    const [moved] = reordered.splice(fromIdx, 1)
-    reordered.splice(toIdx, 0, moved)
-
-    setPriorities(reordered)
-    setDragId(null)
-
-    // Persist new positions — updated_at is intentionally not changed on reorder
-    const supabase = createClient()
-    try {
-      await Promise.all(
-        reordered.map((p, idx) =>
-          supabase.from('prioridades').update({ posicao: idx }).eq('id', p.id)
-        )
-      )
-      toast('Ordem atualizada')
-    } catch (err) {
-      console.error('Erro ao salvar ordem:', err)
-      toast('Erro ao salvar ordem')
-    }
-  }
-
   if (!hydrated) return null
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -501,28 +458,16 @@ export default function PrioridadesClient() {
           {filtered.map(p => {
             const pos = priorities.indexOf(p) + 1
             const last = p.statusFeed[p.statusFeed.length - 1]
-            const isDragging = dragId === p.id
             return (
               <div
                 key={p.id}
-                draggable
-                onDragStart={e => onDragStart(e, p.id)}
-                onDragEnd={() => setDragId(null)}
-                onDragOver={onDragOver}
-                onDrop={e => onDrop(e, p.id)}
                 style={{
-                  background: C.surface, border: `1px solid ${dragId && dragId !== p.id ? C.primary : C.border}`,
+                  background: C.surface, border: `1px solid ${C.border}`,
                   borderRadius: 8, padding: 16,
-                  display: 'grid', gridTemplateColumns: 'auto 32px 1fr auto', gap: 14, alignItems: 'start',
+                  display: 'grid', gridTemplateColumns: '32px 1fr auto', gap: 14, alignItems: 'start',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                  opacity: isDragging ? 0.4 : 1,
-                  transition: 'opacity 0.15s, border-color 0.15s',
                 }}
               >
-                {/* Drag handle */}
-                <div style={{ cursor: 'grab', color: C.muted, padding: 4, userSelect: 'none', fontSize: 18, lineHeight: 1 }}
-                  title="Arrastar para reordenar">⋮⋮</div>
-
                 {/* Position */}
                 <div style={{
                   background: C.primarySoft, color: C.primary, fontWeight: 700, fontSize: 13,

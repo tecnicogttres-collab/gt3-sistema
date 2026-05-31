@@ -106,8 +106,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     const { data, error } = await supabase
       .from('prioridades')
       .select('id, empresa, contratante, responsavel, status_feed, created_at')
-      .order('posicao', { ascending: true })
-      .limit(4)
+      .order('updated_at', { ascending: false })
     if (error) {
       console.error('Erro ao carregar prioridades no dashboard:', error.message, error.code)
       setPriorities([])
@@ -267,12 +266,17 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     void loadPdiAgenda()
   }, [role])
 
+  const sidebarWidth = priorities.length <= 4 ? 380
+    : priorities.length <= 8 ? 440
+    : priorities.length <= 14 ? 500
+    : 560
+
   return (
     <>
       {/* ── Right panel ────────────────────────────────────────────────────── */}
       <div
         style={{
-          width: 380,
+          width: sidebarWidth,
           flexShrink: 0,
           position: 'sticky',
           top: 0,
@@ -315,7 +319,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                 {groupOrder.map((label, gi) => {
                   const group = groups[label]
                   const maxLen = Math.max(...group.map(p => p.empresa.length))
-                  const cols = maxLen <= 7 ? 4 : maxLen <= 12 ? 3 : maxLen <= 18 ? 2 : 1
+                  const minCellW = maxLen <= 6 ? 62 : maxLen <= 10 ? 82 : maxLen <= 16 ? 106 : 138
                   return (
                     <div key={label}>
                       <div style={{
@@ -327,7 +331,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                       </div>
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                        gridTemplateColumns: `repeat(auto-fill, minmax(${minCellW}px, 1fr))`,
                         gap: 5,
                       }}>
                         {group.map(p => (

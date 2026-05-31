@@ -116,13 +116,18 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
     isDbPdi = true
   }
 
-  // Seed ciclo 1 on first visit (skip if already seeded during creation)
+  // Seed or repair ciclo 1 using static file as source of truth
   const { data: existingCiclo } = await admin
     .from('pdi_ciclos')
-    .select('id')
+    .select('id, avaliacao_diretiva')
     .eq('pdi_id', id)
+    .order('numero_ciclo', { ascending: true })
     .limit(1)
     .maybeSingle()
+
+  const staticDiretiva = pdi.matrizAvaliacao.diretiva
+  const staticAuto = pdi.matrizAvaliacao.auto
+  const staticAmbicao = pdi.matrizAvaliacao.ambicao
 
   if (!existingCiclo) {
     const { data: colab } = await admin
@@ -136,12 +141,23 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
       colaborador_id: colab?.id ?? null,
       numero_ciclo: 1,
       status: 'ativo',
-      avaliacao_diretiva: pdi.matrizAvaliacao.diretiva,
-      autoavaliacao: pdi.matrizAvaliacao.auto,
-      ambicao: pdi.matrizAvaliacao.ambicao,
-      autoavaliacao_salva: pdi.matrizAvaliacao.diretiva.length > 0,
+      avaliacao_diretiva: staticDiretiva,
+      autoavaliacao: staticAuto,
+      ambicao: staticAmbicao,
+      autoavaliacao_salva: staticDiretiva.length > 0,
       criado_por: user.id,
     })
+  } else if (
+    staticDiretiva.length > 0 &&
+    (!existingCiclo.avaliacao_diretiva || (existingCiclo.avaliacao_diretiva as number[]).length === 0)
+  ) {
+    // Ciclo exists but was created without evaluation data — repair from static file
+    await admin.from('pdi_ciclos').update({
+      avaliacao_diretiva: staticDiretiva,
+      autoavaliacao: staticAuto,
+      ambicao: staticAmbicao,
+      autoavaliacao_salva: true,
+    }).eq('id', existingCiclo.id)
   }
 
   return <PdiDetailClient pdi={pdi} papel={papel} isDbPdi={isDbPdi} />
