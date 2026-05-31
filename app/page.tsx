@@ -9,15 +9,13 @@ import type { Role } from './lib/modules'
 import DashboardSidebar from './dashboard/DashboardSidebar'
 
 function greeting(profile: ReturnType<typeof useUser>['profile']): string {
-  const raw = profile?.usuario?.trim() || profile?.nome?.trim() || ''
-  const clean = raw.replace(/^GT3\./i, '').split(/[\s.]+/)[0] ?? ''
-  const first = clean ? clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase() : ''
+  const first = profile?.nome?.trim().split(' ')[0] || ''
 
   const total = new Date().getHours() * 60 + new Date().getMinutes()
-  if (total >= 360 && total < 720)  return `Bom dia${first ? ', ' + first : ''}.`
-  if (total >= 720 && total < 1080) return `Boa tarde${first ? ', ' + first : ''}.`
-  if (total >= 1080 && total <= 1260) return `Boa noite${first ? ', ' + first : ''}.`
-  return `Essa hora, você aqui${first ? ', ' + first : ''}.`
+  if (total >= 360 && total < 720)  return first ? `Bom dia, ${first}.`  : 'Bom dia.'
+  if (total >= 720 && total < 1080) return first ? `Boa tarde, ${first}.` : 'Boa tarde.'
+  if (total >= 1080 && total <= 1260) return first ? `Boa noite, ${first}.` : 'Boa noite.'
+  return first ? `Essa hora, você aqui, ${first}.` : 'Essa hora, você aqui.'
 }
 
 export default function DashboardPage() {
