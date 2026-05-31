@@ -144,7 +144,7 @@ export default function PrioridadesClient() {
       .order('posicao', { ascending: true })
     if (!mountedRef.current) return
     if (error) {
-      console.error('Erro ao carregar prioridades:', error)
+      console.error('Erro ao carregar prioridades:', error.message, error.code)
       setPriorities([])
     } else {
       setPriorities((data ?? []).map(rowToPrioridade))

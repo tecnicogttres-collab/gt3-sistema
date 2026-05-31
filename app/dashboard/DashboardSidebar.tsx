@@ -88,7 +88,6 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
 
   async function loadPrioridades() {
-    if (!role || !['gestor', 'admin'].includes(role)) return
     const supabase = createClient()
     const { data, error } = await supabase
       .from('prioridades')
@@ -216,7 +215,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   }
 
   useEffect(() => {
-    loadPrioridades()
+    void loadPrioridades()
     loadData()
     const interval = setInterval(() => {
       void loadPrioridades()
@@ -224,7 +223,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     }, 300_000)
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [role])
 
   useEffect(() => {
     if (!role || !['gestor', 'admin'].includes(role)) return
