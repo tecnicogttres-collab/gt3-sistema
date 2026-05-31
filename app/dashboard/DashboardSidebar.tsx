@@ -88,13 +88,14 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
 
   async function loadPrioridades() {
+    if (!role || !['gestor', 'admin'].includes(role)) return
     const supabase = createClient()
     const { data, error } = await supabase
       .from('prioridades')
       .select('id, empresa, contratante, responsavel, status_feed')
       .order('posicao', { ascending: true })
     if (error) {
-      console.error('Erro ao carregar prioridades no dashboard:', error)
+      console.error('Erro ao carregar prioridades no dashboard:', error.message, error.code)
       setPriorities([])
     } else {
       setPriorities(
