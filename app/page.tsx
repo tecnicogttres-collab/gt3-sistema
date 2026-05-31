@@ -28,6 +28,12 @@ export default function DashboardPage() {
   const { profile, loading } = useUser()
   const role = (profile?.papel ?? 'colaborador') as Role
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
+  const [, setTick] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     if (!profile) return
