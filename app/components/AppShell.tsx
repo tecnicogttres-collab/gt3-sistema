@@ -56,18 +56,22 @@ function UserMenu({ name, onSignOut, onAlterarSenha }: { name: string; onSignOut
         {name}
       </div>
 
-      {/* Dropdown */}
+      {/* Dropdown — top:100% sem gap para o mouse não sair do wrapper */}
       <div style={{
-        position: 'absolute', right: 0, top: 'calc(100% + 4px)',
-        background: '#fff', borderRadius: 8,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.12)', border: '1px solid #E2E8F0',
+        position: 'absolute', right: 0, top: '100%',
+        paddingTop: 6,
+        background: 'transparent',
         minWidth: 180, zIndex: 200,
         opacity: open ? 1 : 0,
         transform: open ? 'translateY(0)' : 'translateY(-6px)',
         pointerEvents: open ? 'auto' : 'none',
         transition: 'opacity 0.18s, transform 0.18s',
-        overflow: 'hidden',
       }}>
+        <div style={{
+          background: '#fff', borderRadius: 8,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.12)', border: '1px solid #E2E8F0',
+          overflow: 'hidden',
+        }}>
         <button
           onClick={onAlterarSenha}
           style={btnStyle}
@@ -85,6 +89,7 @@ function UserMenu({ name, onSignOut, onAlterarSenha }: { name: string; onSignOut
         >
           ← Sair
         </button>
+        </div>
       </div>
     </div>
   )
