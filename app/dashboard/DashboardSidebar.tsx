@@ -93,6 +93,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       .from('prioridades')
       .select('id, empresa, contratante, responsavel, status_feed')
       .order('posicao', { ascending: true })
+      .limit(4)
     if (error) {
       console.error('Erro ao carregar prioridades no dashboard:', error.message, error.code)
       setPriorities([])
