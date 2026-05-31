@@ -8,6 +8,18 @@ import { useUser } from './components/UserContext'
 import type { Role } from './lib/modules'
 import DashboardSidebar from './dashboard/DashboardSidebar'
 
+function greeting(profile: ReturnType<typeof useUser>['profile']): string {
+  const raw = profile?.usuario?.trim() || profile?.nome?.trim() || ''
+  const clean = raw.replace(/^GT3\./i, '').split(/[\s.]+/)[0] ?? ''
+  const first = clean ? clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase() : ''
+
+  const total = new Date().getHours() * 60 + new Date().getMinutes()
+  if (total >= 360 && total < 720)  return `Bom dia${first ? ', ' + first : ''}.`
+  if (total >= 720 && total < 1080) return `Boa tarde${first ? ', ' + first : ''}.`
+  if (total >= 1080 && total <= 1260) return `Boa noite${first ? ', ' + first : ''}.`
+  return `Essa hora, você aqui${first ? ', ' + first : ''}.`
+}
+
 export default function DashboardPage() {
   const { profile, loading } = useUser()
   const role = (profile?.papel ?? 'colaborador') as Role
@@ -57,8 +69,11 @@ export default function DashboardPage() {
       {/* Main content */}
       <div style={{ flex: 1, minWidth: 0, maxWidth: 960 }}>
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1E253D', margin: 0 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Dashboard
+          </p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1E253D', margin: 0 }}>
+            {greeting(profile)}
           </h1>
           <p style={{ fontSize: 13, color: '#6B7A99', marginTop: 4 }}>
             Bem-vindo ao GT3 Sistema — selecione um módulo abaixo
