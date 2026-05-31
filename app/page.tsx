@@ -18,8 +18,6 @@ function greeting(profile: ReturnType<typeof useUser>['profile']): string {
 
   if (day === 0 || day === 6) return `Não seria dia de estar aqui${n}...`
 
-  if (day === 5) return `Sextou${n}!!`
-
   if (total >= 360 && total < 720)  return day === 1 ? `Boa semana${n}!` : `Bom dia${n}!`
   if (total >= 720 && total < 1080) return `Boa tarde${n}!`
   if (total >= 1080 && total <= 1260) return `Boa noite${n}!`
