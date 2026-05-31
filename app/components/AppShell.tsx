@@ -16,7 +16,7 @@ import PdiCriadoNotificacao from './PdiCriadoNotificacao'
 import QuoteBanner from './QuoteBanner'
 
 function useBreadcrumb(pathname: string): string {
-  if (pathname === '/') return 'Dashboard'
+  if (pathname === '/') return ''
   const mod = MODULES.find((m) => m.path === pathname)
   return mod ? `GT3 Sistema › ${mod.label}` : 'GT3 Sistema'
 }
