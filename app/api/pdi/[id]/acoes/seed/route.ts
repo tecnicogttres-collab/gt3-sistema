@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // If rows already exist, return them without inserting
   const { data: existing } = await admin
     .from('pdi_acoes')
-    .select('*')
+    .select('id, pdi_id, titulo, descricao, status, prazo, responsavel, created_at, updated_at')
     .eq('pdi_id', id)
     .order('created_at')
 

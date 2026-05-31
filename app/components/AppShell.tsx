@@ -292,10 +292,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       checkLembretesPendentes(),
     ])
 
-    const pollTimer = setInterval(() => {
-      checkUnseenPdiConversa()
-      checkPdiNotif()
-    }, 30_000)
+    let pollTimer: ReturnType<typeof setInterval> | null = null
+    function startPoll() {
+      if (pollTimer !== null) return
+      pollTimer = setInterval(() => {
+        checkUnseenPdiConversa()
+        checkPdiNotif()
+      }, 30_000)
+    }
+    function stopPoll() {
+      if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null }
+    }
+    startPoll()
+    const onVisibilityChange = () => {
+      if (document.hidden) stopPoll()
+      else { startPoll(); void Promise.all([checkUnseenPdiConversa(), checkPdiNotif()]) }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     const channel = supabase
       .channel(`global-notif-${userId}`)
@@ -357,7 +370,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false
-      clearInterval(pollTimer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      stopPoll()
       supabase.removeChannel(channel)
     }
   }, [profile, isColabOrTrainee])

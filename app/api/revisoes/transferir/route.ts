@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   // Garantir que a data de hoje existe e não está finalizada
   const { data: todayRow } = await admin
     .from('revisoes_datas')
-    .select('*')
+    .select('id, data, finalizado')
     .eq('data', today)
     .maybeSingle()
 

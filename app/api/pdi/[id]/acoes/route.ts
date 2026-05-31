@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('pdi_acoes')
-    .select('*')
+    .select('id, pdi_id, titulo, descricao, status, prazo, responsavel, created_at, updated_at')
     .eq('pdi_id', id)
     .order('created_at')
 

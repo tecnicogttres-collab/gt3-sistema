@@ -1,15 +1,6 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../lib/supabase-server'
 import { createAdminClient } from '../../lib/supabase-admin'
-
-async function getCaller() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
-  if (!user) return null
-  const admin = createAdminClient()
-  const { data } = await admin.from('profiles').select('papel').eq('id', user.id).single()
-  return { user, role: (data?.papel as string) ?? null }
-}
+import { getCaller, getAuthUser } from '../../lib/api-helpers'
 
 export async function GET() {
   const caller = await getCaller()
@@ -38,8 +29,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const body = await request.json() as { texto?: string }

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MODULES } from './lib/modules'
 import PdiCard from './components/PdiCard'
 import { useUser } from './components/UserContext'
@@ -21,6 +21,17 @@ export default function DashboardPage() {
       .catch(() => {})
   }, [profile])
 
+  const modulos_permitidos = role === 'admin' ? null : (profile?.modulos_permitidos ?? null)
+  const modulos_dashboard = role === 'admin' ? null : (profile?.modulos_dashboard ?? null)
+
+  const dashboardModules = useMemo(() => MODULES.filter((m) => {
+    if (m.id === 'pdi') return false
+    if (role === 'admin') return (m.dashboardRoles ?? m.allowedRoles).includes(role)
+    if (modulos_dashboard !== null) return modulos_dashboard.includes(m.id)
+    if (modulos_permitidos !== null) return modulos_permitidos.includes(m.id)
+    return (m.dashboardRoles ?? m.allowedRoles).includes(role)
+  }), [role, modulos_dashboard, modulos_permitidos])
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#6B7A99', fontSize: 14 }}>
@@ -30,16 +41,6 @@ export default function DashboardPage() {
   }
 
   const pdi = MODULES.find((m) => m.id === 'pdi')
-  const modulos_permitidos = role === 'admin' ? null : (profile?.modulos_permitidos ?? null)
-  const modulos_dashboard = role === 'admin' ? null : (profile?.modulos_dashboard ?? null)
-
-  const dashboardModules = MODULES.filter((m) => {
-    if (m.id === 'pdi') return false
-    if (role === 'admin') return (m.dashboardRoles ?? m.allowedRoles).includes(role)
-    if (modulos_dashboard !== null) return modulos_dashboard.includes(m.id)
-    if (modulos_permitidos !== null) return modulos_permitidos.includes(m.id)
-    return (m.dashboardRoles ?? m.allowedRoles).includes(role)
-  })
 
   const showPdi = !!pdi && (
     role === 'admin'

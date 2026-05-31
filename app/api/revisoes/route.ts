@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   // Active date: latest non-finalized date
   let { data: activeDateRow } = await admin
     .from('revisoes_datas')
-    .select('*')
+    .select('id, data, finalizado, finalizado_por')
     .eq('finalizado', false)
     .order('data', { ascending: false })
     .limit(1)
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     const today = new Date().toISOString().split('T')[0]
     const { data: todayRow } = await admin
       .from('revisoes_datas')
-      .select('*')
+      .select('id, data, finalizado, finalizado_por')
       .eq('data', today)
       .maybeSingle()
 
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       const { data: created } = await admin
         .from('revisoes_datas')
         .insert({ data: today, finalizado: false })
-        .select('*')
+        .select('id, data, finalizado, finalizado_por')
         .single()
       activeDateRow = created ?? null
     }

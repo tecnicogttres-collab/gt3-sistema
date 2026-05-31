@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { CATEGORIES, type Category, type Column, type Card } from './data'
+import { CATEGORIES, type Category, type Card } from './data'
 import { useUser } from '../components/UserContext'
+import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
+import type { CardUI, ColumnUI } from './ObsCardGrid'
+import { ObsImageModal } from './ObsImageModal'
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
@@ -13,19 +16,6 @@ const MUTED = '#6B7A99'
 const INK = '#1E253D'
 const BG_CARD = '#FFFFFF'
 const BG_PAGE = '#F4F6FA'
-
-// ─── Extended types ────────────────────────────────────────────────────────────
-
-type CardUI = Card & {
-  _id?: string
-  _source: 'static' | 'db'
-  _imagem_url?: string
-  _atualizado_por?: string | null
-  _atualizado_em?: string | null
-  _status_edicao?: string | null
-  _atualizado_por_nome?: string | null
-}
-type ColumnUI = Omit<Column, 'cards'> & { cards: CardUI[] }
 
 type DbObservacao = {
   id: string
@@ -44,6 +34,46 @@ type DbObservacao = {
   atualizado_por_profile: { nome: string } | null
   created_at: string
   updated_at: string
+}
+
+function buildColumnUI(col: { title: string; isFixed?: boolean; cards: Card[] }, dbRows: DbObservacao[]): ColumnUI {
+  const colDbRows = dbRows.filter(o => o.coluna === col.title)
+
+  function toCardUI(o: DbObservacao, staticFallback?: Card): CardUI {
+    return {
+      motivo: o.motivo,
+      parecer: o.parecer,
+      group: o.group_name ?? staticFallback?.group ?? undefined,
+      _id: o.id,
+      _source: 'db' as const,
+      _imagem_url: o.imagem_url ?? undefined,
+      _atualizado_por: o.atualizado_por,
+      _atualizado_em: o.atualizado_em,
+      _status_edicao: o.status_edicao,
+      _atualizado_por_nome: o.atualizado_por_profile?.nome ?? null,
+    }
+  }
+
+  const dbByMotivo = new Map<string, DbObservacao>()
+  const dbOrphan: DbObservacao[] = []
+  for (const row of colDbRows) {
+    if (col.cards.some(c => c.motivo === row.motivo)) {
+      dbByMotivo.set(row.motivo, row)
+    } else {
+      dbOrphan.push(row)
+    }
+  }
+
+  const cards: CardUI[] = col.cards.map(c => {
+    const override = dbByMotivo.get(c.motivo)
+    return override ? toCardUI(override, c) : { ...c, _source: 'static' as const }
+  })
+
+  for (const row of dbOrphan) {
+    cards.push(toCardUI(row))
+  }
+
+  return { ...col, cards }
 }
 
 type ModalState = {
@@ -82,465 +112,6 @@ const MODAL_INIT: ModalState = {
   saving: false,
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function cardId(catKey: string, subtabKey: string, colTitle: string, idx: number) {
-  return `${catKey}|${subtabKey}|${colTitle}|${idx}`
-}
-
-function matchesSearch(card: CardUI, term: string): boolean {
-  if (!term) return true
-  const t = term.toLowerCase()
-  return card.motivo.toLowerCase().includes(t) || card.parecer.toLowerCase().includes(t)
-}
-
-function highlight(text: string, term: string): React.ReactNode {
-  if (!term) return text
-  const idx = text.toLowerCase().indexOf(term.toLowerCase())
-  if (idx === -1) return text
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark style={{ background: '#FFF3CD', color: INK, borderRadius: 2, padding: '0 1px' }}>
-        {text.slice(idx, idx + term.length)}
-      </mark>
-      {text.slice(idx + term.length)}
-    </>
-  )
-}
-
-function buildColumnUI(col: Column, dbRows: DbObservacao[]): ColumnUI {
-  const colDbRows = dbRows.filter(o => o.coluna === col.title)
-
-  function toCardUI(o: DbObservacao, staticFallback?: Card): CardUI {
-    return {
-      motivo: o.motivo,
-      parecer: o.parecer,
-      group: o.group_name ?? staticFallback?.group ?? undefined,
-      _id: o.id,
-      _source: 'db' as const,
-      _imagem_url: o.imagem_url ?? undefined,
-      _atualizado_por: o.atualizado_por,
-      _atualizado_em: o.atualizado_em,
-      _status_edicao: o.status_edicao,
-      _atualizado_por_nome: o.atualizado_por_profile?.nome ?? null,
-    }
-  }
-
-  // Index DB rows by motivo so static cards can be replaced in-place
-  const dbByMotivo = new Map<string, DbObservacao>()
-  const dbOrphan: DbObservacao[] = []
-  for (const row of colDbRows) {
-    if (col.cards.some(c => c.motivo === row.motivo)) {
-      dbByMotivo.set(row.motivo, row)
-    } else {
-      dbOrphan.push(row)
-    }
-  }
-
-  const cards: CardUI[] = col.cards.map(c => {
-    const override = dbByMotivo.get(c.motivo)
-    return override ? toCardUI(override, c) : { ...c, _source: 'static' as const }
-  })
-
-  // Truly new DB cards (no static counterpart) go at the end
-  for (const row of dbOrphan) {
-    cards.push(toCardUI(row))
-  }
-
-  return { ...col, cards }
-}
-
-// ─── Card Component ────────────────────────────────────────────────────────────
-
-function ObsCard({
-  card, id, isCopied, onCopy, search, canManage, onEdit, onDelete, isFixed,
-  onInlineSave, onValidate, canValidate, onInlineCreate,
-}: {
-  card: CardUI
-  id: string
-  isCopied: boolean
-  onCopy: (id: string, text: string) => void
-  search: string
-  canManage?: boolean
-  onEdit?: () => void
-  onDelete?: () => void
-  isFixed?: boolean
-  onInlineSave?: (id: string, parecer: string) => Promise<void>
-  onValidate?: (id: string) => Promise<void>
-  canValidate?: boolean
-  onInlineCreate?: (motivo: string, parecer: string) => Promise<void>
-}) {
-  const [editingInline, setEditingInline] = useState(false)
-  const [inlineText, setInlineText] = useState('')
-  const [inlineSaving, setInlineSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
-
-  const isPendente = card._status_edicao === 'pendente_validacao'
-  const accentColor = isFixed ? ACCENT : PRIMARY
-  const tagBg = isFixed ? 'rgba(209,174,110,0.15)' : 'rgba(42,79,150,0.08)'
-  const borderColor = isCopied ? '#22C55E' : accentColor
-
-  function startInlineEdit() {
-    setInlineText(card.parecer)
-    setEditingInline(true)
-  }
-
-  async function saveInlineEdit() {
-    if (!inlineText.trim()) return
-    setInlineSaving(true)
-    setSaveError('')
-    try {
-      if (card._id) {
-        await onInlineSave?.(card._id, inlineText.trim())
-      } else {
-        await onInlineCreate?.(card.motivo, inlineText.trim())
-      }
-      setEditingInline(false)
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Erro ao salvar')
-    } finally {
-      setInlineSaving(false)
-    }
-  }
-
-  function formatEditDate(iso: string | null | undefined): string {
-    if (!iso) return ''
-    const d = new Date(iso)
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} às ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  }
-
-  return (
-    <div
-      role={editingInline ? undefined : 'button'}
-      tabIndex={editingInline ? undefined : 0}
-      onClick={editingInline ? undefined : () => onCopy(id, card.parecer)}
-      onKeyDown={editingInline ? undefined : e => (e.key === 'Enter' || e.key === ' ') && onCopy(id, card.parecer)}
-      style={{
-        background: isPendente ? '#EFF6FF' : BG_CARD,
-        borderTop: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
-        borderRight: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
-        borderBottom: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
-        borderLeft: isPendente ? '3px solid #2A4F96' : `1.5px solid ${borderColor}`,
-        borderRadius: 8,
-        padding: '10px 12px',
-        cursor: editingInline ? 'default' : 'pointer',
-        transition: 'border-color 0.2s, box-shadow 0.15s, transform 0.1s',
-        boxShadow: isCopied
-          ? '0 0 0 3px rgba(34,197,94,0.15)'
-          : isFixed
-            ? '0 1px 3px rgba(209,174,110,0.12)'
-            : '0 1px 3px rgba(42,79,150,0.08)',
-        transform: isCopied ? 'scale(0.99)' : undefined,
-        position: 'relative',
-        userSelect: editingInline ? 'text' : 'none',
-      }}
-    >
-      {!editingInline && (
-        <div style={{
-          position: 'absolute', top: 8, right: 10, fontSize: 11, fontWeight: 600,
-          color: isCopied ? '#16A34A' : MUTED, transition: 'color 0.2s', letterSpacing: 0.3,
-        }}>
-          {isCopied ? '✓ Copiado' : '⧉'}
-        </div>
-      )}
-
-      <div style={{
-        display: 'inline-block', fontSize: 12, fontWeight: 700, color: accentColor,
-        background: tagBg, borderRadius: 4, padding: '2px 7px',
-        marginBottom: 6, lineHeight: 1.4, maxWidth: 'calc(100% - 52px)',
-      }}>
-        {highlight(card.motivo, search)}
-      </div>
-
-      {editingInline ? (
-        <textarea
-          value={inlineText}
-          onChange={e => setInlineText(e.target.value)}
-          autoFocus
-          rows={4}
-          onClick={e => e.stopPropagation()}
-          style={{
-            width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 12,
-            border: `1.5px solid ${PRIMARY}`, outline: 'none', resize: 'vertical',
-            fontFamily: 'inherit', color: INK, boxSizing: 'border-box', display: 'block',
-          }}
-        />
-      ) : (
-        <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {highlight(card.parecer, search)}
-        </div>
-      )}
-
-      {!editingInline && card._imagem_url && (
-        <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
-          <img
-            src={card._imagem_url}
-            alt=""
-            style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 6, border: `1px solid ${BORDER}`, display: 'block' }}
-          />
-        </div>
-      )}
-
-      {!editingInline && isPendente && (
-        <div
-          style={{ marginTop: 8, fontSize: 11, color: '#4B72C4', lineHeight: 1.6 }}
-          onClick={e => e.stopPropagation()}
-        >
-          {(() => {
-            const parts = [
-              card._atualizado_por_nome && `por ${card._atualizado_por_nome}`,
-              card._atualizado_em && `em ${formatEditDate(card._atualizado_em)}`,
-            ].filter(Boolean).join(' ')
-            return `✏️ ${parts ? `Atualizado ${parts} — ` : ''}Aguardando validação`
-          })()}
-          {canValidate && (
-            <button
-              onClick={() => card._id && onValidate?.(card._id)}
-              style={{
-                display: 'block', marginTop: 5, fontSize: 11, padding: '3px 10px', borderRadius: 5,
-                border: '1px solid #2A4F96', background: '#fff', color: '#2A4F96',
-                cursor: 'pointer', fontWeight: 600,
-              }}
-            >
-              ✓ Validar atualização
-            </button>
-          )}
-        </div>
-      )}
-
-      <div
-        style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${isPendente ? '#BFDBFE' : BORDER}`, flexWrap: 'wrap' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {editingInline ? (
-          <>
-            <button
-              onClick={saveInlineEdit}
-              disabled={inlineSaving || !inlineText.trim()}
-              style={{
-                fontSize: 11, padding: '2px 10px', borderRadius: 5, border: 'none',
-                background: PRIMARY, color: '#fff', cursor: inlineSaving ? 'default' : 'pointer',
-                fontWeight: 600, opacity: (!inlineText.trim() || inlineSaving) ? 0.6 : 1,
-              }}
-            >
-              {inlineSaving ? 'Salvando…' : 'Salvar'}
-            </button>
-            <button
-              onClick={() => { setEditingInline(false); setSaveError('') }}
-              disabled={inlineSaving}
-              style={{
-                fontSize: 11, padding: '2px 10px', borderRadius: 5, border: `1px solid ${BORDER}`,
-                background: '#fff', color: MUTED, cursor: 'pointer', fontWeight: 600,
-              }}
-            >
-              Cancelar
-            </button>
-            {saveError && (
-              <span style={{ fontSize: 11, color: '#DC2626', marginLeft: 4 }}>{saveError}</span>
-            )}
-          </>
-        ) : (
-          <>
-            <button
-              onClick={startInlineEdit}
-              style={{
-                fontSize: 11, padding: '2px 8px', borderRadius: 5, border: '1px solid #BFDBFE',
-                background: '#EFF6FF', color: '#2A4F96', cursor: 'pointer', fontWeight: 600,
-              }}
-            >
-              ✏️ Editar
-            </button>
-            {canManage && card._source === 'db' && (
-              <>
-                <button
-                  onClick={onEdit}
-                  style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 5, border: `1px solid ${BORDER}`,
-                    background: '#F0F4FA', color: PRIMARY, cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  ✎ Editar completo
-                </button>
-                <button
-                  onClick={onDelete}
-                  style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 5, border: '1px solid #FCA5A5',
-                    background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  🗑 Excluir
-                </button>
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Column Component ──────────────────────────────────────────────────────────
-
-function ObsColumn({
-  col, catKey, subtabKey, search, copiedId, onCopy,
-  papel, onAdd, onEdit, onDelete, onInlineSave, onValidate, onInlineCreate,
-}: {
-  col: ColumnUI
-  catKey: string
-  subtabKey: string
-  search: string
-  copiedId: string | null
-  onCopy: (id: string, text: string) => void
-  papel: string
-  onAdd: (coluna: string, subtabKey: string) => void
-  onEdit: (id: string, motivo: string, parecer: string, coluna: string, subtabKey: string, imagemUrl: string) => void
-  onDelete: (id: string) => void
-  onInlineSave: (id: string, parecer: string) => Promise<void>
-  onValidate: (id: string) => Promise<void>
-  onInlineCreate: (catKey: string, subtabKey: string, coluna: string, motivo: string, parecer: string) => Promise<void>
-}) {
-  const { ungrouped, groups } = useMemo(() => {
-    const ungrouped: { card: CardUI; idx: number }[] = []
-    const groups: Map<string, { card: CardUI; idx: number }[]> = new Map()
-
-    col.cards.forEach((card, idx) => {
-      if (!matchesSearch(card, search)) return
-      if (card.group) {
-        const existing = groups.get(card.group) ?? []
-        existing.push({ card, idx })
-        groups.set(card.group, existing)
-      } else {
-        ungrouped.push({ card, idx })
-      }
-    })
-    return { ungrouped, groups }
-  }, [col.cards, search])
-
-  const totalVisible = ungrouped.length + Array.from(groups.values()).reduce((s, g) => s + g.length, 0)
-  const canManage = ['gestor', 'admin'].includes(papel)
-  const canAdd = ['colaborador', 'gestor', 'admin'].includes(papel)
-
-  if (totalVisible === 0 && search) return null
-
-  const headerBg = col.isFixed
-    ? `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DARK} 100%)`
-    : `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`
-
-  return (
-    <div style={{
-      background: BG_CARD,
-      border: `2px solid ${col.isFixed ? ACCENT : PRIMARY}`,
-      borderRadius: 10,
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      overflow: 'hidden',
-      boxShadow: col.isFixed
-        ? '0 2px 8px rgba(209,174,110,0.18)'
-        : '0 2px 8px rgba(42,79,150,0.10)',
-    }}>
-      {/* Header */}
-      <div style={{
-        background: headerBg, padding: '10px 14px',
-        borderRadius: '8px 8px 0 0',
-        flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.7)', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: 0.2 }}>
-            {col.title}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{
-            fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)',
-            background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: 20, padding: '1px 8px', fontVariantNumeric: 'tabular-nums',
-          }}>
-            {totalVisible}
-          </span>
-          {canAdd && (
-            <button
-              onClick={() => onAdd(col.title, subtabKey)}
-              title="Nova observação"
-              style={{
-                fontSize: 15, lineHeight: 1, fontWeight: 700,
-                color: 'rgba(255,255,255,0.9)', background: 'rgba(255,255,255,0.18)',
-                border: '1px solid rgba(255,255,255,0.35)', borderRadius: 6,
-                width: 24, height: 24, cursor: 'pointer', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}
-            >
-              ＋
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Cards */}
-      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto' }}>
-        {ungrouped.map(({ card, idx }) => {
-          const id = cardId(catKey, subtabKey, col.title, idx)
-          return (
-            <ObsCard
-              key={card._id ?? id}
-              card={card}
-              id={id}
-              isCopied={copiedId === id}
-              onCopy={onCopy}
-              search={search}
-              canManage={canManage}
-              isFixed={col.isFixed}
-              onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
-              onDelete={() => card._id && onDelete(card._id)}
-              onInlineSave={onInlineSave}
-              onValidate={onValidate}
-              canValidate={canManage}
-              onInlineCreate={async (motivo, parecer) => onInlineCreate(catKey, subtabKey, col.title, motivo, parecer)}
-            />
-          )
-        })}
-
-        {Array.from(groups.entries()).map(([groupName, items]) => (
-          <div key={groupName}>
-            <div style={{
-              fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase',
-              letterSpacing: '0.08em', padding: '4px 0 4px', borderBottom: `1px solid ${BORDER}`,
-              marginBottom: 6,
-            }}>
-              {groupName}
-            </div>
-            {items.map(({ card, idx }) => {
-              const id = cardId(catKey, subtabKey, col.title, idx)
-              return (
-                <ObsCard
-                  key={card._id ?? id}
-                  card={card}
-                  id={id}
-                  isCopied={copiedId === id}
-                  onCopy={onCopy}
-                  search={search}
-                  canManage={canManage}
-                  isFixed={col.isFixed}
-                  onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
-                  onDelete={() => card._id && onDelete(card._id)}
-                  onInlineSave={onInlineSave}
-                  onValidate={onValidate}
-                  canValidate={canManage}
-                />
-              )
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Modal Components ──────────────────────────────────────────────────────────
-
 function Backdrop({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
@@ -552,8 +123,6 @@ function Backdrop({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
-
-// ─── Main Client Component ─────────────────────────────────────────────────────
 
 export default function ObservacoesClient() {
   const { profile } = useUser()
@@ -574,7 +143,6 @@ export default function ObservacoesClient() {
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false })
   const [subtabModal, setSubtabModal] = useState<SubtabModal>({ open: false, name: '', saving: false, error: '' })
 
-  // Fetch DB observations and dynamic subtabs whenever category changes
   useEffect(() => {
     if (!activeCatKey) return
     let cancelled = false
@@ -591,7 +159,6 @@ export default function ObservacoesClient() {
   }, [activeCatKey])
 
   useEffect(() => {
-    // Condição DENTRO do efeito, nunca antes
     if (activeCatKey === 'Funcionários') return
 
     const top = topScrollRef.current
@@ -621,7 +188,7 @@ export default function ObservacoesClient() {
       top.removeEventListener('scroll', syncFromTop)
       cols.removeEventListener('scroll', syncFromCols)
     }
-  }, [activeCatKey]) // <- dependência fixa, nunca condicional
+  }, [activeCatKey])
 
   const activeCategory = useMemo<Category | undefined>(
     () => CATEGORIES.find(c => c.key === activeCatKey),
@@ -666,8 +233,6 @@ export default function ObservacoesClient() {
     [fixedCols, dbObsForSubtab]
   )
 
-  // Para Funcionários: mescla todas as colunas fixas (Aguardando + Sistema-Geral)
-  // numa única coluna, usando o título de cada uma como group header.
   const funcFixedMergedCol = useMemo<ColumnUI | null>(() => {
     if (mergedFixedCols.length === 0) return null
     if (mergedFixedCols.length === 1) return mergedFixedCols[0]
@@ -689,7 +254,6 @@ export default function ObservacoesClient() {
     )
   }, [mergedMainCols, mergedFixedCols, search])
 
-  // Mantém a largura do spacer da barra superior igual à scrollWidth real das colunas
   useEffect(() => {
     const cols = colsScrollRef.current
     const spacer = spacerRef.current
@@ -733,8 +297,6 @@ export default function ObservacoesClient() {
   useEffect(() => {
     return () => { if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current) }
   }, [])
-
-  // ── CRUD handlers ─────────────────────────────────────────────────────────────
 
   const handleAdd = useCallback((coluna: string, subtabKey: string) => {
     setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey })
@@ -911,11 +473,8 @@ export default function ObservacoesClient() {
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────────
-
   return (
     <>
-      {/* ── Create / Edit Modal ─────────────────────────── */}
       {modal.open && (
         <Backdrop>
           <div style={{
@@ -939,43 +498,11 @@ export default function ObservacoesClient() {
                 <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
                   Imagem (opcional)
                 </label>
-                {modal.imagemPreview ? (
-                  <div>
-                    <img
-                      src={modal.imagemPreview}
-                      alt=""
-                      style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 8, border: `1px solid ${BORDER}`, display: 'block', marginBottom: 6 }}
-                    />
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <label style={{
-                        padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`,
-                        background: '#F0F4FA', color: INK, fontSize: 12, cursor: 'pointer', fontWeight: 500,
-                      }}>
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileSelect} />
-                        Trocar
-                      </label>
-                      <button
-                        onClick={handleRemoveImage}
-                        style={{
-                          padding: '4px 10px', borderRadius: 6, border: '1px solid #FCA5A5',
-                          background: '#FEF2F2', color: '#DC2626', fontSize: 12, cursor: 'pointer', fontWeight: 500,
-                        }}
-                      >
-                        Remover
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <label style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                    padding: '16px 12px', border: `2px dashed ${BORDER}`, borderRadius: 8,
-                    cursor: 'pointer', color: MUTED, fontSize: 12, transition: 'border-color 0.15s',
-                  }}>
-                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileSelect} />
-                    <span style={{ fontSize: 22 }}>🖼</span>
-                    <span>Clique para adicionar uma imagem</span>
-                  </label>
-                )}
+                <ObsImageModal
+                  preview={modal.imagemPreview}
+                  onFileSelect={handleFileSelect}
+                  onRemove={handleRemoveImage}
+                />
               </div>
 
               <div>
@@ -1069,7 +596,6 @@ export default function ObservacoesClient() {
         </Backdrop>
       )}
 
-      {/* ── Confirm Dialog ──────────────────────────────── */}
       {confirm.open && (
         <Backdrop>
           <div style={{
@@ -1112,7 +638,6 @@ export default function ObservacoesClient() {
         </Backdrop>
       )}
 
-      {/* ── Subtab Creation Modal ──────────────────────── */}
       {subtabModal.open && (
         <Backdrop>
           <div style={{
@@ -1183,13 +708,11 @@ export default function ObservacoesClient() {
         </Backdrop>
       )}
 
-      {/* ── Main layout ─────────────────────────────────── */}
       <div style={{
         display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0,
         minHeight: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'clip',
         border: `1px solid ${BORDER}`, boxShadow: '0 1px 6px rgba(30,37,61,0.06)',
       }}>
-        {/* ── Internal category nav ──────────────────────── */}
         <nav style={{
           background: '#fff', borderRight: `1px solid ${BORDER}`,
           padding: '14px 8px', display: 'flex', flexDirection: 'column', gap: 2,
@@ -1235,10 +758,8 @@ export default function ObservacoesClient() {
           })}
         </nav>
 
-        {/* ── Content area ───────────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', background: BG_PAGE, minWidth: 0 }}>
 
-          {/* Subtabs bar */}
           {hasSubtabs && (
             <div style={{
               background: '#fff', borderBottom: `1px solid ${BORDER}`,
@@ -1285,7 +806,6 @@ export default function ObservacoesClient() {
             </div>
           )}
 
-          {/* Search + stat bar */}
           <div style={{ padding: '14px 20px 10px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
             <div style={{ position: 'relative', flex: 1, maxWidth: 480 }}>
               <span style={{
@@ -1324,120 +844,63 @@ export default function ObservacoesClient() {
             )}
           </div>
 
-          {/* Kanban — layouts distintos: Funcionários (área fixa à direita) | Empresas+Outros (scrollbar no topo) */}
           {activeSubtab ? (
             activeCatKey === 'Funcionários' ? (
-              // ── FUNCIONÁRIOS ─────────────────────────────────
               <div style={{
                 flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'stretch',
-                padding: '0 20px 20px',
-                gap: 0,
+                display: 'flex', flexDirection: 'row', alignItems: 'stretch',
+                padding: '0 20px 20px', gap: 0,
               }}>
-                {/* Cell 1: scroll horizontal das colunas principais */}
                 <div
                   ref={colsScrollRef}
                   className="obs-hscroll-visible"
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    overflowX: 'auto', overflowY: 'hidden',
-                    paddingRight: 0,
-                  }}
+                  style={{ flex: 1, minWidth: 0, overflowX: 'auto', overflowY: 'hidden', paddingRight: 0 }}
                 >
-                  <div style={{
-                    display: 'flex', flexDirection: 'row',
-                    gap: 16, height: '100%', width: 'max-content',
-                  }}>
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: 16, height: '100%', width: 'max-content' }}>
                     {mergedMainCols.map(col => (
                       <div
                         key={`${activeSubtab.key}|${col.title}`}
-                        style={{
-                          width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%',
-                          backgroundColor: BG_CARD, borderRadius: 10,
-                        }}
+                        style={{ width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%', backgroundColor: BG_CARD, borderRadius: 10 }}
                       >
                         <ObsColumn
-                          col={col}
-                          catKey={activeCatKey}
-                          subtabKey={activeSubtab.key}
-                          search={search}
-                          copiedId={copiedId}
-                          onCopy={handleCopy}
-                          papel={papel}
-                          onAdd={handleAdd}
-                          onEdit={handleEditOpen}
-                          onDelete={handleDeleteRequest}
-                          onInlineSave={handleInlineSave}
-                          onValidate={handleValidate}
-                          onInlineCreate={handleInlineCreate}
+                          col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
+                          search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
+                          onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
+                          onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
                         />
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Cell 2: divisor vertical visual (12px de gap entre scroll e fixa) */}
-                {funcFixedMergedCol && (
-                  <div style={{
-                    flexShrink: 0,
-                    width: 12,
-                  }} />
-                )}
+                {funcFixedMergedCol && <div style={{ flexShrink: 0, width: 12 }} />}
 
-                {/* Cell 3: coluna fixa única (Aguardando + Sistema-Geral mesclados) */}
                 {funcFixedMergedCol && (
-                  <div style={{
-                    flexShrink: 0,
-                    width: 280,
-                    minHeight: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}>
+                  <div style={{ flexShrink: 0, width: 280, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                     <ObsColumn
-                      col={funcFixedMergedCol}
-                      catKey={activeCatKey}
-                      subtabKey={activeSubtab.key}
-                      search={search}
-                      copiedId={copiedId}
-                      onCopy={handleCopy}
-                      papel={papel}
-                      onAdd={handleAdd}
-                      onEdit={handleEditOpen}
-                      onDelete={handleDeleteRequest}
-                      onInlineSave={handleInlineSave}
-                      onValidate={handleValidate}
-                      onInlineCreate={handleInlineCreate}
+                      col={funcFixedMergedCol} catKey={activeCatKey} subtabKey={activeSubtab.key}
+                      search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
+                      onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
+                      onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
                     />
                   </div>
                 )}
               </div>
             ) : (
-              // ── EMPRESAS / OUTROS ────────────────────────────
               <div style={{
                 flex: 1, minHeight: 0, minWidth: 0,
                 display: 'flex', flexDirection: 'column', padding: '0 20px 20px',
               }}>
-                {/* Scrollbar grossa espelhada no topo */}
                 <div ref={topScrollRef} className="obs-scroll-top">
                   <div ref={spacerRef} style={{ height: 1 }} />
                 </div>
 
-                {/* Container do scroll real (scrollbar nativa oculta) */}
                 <div
                   ref={colsScrollRef}
                   className="obs-hscroll-hidden"
-                  style={{
-                    flex: 1, minWidth: 0,
-                    overflowX: 'auto', overflowY: 'hidden',
-                  }}
+                  style={{ flex: 1, minWidth: 0, overflowX: 'auto', overflowY: 'hidden' }}
                 >
-                  <div style={{
-                    display: 'flex', flexDirection: 'row',
-                    gap: 16, height: '100%', width: 'max-content',
-                  }}>
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: 16, height: '100%', width: 'max-content' }}>
                     {(activeSubtab.key === 'Certidões'
                       ? [...mergedFixedCols, ...mergedMainCols]
                       : [...mergedMainCols, ...mergedFixedCols]
@@ -1447,19 +910,10 @@ export default function ObservacoesClient() {
                         style={{ width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%' }}
                       >
                         <ObsColumn
-                          col={col}
-                          catKey={activeCatKey}
-                          subtabKey={activeSubtab.key}
-                          search={search}
-                          copiedId={copiedId}
-                          onCopy={handleCopy}
-                          papel={papel}
-                          onAdd={handleAdd}
-                          onEdit={handleEditOpen}
-                          onDelete={handleDeleteRequest}
-                          onInlineSave={handleInlineSave}
-                          onValidate={handleValidate}
-                          onInlineCreate={handleInlineCreate}
+                          col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
+                          search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
+                          onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
+                          onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
                         />
                       </div>
                     ))}
@@ -1477,7 +931,7 @@ export default function ObservacoesClient() {
             <div style={{ textAlign: 'center', padding: '24px', color: MUTED, flexShrink: 0 }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>
-                Nenhum resultado para "{search}"
+                Nenhum resultado para &ldquo;{search}&rdquo;
               </div>
               <div style={{ fontSize: 13 }}>Tente outros termos ou limpe a busca.</div>
             </div>

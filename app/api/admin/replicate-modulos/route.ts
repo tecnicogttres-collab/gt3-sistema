@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     // Busca perfil de origem pelo ID (sempre preenchido)
     const { data: source, error: srcErr } = await admin
       .from('profiles')
-      .select('*')
+      .select('id, modulos_permitidos, modulos_dashboard')
       .eq('id', source_id)
       .single()
 

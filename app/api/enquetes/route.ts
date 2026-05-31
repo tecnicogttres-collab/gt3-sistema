@@ -1,15 +1,6 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../lib/supabase-server'
 import { createAdminClient } from '../../lib/supabase-admin'
-
-async function getCaller() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
-  if (!user) return null
-  const admin = createAdminClient()
-  const { data } = await admin.from('profiles').select('papel, nome').eq('id', user.id).single()
-  return { user, role: (data?.papel as string) ?? 'colaborador', nome: (data?.nome as string) ?? '' }
-}
+import { getCallerWithNome as getCaller } from '../../lib/api-helpers'
 
 function publicoAlvoFilter(role: string): string[] {
   if (role === 'admin' || role === 'gestor') return ['todos', 'colaboradores', 'trainees', 'gestores']

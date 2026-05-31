@@ -1,18 +1,11 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
+import { getCaller as _getCaller } from '../../../lib/api-helpers'
 
 async function getCaller() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
-  if (!user) return { user: null, papel: null }
-  const admin = createAdminClient()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('papel')
-    .eq('id', user.id)
-    .single()
-  return { user, papel: profile?.papel as string | null }
+  const caller = await _getCaller()
+  if (!caller) return { user: null, papel: null }
+  return { user: caller.user, papel: caller.role }
 }
 
 export async function GET(req: NextRequest) {
@@ -26,7 +19,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('observacoes_subtabs')
-    .select('*')
+    .select('id, categoria, subtab, criado_por, created_at')
     .eq('categoria', categoria)
     .order('created_at', { ascending: true })
 

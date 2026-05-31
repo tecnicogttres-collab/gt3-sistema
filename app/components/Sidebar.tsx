@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MODULES } from '../lib/modules'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
@@ -32,7 +32,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
 
   const papel = profile?.papel as Role | null
-  const visibleModules = papel
+  const visibleModules = useMemo(() => papel
     ? MODULES.filter((m) => {
         if (papel === 'admin') return true
         const allowed = profile?.modulos_permitidos ?? null
@@ -41,7 +41,8 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       })
     : loading
     ? []
-    : MODULES.filter((m) => m.allowedRoles.includes('colaborador'))
+    : MODULES.filter((m) => m.allowedRoles.includes('colaborador')),
+  [papel, profile?.modulos_permitidos, loading])
 
   // PDI notifications (tabela pdi_notificacoes — sistema existente para colaboradores)
   useEffect(() => {

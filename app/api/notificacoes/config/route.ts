@@ -16,7 +16,7 @@ export async function GET() {
   if (role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin.from('notificacoes_config').select('*')
+  const { data, error } = await admin.from('notificacoes_config').select('modulo, perfis_notificados, ativo, updated_at')
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json(data ?? [])
 }

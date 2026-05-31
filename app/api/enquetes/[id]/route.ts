@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const admin = createAdminClient()
   const isGestorAdmin = ['admin', 'gestor'].includes(caller.role)
 
-  const { data: enquete, error } = await admin.from('enquetes').select('*').eq('id', id).single()
+  const { data: enquete, error } = await admin.from('enquetes').select('id, titulo, descricao, encerramento, publico_alvo, status, anonima, permitir_alterar_voto, mostrar_resultados_parciais, criado_por, criado_em').eq('id', id).single()
   if (error || !enquete) return Response.json({ error: 'Não encontrada' }, { status: 404 })
   if (!isGestorAdmin && enquete.status === 'draft') return Response.json({ error: 'Não encontrada' }, { status: 404 })
 

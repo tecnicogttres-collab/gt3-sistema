@@ -7,7 +7,13 @@ type Quote = { id: string; texto: string; autor: string }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
-function isWeekday() { const d = new Date().getDay(); return d >= 1 && d <= 5 }
+function isWeekdaySP(): boolean {
+  const day = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'long',
+  }).format(new Date())
+  return day !== 'Saturday' && day !== 'Sunday'
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -103,13 +109,17 @@ const WEEKEND_BANNER = (
 
 export default function QuoteBanner() {
   const [quote, setQuote] = useState<Quote | null>(null)
+  const [isWkd, setIsWkd] = useState<boolean | null>(null)
 
   useEffect(() => {
-    if (!isWeekday()) return
+    const wd = isWeekdaySP()
+    setIsWkd(wd)
+    if (!wd) return
     void fetchOrCreateTodayQuote().then(setQuote)
   }, [])
 
-  if (!isWeekday()) return WEEKEND_BANNER
+  if (isWkd === null) return null
+  if (!isWkd) return WEEKEND_BANNER
   if (!quote) return null
 
   return (
