@@ -75,10 +75,7 @@ export default function DashboardPage() {
       {/* Main content */}
       <div style={{ flex: 1, minWidth: 0, maxWidth: 960 }}>
         <div style={{ marginBottom: 28 }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Dashboard
-          </p>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1E253D', margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1E253D', margin: 0 }}>
             {greeting(profile)}
           </h1>
           <p style={{ fontSize: 13, color: '#6B7A99', marginTop: 4 }}>
