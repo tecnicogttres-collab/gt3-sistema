@@ -19,6 +19,7 @@ type Prioridade = {
   contratante: string
   responsavel: string
   statusFeed: StatusEntry[]
+  createdAt: string
 }
 
 type BdayItem = {
@@ -76,6 +77,19 @@ function fmtTs(ts: number) {
   return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
 
+function prioDateLabel(p: Prioridade): string {
+  const latestFeed = p.statusFeed.length > 0
+    ? Math.max(...p.statusFeed.map(s => s.data))
+    : 0
+  const ts = latestFeed || new Date(p.createdAt).getTime()
+  const d = new Date(ts); d.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
+  if (d.getTime() === today.getTime()) return 'Hoje'
+  if (d.getTime() === yesterday.getTime()) return 'Ontem'
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DashboardSidebar({ role }: { role?: string }) {
@@ -91,7 +105,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('prioridades')
-      .select('id, empresa, contratante, responsavel, status_feed')
+      .select('id, empresa, contratante, responsavel, status_feed, created_at')
       .order('posicao', { ascending: true })
       .limit(4)
     if (error) {
@@ -105,6 +119,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           contratante: row.contratante,
           responsavel: row.responsavel,
           statusFeed: row.status_feed ?? [],
+          createdAt: row.created_at,
         }))
       )
     }
@@ -257,7 +272,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       {/* ── Right panel ────────────────────────────────────────────────────── */}
       <div
         style={{
-          width: 280,
+          width: 380,
           flexShrink: 0,
           position: 'sticky',
           top: 0,
@@ -288,37 +303,54 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               Nenhuma prioridade no momento
             </div>
           ) : (() => {
-            const maxLen = Math.max(...priorities.map(p => p.empresa.length))
-            const cols = maxLen <= 7 ? 4 : maxLen <= 12 ? 3 : maxLen <= 18 ? 2 : 1
+            const groupOrder = Array.from(new Set(priorities.map(prioDateLabel)))
+            const groups = priorities.reduce<Record<string, Prioridade[]>>((acc, p) => {
+              const label = prioDateLabel(p)
+              if (!acc[label]) acc[label] = []
+              acc[label].push(p)
+              return acc
+            }, {})
             return (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                gap: 6,
-              }}>
-                {priorities.map(p => (
-                  <div
-                    key={p.id}
-                    onDoubleClick={() => setModalPrio(p)}
-                    title={`${p.empresa}\n${p.contratante}${p.responsavel ? ' · ' + p.responsavel : ''}\n\nDuplo clique para detalhes`}
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: '#1E253D',
-                      background: '#FFFBF0',
-                      border: '1px solid rgba(209,174,110,0.45)',
-                      borderRadius: 6,
-                      padding: '5px 8px',
-                      cursor: 'default',
-                      userSelect: 'none',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {p.empresa}
-                  </div>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {groupOrder.map((label, gi) => {
+                  const group = groups[label]
+                  const maxLen = Math.max(...group.map(p => p.empresa.length))
+                  const cols = maxLen <= 7 ? 4 : maxLen <= 12 ? 3 : maxLen <= 18 ? 2 : 1
+                  return (
+                    <div key={label}>
+                      <div style={{
+                        fontSize: 10, fontWeight: 700, color: '#9CA3AF',
+                        textTransform: 'uppercase', letterSpacing: '0.07em',
+                        marginBottom: 5, marginTop: gi > 0 ? 2 : 0,
+                      }}>
+                        {label}
+                      </div>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                        gap: 5,
+                      }}>
+                        {group.map(p => (
+                          <div
+                            key={p.id}
+                            onDoubleClick={() => setModalPrio(p)}
+                            title={`${p.empresa}\n${p.contratante}${p.responsavel ? ' · ' + p.responsavel : ''}\n\nDuplo clique para detalhes`}
+                            style={{
+                              fontSize: 12, fontWeight: 500, color: '#1E253D',
+                              background: '#FFFBF0',
+                              border: '1px solid rgba(209,174,110,0.45)',
+                              borderRadius: 6, padding: '5px 8px',
+                              cursor: 'default', userSelect: 'none',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {p.empresa}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
           })()}
