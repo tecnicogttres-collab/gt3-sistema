@@ -1252,14 +1252,21 @@ function MbtiTab({ pdi, isDbPdi, canEdit }: { pdi: PdiColaborador; isDbPdi?: boo
           {isDbPdi && canEdit ? 'Clique em "Editar" para preencher os dados MBTI.' : 'Avaliação MBTI não disponível para este colaborador.'}
         </div>
       ) : (<>
-      {display?.tipo && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ backgroundColor: '#1E3A6E', color: '#D1AE6E', borderRadius: 12, padding: '10px 22px', fontSize: 28, fontWeight: 800, letterSpacing: 4 }}>{display.tipo}</div>
-          <div style={{ fontSize: 13, color: '#6B7A99' }}>Tipo predominante</div>
-        </div>
-      )}
+      {/* Cabeçalho: badge tipo + veredito em destaque (primeiro) */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+        {display?.tipo && (
+          <div style={{ flexShrink: 0, backgroundColor: '#1E3A6E', color: '#D1AE6E', borderRadius: 12, padding: '10px 22px', fontSize: 28, fontWeight: 800, letterSpacing: 4, alignSelf: 'flex-start' }}>
+            {display.tipo}
+          </div>
+        )}
+        {display?.veredito && (
+          <div style={{ flex: 1, minWidth: 220, backgroundColor: '#FEF9EC', borderRadius: 10, padding: '18px 22px', border: '2px solid #D1AE6E', borderLeft: '5px solid #D1AE6E', boxShadow: '0 2px 8px rgba(209,174,110,0.15)' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>🧠 Veredito organizacional</div>
+            <p style={{ margin: 0, fontSize: 14, color: '#1E293B', lineHeight: 1.8, fontWeight: 500 }}>{display.veredito}</p>
+          </div>
+        )}
+      </div>
       {display?.nucleo && <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🧭 Núcleo de funcionamento</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7 }}>{display.nucleo}</p></div>}
-      {display?.veredito && <div style={{ backgroundColor: '#FEF9EC', borderRadius: 10, padding: '20px 22px', border: '2px solid #D1AE6E', borderLeft: '5px solid #D1AE6E', boxShadow: '0 2px 8px rgba(209,174,110,0.15)' }}><div style={{ fontSize: 13, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>🧠 Veredito organizacional</div><p style={{ margin: 0, fontSize: 14, color: '#1E293B', lineHeight: 1.8, fontWeight: 500 }}>{display.veredito}</p></div>}
       {display?.estiloDecisao && <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🧩 Estilo de tomada de decisão</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{display.estiloDecisao}</p></div>}
       {(display as Record<string, string> | null)?.relacionamentoAutoridade && <div style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: '16px 18px', border: '1px solid #E2E8F0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🎯 Relação com autoridade e processo</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{(display as Record<string, string>).relacionamentoAutoridade}</p></div>}
       {display?.curvaAprendizado && <div style={{ backgroundColor: '#F0FFF4', borderRadius: 10, padding: '16px 18px', border: '1px solid #BBF7D0' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>🔄 Curva de aprendizado</div><p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{display.curvaAprendizado}</p></div>}
