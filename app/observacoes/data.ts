@@ -1,7 +1,7 @@
 import rawData from './observacoes-raw.json'
 
-export type Card = { motivo: string; parecer: string; group?: string }
-export type Column = { title: string; cards: Card[]; isFixed?: boolean }
+export type Card = { motivo: string; parecer: string; group?: string; imagem_url?: string }
+export type Column = { title: string; cards: Card[]; isFixed?: boolean; imageOnly?: boolean }
 export type Subtab = { key: string; columns: Column[] }
 export type Category = {
   key: string
@@ -83,8 +83,12 @@ function normalizeCategory(key: string, rawCat: unknown): Category | null {
           })
         }
       } else if (subObj.__images__) {
-        // Skip image galleries (Referências NR)
-        return []
+        const imgs = subObj.__images__ as Array<{ titulo: string; descricao: string; src: string }>
+        columns = [{
+          title: 'Informações NR',
+          imageOnly: true,
+          cards: imgs.map(img => ({ motivo: img.titulo, parecer: img.descricao, imagem_url: img.src })),
+        }]
       } else {
         // Normal subtab with multiple column groups (Funcionários subtabs)
         columns = Object.entries(subObj)

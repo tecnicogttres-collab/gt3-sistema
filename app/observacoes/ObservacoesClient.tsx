@@ -66,7 +66,7 @@ function buildColumnUI(col: { title: string; isFixed?: boolean; cards: Card[] },
 
   const cards: CardUI[] = col.cards.map(c => {
     const override = dbByMotivo.get(c.motivo)
-    return override ? toCardUI(override, c) : { ...c, _source: 'static' as const }
+    return override ? toCardUI(override, c) : { ...c, _source: 'static' as const, _imagem_url: c.imagem_url }
   })
 
   for (const row of dbOrphan) {
@@ -87,6 +87,8 @@ type ModalState = {
   imagemUrl: string
   imagemFile: File | null
   imagemPreview: string
+  imageOnly: boolean
+  uploadError: string
   saving: boolean
 }
 
@@ -109,7 +111,7 @@ const MODAL_INIT: ModalState = {
   open: false, mode: 'create', coluna: '', subtabKey: '',
   editingId: null, motivo: '', parecerBody: '',
   imagemUrl: '', imagemFile: null, imagemPreview: '',
-  saving: false,
+  imageOnly: false, uploadError: '', saving: false,
 }
 
 function Backdrop({ children }: { children: React.ReactNode }) {
@@ -200,7 +202,7 @@ export default function ObservacoesClient() {
     const staticKeys = new Set(staticSubs.map(s => s.key))
     const dynSubs = dbSubtabs
       .filter(ds => !staticKeys.has(ds.subtab))
-      .map(ds => ({ key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false }] }))
+      .map(ds => ({ key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly: false }] }))
     return [...staticSubs, ...dynSubs]
   }, [activeCategory, dbSubtabs])
 
@@ -299,12 +301,14 @@ export default function ObservacoesClient() {
   }, [])
 
   const handleAdd = useCallback((coluna: string, subtabKey: string) => {
-    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey })
-  }, [])
+    const sub = allSubtabs.find(s => s.key === subtabKey)
+    const col = sub?.columns.find(c => c.title === coluna)
+    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly: col?.imageOnly ?? false })
+  }, [allSubtabs])
 
   const handleEditOpen = useCallback((id: string, motivo: string, parecer: string, coluna: string, subtabKey: string, imagemUrl: string) => {
     if (modal.imagemPreview.startsWith('blob:')) URL.revokeObjectURL(modal.imagemPreview)
-    setModal({ open: true, mode: 'edit', coluna, subtabKey, editingId: id, motivo, parecerBody: parecer, imagemUrl, imagemFile: null, imagemPreview: imagemUrl, saving: false })
+    setModal({ open: true, mode: 'edit', coluna, subtabKey, editingId: id, motivo, parecerBody: parecer, imagemUrl, imagemFile: null, imagemPreview: imagemUrl, imageOnly: false, uploadError: '', saving: false })
   }, [modal.imagemPreview])
 
   const handleDeleteRequest = useCallback((id: string) => {
@@ -355,6 +359,7 @@ export default function ObservacoesClient() {
   }, [])
 
   function buildParecer(): string {
+    if (modal.imageOnly) return modal.parecerBody || ''
     return papel === 'colaborador'
       ? 'Favor rever: ' + modal.parecerBody
       : modal.parecerBody
@@ -384,24 +389,44 @@ export default function ObservacoesClient() {
     const fd = new FormData()
     fd.append('file', modal.imagemFile)
     const res = await fetch('/api/observacoes/upload', { method: 'POST', body: fd })
-    if (!res.ok) return null
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error ?? 'Falha ao fazer upload da imagem')
+    }
     const { url } = await res.json()
     return url as string
   }
 
   async function handleSave() {
-    if (!modal.motivo.trim() || !modal.parecerBody.trim()) return
+    const motivo = modal.motivo.trim()
+    if (modal.imageOnly) {
+      if (!motivo || (!modal.imagemFile && !modal.imagemUrl)) return
+    } else {
+      if (!motivo || !modal.parecerBody.trim()) return
+    }
 
     if (modal.mode === 'edit') {
-      setModal(m => ({ ...m, saving: true }))
-      const imagemUrl = await uploadImageIfNeeded()
+      setModal(m => ({ ...m, saving: true, uploadError: '' }))
+      let imagemUrl: string | null
+      try {
+        imagemUrl = await uploadImageIfNeeded()
+      } catch (e) {
+        setModal(m => ({ ...m, saving: false, uploadError: e instanceof Error ? e.message : 'Erro no upload' }))
+        return
+      }
       setModal(m => ({ ...m, saving: false }))
-      setConfirm({ open: true, type: 'edit', id: modal.editingId!, motivo: modal.motivo.trim(), parecer: buildParecer(), imagemUrl })
+      setConfirm({ open: true, type: 'edit', id: modal.editingId!, motivo, parecer: buildParecer(), imagemUrl })
       return
     }
 
-    setModal(m => ({ ...m, saving: true }))
-    const imagemUrl = await uploadImageIfNeeded()
+    setModal(m => ({ ...m, saving: true, uploadError: '' }))
+    let imagemUrl: string | null
+    try {
+      imagemUrl = await uploadImageIfNeeded()
+    } catch (e) {
+      setModal(m => ({ ...m, saving: false, uploadError: e instanceof Error ? e.message : 'Erro no upload' }))
+      return
+    }
     const res = await fetch('/api/observacoes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -409,7 +434,7 @@ export default function ObservacoesClient() {
         categoria: activeCatKey,
         subtab: modal.subtabKey,
         coluna: modal.coluna,
-        motivo: modal.motivo.trim(),
+        motivo,
         parecer: buildParecer(),
         imagem_url: imagemUrl,
       }),
@@ -496,7 +521,7 @@ export default function ObservacoesClient() {
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  Imagem (opcional)
+                  {modal.imageOnly ? 'Imagem' : 'Imagem (opcional)'}
                 </label>
                 <ObsImageModal
                   preview={modal.imagemPreview}
@@ -507,13 +532,13 @@ export default function ObservacoesClient() {
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  Tag / Motivo
+                  {modal.imageOnly ? 'Título' : 'Tag / Motivo'}
                 </label>
                 <input
                   type="text"
                   value={modal.motivo}
                   onChange={e => setModal(m => ({ ...m, motivo: e.target.value }))}
-                  placeholder="Ex: Outro coordenador"
+                  placeholder={modal.imageOnly ? 'Ex: NR 20 — Critérios para Capacitação' : 'Ex: Outro coordenador'}
                   autoFocus
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
@@ -523,53 +548,58 @@ export default function ObservacoesClient() {
                 />
               </div>
 
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  Observação
-                </label>
-                {papel === 'colaborador' ? (
-                  <div style={{
-                    border: `1.5px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden',
-                    background: '#fff',
-                  }}>
+              {!modal.imageOnly && (
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                    Observação
+                  </label>
+                  {papel === 'colaborador' ? (
                     <div style={{
-                      padding: '8px 12px 4px', fontSize: 12, fontWeight: 700,
-                      color: PRIMARY, background: PRIMARY_LIGHT, borderBottom: `1px solid ${BORDER}`,
+                      border: `1.5px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden',
+                      background: '#fff',
                     }}>
-                      Favor rever:
+                      <div style={{
+                        padding: '8px 12px 4px', fontSize: 12, fontWeight: 700,
+                        color: PRIMARY, background: PRIMARY_LIGHT, borderBottom: `1px solid ${BORDER}`,
+                      }}>
+                        Favor rever:
+                      </div>
+                      <textarea
+                        value={modal.parecerBody}
+                        onChange={e => setModal(m => ({ ...m, parecerBody: e.target.value }))}
+                        placeholder="Continue aqui…"
+                        rows={4}
+                        style={{
+                          width: '100%', padding: '8px 12px', border: 'none', outline: 'none',
+                          fontSize: 13, resize: 'vertical', fontFamily: 'inherit', color: INK,
+                          boxSizing: 'border-box',
+                        }}
+                      />
                     </div>
+                  ) : (
                     <textarea
                       value={modal.parecerBody}
                       onChange={e => setModal(m => ({ ...m, parecerBody: e.target.value }))}
-                      placeholder="Continue aqui…"
+                      placeholder="Texto da observação…"
                       rows={4}
                       style={{
-                        width: '100%', padding: '8px 12px', border: 'none', outline: 'none',
-                        fontSize: 13, resize: 'vertical', fontFamily: 'inherit', color: INK,
-                        boxSizing: 'border-box',
+                        width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                        border: `1.5px solid ${BORDER}`, outline: 'none', resize: 'vertical',
+                        fontFamily: 'inherit', color: INK, boxSizing: 'border-box',
                       }}
                     />
-                  </div>
-                ) : (
-                  <textarea
-                    value={modal.parecerBody}
-                    onChange={e => setModal(m => ({ ...m, parecerBody: e.target.value }))}
-                    placeholder="Texto da observação…"
-                    rows={4}
-                    style={{
-                      width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
-                      border: `1.5px solid ${BORDER}`, outline: 'none', resize: 'vertical',
-                      fontFamily: 'inherit', color: INK, boxSizing: 'border-box',
-                    }}
-                  />
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{
               padding: '12px 20px', borderTop: `1px solid ${BORDER}`,
-              display: 'flex', justifyContent: 'flex-end', gap: 8,
+              display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', alignItems: 'center',
             }}>
+              {modal.uploadError && (
+                <span style={{ flex: 1, fontSize: 12, color: '#DC2626' }}>⚠ {modal.uploadError}</span>
+              )}
               <button
                 onClick={closeModal}
                 style={{
@@ -581,12 +611,18 @@ export default function ObservacoesClient() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={modal.saving || !modal.motivo.trim() || !modal.parecerBody.trim()}
+                disabled={modal.saving || (modal.imageOnly
+                  ? (!modal.motivo.trim() || (!modal.imagemFile && !modal.imagemUrl))
+                  : (!modal.motivo.trim() || !modal.parecerBody.trim())
+                )}
                 style={{
                   padding: '8px 20px', borderRadius: 8, border: 'none',
                   background: modal.saving ? MUTED : PRIMARY, color: '#fff',
                   fontSize: 13, cursor: modal.saving ? 'not-allowed' : 'pointer', fontWeight: 700,
-                  opacity: (!modal.motivo.trim() || !modal.parecerBody.trim()) ? 0.5 : 1,
+                  opacity: (modal.imageOnly
+                    ? (!modal.motivo.trim() || (!modal.imagemFile && !modal.imagemUrl))
+                    : (!modal.motivo.trim() || !modal.parecerBody.trim())
+                  ) ? 0.5 : 1,
                 }}
               >
                 {modal.saving ? 'Salvando…' : 'Salvar'}

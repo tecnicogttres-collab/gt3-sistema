@@ -48,8 +48,11 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const { categoria, subtab, coluna, motivo, parecer, group_name, imagem_url, status_edicao } = body
-  if (!categoria || !subtab || !coluna || !motivo?.trim() || !parecer?.trim()) {
+  if (!categoria || !subtab || !coluna || !motivo?.trim()) {
     return Response.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
+  }
+  if (!imagem_url && !parecer?.trim()) {
+    return Response.json({ error: 'Observação ou imagem obrigatórios' }, { status: 400 })
   }
 
   const admin = createAdminClient()

@@ -25,8 +25,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const body = await req.json()
   const { motivo, parecer, imagem_url } = body
-  if (!motivo?.trim() || !parecer?.trim()) {
-    return Response.json({ error: 'motivo e parecer obrigatórios' }, { status: 400 })
+  if (!motivo?.trim()) {
+    return Response.json({ error: 'motivo obrigatório' }, { status: 400 })
+  }
+  if (!imagem_url && !parecer?.trim()) {
+    return Response.json({ error: 'parecer ou imagem obrigatório' }, { status: 400 })
   }
 
   const admin = createAdminClient()
