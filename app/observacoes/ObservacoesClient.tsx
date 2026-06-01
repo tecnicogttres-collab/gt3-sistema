@@ -7,6 +7,11 @@ import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
 import { ObsImageModal } from './ObsImageModal'
 
+// Títulos de colunas que são repositório de imagem (derivado dos dados estáticos de todas as categorias)
+const IMAGE_ONLY_TITLES = new Set(
+  CATEGORIES.flatMap(cat => cat.subtabs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => c.title)))
+)
+
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
 const ACCENT = '#D1AE6E'
@@ -200,13 +205,10 @@ export default function ObservacoesClient() {
   const allSubtabs = useMemo(() => {
     const staticSubs = activeCategory?.subtabs ?? []
     const staticKeys = new Set(staticSubs.map(s => s.key))
-    const imageOnlyTitles = new Set(
-      staticSubs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => c.title))
-    )
     const dynSubs = dbSubtabs
       .filter(ds => !staticKeys.has(ds.subtab))
       .map(ds => {
-        const imageOnly = imageOnlyTitles.has(ds.subtab)
+        const imageOnly = IMAGE_ONLY_TITLES.has(ds.subtab)
         return { key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly }] }
       })
     return [...staticSubs, ...dynSubs]
@@ -309,7 +311,8 @@ export default function ObservacoesClient() {
   const handleAdd = useCallback((coluna: string, subtabKey: string) => {
     const sub = allSubtabs.find(s => s.key === subtabKey)
     const col = sub?.columns.find(c => c.title === coluna)
-    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly: col?.imageOnly ?? false })
+    const imageOnly = col?.imageOnly ?? IMAGE_ONLY_TITLES.has(coluna) ?? false
+    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly })
   }, [allSubtabs])
 
   const handleEditOpen = useCallback((id: string, motivo: string, parecer: string, coluna: string, subtabKey: string, imagemUrl: string) => {
