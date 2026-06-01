@@ -496,43 +496,47 @@ export default function ControleRevisaoClient() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', flex: '0 0 auto' }}>📋 Revisões e inconsistências</span>
-              </div>
+              <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                {/* Esquerda: escala diária */}
+                <div style={{ flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
+                    📅 Escala diária do mês
+                  </div>
+                  <RevisaoEquipe
+                    people={people}
+                    newPersonInput={newPersonInput}
+                    onInputChange={setNewPersonInput}
+                    onAddPerson={handleAddPerson}
+                    onRemovePerson={handleRemovePerson}
+                  />
+                  <ScheduleTable sheet={current} people={people} readOnly={false} onPersonChange={handlePersonChange} />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button onClick={() => setHolidayModal('mark')} style={btnSecondary}>⭐ Marcar feriado</button>
+                    <button onClick={() => setHolidayModal('unmark')} style={btnSecondary}>↺ Desmarcar feriado</button>
+                    <button onClick={handleReset} style={btnDanger}>🗑 Limpar mês</button>
+                    <button onClick={handleFinalize} style={btnPrimary}>✓ Finalizar e arquivar</button>
+                  </div>
+                </div>
 
-              <RevisaoTable
-                filteredRevisions={filteredRevisions}
-                search={search}
-                people={people}
-                suggestions={suggestions}
-                onSearchChange={setSearch}
-                onAddRevision={handleAddRevision}
-                onUpdateRevision={handleUpdateRevision}
-                onDeleteRevision={handleDeleteRevision}
-                onExportRevCSV={() => exportRevisionsCSV(current)}
-                onExportSchedCSV={() => exportScheduleCSV(current)}
-                onExportJSON={exportJSON}
-              />
-
-              <div style={{ fontSize: 12, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
-                📅 Escala diária do mês
-              </div>
-
-              <RevisaoEquipe
-                people={people}
-                newPersonInput={newPersonInput}
-                onInputChange={setNewPersonInput}
-                onAddPerson={handleAddPerson}
-                onRemovePerson={handleRemovePerson}
-              />
-
-              <ScheduleTable sheet={current} people={people} readOnly={false} onPersonChange={handlePersonChange} />
-
-              <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button onClick={() => setHolidayModal('mark')} style={btnSecondary}>⭐ Marcar feriado</button>
-                <button onClick={() => setHolidayModal('unmark')} style={btnSecondary}>↺ Desmarcar feriado</button>
-                <button onClick={handleReset} style={btnDanger}>🗑 Limpar mês</button>
-                <button onClick={handleFinalize} style={{ ...btnPrimary, marginLeft: 'auto' }}>✓ Finalizar e arquivar</button>
+                {/* Direita: revisões e inconsistências */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
+                    📋 Revisões e inconsistências
+                  </div>
+                  <RevisaoTable
+                    filteredRevisions={filteredRevisions}
+                    search={search}
+                    people={people}
+                    suggestions={suggestions}
+                    onSearchChange={setSearch}
+                    onAddRevision={handleAddRevision}
+                    onUpdateRevision={handleUpdateRevision}
+                    onDeleteRevision={handleDeleteRevision}
+                    onExportRevCSV={() => exportRevisionsCSV(current)}
+                    onExportSchedCSV={() => exportScheduleCSV(current)}
+                    onExportJSON={exportJSON}
+                  />
+                </div>
               </div>
             </>
           )}
