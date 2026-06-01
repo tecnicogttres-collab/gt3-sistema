@@ -217,8 +217,11 @@ export default function ObservacoesClient() {
   const allSubtabs = useMemo(() => {
     const staticSubs = activeCategory?.subtabs ?? []
     const staticKeys = new Set(staticSubs.map(s => s.key))
+    // Também filtra subtabs dinâmicos cujo nome coincide com o título de uma coluna estática
+    // (evita duplicatas como "Informações NR" quando já existe como coluna em "Referências NR")
+    const staticColTitles = new Set(staticSubs.flatMap(s => s.columns.map(c => _ascii(c.title))))
     const dynSubs = dbSubtabs
-      .filter(ds => !staticKeys.has(ds.subtab))
+      .filter(ds => !staticKeys.has(ds.subtab) && !staticColTitles.has(_ascii(ds.subtab)))
       .map(ds => {
         const imageOnly = isImageOnlyColuna(ds.subtab)
         return { key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly }] }
