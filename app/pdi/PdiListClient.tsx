@@ -34,6 +34,15 @@ type EditModalState = {
 
 const today = new Date().toISOString().split('T')[0]
 
+const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+function formatCicloPeriodo(dataInicio: string, dataFim: string | null): string {
+  const ini = new Date(dataInicio + 'T12:00:00')
+  const iniStr = `${MONTHS_PT[ini.getMonth()]}/${String(ini.getFullYear()).slice(-2)}`
+  if (!dataFim) return `${iniStr} - em aberto`
+  const fim = new Date(dataFim + 'T12:00:00')
+  return `${iniStr} - ${MONTHS_PT[fim.getMonth()]}/${String(fim.getFullYear()).slice(-2)}`
+}
+
 const MODAL_INIT: ModalState = {
   open: false, colaborador_id: '', nome: '', funcao: '',
   data_inicio: today, observacao: '', saving: false, error: '',
@@ -176,7 +185,7 @@ function StaticPdiCard({ pdi }: { pdi: PdiColaborador }) {
   )
 }
 
-type CicloScores = { avaliacao_diretiva: number[]; autoavaliacao: number[]; ambicao: number[]; status: string }
+type CicloScores = { avaliacao_diretiva: number[]; autoavaliacao: number[]; ambicao: number[]; status: string; data_inicio: string | null; data_fim: string | null }
 type CardExtra = { eneagrama: DbPdi['eneagrama']; animais: DbPdi['animais']; conclusoes: DbPdi['conclusoes'] }
 
 function DbPdiCard({ pdi, initialScores, isGestorAdmin, onEdit, onArchive, onDelete }: {
@@ -224,7 +233,9 @@ function DbPdiCard({ pdi, initialScores, isGestorAdmin, onEdit, onArchive, onDel
   } : null
 
   const topAnimal = [...(extra.animais ?? [])].sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0] ?? null
-  const periodo = pdi.data_inicio ? new Date(pdi.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR') : null
+  const periodo = scores?.data_inicio
+    ? formatCicloPeriodo(scores.data_inicio, scores.data_fim ?? null)
+    : null
 
   const actions = isGestorAdmin ? (
     <div style={{ padding: '10px 18px 14px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 6, justifyContent: confirmDelete ? 'space-between' : 'flex-end' }}>
@@ -268,6 +279,8 @@ function DbPdiCard({ pdi, initialScores, isGestorAdmin, onEdit, onArchive, onDel
 
 type CicloAgregado = {
   numero: number
+  data_inicio: string | null
+  data_fim: string | null
   competencias: string[]
   pessoas: { nome: string; diretiva: number[]; auto: number[]; ambicao: number[] }[]
 }
@@ -301,7 +314,9 @@ function CicloAgregadoCard({ ciclo }: { ciclo: CicloAgregado }) {
         }}
       >
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#1E293B' }}>Ciclo {ciclo.numero}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#1E293B' }}>
+            {ciclo.data_inicio ? formatCicloPeriodo(ciclo.data_inicio, ciclo.data_fim) : `Ciclo ${ciclo.numero}`}
+          </div>
           <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>
             {ciclo.pessoas.length} colaboradores · {ciclo.competencias.length} competências
           </div>

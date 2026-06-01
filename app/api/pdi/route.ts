@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
   await admin.from('profiles').update({ pdi_slug: pdiId }).eq('id', colaborador_id)
 
   // 3. Create ciclo 1
+  const _now = new Date()
+  const _dataInicio = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-01`
   await admin.from('pdi_ciclos').insert({
     pdi_id: pdiId,
     colaborador_id,
@@ -62,6 +64,8 @@ export async function POST(req: NextRequest) {
     ambicao: [],
     autoavaliacao_salva: false,
     criado_por: user.id,
+    data_inicio: _dataInicio,
+    data_fim: null,
   })
 
   // 4. Create notification for collaborator

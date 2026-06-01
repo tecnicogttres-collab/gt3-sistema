@@ -24,6 +24,8 @@ export type DbCicloScore = {
   avaliacao_diretiva: number[]
   autoavaliacao: number[]
   ambicao: number[]
+  data_inicio: string | null
+  data_fim: string | null
 }
 
 export default async function PdiPage() {
@@ -61,7 +63,7 @@ export default async function PdiPage() {
       .order('created_at', { ascending: true }),
     admin
       .from('pdi_ciclos')
-      .select('pdi_id, status, avaliacao_diretiva, autoavaliacao, ambicao')
+      .select('pdi_id, status, avaliacao_diretiva, autoavaliacao, ambicao, data_inicio, data_fim')
       .order('numero_ciclo', { ascending: false }),
   ])
 

@@ -28,7 +28,7 @@ export async function GET() {
   // Ciclos com dados de avaliação
   const { data: ciclos, error } = await admin
     .from('pdi_ciclos')
-    .select('pdi_id, numero_ciclo, avaliacao_diretiva, autoavaliacao, ambicao')
+    .select('pdi_id, numero_ciclo, avaliacao_diretiva, autoavaliacao, ambicao, data_inicio, data_fim')
     .order('numero_ciclo', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
@@ -45,8 +45,9 @@ export async function GET() {
     { nome: p.nome as string, competencias: (p.competencias as string[] | null) ?? [] },
   ]))
 
-  // Agrupa por numero_ciclo
+  // Agrupa por numero_ciclo; registra data_inicio/data_fim do primeiro ciclo do grupo
   const grouped = new Map<number, { nome: string; diretiva: number[]; auto: number[]; ambicao: number[] }[]>()
+  const groupMeta = new Map<number, { data_inicio: string | null; data_fim: string | null }>()
   let competencias: string[] = []
 
   for (const c of ciclos ?? []) {
@@ -65,11 +66,20 @@ export async function GET() {
     const pessoas = grouped.get(c.numero_ciclo) ?? []
     pessoas.push({ nome: shortenName(info.nome), diretiva: dir, auto, ambicao: amb })
     grouped.set(c.numero_ciclo, pessoas)
+
+    if (!groupMeta.has(c.numero_ciclo)) {
+      groupMeta.set(c.numero_ciclo, {
+        data_inicio: (c.data_inicio as string | null) ?? null,
+        data_fim: (c.data_fim as string | null) ?? null,
+      })
+    }
   }
 
   const result = Array.from(grouped.entries())
     .map(([numero, pessoas]) => ({
       numero,
+      data_inicio: groupMeta.get(numero)?.data_inicio ?? null,
+      data_fim: groupMeta.get(numero)?.data_fim ?? null,
       competencias,
       pessoas: pessoas.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
     }))

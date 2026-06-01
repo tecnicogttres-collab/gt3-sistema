@@ -8,9 +8,20 @@ type AgendaItem = {
   pdi_id: string
   colaborador_id: string | null
   numero_ciclo: number
+  data_inicio: string
+  data_fim: string | null
   data_conversa: string
   conversa_confirmada_em: string | null
   colaborador_nome: string
+}
+
+const MONTHS_PT_AG = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+function formatCicloPeriodo(dataInicio: string, dataFim: string | null): string {
+  const ini = new Date(dataInicio + 'T12:00:00')
+  const iniStr = `${MONTHS_PT_AG[ini.getMonth()]}/${String(ini.getFullYear()).slice(-2)}`
+  if (!dataFim) return `${iniStr} - em aberto`
+  const fim = new Date(dataFim + 'T12:00:00')
+  return `${iniStr} - ${MONTHS_PT_AG[fim.getMonth()]}/${String(fim.getFullYear()).slice(-2)}`
 }
 
 type Props = { open: boolean; onClose: () => void; onCountChange: (n: number) => void }
@@ -122,7 +133,9 @@ export default function PdiAgendaDrawer({ open, onClose, onCountChange }: Props)
             <div style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {item.colaborador_nome}
             </div>
-            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>Ciclo {item.numero_ciclo}</div>
+            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>
+              {item.data_inicio ? formatCicloPeriodo(item.data_inicio, item.data_fim) : `Ciclo ${item.numero_ciclo}`}
+            </div>
             <div style={{ fontSize: 12, color: '#475569', marginTop: 3 }}>{fmtConversa(item.data_conversa)}</div>
           </div>
           <span style={{

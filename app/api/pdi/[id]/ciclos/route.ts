@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('pdi_ciclos')
-    .select('id, pdi_id, colaborador_id, numero_ciclo, status, avaliacao_diretiva, autoavaliacao, ambicao, autoavaliacao_salva, data_conversa, conversa_confirmada_em, arquivado_em, criado_em')
+    .select('id, pdi_id, colaborador_id, numero_ciclo, status, avaliacao_diretiva, autoavaliacao, ambicao, autoavaliacao_salva, data_conversa, conversa_confirmada_em, arquivado_em, criado_em, data_inicio, data_fim')
     .eq('pdi_id', id)
     .order('numero_ciclo', { ascending: false })
 
@@ -80,6 +80,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     ? (body.ambicao ?? [])
     : (ciclo1?.data?.ambicao ?? existing?.[0]?.ambicao ?? [])
 
+  const now = new Date()
+  const dataInicio = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
   const { data: novo, error } = await admin
     .from('pdi_ciclos')
     .insert({
@@ -92,6 +95,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       ambicao: ambicaoBase,
       autoavaliacao_salva: isFirst ? (body.autoavaliacao_salva ?? false) : false,
       criado_por: user.id,
+      data_inicio: dataInicio,
+      data_fim: null,
     })
     .select()
     .single()

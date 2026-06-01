@@ -21,6 +21,18 @@ type Ciclo = {
   conversa_confirmada_em: string | null
   criado_em: string
   arquivado_em: string | null
+  data_inicio: string | null
+  data_fim: string | null
+}
+
+const MONTHS_PT_DT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+function formatCicloPeriodo(dataInicio: string | null, dataFim: string | null): string {
+  if (!dataInicio) return '—'
+  const ini = new Date(dataInicio + 'T12:00:00')
+  const iniStr = `${MONTHS_PT_DT[ini.getMonth()]}/${String(ini.getFullYear()).slice(-2)}`
+  if (!dataFim) return `${iniStr} - em aberto`
+  const fim = new Date(dataFim + 'T12:00:00')
+  return `${iniStr} - ${MONTHS_PT_DT[fim.getMonth()]}/${String(fim.getFullYear()).slice(-2)}`
 }
 
 const TABS: { id: Tab; label: string }[] = [
@@ -633,7 +645,7 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
       >
         <span style={{ fontSize: 11 }}>{open ? '▼' : '▶'}</span>
         <span style={{ fontWeight: 700, fontSize: 14, color: '#1E293B', flex: 1 }}>
-          Ciclo {ciclo.numero_ciclo} {arquivadoLabel && <span style={{ fontSize: 11, fontWeight: 400, color: '#94A3B8' }}>— {arquivadoLabel}</span>}
+          {formatCicloPeriodo(ciclo.data_inicio, ciclo.data_fim)} {arquivadoLabel && <span style={{ fontSize: 11, fontWeight: 400, color: '#94A3B8' }}>— {arquivadoLabel}</span>}
         </span>
         {statusBadge}
         {isGestorAdmin && (
@@ -815,7 +827,7 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: '28px 30px', maxWidth: 360, textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>🗑</div>
-            <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Excluir Ciclo {ciclo.numero_ciclo}?</h3>
+            <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Excluir {formatCicloPeriodo(ciclo.data_inicio, ciclo.data_fim)}?</h3>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>Todos os dados deste ciclo serão removidos permanentemente.</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button onClick={() => setConfirmDelete(false)} style={{ padding: '8px 20px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
@@ -931,7 +943,7 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
             <div style={{ fontSize: 36, marginBottom: 12 }}>🔄</div>
             <h3 style={{ margin: '0 0 10px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Iniciar novo ciclo?</h3>
             <p style={{ margin: '0 0 24px', fontSize: 13, color: '#6B7A99', lineHeight: 1.6 }}>
-              O ciclo atual será arquivado. A autoavaliação ficará em branco para novo preenchimento. A ambição permanece igual ao Ciclo 1.
+              O ciclo atual será arquivado. A autoavaliação ficará em branco para novo preenchimento. A ambição permanece igual ao ciclo inicial.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button onClick={() => setShowNovoCicloModal(false)} style={{ padding: '9px 22px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>

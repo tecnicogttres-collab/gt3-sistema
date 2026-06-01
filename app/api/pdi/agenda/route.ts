@@ -7,6 +7,8 @@ export type AgendaItem = {
   pdi_id: string
   colaborador_id: string | null
   numero_ciclo: number
+  data_inicio: string
+  data_fim: string | null
   data_conversa: string
   conversa_confirmada_em: string | null
   colaborador_nome: string
@@ -25,7 +27,7 @@ export async function GET(_req: NextRequest) {
 
   const { data, error } = await admin
     .from('pdi_ciclos')
-    .select('id, pdi_id, colaborador_id, numero_ciclo, data_conversa, conversa_confirmada_em')
+    .select('id, pdi_id, colaborador_id, numero_ciclo, data_inicio, data_fim, data_conversa, conversa_confirmada_em')
     .not('data_conversa', 'is', null)
     .order('data_conversa', { ascending: true })
 
@@ -33,7 +35,8 @@ export async function GET(_req: NextRequest) {
 
   const ciclos = (data ?? []) as Array<{
     id: string; pdi_id: string; colaborador_id: string | null
-    numero_ciclo: number; data_conversa: string; conversa_confirmada_em: string | null
+    numero_ciclo: number; data_inicio: string; data_fim: string | null
+    data_conversa: string; conversa_confirmada_em: string | null
   }>
 
   // Batch fetch collaborator names
@@ -49,6 +52,8 @@ export async function GET(_req: NextRequest) {
     pdi_id: c.pdi_id,
     colaborador_id: c.colaborador_id,
     numero_ciclo: c.numero_ciclo,
+    data_inicio: c.data_inicio,
+    data_fim: c.data_fim,
     data_conversa: c.data_conversa,
     conversa_confirmada_em: c.conversa_confirmada_em,
     colaborador_nome: c.colaborador_id ? (profilesMap[c.colaborador_id] ?? 'Colaborador') : 'Colaborador',
