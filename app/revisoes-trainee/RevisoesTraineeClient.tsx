@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useUser } from '../components/UserContext'
+import { createClient } from '../lib/supabase'
 
 type Status = 'pending' | 'red' | 'yellow' | 'green'
 type AutoAval = 'aprovado' | 'pendente' | 'reprovado' | null
@@ -143,6 +144,18 @@ export default function RevisoesTraineeClient() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => { return () => { clearTimeout(toastTimerRef.current) } }, [])
 
+  // Empresa copy feedback
+  const [copiedEmpresaId, setCopiedEmpresaId] = useState<string | null>(null)
+  const copiedEmpresaTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => { return () => { clearTimeout(copiedEmpresaTimer.current) } }, [])
+
+  // Relatório
+  type ReportFilters = { startDate: string; endDate: string; traineeId: string; status: '' | Status }
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportResult, setReportResult] = useState<Registro[] | null>(null)
+  const [reportFilters, setReportFilters] = useState<ReportFilters>({ startDate: '', endDate: '', traineeId: '', status: '' })
+
   const isTrainee = profile?.papel === 'trainee'
   activeTraineeIdRef.current = activeTraineeId
 
@@ -177,6 +190,17 @@ export default function RevisoesTraineeClient() {
   useEffect(() => {
     if (editCell && editRef.current) editRef.current.focus()
   }, [editCell])
+
+  // Realtime — atualiza automaticamente em INSERT/UPDATE sem precisar do botão Atualizar
+  useEffect(() => {
+    const supabase = createClient()
+    const channel = supabase
+      .channel('revisoes-trainee-rt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'revisoes_trainee' }, () => void fetchData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'revisoes_trainee' }, () => void fetchData())
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [fetchData])
 
   const activeDate = data?.activeDate ?? null
   const isFinalized = data?.activeDateRow?.finalizado ?? false
@@ -304,24 +328,39 @@ export default function RevisoesTraineeClient() {
     await fetchData()
   }
 
+  // ── Optimistic status helper ────────────────────────────────────
+  function applyOptimisticStatus(id: string, patch: Partial<Registro>) {
+    setData(prev => prev ? { ...prev, records: prev.records.map(r => r.id === id ? { ...r, ...patch } : r) } : prev)
+  }
+
   // ── Approve ────────────────────────────────────────────────────
   async function handleApprove(id: string) {
-    await fetch(`/api/revisoes/${id}`, {
+    const prev = data!.records.find(r => r.id === id)
+    applyOptimisticStatus(id, { status: 'green', nota_revisor: null })
+    const res = await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'green', nota_revisor: null }),
     })
-    await fetchData()
+    if (!res.ok) {
+      if (prev) applyOptimisticStatus(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+      showToast('Erro ao aprovar. Tente novamente.')
+    }
   }
 
   // ── Clear flag ─────────────────────────────────────────────────
   async function handleClear(id: string) {
-    await fetch(`/api/revisoes/${id}`, {
+    const prev = data!.records.find(r => r.id === id)
+    applyOptimisticStatus(id, { status: 'pending', nota_revisor: null })
+    const res = await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'pending', nota_revisor: null }),
     })
-    await fetchData()
+    if (!res.ok) {
+      if (prev) applyOptimisticStatus(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+      showToast('Erro ao limpar flag. Tente novamente.')
+    }
   }
 
   // ── Flag modal ─────────────────────────────────────────────────
@@ -334,14 +373,21 @@ export default function RevisoesTraineeClient() {
   async function submitFlag() {
     if (!flagModal) return
     if (!flagNote.trim()) { alert('Descreva o motivo da sinalização.'); return }
-    setFlagLoading(true)
-    await fetch(`/api/revisoes/${flagModal.id}`, {
+    const { id, status } = flagModal
+    const nota = flagNote
+    const prev = data!.records.find(r => r.id === id)
+    // Optimistic — fecha modal imediatamente
+    applyOptimisticStatus(id, { status: status as Status, nota_revisor: nota })
+    setFlagModal(null); setFlagNote('')
+    const res = await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: flagModal.status, nota_revisor: flagNote }),
+      body: JSON.stringify({ status, nota_revisor: nota }),
     })
-    await fetchData()
-    setFlagModal(null); setFlagNote(''); setFlagLoading(false)
+    if (!res.ok) {
+      if (prev) applyOptimisticStatus(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+      showToast('Erro ao sinalizar. Tente novamente.')
+    }
   }
 
   // ── Cycle auto_avaliacao no row do trainee ─────────────────────
@@ -444,10 +490,86 @@ export default function RevisoesTraineeClient() {
     URL.revokeObjectURL(url)
   }
 
+  // ── Relatório ──────────────────────────────────────────────────
+  async function generateReport() {
+    setReportLoading(true)
+    const allDates = data?.historyDates ?? []
+    const filteredDates = allDates.filter(hd => {
+      if (reportFilters.startDate && hd.data < reportFilters.startDate) return false
+      if (reportFilters.endDate && hd.data > reportFilters.endDate) return false
+      return true
+    })
+    const combined: Record<string, Registro[]> = { ...historyRecords }
+    const toFetch = filteredDates.filter(hd => !combined[hd.data])
+    await Promise.all(toFetch.map(async hd => {
+      const res = await fetch(`/api/revisoes?date=${hd.data}`)
+      if (res.ok) combined[hd.data] = await res.json()
+    }))
+    if (toFetch.length > 0) setHistoryRecords(combined)
+    let recs = filteredDates.flatMap(hd => combined[hd.data] ?? [])
+    if (reportFilters.traineeId) recs = recs.filter(r => r.criado_por === reportFilters.traineeId)
+    if (reportFilters.status) recs = recs.filter(r => r.status === reportFilters.status)
+    setReportResult(recs)
+    setReportLoading(false)
+  }
+
+  function exportReportCSV() {
+    if (!reportResult) return
+    const rows = [['Data', 'Trainee', 'Empresa', 'Colaborador', 'Documento', 'Observações', 'Auto-aval', 'Status', 'Nota revisor', 'Revisor']]
+    reportResult.forEach(r => rows.push([
+      r.data_dia, r.criado_por_profile?.nome ?? '', r.empresa, r.colaborador ?? '', r.documento,
+      r.observacoes ?? '', r.auto_avaliacao ?? '', STATUS_LABEL[r.status], r.nota_revisor ?? '',
+      r.revisado_por_profile?.nome ?? '',
+    ]))
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `gt3_relatorio_${reportFilters.startDate || 'completo'}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function printReport() {
+    if (!reportResult) return
+    const win = window.open('', '_blank')
+    if (!win) return
+    const STATUS_COLOR: Record<Status, string> = { green: '#D1FAE5', red: '#FEE2E2', yellow: '#FEF3C7', pending: '#F1F5F9' }
+    const STATUS_TEXT: Record<Status, string> = { green: '#065F46', red: '#991B1B', yellow: '#92400E', pending: '#6B7A99' }
+    const rows = reportResult.map(r => `<tr style="border-bottom:1px solid #eee;background:${STATUS_COLOR[r.status]}">
+      <td style="padding:5px 8px;font-size:11px;">${r.data_dia}</td>
+      <td style="padding:5px 8px;font-size:11px;">${r.criado_por_profile?.nome ?? '—'}</td>
+      <td style="padding:5px 8px;font-size:11px;">${r.empresa}</td>
+      <td style="padding:5px 8px;font-size:11px;">${r.colaborador ?? '—'}</td>
+      <td style="padding:5px 8px;font-size:11px;">${r.documento}</td>
+      <td style="padding:5px 8px;font-size:11px;color:${STATUS_TEXT[r.status]};font-weight:600;">${STATUS_LABEL[r.status]}</td>
+      <td style="padding:5px 8px;font-size:11px;">${r.revisado_por_profile?.nome ?? '—'}</td>
+    </tr>`).join('')
+    const totals = (reportResult ?? []).reduce((acc, r) => { acc[r.status] = (acc[r.status] ?? 0) + 1; return acc }, {} as Record<string, number>)
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório GT3</title>
+    <style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse}
+    th{background:#f0f4fa;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+    .totals{display:flex;gap:16px;margin:12px 0;font-size:13px}
+    @media print{.no-print{display:none}}</style></head><body>
+    <h2 style="margin:0 0 4px;font-size:18px">Relatório de Revisões Trainee</h2>
+    <p style="margin:0 0 12px;font-size:12px;color:#6B7A99">${reportResult.length} registros · gerado em ${new Date().toLocaleString('pt-BR')}</p>
+    <div class="totals">
+      <span>✅ Aprovados: <b>${totals.green ?? 0}</b></span>
+      <span>❌ Erros: <b>${totals.red ?? 0}</b></span>
+      <span>⚠️ A discutir: <b>${totals.yellow ?? 0}</b></span>
+      <span>⏳ Pendentes: <b>${totals.pending ?? 0}</b></span>
+    </div>
+    <button class="no-print" onclick="window.print()" style="margin-bottom:12px;padding:6px 14px;background:#2A4F96;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir</button>
+    <table><thead><tr>
+      <th>Data</th><th>Trainee</th><th>Empresa</th><th>Colaborador</th><th>Documento</th><th>Status</th><th>Revisor</th>
+    </tr></thead><tbody>${rows}</tbody></table></body></html>`)
+    win.document.close()
+  }
+
   // ── Cell renderer ──────────────────────────────────────────────
   function renderCell(rec: Registro, field: 'empresa' | 'colaborador' | 'documento') {
     const canEdit = isTrainee && rec.criado_por === data!.currentUserId && !!activeDate && !isFinalized
     const isEditing = editCell?.id === rec.id && editCell.field === field
+    const isCopied = field === 'empresa' && copiedEmpresaId === rec.id
 
     if (canEdit && isEditing) {
       return (
@@ -462,12 +584,29 @@ export default function RevisoesTraineeClient() {
       )
     }
 
+    function handleClick() {
+      if (canEdit) { startEdit(rec.id, field, rec[field] ?? ''); return }
+      if (field === 'empresa' && rec.empresa) {
+        navigator.clipboard.writeText(rec.empresa).catch(() => {})
+        setCopiedEmpresaId(rec.id)
+        clearTimeout(copiedEmpresaTimer.current)
+        copiedEmpresaTimer.current = setTimeout(() => setCopiedEmpresaId(null), 1000)
+      }
+    }
+
     return (
       <span
-        onClick={() => canEdit && startEdit(rec.id, field, rec[field] ?? '')}
-        style={{ cursor: canEdit ? 'text' : 'default', borderBottom: canEdit ? '1px dashed #CBD5E1' : 'none', fontSize: 13, color: '#1E293B', display: 'block', minWidth: 60, minHeight: 20, padding: '2px 0' }}
+        onClick={handleClick}
+        title={field === 'empresa' && !canEdit ? 'Clique para copiar' : undefined}
+        style={{
+          cursor: canEdit ? 'text' : field === 'empresa' ? 'pointer' : 'default',
+          borderBottom: canEdit ? '1px dashed #CBD5E1' : 'none',
+          fontSize: 13, color: isCopied ? '#16A34A' : '#1E293B',
+          display: 'block', minWidth: 60, minHeight: 20, padding: '2px 0',
+          transition: 'color 0.15s', userSelect: field === 'empresa' ? 'none' : 'auto',
+        }}
       >
-        {rec[field] || <span style={{ color: '#CBD5E1' }}>—</span>}
+        {isCopied ? '✓ Copiado!' : (rec[field] || <span style={{ color: '#CBD5E1' }}>—</span>)}
       </span>
     )
   }
@@ -512,10 +651,10 @@ export default function RevisoesTraineeClient() {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            style={{ padding: '7px 14px', background: '#fff', color: '#2A4F96', border: '1px solid #2A4F96', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: refreshing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: refreshing ? 0.7 : 1, fontFamily: 'inherit' }}
+            title="Atualizar (atualização automática ativa)"
+            style={{ padding: '6px 10px', background: 'transparent', color: '#94A3B8', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, cursor: refreshing ? 'default' : 'pointer', opacity: refreshing ? 0.5 : 1, fontFamily: 'inherit' }}
           >
             <span className={refreshing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>🔄</span>
-            Atualizar
           </button>
         </div>
       </div>
@@ -768,9 +907,19 @@ export default function RevisoesTraineeClient() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Histórico</h2>
-          <button onClick={() => setHistoryExpanded(p => !p)} style={{ background: 'none', border: 'none', color: '#6B7A99', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
-            {historyExpanded ? 'ocultar' : 'mostrar'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {!isTrainee && data.historyDates.length > 0 && (
+              <button
+                onClick={() => { setReportOpen(true); setReportResult(null) }}
+                style={{ padding: '6px 12px', background: '#fff', color: '#2A4F96', border: '1px solid #2A4F96', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                📊 Gerar Relatório
+              </button>
+            )}
+            <button onClick={() => setHistoryExpanded(p => !p)} style={{ background: 'none', border: 'none', color: '#6B7A99', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+              {historyExpanded ? 'ocultar' : 'mostrar'}
+            </button>
+          </div>
         </div>
 
         {historyExpanded && (
@@ -931,6 +1080,142 @@ export default function RevisoesTraineeClient() {
               <button onClick={handleFinalizar} disabled={finalizarLoading} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: finalizarLoading ? '#F87171' : '#DC2626', color: '#fff', fontSize: 14, fontWeight: 600, cursor: finalizarLoading ? 'not-allowed' : 'pointer' }}>
                 {finalizarLoading ? 'Finalizando...' : 'Confirmar finalização'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Relatório ─────────────────────────────────────── */}
+      {reportOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '32px 16px', overflowY: 'auto' }} onClick={e => { if (e.target === e.currentTarget) setReportOpen(false) }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: 820, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FAFAFA' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>📊 Relatório do Histórico</h2>
+                <p style={{ margin: '3px 0 0', fontSize: 12, color: '#94A3B8' }}>Filtre e exporte os registros arquivados</p>
+              </div>
+              <button onClick={() => setReportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 22, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+            </div>
+
+            {/* Filtros */}
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em' }}>De</label>
+                <input type="date" value={reportFilters.startDate} onChange={e => setReportFilters(f => ({ ...f, startDate: e.target.value }))}
+                  style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Até</label>
+                <input type="date" value={reportFilters.endDate} onChange={e => setReportFilters(f => ({ ...f, endDate: e.target.value }))}
+                  style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trainee</label>
+                <select value={reportFilters.traineeId} onChange={e => setReportFilters(f => ({ ...f, traineeId: e.target.value }))}
+                  style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', background: '#fff' }}>
+                  <option value="">Todos</option>
+                  {data.trainees.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</label>
+                <select value={reportFilters.status} onChange={e => setReportFilters(f => ({ ...f, status: e.target.value as '' | Status }))}
+                  style={{ padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', background: '#fff' }}>
+                  <option value="">Todos</option>
+                  <option value="green">Aprovado</option>
+                  <option value="pending">Pendente</option>
+                  <option value="red">Erro</option>
+                  <option value="yellow">A discutir</option>
+                </select>
+              </div>
+              <button onClick={generateReport} disabled={reportLoading}
+                style={{ padding: '8px 18px', background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: reportLoading ? 'wait' : 'pointer', opacity: reportLoading ? 0.7 : 1 }}>
+                {reportLoading ? 'Carregando…' : 'Gerar'}
+              </button>
+            </div>
+
+            {/* Resultado */}
+            <div style={{ padding: '0 24px 24px' }}>
+              {reportResult === null && !reportLoading && (
+                <div style={{ padding: '32px 0', textAlign: 'center', color: '#94A3B8', fontSize: 13, fontStyle: 'italic' }}>
+                  Defina os filtros e clique em &ldquo;Gerar&rdquo; para visualizar os registros.
+                </div>
+              )}
+
+              {reportResult && (
+                <>
+                  {/* Totais */}
+                  <div style={{ display: 'flex', gap: 10, padding: '14px 0 12px', flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Total', value: reportResult.length, color: '#1E293B' },
+                      { label: 'Aprovados', value: reportResult.filter(r => r.status === 'green').length, color: '#16A34A' },
+                      { label: 'Erros', value: reportResult.filter(r => r.status === 'red').length, color: '#DC2626' },
+                      { label: 'A discutir', value: reportResult.filter(r => r.status === 'yellow').length, color: '#D97706' },
+                      { label: 'Pendentes', value: reportResult.filter(r => r.status === 'pending').length, color: '#6B7A99' },
+                    ].map(s => (
+                      <div key={s.label} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 14px', minWidth: 80 }}>
+                        <div style={{ fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{s.label}</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</div>
+                      </div>
+                    ))}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button onClick={exportReportCSV} style={{ padding: '7px 14px', background: '#fff', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', color: '#374151' }}>
+                        ⬇ Exportar CSV
+                      </button>
+                      <button onClick={printReport} style={{ padding: '7px 14px', background: '#fff', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', color: '#374151' }}>
+                        🖨 Imprimir
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tabela */}
+                  {reportResult.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: 13, fontStyle: 'italic', background: '#F8FAFC', borderRadius: 8 }}>
+                      Nenhum registro encontrado para os filtros selecionados.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #E2E8F0', maxHeight: 420, overflowY: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                          <tr style={{ background: '#F8FAFC' }}>
+                            {['Data', 'Trainee', 'Empresa', 'Colaborador', 'Documento', 'Auto-aval', 'Status', 'Revisor'].map(h => (
+                              <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportResult.map(r => (
+                            <tr key={r.id} style={{ borderBottom: '1px solid #F8FAFC', background: rowBg(r.status) }}>
+                              <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: '#6B7A99' }}>{formatDate(r.data_dia)}</td>
+                              <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>{r.criado_por_profile?.nome ?? '—'}</td>
+                              <td style={{ padding: '7px 12px' }}>{r.empresa}</td>
+                              <td style={{ padding: '7px 12px' }}>{r.colaborador ?? '—'}</td>
+                              <td style={{ padding: '7px 12px' }}>
+                                {r.documento}
+                                {r.nota_revisor && <div style={{ fontSize: 10, color: '#6B7A99', fontStyle: 'italic', marginTop: 1 }}>"{r.nota_revisor}"</div>}
+                              </td>
+                              <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
+                                {r.auto_avaliacao ? (
+                                  <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: AUTO_AVAL_META[r.auto_avaliacao].bg, color: AUTO_AVAL_META[r.auto_avaliacao].color }}>
+                                    {AUTO_AVAL_META[r.auto_avaliacao].icon} {AUTO_AVAL_META[r.auto_avaliacao].label}
+                                  </span>
+                                ) : <span style={{ color: '#CBD5E1' }}>—</span>}
+                              </td>
+                              <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: r.status === 'green' ? '#D1FAE5' : r.status === 'red' ? '#FEE2E2' : r.status === 'yellow' ? '#FEF3C7' : '#F1F5F9', color: r.status === 'green' ? '#065F46' : r.status === 'red' ? '#991B1B' : r.status === 'yellow' ? '#92400E' : '#6B7A99' }}>
+                                  {STATUS_LABEL[r.status]}
+                                </span>
+                              </td>
+                              <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: '#6B7A99' }}>{r.revisado_por_profile?.nome ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
