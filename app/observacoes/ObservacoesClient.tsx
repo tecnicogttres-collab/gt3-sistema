@@ -36,7 +36,7 @@ type DbObservacao = {
   updated_at: string
 }
 
-function buildColumnUI(col: { title: string; isFixed?: boolean; cards: Card[] }, dbRows: DbObservacao[]): ColumnUI {
+function buildColumnUI(col: { title: string; isFixed?: boolean; imageOnly?: boolean; cards: Card[] }, dbRows: DbObservacao[]): ColumnUI {
   const colDbRows = dbRows.filter(o => o.coluna === col.title)
 
   function toCardUI(o: DbObservacao, staticFallback?: Card): CardUI {
