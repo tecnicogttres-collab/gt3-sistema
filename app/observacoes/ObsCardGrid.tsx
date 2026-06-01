@@ -64,7 +64,7 @@ function formatEditDate(iso: string | null | undefined): string {
 
 function ObsCard({
   card, id, isCopied, onCopy, search, canManage, onEdit, onDelete, isFixed,
-  onInlineSave, onValidate, canValidate, onInlineCreate,
+  onInlineSave, onValidate, canValidate, onInlineCreate, imageOnly,
 }: {
   card: CardUI
   id: string
@@ -79,11 +79,71 @@ function ObsCard({
   onValidate?: (id: string) => Promise<void>
   canValidate?: boolean
   onInlineCreate?: (motivo: string, parecer: string) => Promise<void>
+  imageOnly?: boolean
 }) {
   const [editingInline, setEditingInline] = useState(false)
   const [inlineText, setInlineText] = useState('')
   const [inlineSaving, setInlineSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [lightbox, setLightbox] = useState(false)
+
+  // ── Modo repositório de imagem ──────────────────────────────────────────────
+  if (imageOnly) {
+    return (
+      <>
+        {lightbox && card._imagem_url && (
+          <div
+            onClick={() => setLightbox(false)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 9999, cursor: 'zoom-out', padding: 24,
+            }}
+          >
+            <img
+              src={card._imagem_url}
+              alt=""
+              onClick={e => e.stopPropagation()}
+              style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, cursor: 'default' }}
+            />
+            <button
+              onClick={() => setLightbox(false)}
+              style={{
+                position: 'fixed', top: 18, right: 18, background: 'rgba(255,255,255,0.15)',
+                border: 'none', borderRadius: '50%', color: '#fff', fontSize: 18,
+                width: 36, height: 36, cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >✕</button>
+          </div>
+        )}
+        <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: `1px solid ${BORDER}`, background: '#F8FAFC' }}>
+          {card._imagem_url ? (
+            <img
+              src={card._imagem_url}
+              alt=""
+              onClick={() => setLightbox(true)}
+              style={{ width: '100%', display: 'block', cursor: 'zoom-in', objectFit: 'contain', maxHeight: 260 }}
+            />
+          ) : (
+            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', color: MUTED, fontSize: 12 }}>
+              Sem imagem
+            </div>
+          )}
+          {canManage && card._source === 'db' && (
+            <button
+              onClick={e => { e.stopPropagation(); onDelete?.() }}
+              style={{
+                position: 'absolute', top: 6, right: 6, background: 'rgba(220,38,38,0.75)',
+                border: 'none', borderRadius: 4, color: '#fff', fontSize: 11,
+                padding: '3px 7px', cursor: 'pointer', fontWeight: 600,
+              }}
+            >🗑</button>
+          )}
+        </div>
+      </>
+    )
+  }
 
   const isPendente = card._status_edicao === 'pendente_validacao'
   const accentColor = isFixed ? ACCENT : PRIMARY
@@ -394,6 +454,7 @@ export function ObsColumn({
               search={search}
               canManage={canManage}
               isFixed={col.isFixed}
+              imageOnly={col.imageOnly}
               onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
               onDelete={() => card._id && onDelete(card._id)}
               onInlineSave={onInlineSave}
@@ -425,6 +486,7 @@ export function ObsColumn({
                   search={search}
                   canManage={canManage}
                   isFixed={col.isFixed}
+                  imageOnly={col.imageOnly}
                   onEdit={() => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
                   onDelete={() => card._id && onDelete(card._id)}
                   onInlineSave={onInlineSave}

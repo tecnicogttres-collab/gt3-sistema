@@ -398,12 +398,14 @@ export default function ObservacoesClient() {
   }
 
   async function handleSave() {
-    const motivo = modal.motivo.trim()
     if (modal.imageOnly) {
-      if (!motivo || (!modal.imagemFile && !modal.imagemUrl)) return
+      if (!modal.imagemFile && !modal.imagemUrl) return
     } else {
-      if (!motivo || !modal.parecerBody.trim()) return
+      if (!modal.motivo.trim() || !modal.parecerBody.trim()) return
     }
+    const motivo = modal.imageOnly
+      ? (modal.imagemFile?.name.replace(/\.[^.]+$/, '') ?? `imagem-${Date.now()}`)
+      : modal.motivo.trim()
 
     if (modal.mode === 'edit') {
       setModal(m => ({ ...m, saving: true, uploadError: '' }))
@@ -518,37 +520,45 @@ export default function ObservacoesClient() {
               </p>
             </div>
 
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  {modal.imageOnly ? 'Imagem' : 'Imagem (opcional)'}
-                </label>
+            {modal.imageOnly ? (
+              <div style={{ padding: 20 }}>
                 <ObsImageModal
                   preview={modal.imagemPreview}
                   onFileSelect={handleFileSelect}
                   onRemove={handleRemoveImage}
                 />
               </div>
+            ) : (
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                    Imagem (opcional)
+                  </label>
+                  <ObsImageModal
+                    preview={modal.imagemPreview}
+                    onFileSelect={handleFileSelect}
+                    onRemove={handleRemoveImage}
+                  />
+                </div>
 
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  {modal.imageOnly ? 'Título' : 'Tag / Motivo'}
-                </label>
-                <input
-                  type="text"
-                  value={modal.motivo}
-                  onChange={e => setModal(m => ({ ...m, motivo: e.target.value }))}
-                  placeholder={modal.imageOnly ? 'Ex: NR 20 — Critérios para Capacitação' : 'Ex: Outro coordenador'}
-                  autoFocus
-                  style={{
-                    width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
-                    border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
-                    fontFamily: 'inherit', color: INK,
-                  }}
-                />
-              </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                    Tag / Motivo
+                  </label>
+                  <input
+                    type="text"
+                    value={modal.motivo}
+                    onChange={e => setModal(m => ({ ...m, motivo: e.target.value }))}
+                    placeholder="Ex: Outro coordenador"
+                    autoFocus
+                    style={{
+                      width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                      border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
+                      fontFamily: 'inherit', color: INK,
+                    }}
+                  />
+                </div>
 
-              {!modal.imageOnly && (
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
                     Observação
@@ -590,8 +600,8 @@ export default function ObservacoesClient() {
                     />
                   )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div style={{
               padding: '12px 20px', borderTop: `1px solid ${BORDER}`,
@@ -612,7 +622,7 @@ export default function ObservacoesClient() {
               <button
                 onClick={handleSave}
                 disabled={modal.saving || (modal.imageOnly
-                  ? (!modal.motivo.trim() || (!modal.imagemFile && !modal.imagemUrl))
+                  ? (!modal.imagemFile && !modal.imagemUrl)
                   : (!modal.motivo.trim() || !modal.parecerBody.trim())
                 )}
                 style={{
@@ -620,7 +630,7 @@ export default function ObservacoesClient() {
                   background: modal.saving ? MUTED : PRIMARY, color: '#fff',
                   fontSize: 13, cursor: modal.saving ? 'not-allowed' : 'pointer', fontWeight: 700,
                   opacity: (modal.imageOnly
-                    ? (!modal.motivo.trim() || (!modal.imagemFile && !modal.imagemUrl))
+                    ? (!modal.imagemFile && !modal.imagemUrl)
                     : (!modal.motivo.trim() || !modal.parecerBody.trim())
                   ) ? 0.5 : 1,
                 }}
