@@ -172,7 +172,15 @@ export default function ObservacoesClient() {
       .catch(() => {})
     fetch(`/api/observacoes/subtabs?categoria=${cat}`)
       .then(r => r.ok ? r.json() : [])
-      .then(data => { if (!cancelled) setDbSubtabs(data) })
+      .then((data: DbSubtab[]) => {
+        if (cancelled) return
+        // Remove automaticamente subtabs dinâmicos que conflitam com colunas estáticas (ex: Informações NR)
+        const toDelete = data.filter(ds => _IMAGE_ONLY_ASCII.includes(_ascii(ds.subtab)))
+        toDelete.forEach(ds => {
+          fetch(`/api/observacoes/subtabs?categoria=${encodeURIComponent(ds.categoria)}&subtab=${encodeURIComponent(ds.subtab)}`, { method: 'DELETE' }).catch(() => {})
+        })
+        setDbSubtabs(data.filter(ds => !_IMAGE_ONLY_ASCII.includes(_ascii(ds.subtab))))
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [activeCatKey])
@@ -221,7 +229,11 @@ export default function ObservacoesClient() {
     // (evita duplicatas como "Informações NR" quando já existe como coluna em "Referências NR")
     const staticColTitles = new Set(staticSubs.flatMap(s => s.columns.map(c => _ascii(c.title))))
     const dynSubs = dbSubtabs
-      .filter(ds => !staticKeys.has(ds.subtab) && !staticColTitles.has(_ascii(ds.subtab)))
+      .filter(ds =>
+        !staticKeys.has(ds.subtab) &&
+        !staticColTitles.has(_ascii(ds.subtab)) &&
+        !_IMAGE_ONLY_ASCII.includes(_ascii(ds.subtab))
+      )
       .map(ds => {
         const imageOnly = isImageOnlyColuna(ds.subtab)
         return { key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly }] }

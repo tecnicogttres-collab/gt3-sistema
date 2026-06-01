@@ -27,6 +27,29 @@ export async function GET(req: NextRequest) {
   return Response.json(data ?? [])
 }
 
+export async function DELETE(req: NextRequest) {
+  const { user, papel } = await getCaller()
+  if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+  if (!['gestor', 'admin'].includes(papel ?? '')) {
+    return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  }
+
+  const { searchParams } = new URL(req.url)
+  const categoria = searchParams.get('categoria')
+  const subtab = searchParams.get('subtab')
+  if (!categoria || !subtab) return Response.json({ error: 'categoria e subtab obrigatórios' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('observacoes_subtabs')
+    .delete()
+    .eq('categoria', categoria)
+    .eq('subtab', subtab)
+
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+  return new Response(null, { status: 204 })
+}
+
 export async function POST(req: NextRequest) {
   const { user, papel } = await getCaller()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
