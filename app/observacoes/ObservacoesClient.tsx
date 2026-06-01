@@ -239,7 +239,9 @@ export default function ObservacoesClient() {
     () => activeSubtab?.columns.filter(c => c.isFixed) ?? [],
     [activeSubtab]
   )
-  const colWidth = ['Ficha Registro + ASO', 'EPI + Treinamentos'].includes(activeSubtab?.key ?? '') ? 580 : 320
+  const colWidth = isImageOnlyColuna(activeSubtab?.key ?? '') ? 520
+    : ['Ficha Registro + ASO', 'EPI + Treinamentos'].includes(activeSubtab?.key ?? '') ? 580
+    : 320
 
   const dbObsForSubtab = useMemo(
     () => dbObs.filter(o => o.subtab === (activeSubtab?.key ?? '')),
