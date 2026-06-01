@@ -854,7 +854,10 @@ export default function ObservacoesClient() {
               <span style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginRight: 6 }}>
                 Subcat.:
               </span>
-              {allSubtabs.map(st => {
+              {allSubtabs.filter(st =>
+                // Oculta subtabs dinâmicos imageOnly que não são da lista estática
+                !isImageOnlyColuna(st.key) || !!activeCategory?.subtabs.find(s => s.key === st.key)
+              ).map(st => {
                 const isActive = st.key === (activeSubtab?.key ?? '')
                 const isDynamic = !activeCategory?.subtabs.find(s => s.key === st.key)
                 return (
