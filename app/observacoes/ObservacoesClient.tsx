@@ -200,9 +200,15 @@ export default function ObservacoesClient() {
   const allSubtabs = useMemo(() => {
     const staticSubs = activeCategory?.subtabs ?? []
     const staticKeys = new Set(staticSubs.map(s => s.key))
+    const imageOnlyTitles = new Set(
+      staticSubs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => c.title))
+    )
     const dynSubs = dbSubtabs
       .filter(ds => !staticKeys.has(ds.subtab))
-      .map(ds => ({ key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly: false }] }))
+      .map(ds => {
+        const imageOnly = imageOnlyTitles.has(ds.subtab)
+        return { key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly }] }
+      })
     return [...staticSubs, ...dynSubs]
   }, [activeCategory, dbSubtabs])
 
