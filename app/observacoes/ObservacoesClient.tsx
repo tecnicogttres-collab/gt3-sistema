@@ -7,21 +7,21 @@ import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
 import { ObsImageModal } from './ObsImageModal'
 
-// Remove todos os diacríticos e normaliza para ASCII comparável
+// Nomes imageOnly — lista explícita com e sem acentos para comparação case-insensitive simples
+const IMAGE_ONLY_NAMES = [
+  'informações nr', 'informacoes nr', 'informação nr', 'informacao nr',
+  'referências nr', 'referencias nr', 'referencia nr', 'referência nr',
+]
 function _ascii(s: string) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ')
 }
-// Colunas/subtabs que são repositório puro de imagem — comparação sem acentos
-const _IMAGE_ONLY_ASCII = [
-  ...new Set([
-    ...CATEGORIES.flatMap(cat =>
-      cat.subtabs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => _ascii(c.title)))
-    ),
-    'informacoes nr', 'referencias nr', // fallback explícito
-  ])
-]
 function isImageOnlyColuna(coluna: string): boolean {
-  return _IMAGE_ONLY_ASCII.includes(_ascii(coluna))
+  const lower = coluna.toLowerCase().trim()
+  if (IMAGE_ONLY_NAMES.includes(lower)) return true
+  // fallback: strips diacritics
+  const ascii = _ascii(coluna)
+  return IMAGE_ONLY_NAMES.some(n => _ascii(n) === ascii)
+    || CATEGORIES.some(cat => cat.subtabs.some(s => s.columns.some(c => c.imageOnly && (c.title.toLowerCase().trim() === lower || _ascii(c.title) === ascii))))
 }
 
 const PRIMARY = '#2A4F96'
@@ -175,11 +175,11 @@ export default function ObservacoesClient() {
       .then((data: DbSubtab[]) => {
         if (cancelled) return
         // Remove automaticamente subtabs dinâmicos que conflitam com colunas estáticas (ex: Informações NR)
-        const toDelete = data.filter(ds => _IMAGE_ONLY_ASCII.includes(_ascii(ds.subtab)))
+        const toDelete = data.filter(ds => isImageOnlyColuna(ds.subtab))
         toDelete.forEach(ds => {
           fetch(`/api/observacoes/subtabs?categoria=${encodeURIComponent(ds.categoria)}&subtab=${encodeURIComponent(ds.subtab)}`, { method: 'DELETE' }).catch(() => {})
         })
-        setDbSubtabs(data.filter(ds => !_IMAGE_ONLY_ASCII.includes(_ascii(ds.subtab))))
+        setDbSubtabs(data.filter(ds => !isImageOnlyColuna(ds.subtab)))
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -232,7 +232,7 @@ export default function ObservacoesClient() {
       .filter(ds =>
         !staticKeys.has(ds.subtab) &&
         !staticColTitles.has(_ascii(ds.subtab)) &&
-        !_IMAGE_ONLY_ASCII.includes(_ascii(ds.subtab))
+        !isImageOnlyColuna(ds.subtab)
       )
       .map(ds => {
         const imageOnly = isImageOnlyColuna(ds.subtab)
