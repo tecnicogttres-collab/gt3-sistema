@@ -85,7 +85,7 @@ function normalizeCategory(key: string, rawCat: unknown): Category | null {
       } else if (subObj.__images__) {
         const imgs = subObj.__images__ as Array<{ titulo: string; descricao: string; src: string }>
         columns = [{
-          title: 'Informações NR',
+          title: subKey,
           imageOnly: true,
           cards: imgs.map(img => ({ motivo: img.titulo, parecer: img.descricao, imagem_url: img.src })),
         }]
