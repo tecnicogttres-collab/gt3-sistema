@@ -7,10 +7,18 @@ import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
 import { ObsImageModal } from './ObsImageModal'
 
-// Títulos de colunas que são repositório de imagem (derivado dos dados estáticos de todas as categorias)
-const IMAGE_ONLY_TITLES = new Set(
-  CATEGORIES.flatMap(cat => cat.subtabs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => c.title)))
-)
+// Nomes de colunas/subtabs que são repositório puro de imagem
+// Comparação normalizada (sem acento/case/espaço extra) para não depender de encoding do DB
+const IMAGE_ONLY_TITLES_RAW = [
+  ...new Set(
+    CATEGORIES.flatMap(cat => cat.subtabs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => c.title)))
+  )
+]
+function _norm(s: string) { return s.normalize('NFC').trim().toLowerCase() }
+function isImageOnlyColuna(coluna: string): boolean {
+  const n = _norm(coluna)
+  return IMAGE_ONLY_TITLES_RAW.some(t => _norm(t) === n)
+}
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
@@ -208,7 +216,7 @@ export default function ObservacoesClient() {
     const dynSubs = dbSubtabs
       .filter(ds => !staticKeys.has(ds.subtab))
       .map(ds => {
-        const imageOnly = IMAGE_ONLY_TITLES.has(ds.subtab)
+        const imageOnly = isImageOnlyColuna(ds.subtab)
         return { key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly }] }
       })
     return [...staticSubs, ...dynSubs]
@@ -311,7 +319,7 @@ export default function ObservacoesClient() {
   const handleAdd = useCallback((coluna: string, subtabKey: string) => {
     const sub = allSubtabs.find(s => s.key === subtabKey)
     const col = sub?.columns.find(c => c.title === coluna)
-    const imageOnly = col?.imageOnly ?? IMAGE_ONLY_TITLES.has(coluna) ?? false
+    const imageOnly = col?.imageOnly === true || isImageOnlyColuna(coluna)
     setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly })
   }, [allSubtabs])
 
@@ -368,7 +376,7 @@ export default function ObservacoesClient() {
   }, [])
 
   function buildParecer(): string {
-    if (modal.imageOnly) return modal.parecerBody || ''
+    if (isImageOnlyColuna(modal.coluna)) return modal.parecerBody || ''
     return papel === 'colaborador'
       ? 'Favor rever: ' + modal.parecerBody
       : modal.parecerBody
@@ -407,12 +415,13 @@ export default function ObservacoesClient() {
   }
 
   async function handleSave() {
-    if (modal.imageOnly) {
+    const imageOnly = isImageOnlyColuna(modal.coluna)
+    if (imageOnly) {
       if (!modal.imagemFile && !modal.imagemUrl) return
     } else {
       if (!modal.motivo.trim() || !modal.parecerBody.trim()) return
     }
-    const motivo = modal.imageOnly
+    const motivo = imageOnly
       ? (modal.imagemFile?.name.replace(/\.[^.]+$/, '') ?? `imagem-${Date.now()}`)
       : modal.motivo.trim()
 
@@ -529,7 +538,7 @@ export default function ObservacoesClient() {
               </p>
             </div>
 
-            {modal.imageOnly ? (
+            {isImageOnlyColuna(modal.coluna) ? (
               <div style={{ padding: 20 }}>
                 <ObsImageModal
                   preview={modal.imagemPreview}
@@ -630,7 +639,7 @@ export default function ObservacoesClient() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={modal.saving || (modal.imageOnly
+                disabled={modal.saving || (isImageOnlyColuna(modal.coluna)
                   ? (!modal.imagemFile && !modal.imagemUrl)
                   : (!modal.motivo.trim() || !modal.parecerBody.trim())
                 )}
@@ -638,7 +647,7 @@ export default function ObservacoesClient() {
                   padding: '8px 20px', borderRadius: 8, border: 'none',
                   background: modal.saving ? MUTED : PRIMARY, color: '#fff',
                   fontSize: 13, cursor: modal.saving ? 'not-allowed' : 'pointer', fontWeight: 700,
-                  opacity: (modal.imageOnly
+                  opacity: (isImageOnlyColuna(modal.coluna)
                     ? (!modal.imagemFile && !modal.imagemUrl)
                     : (!modal.motivo.trim() || !modal.parecerBody.trim())
                   ) ? 0.5 : 1,
