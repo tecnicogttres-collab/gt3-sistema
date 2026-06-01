@@ -7,17 +7,21 @@ import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
 import { ObsImageModal } from './ObsImageModal'
 
-// Nomes de colunas/subtabs que são repositório puro de imagem
-// Comparação normalizada (sem acento/case/espaço extra) para não depender de encoding do DB
-const IMAGE_ONLY_TITLES_RAW = [
-  ...new Set(
-    CATEGORIES.flatMap(cat => cat.subtabs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => c.title)))
-  )
+// Remove todos os diacríticos e normaliza para ASCII comparável
+function _ascii(s: string) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ')
+}
+// Colunas/subtabs que são repositório puro de imagem — comparação sem acentos
+const _IMAGE_ONLY_ASCII = [
+  ...new Set([
+    ...CATEGORIES.flatMap(cat =>
+      cat.subtabs.flatMap(s => s.columns.filter(c => c.imageOnly).map(c => _ascii(c.title)))
+    ),
+    'informacoes nr', 'referencias nr', // fallback explícito
+  ])
 ]
-function _norm(s: string) { return s.normalize('NFC').trim().toLowerCase() }
 function isImageOnlyColuna(coluna: string): boolean {
-  const n = _norm(coluna)
-  return IMAGE_ONLY_TITLES_RAW.some(t => _norm(t) === n)
+  return _IMAGE_ONLY_ASCII.includes(_ascii(coluna))
 }
 
 const PRIMARY = '#2A4F96'
