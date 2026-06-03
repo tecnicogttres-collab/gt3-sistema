@@ -119,6 +119,15 @@ export const MODULES: Module[] = [
     dashboardRoles: ['admin'],
   },
   {
+    id: 'ferias',
+    label: 'Calendário de Férias',
+    color: '#4A90D9',
+    path: '/calendario-ferias',
+    description: 'Registro e visualização de férias por colaborador',
+    allowedRoles: ['gestor', 'admin'],
+    dashboardRoles: ['admin'],
+  },
+  {
     id: 'revisao',
     label: 'Revisões BSA',
     color: '#4A90D9',

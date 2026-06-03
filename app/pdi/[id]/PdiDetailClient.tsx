@@ -846,6 +846,7 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
   const [colaboradorId, setColaboradorId] = useState<string | null>(null)
   const [showNovoCicloModal, setShowNovoCicloModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
   const [localComps, setLocalComps] = useState<string[]>(pdi.matrizAvaliacao.competencias)
   const isGestorAdmin = ['gestor', 'admin'].includes(papel)
 
@@ -870,17 +871,22 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
 
   async function criarNovoCiclo() {
     setCreating(true)
+    setCreateError('')
     try {
       const res = await fetch(`/api/pdi/${pdi.id}/ciclos`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ colaborador_id: colaboradorId }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(body.error ?? 'Erro ao criar ciclo')
+      }
       const novo: Ciclo = await res.json()
-      // Archive the previously active one in local state
       setCiclos(prev => [novo, ...prev.map(c => c.status === 'ativo' ? { ...c, status: 'arquivado' as const, arquivado_em: new Date().toISOString() } : c)])
       setShowNovoCicloModal(false)
-    } catch { /* noop */ } finally { setCreating(false) }
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Erro ao criar ciclo')
+    } finally { setCreating(false) }
   }
 
   function handleUpdate(updated: Ciclo) {
@@ -945,8 +951,13 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
             <p style={{ margin: '0 0 24px', fontSize: 13, color: '#6B7A99', lineHeight: 1.6 }}>
               O ciclo atual será arquivado. A autoavaliação ficará em branco para novo preenchimento. A ambição permanece igual ao ciclo inicial.
             </p>
+            {createError && (
+              <div style={{ margin: '-12px 0 16px', padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>
+                {createError}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={() => setShowNovoCicloModal(false)} style={{ padding: '9px 22px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={() => { setShowNovoCicloModal(false); setCreateError('') }} style={{ padding: '9px 22px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
               <button onClick={criarNovoCiclo} disabled={creating} style={{ padding: '9px 22px', border: 'none', borderRadius: 8, background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: creating ? 0.7 : 1 }}>
                 {creating ? 'Criando…' : 'Confirmar'}
               </button>

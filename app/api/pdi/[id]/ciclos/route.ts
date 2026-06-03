@@ -69,6 +69,17 @@ export async function POST(req: NextRequest, { params }: Params) {
       .eq('status', 'ativo')
   }
 
+  // Resolve colaborador_id — use body value or fall back to profile lookup
+  let resolvedColabId: string | null = body.colaborador_id ?? null
+  if (!resolvedColabId) {
+    const { data: colab } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('pdi_slug', id)
+      .maybeSingle()
+    resolvedColabId = colab?.id ?? null
+  }
+
   // Ambicao from ciclo 1 (or from body for seed)
   const ciclo1 = isFirst ? null : await admin
     .from('pdi_ciclos')
@@ -87,7 +98,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     .from('pdi_ciclos')
     .insert({
       pdi_id: id,
-      colaborador_id: body.colaborador_id,
+      colaborador_id: resolvedColabId,
       numero_ciclo: maxCiclo + 1,
       status: 'ativo',
       avaliacao_diretiva: isFirst ? (body.avaliacao_diretiva ?? []) : [],

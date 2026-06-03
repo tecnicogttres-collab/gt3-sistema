@@ -129,6 +129,9 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
   const staticAuto = pdi.matrizAvaliacao.auto
   const staticAmbicao = pdi.matrizAvaliacao.ambicao
 
+  const _now = new Date()
+  const _seedDataInicio = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-01`
+
   if (!existingCiclo) {
     const { data: colab } = await admin
       .from('profiles')
@@ -146,6 +149,7 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
       ambicao: staticAmbicao,
       autoavaliacao_salva: staticDiretiva.length > 0,
       criado_por: user.id,
+      data_inicio: _seedDataInicio,
     })
   } else if (
     staticDiretiva.length > 0 &&
@@ -156,7 +160,7 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
       avaliacao_diretiva: staticDiretiva,
       autoavaliacao: staticAuto,
       ambicao: staticAmbicao,
-      autoavaliacao_salva: true,
+      autoavaliacao_salva: staticAuto.length > 0,
     }).eq('id', existingCiclo.id)
   }
 

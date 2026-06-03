@@ -935,36 +935,33 @@ export default function ObservacoesClient() {
           {activeSubtab ? (
             activeCatKey === 'Funcionários' ? (
               <div style={{
-                flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden',
+                flex: 1, height: 0, minWidth: 0, overflow: 'hidden',
                 display: 'flex', flexDirection: 'row', alignItems: 'stretch',
                 padding: '0 20px 20px', gap: 0,
               }}>
                 <div
                   ref={colsScrollRef}
-                  className="obs-hscroll-visible"
-                  style={{ flex: 1, minWidth: 0, overflowX: 'auto', overflowY: 'hidden', paddingRight: 0 }}
+                  style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'row', gap: 16, height: '100%' }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'row', gap: 16, height: '100%', width: 'max-content' }}>
-                    {mergedMainCols.map(col => (
-                      <div
-                        key={`${activeSubtab.key}|${col.title}`}
-                        style={{ width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%', backgroundColor: BG_CARD, borderRadius: 10 }}
-                      >
-                        <ObsColumn
-                          col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
-                          search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
-                          onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
-                          onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
-                        />
-                      </div>
-                    ))}
-                  </div>
+                  {mergedMainCols.map(col => (
+                    <div
+                      key={`${activeSubtab.key}|${col.title}`}
+                      style={{ flex: 1, minWidth: 0, height: '100%', backgroundColor: BG_CARD, borderRadius: 10 }}
+                    >
+                      <ObsColumn
+                        col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
+                        search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
+                        onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
+                        onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 {funcFixedMergedCol && <div style={{ flexShrink: 0, width: 12 }} />}
 
                 {funcFixedMergedCol && (
-                  <div style={{ flexShrink: 0, width: 280, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ flexShrink: 0, width: 280, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <ObsColumn
                       col={funcFixedMergedCol} catKey={activeCatKey} subtabKey={activeSubtab.key}
                       search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
@@ -976,7 +973,7 @@ export default function ObservacoesClient() {
               </div>
             ) : (
               <div style={{
-                flex: 1, minHeight: 0, minWidth: 0,
+                flex: 1, height: 0, minWidth: 0,
                 display: 'flex', flexDirection: 'column', padding: '0 20px 20px',
               }}>
                 <div ref={topScrollRef} className="obs-scroll-top">

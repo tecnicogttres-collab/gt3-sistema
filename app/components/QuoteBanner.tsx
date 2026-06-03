@@ -125,33 +125,32 @@ export default function QuoteBanner() {
   return (
     <div style={{
       background: '#1E3A6E',
-      padding: '7px 32px',
+      padding: '8px 32px',
       display: 'flex',
       alignItems: 'center',
       gap: 16,
       boxShadow: '0 -2px 12px rgba(0,0,0,0.15)',
     }}>
-      <span style={{ fontSize: 20, opacity: 0.5, flexShrink: 0, color: '#fff' }}>"</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <span style={{ fontSize: 18, opacity: 0.5, flexShrink: 0, color: '#fff' }}>"</span>
+      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
         <p style={{
           margin: 0,
-          fontSize: 14,
-          lineHeight: 1.6,
+          fontSize: 13,
+          lineHeight: 1.45,
           color: '#fff',
           fontStyle: 'italic',
+          overflow: 'hidden',
+          display: '-webkit-box',
+          WebkitLineClamp: 1,
+          WebkitBoxOrient: 'vertical',
         }}>
           {quote.texto}
+          {quote.autor && (
+            <span style={{ fontStyle: 'normal', color: 'rgba(255,255,255,0.6)', marginLeft: 8 }}>
+              — {quote.autor}
+            </span>
+          )}
         </p>
-        {quote.autor && (
-          <p style={{
-            margin: '3px 0 0',
-            fontSize: 12,
-            color: 'rgba(255,255,255,0.65)',
-            fontStyle: 'normal',
-          }}>
-            — {quote.autor}
-          </p>
-        )}
       </div>
     </div>
   )
