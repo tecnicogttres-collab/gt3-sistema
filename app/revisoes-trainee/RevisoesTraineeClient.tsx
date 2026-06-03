@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 
-type Status = 'pending' | 'red' | 'yellow' | 'green'
+type Status = 'pending' | 'red' | 'yellow' | 'green' | 'erro_corrigido'
 type AutoAval = 'aprovado' | 'pendente' | 'reprovado' | null
 type SortKey = 'created_at' | 'empresa' | 'colaborador' | 'documento' | 'auto_avaliacao' | 'status'
 
@@ -22,6 +22,7 @@ type Registro = {
   nota_revisor: string | null
   revisado_por: string | null
   revisado_em: string | null
+  corrigido_em: string | null
   criado_por_profile: { nome: string } | null
   revisado_por_profile: { nome: string } | null
 }
@@ -56,6 +57,7 @@ const STATUS_LABEL: Record<Status, string> = {
   red: 'Erro',
   yellow: 'A discutir',
   green: 'Aprovado',
+  erro_corrigido: 'Erro corrigido',
 }
 
 function formatDate(iso: string) {
@@ -80,6 +82,7 @@ function todayISO() {
 function rowBg(status: Status) {
   if (status === 'red') return '#FEF2F2'
   if (status === 'yellow') return '#FFFBEB'
+  if (status === 'erro_corrigido') return '#FFF7ED'
   return 'transparent'
 }
 
@@ -144,6 +147,25 @@ export default function RevisoesTraineeClient() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => { return () => { clearTimeout(toastTimerRef.current) } }, [])
 
+  // Per-item processing (optimistic updates + Realtime dedup)
+  const processingIds = useRef<Set<string>>(new Set())
+  const pendingOptimistic = useRef<Map<string, Partial<Registro>>>(new Map())
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set())
+
+  function startProcessing(id: string) {
+    processingIds.current.add(id)
+    setLoadingIds(prev => new Set([...prev, id]))
+  }
+  function endProcessing(id: string) {
+    processingIds.current.delete(id)
+    pendingOptimistic.current.delete(id)
+    setLoadingIds(prev => { const n = new Set(prev); n.delete(id); return n })
+  }
+  function revertOptimistic(id: string, prevPatch: Partial<Registro>) {
+    endProcessing(id)
+    setData(prev => prev ? { ...prev, records: prev.records.map(r => r.id === id ? { ...r, ...prevPatch } : r) } : prev)
+  }
+
   // Empresa copy feedback
   const [copiedEmpresaId, setCopiedEmpresaId] = useState<string | null>(null)
   const copiedEmpresaTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -172,6 +194,13 @@ export default function RevisoesTraineeClient() {
     if (!activeTraineeIdRef.current && json.trainees.length > 0) {
       setActiveTraineeId(json.trainees[0].id)
     }
+    // Re-apply any in-flight optimistic updates so they aren't overwritten by the re-fetch
+    if (pendingOptimistic.current.size > 0) {
+      json.records = json.records.map(r => {
+        const patch = pendingOptimistic.current.get(r.id)
+        return patch ? { ...r, ...patch } : r
+      })
+    }
     setData(json)
     setLoading(false)
     setFetchError('')
@@ -197,7 +226,12 @@ export default function RevisoesTraineeClient() {
     const channel = supabase
       .channel('revisoes-trainee-rt')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'revisoes_trainee' }, () => void fetchData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'revisoes_trainee' }, () => void fetchData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'revisoes_trainee' }, (payload) => {
+        // Skip re-fetch if this ID is currently being processed — optimistic update already applied
+        const id = (payload.new as { id?: string }).id
+        if (id && processingIds.current.has(id)) return
+        void fetchData()
+      })
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [fetchData])
@@ -212,11 +246,12 @@ export default function RevisoesTraineeClient() {
       ? records.filter(r => r.criado_por === activeTraineeId)
       : []
 
-  const activeRecords = visibleRecords.filter(r => r.status !== 'green')
+  const activeRecords = visibleRecords.filter(r => r.status !== 'green' && r.status !== 'erro_corrigido')
   const pendingCount = visibleRecords.filter(r => r.status === 'pending').length
   const redCount = visibleRecords.filter(r => r.status === 'red').length
   const yellowCount = visibleRecords.filter(r => r.status === 'yellow').length
   const greenCount = visibleRecords.filter(r => r.status === 'green').length
+  const erroCorrigidoCount = visibleRecords.filter(r => r.status === 'erro_corrigido').length
   const totalCount = visibleRecords.length
 
   const sortedRecords = useMemo(() => {
@@ -330,35 +365,46 @@ export default function RevisoesTraineeClient() {
 
   // ── Optimistic status helper ────────────────────────────────────
   function applyOptimisticStatus(id: string, patch: Partial<Registro>) {
+    pendingOptimistic.current.set(id, patch)
     setData(prev => prev ? { ...prev, records: prev.records.map(r => r.id === id ? { ...r, ...patch } : r) } : prev)
   }
 
   // ── Approve ────────────────────────────────────────────────────
   async function handleApprove(id: string) {
+    if (processingIds.current.has(id)) return
     const prev = data!.records.find(r => r.id === id)
+    startProcessing(id)
     applyOptimisticStatus(id, { status: 'green', nota_revisor: null })
     const res = await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'green', nota_revisor: null }),
     })
-    if (!res.ok) {
-      if (prev) applyOptimisticStatus(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+    if (res.ok) {
+      endProcessing(id)
+    } else {
+      if (prev) revertOptimistic(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+      else endProcessing(id)
       showToast('Erro ao aprovar. Tente novamente.')
     }
   }
 
   // ── Clear flag ─────────────────────────────────────────────────
   async function handleClear(id: string) {
+    if (processingIds.current.has(id)) return
     const prev = data!.records.find(r => r.id === id)
+    startProcessing(id)
     applyOptimisticStatus(id, { status: 'pending', nota_revisor: null })
     const res = await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'pending', nota_revisor: null }),
     })
-    if (!res.ok) {
-      if (prev) applyOptimisticStatus(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+    if (res.ok) {
+      endProcessing(id)
+    } else {
+      if (prev) revertOptimistic(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+      else endProcessing(id)
       showToast('Erro ao limpar flag. Tente novamente.')
     }
   }
@@ -375,7 +421,9 @@ export default function RevisoesTraineeClient() {
     if (!flagNote.trim()) { alert('Descreva o motivo da sinalização.'); return }
     const { id, status } = flagModal
     const nota = flagNote
+    if (processingIds.current.has(id)) return
     const prev = data!.records.find(r => r.id === id)
+    startProcessing(id)
     // Optimistic — fecha modal imediatamente
     applyOptimisticStatus(id, { status: status as Status, nota_revisor: nota })
     setFlagModal(null); setFlagNote('')
@@ -384,9 +432,33 @@ export default function RevisoesTraineeClient() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, nota_revisor: nota }),
     })
-    if (!res.ok) {
-      if (prev) applyOptimisticStatus(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+    if (res.ok) {
+      endProcessing(id)
+    } else {
+      if (prev) revertOptimistic(id, { status: prev.status, nota_revisor: prev.nota_revisor })
+      else endProcessing(id)
       showToast('Erro ao sinalizar. Tente novamente.')
+    }
+  }
+
+  // ── Já corrigido (trainee) ─────────────────────────────────────
+  async function handleJaCorrigido(id: string) {
+    if (processingIds.current.has(id)) return
+    const prev = data!.records.find(r => r.id === id)
+    startProcessing(id)
+    applyOptimisticStatus(id, { status: 'erro_corrigido', corrigido_em: new Date().toISOString() })
+    const res = await fetch(`/api/revisoes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'erro_corrigido' }),
+    })
+    if (res.ok) {
+      endProcessing(id)
+      showToast('Correção registrada.')
+    } else {
+      if (prev) revertOptimistic(id, { status: prev.status })
+      else endProcessing(id)
+      showToast('Erro ao registrar correção. Tente novamente.')
     }
   }
 
@@ -533,8 +605,8 @@ export default function RevisoesTraineeClient() {
     if (!reportResult) return
     const win = window.open('', '_blank')
     if (!win) return
-    const STATUS_COLOR: Record<Status, string> = { green: '#D1FAE5', red: '#FEE2E2', yellow: '#FEF3C7', pending: '#F1F5F9' }
-    const STATUS_TEXT: Record<Status, string> = { green: '#065F46', red: '#991B1B', yellow: '#92400E', pending: '#6B7A99' }
+    const STATUS_COLOR: Record<Status, string> = { green: '#D1FAE5', red: '#FEE2E2', yellow: '#FEF3C7', pending: '#F1F5F9', erro_corrigido: '#FFF7ED' }
+    const STATUS_TEXT: Record<Status, string> = { green: '#065F46', red: '#991B1B', yellow: '#92400E', pending: '#6B7A99', erro_corrigido: '#C2410C' }
     const rows = reportResult.map(r => `<tr style="border-bottom:1px solid #eee;background:${STATUS_COLOR[r.status]}">
       <td style="padding:5px 8px;font-size:11px;">${r.data_dia}</td>
       <td style="padding:5px 8px;font-size:11px;">${r.criado_por_profile?.nome ?? '—'}</td>
@@ -668,6 +740,7 @@ export default function RevisoesTraineeClient() {
             { label: 'Com erro', value: redCount, color: '#DC2626' },
             { label: 'A discutir', value: yellowCount, color: '#D97706' },
             { label: 'Aprovados', value: greenCount, color: '#16A34A' },
+            ...(erroCorrigidoCount > 0 ? [{ label: 'Corrigidos', value: erroCorrigidoCount, color: '#C2410C' }] : []),
           ].map(s => (
             <div key={s.label} style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 14px', minWidth: 72 }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', fontWeight: 600, marginBottom: 4 }}>{s.label}</div>
@@ -799,31 +872,65 @@ export default function RevisoesTraineeClient() {
                       </td>
                       {!isTrainee && (
                         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 7px', borderRadius: 4, backgroundColor: rec.status === 'green' ? '#D1FAE5' : rec.status === 'red' ? '#FEE2E2' : rec.status === 'yellow' ? '#FEF3C7' : '#F1F5F9', color: rec.status === 'green' ? '#065F46' : rec.status === 'red' ? '#991B1B' : rec.status === 'yellow' ? '#92400E' : '#6B7A99' }}>
-                            {STATUS_LABEL[rec.status]}
+                          <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 7px', borderRadius: 4, backgroundColor: rec.status === 'green' ? '#D1FAE5' : rec.status === 'red' ? '#FEE2E2' : rec.status === 'yellow' ? '#FEF3C7' : rec.status === 'erro_corrigido' ? '#FFF7ED' : '#F1F5F9', color: rec.status === 'green' ? '#065F46' : rec.status === 'red' ? '#991B1B' : rec.status === 'yellow' ? '#92400E' : rec.status === 'erro_corrigido' ? '#C2410C' : '#6B7A99' }}>
+                            {rec.status === 'erro_corrigido' ? '⚠️ Erro corrigido' : STATUS_LABEL[rec.status]}
                           </span>
                         </td>
                       )}
                       <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                         {isTrainee ? (
                           rec.criado_por === data.currentUserId && !isFinalized && (
-                            <button onClick={() => handleDelete(rec.id)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: 12, padding: '3px 6px', borderRadius: 4 }} onMouseEnter={e => (e.currentTarget.style.color = '#DC2626')} onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}>
-                              excluir
-                            </button>
+                            rec.status === 'red' ? (
+                              <button
+                                onClick={() => handleJaCorrigido(rec.id)}
+                                disabled={loadingIds.has(rec.id)}
+                                style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #C2410C', background: '#FFF7ED', color: '#C2410C', fontSize: 11, fontWeight: 600, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.6 : 1 }}
+                              >
+                                {loadingIds.has(rec.id) ? '…' : '✅ Já corrigido'}
+                              </button>
+                            ) : (
+                              <button onClick={() => handleDelete(rec.id)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: 12, padding: '3px 6px', borderRadius: 4 }} onMouseEnter={e => (e.currentTarget.style.color = '#DC2626')} onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}>
+                                excluir
+                              </button>
+                            )
                           )
                         ) : (
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <button onClick={() => handleApprove(rec.id)} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#16A34A', fontSize: 11, fontWeight: 500, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#F0FFF4'; e.currentTarget.style.borderColor = '#16A34A' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}>
+                            <button
+                              onClick={() => handleApprove(rec.id)}
+                              disabled={loadingIds.has(rec.id)}
+                              style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#16A34A', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                              onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#F0FFF4'; e.currentTarget.style.borderColor = '#16A34A' } }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+                            >
                               ✓ Aprovar
                             </button>
-                            <button onClick={() => openFlag(rec.id, 'yellow')} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#D97706', fontSize: 11, fontWeight: 500, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#FFFBEB'; e.currentTarget.style.borderColor = '#D97706' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}>
+                            <button
+                              onClick={() => openFlag(rec.id, 'yellow')}
+                              disabled={loadingIds.has(rec.id)}
+                              style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#D97706', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                              onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#FFFBEB'; e.currentTarget.style.borderColor = '#D97706' } }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+                            >
                               ! Discutir
                             </button>
-                            <button onClick={() => openFlag(rec.id, 'red')} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#DC2626', fontSize: 11, fontWeight: 500, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = '#DC2626' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}>
+                            <button
+                              onClick={() => openFlag(rec.id, 'red')}
+                              disabled={loadingIds.has(rec.id)}
+                              style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#DC2626', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                              onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = '#DC2626' } }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+                            >
                               ✕ Erro
                             </button>
                             {rec.status !== 'pending' && (
-                              <button onClick={() => handleClear(rec.id)} style={{ padding: '4px 8px', borderRadius: 5, border: 'none', background: 'transparent', color: '#94A3B8', fontSize: 11, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.color = '#374151'; e.currentTarget.style.background = '#F1F5F9' }} onMouseLeave={e => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'transparent' }}>
+                              <button
+                                onClick={() => handleClear(rec.id)}
+                                disabled={loadingIds.has(rec.id)}
+                                style={{ padding: '4px 8px', borderRadius: 5, border: 'none', background: 'transparent', color: '#94A3B8', fontSize: 11, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                                onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.color = '#374151'; e.currentTarget.style.background = '#F1F5F9' } }}
+                                onMouseLeave={e => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'transparent' }}
+                              >
                                 limpar
                               </button>
                             )}
@@ -989,8 +1096,8 @@ export default function RevisoesTraineeClient() {
                                       {r.nota_revisor && <div style={{ fontSize: 10, color: '#6B7A99', fontStyle: 'italic', marginTop: 2 }}>"{r.nota_revisor}"</div>}
                                     </td>
                                     <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
-                                      <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 6px', borderRadius: 4, backgroundColor: r.status === 'green' ? '#D1FAE5' : r.status === 'red' ? '#FEE2E2' : r.status === 'yellow' ? '#FEF3C7' : '#F1F5F9', color: r.status === 'green' ? '#065F46' : r.status === 'red' ? '#991B1B' : r.status === 'yellow' ? '#92400E' : '#6B7A99' }}>
-                                        {STATUS_LABEL[r.status]}
+                                      <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 6px', borderRadius: 4, backgroundColor: r.status === 'green' ? '#D1FAE5' : r.status === 'red' ? '#FEE2E2' : r.status === 'yellow' ? '#FEF3C7' : r.status === 'erro_corrigido' ? '#FFF7ED' : '#F1F5F9', color: r.status === 'green' ? '#065F46' : r.status === 'red' ? '#991B1B' : r.status === 'yellow' ? '#92400E' : r.status === 'erro_corrigido' ? '#C2410C' : '#6B7A99' }}>
+                                        {r.status === 'erro_corrigido' ? '⚠️ Erro corrigido' : STATUS_LABEL[r.status]}
                                       </span>
                                     </td>
                                     <td style={{ padding: '8px 14px', fontSize: 11, color: '#6B7A99' }}>{r.revisado_por_profile?.nome ?? '—'}</td>
@@ -1203,8 +1310,8 @@ export default function RevisoesTraineeClient() {
                                 ) : <span style={{ color: '#CBD5E1' }}>—</span>}
                               </td>
                               <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: r.status === 'green' ? '#D1FAE5' : r.status === 'red' ? '#FEE2E2' : r.status === 'yellow' ? '#FEF3C7' : '#F1F5F9', color: r.status === 'green' ? '#065F46' : r.status === 'red' ? '#991B1B' : r.status === 'yellow' ? '#92400E' : '#6B7A99' }}>
-                                  {STATUS_LABEL[r.status]}
+                                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: r.status === 'green' ? '#D1FAE5' : r.status === 'red' ? '#FEE2E2' : r.status === 'yellow' ? '#FEF3C7' : r.status === 'erro_corrigido' ? '#FFF7ED' : '#F1F5F9', color: r.status === 'green' ? '#065F46' : r.status === 'red' ? '#991B1B' : r.status === 'yellow' ? '#92400E' : r.status === 'erro_corrigido' ? '#C2410C' : '#6B7A99' }}>
+                                  {r.status === 'erro_corrigido' ? '⚠️ Erro corrigido' : STATUS_LABEL[r.status]}
                                 </span>
                               </td>
                               <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: '#6B7A99' }}>{r.revisado_por_profile?.nome ?? '—'}</td>

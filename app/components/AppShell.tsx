@@ -119,18 +119,7 @@ export async function markAtaNotifVista(id: string, userId: string) {
   } catch { /* noop */ }
 }
 
-function ataBannerKey(userId: string) { return `atas_banner_dismissed_${userId}` }
-function getBannerDismissed(userId: string): string[] {
-  try { return JSON.parse(sessionStorage.getItem(ataBannerKey(userId)) ?? '[]') } catch { return [] }
-}
-function dismissBanner(ataId: string, userId: string) {
-  try {
-    const dismissed = getBannerDismissed(userId)
-    if (!dismissed.includes(ataId)) {
-      sessionStorage.setItem(ataBannerKey(userId), JSON.stringify([...dismissed, ataId]))
-    }
-  } catch { /* noop */ }
-}
+// (atas banner dismiss moved to DB-only — no session storage)
 
 // ─── Sugestões helpers ────────────────────────────────────────────────────────
 
@@ -238,8 +227,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         .select('ata_id')
         .eq('user_id', userId)
       const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
-      const dismissed = getBannerDismissed(userId)
-      setUnreadAtas(atas.filter(a => !seenSet.has(a.id) && !dismissed.includes(a.id)))
+      setUnreadAtas(atas.filter(a => !seenSet.has(a.id)))
     } catch { /* noop */ }
   }, [isColabOrTrainee])
 
@@ -277,10 +265,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .select('ata_id')
           .eq('user_id', userId)
         const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
-        const dismissed = getBannerDismissed(userId)
         const unnotified = atas.filter(a => !seenSet.has(a.id))
         if (unnotified.length > 0) setAtaQueue(unnotified)
-        setUnreadAtas(atas.filter(a => !seenSet.has(a.id) && !dismissed.includes(a.id)))
+        setUnreadAtas(unnotified)
       } catch { /* noop */ }
     }
 
@@ -393,11 +380,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           const record = payload.new as { id: string; data: string; titulo: string | null; status: string }
           if (record?.status !== 'Validada' || !record?.id) return
           setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
-          setUnreadAtas(prev => {
-            const dismissed = getBannerDismissed(userId)
-            if (prev.some(a => a.id === record.id) || dismissed.includes(record.id)) return prev
-            return [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
-          })
+          setUnreadAtas(prev =>
+            prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
+          )
         }
       )
       .on('postgres_changes',
@@ -460,23 +445,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setPrioQueue(prev => prev.slice(1))
   }
 
-  function dismissTopAta(markSeen: boolean) {
-    const top = ataQueue[0]
-    if (!top || !profile) return
-    if (markSeen) {
-      void markAtaNotifVista(top.id, profile.id)
-    } else {
-      // "Ver depois" — session-only dismiss so banner doesn't reappear on navigation
-      dismissBanner(top.id, profile.id)
-    }
+  function dismissTopAta() {
+    // "Ver depois": fecha o popup, mas o banner persiste até a ata ser lida
     setAtaQueue(prev => prev.slice(1))
-    setUnreadAtas(prev => prev.filter(a => a.id !== top.id))
   }
 
   function handleLerAgora(ataId: string) {
     if (!profile) return
     void markAtaNotifVista(ataId, profile.id)
-    dismissTopAta(false)
+    setAtaQueue(prev => prev.slice(1))
+    setUnreadAtas(prev => prev.filter(a => a.id !== ataId))
     router.push(`/atas?ata=${ataId}`)
   }
 
@@ -640,38 +618,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {bannerAta && (
             <div style={{
-              backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D',
+              backgroundColor: '#FFFBEB', borderBottom: '2px solid #F59E0B',
               padding: '10px 24px', display: 'flex', alignItems: 'center',
               justifyContent: 'space-between', flexShrink: 0, gap: 12,
             }}>
-              <span style={{ fontSize: 13, color: '#92400E' }}>
-                📋 Nova ata disponível para leitura:{' '}
+              <span style={{ fontSize: 13, color: '#92400E', fontWeight: 500 }}>
+                📋 Leitura pendente:{' '}
                 <strong>{bannerAta.titulo?.trim() || `Ata de ${bannerAta.data}`}</strong>
+                <span style={{ fontWeight: 400, marginLeft: 6 }}>— confirme a leitura para dispensar este aviso</span>
               </span>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                <button
-                  onClick={() => router.push(`/atas?ata=${bannerAta.id}`)}
-                  style={{
-                    padding: '4px 14px', borderRadius: 6, border: 'none',
-                    background: '#D97706', color: '#fff', fontSize: 12,
-                    fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  Ler agora
-                </button>
-                <button
-                  onClick={() => {
-                    if (profile) dismissBanner(bannerAta.id, profile.id)
-                    setUnreadAtas(prev => prev.filter(a => a.id !== bannerAta.id))
-                  }}
-                  style={{
-                    padding: '4px 12px', borderRadius: 6, border: '1px solid #D97706',
-                    background: 'transparent', color: '#92400E', fontSize: 12, cursor: 'pointer',
-                  }}
-                >
-                  Dispensar
-                </button>
-              </div>
+              <button
+                onClick={() => router.push(`/atas?ata=${bannerAta.id}`)}
+                style={{
+                  padding: '4px 14px', borderRadius: 6, border: 'none',
+                  background: '#D97706', color: '#fff', fontSize: 12,
+                  fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                Ler agora
+              </button>
             </div>
           )}
 
@@ -692,7 +657,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           data={ataQueue[0].data}
           titulo={ataQueue[0].titulo}
           onLerAgora={handleLerAgora}
-          onVerDepois={() => dismissTopAta(false)}
+          onVerDepois={dismissTopAta}
         />
       )}
       {showSugestaoNotif && (

@@ -61,6 +61,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
       updates.auto_avaliacao = v || null
     }
+    // Trainee marks a red/yellow item as corrected
+    if (body.status === 'erro_corrigido') {
+      if (existing.status !== 'red' && existing.status !== 'yellow') {
+        return Response.json({ error: 'Só é possível marcar como corrigido itens com erro ou pendência' }, { status: 400 })
+      }
+      updates.status = 'erro_corrigido'
+      updates.corrigido_em = new Date().toISOString()
+    }
     // Auto-reset flagged status when trainee edits their record (only for editable content fields)
     const contentFieldsChanged = ['empresa', 'colaborador', 'documento', 'observacoes'].some(k => k in updates)
     if (contentFieldsChanged && (existing.status === 'red' || existing.status === 'yellow')) {
