@@ -126,7 +126,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
   const { data: existing } = await admin
     .from('revisoes_trainee')
-    .select('criado_por, data_dia')
+    .select('criado_por, data_dia, status')
     .eq('id', id)
     .single()
 
@@ -134,6 +134,11 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
   if (isTrainee && existing.criado_por !== user.id) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  }
+
+  // Trainee cannot delete items flagged by the reviewer — must use "Já corrigido"
+  if (isTrainee && (existing.status === 'red' || existing.status === 'yellow')) {
+    return Response.json({ error: 'Itens sinalizados pelo revisor não podem ser excluídos. Use "Já corrigido".' }, { status: 403 })
   }
 
   const { data: dateRow } = await admin

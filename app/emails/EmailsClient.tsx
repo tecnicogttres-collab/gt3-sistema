@@ -467,13 +467,10 @@ export default function EmailsClient() {
                     📎 .msg · {formatDate(t.createdAt)}
                   </div>
                 ) : null}
-                <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-                  <button onClick={() => downloadTemplate(t.id)} style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: `1.5px solid ${BORDER}`, background: '#fff', color: INK, fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}>
-                    ↓ Baixar
-                  </button>
+                <div style={{ paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
                   <button
                     onClick={() => downloadTemplate(t.id, 'Arquivo baixado — clique nele na barra do Chrome para abrir no Outlook ↓')}
-                    style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}
+                    style={{ width: '100%', padding: '7px 12px', borderRadius: 6, border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}
                   >
                     📨 Abrir no Outlook
                   </button>

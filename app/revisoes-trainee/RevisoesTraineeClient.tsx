@@ -151,6 +151,9 @@ export default function RevisoesTraineeClient() {
   const processingIds = useRef<Set<string>>(new Set())
   const pendingOptimistic = useRef<Map<string, Partial<Registro>>>(new Map())
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set())
+  // Ref kept in sync with data.records so the Realtime handler can compare
+  // local state without stale closures (never triggers re-renders).
+  const recordsRef = useRef<Registro[]>([])
 
   function startProcessing(id: string) {
     processingIds.current.add(id)
@@ -201,6 +204,7 @@ export default function RevisoesTraineeClient() {
         return patch ? { ...r, ...patch } : r
       })
     }
+    recordsRef.current = json.records
     setData(json)
     setLoading(false)
     setFetchError('')
@@ -223,13 +227,21 @@ export default function RevisoesTraineeClient() {
   // Realtime — atualiza automaticamente em INSERT/UPDATE sem precisar do botão Atualizar
   useEffect(() => {
     const supabase = createClient()
+    // Unique name per effect invocation avoids Strict Mode double-mount collision
+    // (removeChannel is async, so reusing the same name on the second run would
+    //  find the still-subscribed channel and throw when .on() is called)
     const channel = supabase
-      .channel('revisoes-trainee-rt')
+      .channel(`revisoes-trainee-rt-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'revisoes_trainee' }, () => void fetchData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'revisoes_trainee' }, (payload) => {
-        // Skip re-fetch if this ID is currently being processed — optimistic update already applied
         const id = (payload.new as { id?: string }).id
-        if (id && processingIds.current.has(id)) return
+        const newStatus = (payload.new as { status?: string }).status
+        if (!id) return
+        // ID is being processed locally — optimistic update is authoritative
+        if (processingIds.current.has(id)) return
+        // Local state already reflects this status — skip re-fetch to avoid flicker
+        const local = recordsRef.current.find(r => r.id === id)
+        if (local?.status === newStatus) return
         void fetchData()
       })
       .subscribe()
@@ -366,7 +378,12 @@ export default function RevisoesTraineeClient() {
   // ── Optimistic status helper ────────────────────────────────────
   function applyOptimisticStatus(id: string, patch: Partial<Registro>) {
     pendingOptimistic.current.set(id, patch)
-    setData(prev => prev ? { ...prev, records: prev.records.map(r => r.id === id ? { ...r, ...patch } : r) } : prev)
+    setData(prev => {
+      if (!prev) return prev
+      const newRecords = prev.records.map(r => r.id === id ? { ...r, ...patch } : r)
+      recordsRef.current = newRecords
+      return { ...prev, records: newRecords }
+    })
   }
 
   // ── Approve ────────────────────────────────────────────────────
@@ -880,7 +897,7 @@ export default function RevisoesTraineeClient() {
                       <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                         {isTrainee ? (
                           rec.criado_por === data.currentUserId && !isFinalized && (
-                            rec.status === 'red' ? (
+                            (rec.status === 'red' || rec.status === 'yellow') ? (
                               <button
                                 onClick={() => handleJaCorrigido(rec.id)}
                                 disabled={loadingIds.has(rec.id)}
@@ -1234,6 +1251,7 @@ export default function RevisoesTraineeClient() {
                   <option value="pending">Pendente</option>
                   <option value="red">Erro</option>
                   <option value="yellow">A discutir</option>
+                  <option value="erro_corrigido">⚠️ Erro corrigido</option>
                 </select>
               </div>
               <button onClick={generateReport} disabled={reportLoading}

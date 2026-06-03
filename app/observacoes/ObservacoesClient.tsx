@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { CATEGORIES, type Category, type Card } from './data'
 import { useUser } from '../components/UserContext'
+import { createClient } from '../lib/supabase'
 import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
 import { ObsImageModal } from './ObsImageModal'
@@ -183,6 +184,37 @@ export default function ObservacoesClient() {
       })
       .catch(() => {})
     return () => { cancelled = true }
+  }, [activeCatKey])
+
+  // Realtime: propaga validações e edições de outros usuários sem precisar recarregar
+  useEffect(() => {
+    if (!activeCatKey) return
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`obs-rt-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'observacoes' }, (payload) => {
+        const row = payload.new as { id: string; categoria?: string; status_edicao?: string | null; parecer?: string; motivo?: string; atualizado_por?: string | null; atualizado_em?: string | null }
+        if (row.categoria !== activeCatKey) return
+        setDbObs(prev => prev.map(o =>
+          o.id === row.id
+            ? {
+                ...o,
+                ...(row.status_edicao !== undefined && { status_edicao: row.status_edicao as DbObservacao['status_edicao'] }),
+                ...(row.parecer !== undefined && { parecer: row.parecer }),
+                ...(row.motivo !== undefined && { motivo: row.motivo }),
+                ...(row.atualizado_por !== undefined && { atualizado_por: row.atualizado_por }),
+                ...(row.atualizado_em !== undefined && { atualizado_em: row.atualizado_em }),
+              }
+            : o
+        ))
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'observacoes' }, (payload) => {
+        const row = payload.old as { id: string }
+        if (!row.id) return
+        setDbObs(prev => prev.filter(o => o.id !== row.id))
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
   }, [activeCatKey])
 
   useEffect(() => {

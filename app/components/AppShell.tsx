@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
+import { TabContentCache } from './TabContentCache'
+import { MODULE_COMPONENT_MAP } from './moduleComponentMap'
 import Tabbar from './Tabbar'
 import { MODULES } from '../lib/modules'
 import { useUser } from './UserContext'
@@ -327,11 +329,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!mounted || !res.ok) return
-        const data: Array<{ data_inicio: string; periodo: string; concluido: boolean }> = await res.json()
+        const data: Array<{ data_inicio: string; periodo: string; concluido: boolean; confirmado?: boolean }> = await res.json()
         const today = new Date().toISOString().split('T')[0]
         const dismissedDate = getLembreteDismissDate(userId)
         if (dismissedDate === today) return
-        const count = data.filter(r => !(r.concluido && r.periodo === 'unico') && r.data_inicio <= today).length
+        const count = data.filter(r => !r.confirmado && r.data_inicio <= today).length
         if (count > 0) { setLembreteCount(count); setShowLembreteNotif(true) }
       } catch { /* noop */ }
     }
@@ -642,9 +644,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <Tabbar />
 
-          <main style={{ flex: 1, overflow: 'auto', backgroundColor: '#F4F6FA', padding: 24, paddingBottom: 80 }}>
-            {children}
-          </main>
+          <TabContentCache
+            pathname={pathname}
+            content={children}
+            mainStyle={{ flex: 1, overflow: 'auto', backgroundColor: '#F4F6FA', padding: 24, paddingBottom: 80 }}
+            componentMap={MODULE_COMPONENT_MAP}
+          />
         </div>
       </div>
 

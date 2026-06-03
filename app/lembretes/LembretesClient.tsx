@@ -24,6 +24,10 @@ type Lembrete = {
   concluido: boolean
   criado_por: string | null
   created_at: string
+  // enriquecido pelo GET: confirmação do usuário atual no mês corrente
+  confirmado: boolean
+  confirmado_em: string | null
+  confirmado_por_nome: string | null
 }
 
 type Filter = 'todos' | 'pendentes' | 'hoje' | 'atrasados' | 'concluidos'
@@ -52,28 +56,17 @@ function fmtBR(s: string): string {
   return `${d}/${m}/${y}`
 }
 
-function nextOccurrence(r: Lembrete): Date {
-  const start = parseDate(r.data_inicio)
-  const today = todayLocal()
-  if (r.periodo === 'unico') return start
-  if (r.periodo === 'diario') return today < start ? start : today
-  const d = new Date(start)
-  if (r.periodo === 'semanal') { while (d < today) d.setDate(d.getDate() + 7) }
-  else if (r.periodo === 'mensal') { while (d < today) d.setMonth(d.getMonth() + 1) }
-  else if (r.periodo === 'trimestral') { while (d < today) d.setMonth(d.getMonth() + 3) }
-  else if (r.periodo === 'semestral') { while (d < today) d.setMonth(d.getMonth() + 6) }
-  else if (r.periodo === 'anual') { while (d < today) d.setFullYear(d.getFullYear() + 1) }
-  return d
+// Primeiro dia do mês atual no formato YYYY-MM-01
+function mesReferenciaAtual(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-function isDone(r: Lembrete) { return r.concluido && r.periodo === 'unico' }
-function isOverdue(r: Lembrete) {
-  if (isDone(r)) return false
-  return nextOccurrence(r) < todayLocal()
-}
-function isToday(r: Lembrete) {
-  if (isDone(r)) return false
-  return fmtDateStr(nextOccurrence(r)) === fmtDateStr(todayLocal())
+function formatDatetime(iso: string): string {
+  const dt = new Date(iso)
+  const date = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const time = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return `${date} às ${time}`
 }
 
 // Retorna a data (YYYY-MM-DD) da ocorrência deste lembrete no mês/ano dado, ou null se não houver
@@ -86,7 +79,6 @@ function findMonthOccurrence(r: Lembrete, year: number, month: number): string |
     if (start.getFullYear() === year && start.getMonth() === month) return fmtDateStr(start)
     return null
   }
-
   if (r.periodo === 'diario') {
     const day = start > mStart ? start : new Date(mStart)
     return day <= mEnd ? fmtDateStr(day) : null
@@ -94,14 +86,37 @@ function findMonthOccurrence(r: Lembrete, year: number, month: number): string |
 
   let cur = new Date(start)
   while (cur < mStart) {
-    if (r.periodo === 'semanal') cur.setDate(cur.getDate() + 7)
-    else if (r.periodo === 'mensal') cur.setMonth(cur.getMonth() + 1)
-    else if (r.periodo === 'trimestral') cur.setMonth(cur.getMonth() + 3)
-    else if (r.periodo === 'semestral') cur.setMonth(cur.getMonth() + 6)
-    else if (r.periodo === 'anual') cur.setFullYear(cur.getFullYear() + 1)
+    if (r.periodo === 'semanal')      cur.setDate(cur.getDate() + 7)
+    else if (r.periodo === 'mensal')       cur.setMonth(cur.getMonth() + 1)
+    else if (r.periodo === 'trimestral')   cur.setMonth(cur.getMonth() + 3)
+    else if (r.periodo === 'semestral')    cur.setMonth(cur.getMonth() + 6)
+    else if (r.periodo === 'anual')        cur.setFullYear(cur.getFullYear() + 1)
     else break
   }
   return cur <= mEnd ? fmtDateStr(cur) : null
+}
+
+// Data de ocorrência no mês atual (para isOverdue / isToday)
+function currentMonthOccurrence(r: Lembrete): Date | null {
+  const now = new Date()
+  const ds = findMonthOccurrence(r, now.getFullYear(), now.getMonth())
+  return ds ? parseDate(ds) : null
+}
+
+function isDone(r: Lembrete) { return r.confirmado }
+
+function isOverdue(r: Lembrete) {
+  if (r.confirmado) return false
+  const occ = currentMonthOccurrence(r)
+  if (!occ) return false
+  return occ < todayLocal()
+}
+
+function isToday(r: Lembrete) {
+  if (r.confirmado) return false
+  const occ = currentMonthOccurrence(r)
+  if (!occ) return false
+  return fmtDateStr(occ) === fmtDateStr(todayLocal())
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -120,8 +135,9 @@ export default function LembretesClient() {
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [historyTarget, setHistoryTarget] = useState<{ id: string; titulo: string } | null>(null)
-  const [history, setHistory] = useState<Array<{ id: string; usuario_nome: string; created_at: string }>>([])
+  const [history, setHistory] = useState<Array<{ id: string; usuario_nome: string; mes_referencia: string; created_at: string }>>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [confirmandoIds, setConfirmandoIds] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     try {
@@ -136,16 +152,26 @@ export default function LembretesClient() {
 
   useEffect(() => { void load() }, [load])
 
+  // ── Mês atual para filtragem ────────────────────────────────────────────────
+
+  const now = useMemo(() => new Date(), [])
+
+  // Apenas lembretes com ocorrência no mês atual (Problema 3)
+  const currentMonthLembretes = useMemo(() =>
+    lembretes.filter(r => findMonthOccurrence(r, now.getFullYear(), now.getMonth()) !== null),
+    [lembretes, now]
+  )
+
   // ── Stats ──────────────────────────────────────────────────────────────────
 
-  const total = lembretes.length
-  const atrasados = lembretes.filter(r => isOverdue(r)).length
-  const hoje = lembretes.filter(r => isToday(r)).length
-  const concluidos = lembretes.filter(r => isDone(r)).length
+  const total = currentMonthLembretes.length
+  const atrasados = currentMonthLembretes.filter(r => isOverdue(r)).length
+  const hoje = currentMonthLembretes.filter(r => isToday(r)).length
+  const concluidos = currentMonthLembretes.filter(r => isDone(r)).length
 
   // ── Filtered list ──────────────────────────────────────────────────────────
 
-  const filtered = lembretes
+  const filtered = currentMonthLembretes
     .filter(r => {
       if (search) {
         const q = search.toLowerCase()
@@ -164,7 +190,9 @@ export default function LembretesClient() {
       if (ao && !bo) return -1; if (!ao && bo) return 1
       if (at && !bt) return -1; if (!at && bt) return 1
       if (ad && !bd) return 1; if (!ad && bd) return -1
-      return fmtDateStr(nextOccurrence(a)).localeCompare(fmtDateStr(nextOccurrence(b)))
+      const aOcc = currentMonthOccurrence(a)
+      const bOcc = currentMonthOccurrence(b)
+      return (aOcc?.getTime() ?? 0) - (bOcc?.getTime() ?? 0)
     })
 
   // ── CRUD ───────────────────────────────────────────────────────────────────
@@ -181,7 +209,7 @@ export default function LembretesClient() {
         })
         if (res.ok) {
           const updated: Lembrete = await res.json()
-          setLembretes(prev => prev.map(r => r.id === editingId ? updated : r))
+          setLembretes(prev => prev.map(r => r.id === editingId ? { ...updated, confirmado: r.confirmado, confirmado_em: r.confirmado_em, confirmado_por_nome: r.confirmado_por_nome } : r))
         }
       } else {
         const res = await fetch('/api/lembretes', {
@@ -200,35 +228,26 @@ export default function LembretesClient() {
     }
   }
 
-  async function handleToggle(r: Lembrete) {
-    if (r.periodo === 'unico') {
-      const res = await fetch(`/api/lembretes/${r.id}`, {
-        method: 'PUT',
+  // ── Confirmar (Problema 1 + 2) ─────────────────────────────────────────────
+
+  async function handleConfirm(r: Lembrete) {
+    if (confirmandoIds.has(r.id)) return
+    setConfirmandoIds(prev => new Set([...prev, r.id]))
+    try {
+      const res = await fetch(`/api/lembretes/${r.id}/confirmar`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ concluido: !r.concluido }),
+        body: JSON.stringify({ mes_referencia: mesReferenciaAtual() }),
       })
       if (res.ok) {
-        const updated: Lembrete = await res.json()
-        setLembretes(prev => prev.map(x => x.id === r.id ? updated : x))
+        const data = await res.json()
+        setLembretes(prev => prev.map(l => l.id === r.id
+          ? { ...l, confirmado: true, confirmado_em: data.confirmado_em, confirmado_por_nome: data.confirmado_por_nome }
+          : l
+        ))
       }
-    } else {
-      // Recorrente: avança data para próxima ocorrência
-      const next = new Date(nextOccurrence(r))
-      if (r.periodo === 'diario') next.setDate(next.getDate() + 1)
-      else if (r.periodo === 'semanal') next.setDate(next.getDate() + 7)
-      else if (r.periodo === 'mensal') next.setMonth(next.getMonth() + 1)
-      else if (r.periodo === 'trimestral') next.setMonth(next.getMonth() + 3)
-      else if (r.periodo === 'semestral') next.setMonth(next.getMonth() + 6)
-      else if (r.periodo === 'anual') next.setFullYear(next.getFullYear() + 1)
-      const res = await fetch(`/api/lembretes/${r.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data_inicio: fmtDateStr(next) }),
-      })
-      if (res.ok) {
-        const updated: Lembrete = await res.json()
-        setLembretes(prev => prev.map(x => x.id === r.id ? updated : x))
-      }
+    } finally {
+      setConfirmandoIds(prev => { const n = new Set(prev); n.delete(r.id); return n })
     }
   }
 
@@ -264,7 +283,6 @@ export default function LembretesClient() {
 
   // ── Calendar ───────────────────────────────────────────────────────────────
 
-  // Mapa dia -> lembretes apenas para o mês visível no calendário
   const calDayMap = useMemo(() => {
     const map = new Map<string, Lembrete[]>()
     for (const r of lembretes) {
@@ -291,7 +309,8 @@ export default function LembretesClient() {
   const INK = '#2A4F96'
   const WARN = '#B85C1A'
   const GOLD = '#D1AE6E'
-  const OK = '#3A7D52'
+  const OK_GREEN = '#22C55E'
+  const OK_TEXT = '#15803D'
   const BORDER = '#E0DDD6'
   const TEXT = '#1C1B18'
   const TEXT_MID = '#5C5A54'
@@ -299,7 +318,7 @@ export default function LembretesClient() {
   const SURFACE2 = '#EFEFEB'
 
   function cardBorderColor(r: Lembrete): string {
-    if (isDone(r)) return '#C8C5BC'
+    if (isDone(r)) return OK_GREEN
     if (isOverdue(r)) return WARN
     if (isToday(r)) return GOLD
     return INK
@@ -330,6 +349,9 @@ export default function LembretesClient() {
           <div style={{ fontSize: 26, fontWeight: 700, color: TEXT, letterSpacing: -0.5, lineHeight: 1, marginTop: 4 }}>
             Lembretes
           </div>
+          <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 4 }}>
+            {MONTHS[now.getMonth()]} {now.getFullYear()}
+          </div>
         </div>
         <button
           onClick={openNew}
@@ -351,10 +373,10 @@ export default function LembretesClient() {
       {/* ── Stats ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Total', value: total, highlight: false },
+          { label: 'Este mês', value: total, highlight: false },
           { label: 'Atrasados', value: atrasados, highlight: atrasados > 0 },
           { label: 'Hoje', value: hoje, highlight: false },
-          { label: 'Concluídos', value: concluidos, highlight: false },
+          { label: 'Confirmados', value: concluidos, highlight: false },
         ].map(s => (
           <div key={s.label} style={{
             background: s.highlight ? '#FBF0E8' : '#fff',
@@ -374,7 +396,7 @@ export default function LembretesClient() {
       {/* ── Filter bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         {(['todos','pendentes','hoje','atrasados','concluidos'] as Filter[]).map(f => {
-          const labels: Record<Filter, string> = { todos: 'Todos', pendentes: 'Pendentes', hoje: 'Hoje', atrasados: 'Atrasados', concluidos: 'Concluídos' }
+          const labels: Record<Filter, string> = { todos: 'Todos', pendentes: 'Pendentes', hoje: 'Hoje', atrasados: 'Atrasados', concluidos: 'Confirmados' }
           const active = filter === f
           return (
             <button key={f} onClick={() => setFilter(f)} style={{
@@ -420,76 +442,65 @@ export default function LembretesClient() {
               <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
               <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>
             </svg>
-            Nenhum lembrete encontrado.
+            {lembretes.length > 0
+              ? 'Nenhum lembrete programado para este mês.'
+              : 'Nenhum lembrete encontrado.'}
           </div>
         ) : filtered.map(r => {
           const done = isDone(r)
           const overdue = isOverdue(r)
           const todayFlag = isToday(r)
-          const next = nextOccurrence(r)
-          const nextStr = fmtDateStr(next)
+          const occDate = currentMonthOccurrence(r)
+          const occStr = occDate ? fmtDateStr(occDate) : r.data_inicio
+          const confirmando = confirmandoIds.has(r.id)
 
           return (
             <div key={r.id} style={{
-              background: '#fff',
-              border: `1px solid ${BORDER}`,
+              background: done ? '#F0FDF4' : '#fff',
+              border: `1px solid ${done ? '#86EFAC' : BORDER}`,
               borderLeft: `3px solid ${cardBorderColor(r)}`,
               borderRadius: 10,
               padding: '14px 16px',
               display: 'flex', alignItems: 'flex-start', gap: 14,
-              opacity: done ? 0.55 : 1,
+              transition: 'background 0.2s, border-color 0.2s',
             }}>
-              {/* Check button */}
-              <button
-                onClick={() => void handleToggle(r)}
-                title={done ? 'Marcar como pendente' : r.periodo === 'unico' ? 'Marcar como concluído' : 'Avançar para próxima ocorrência'}
-                style={{
-                  width: 22, height: 22, minWidth: 22, borderRadius: '50%',
-                  border: `1.5px solid ${done ? OK : '#C8C5BC'}`,
-                  background: done ? '#E8F4EE' : '#fff',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  marginTop: 1,
-                }}
-                onMouseEnter={e => { const b = e.currentTarget as HTMLElement; b.style.borderColor = OK; b.style.background = '#E8F4EE' }}
-                onMouseLeave={e => { const b = e.currentTarget as HTMLElement; b.style.borderColor = done ? OK : '#C8C5BC'; b.style.background = done ? '#E8F4EE' : '#fff' }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={OK} strokeWidth="2.5" style={{ opacity: done ? 1 : 0 }}>
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </button>
-
               {/* Body */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 15, fontWeight: 600, color: done ? TEXT_FAINT : TEXT,
-                  marginBottom: 4, lineHeight: 1.3,
-                  textDecoration: done ? 'line-through' : 'none',
-                }}>
-                  {r.titulo}
+                {/* Título + ✅ */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: done ? 2 : 4 }}>
+                  {done && <span style={{ fontSize: 16, lineHeight: 1 }}>✅</span>}
+                  <span style={{ fontSize: 15, fontWeight: 600, color: TEXT, lineHeight: 1.3 }}>
+                    {r.titulo}
+                  </span>
                 </div>
+
+                {/* "Feito por..." quando confirmado (Problema 1) */}
+                {done && r.confirmado_em && (
+                  <div style={{ fontSize: 11, color: '#4B7C5A', marginBottom: 6, lineHeight: 1.4 }}>
+                    Feito por {r.confirmado_por_nome ?? 'Usuário'} em {formatDatetime(r.confirmado_em)}
+                  </div>
+                )}
+
                 {r.descricao && (
                   <div style={{ fontSize: 13, color: TEXT_MID, lineHeight: 1.5, marginBottom: 8 }}>
                     {r.descricao}
                   </div>
                 )}
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {/* Period badge */}
-                  <span style={{
-                    padding: '2px 9px', borderRadius: 100,
-                    background: '#EBF0FA', color: '#1A3266',
-                    fontSize: 11, fontWeight: 500,
-                  }}>
+                  <span style={{ padding: '2px 9px', borderRadius: 100, background: '#EBF0FA', color: '#1A3266', fontSize: 11, fontWeight: 500 }}>
                     {PERIOD_LABEL[r.periodo]}
                   </span>
-                  {/* Date badge */}
+                  {/* Status badge */}
                   {done ? (
-                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#E8F4EE', color: '#1E4D30', fontSize: 11, fontWeight: 500 }}>
-                      Concluído
+                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#DCFCE7', color: '#166534', fontSize: 11, fontWeight: 500 }}>
+                      Confirmado
                     </span>
                   ) : overdue ? (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FBF0E8', color: '#7A3A0E', fontSize: 11, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                      Atrasado · {fmtBR(nextStr)}
+                      Atrasado · {fmtBR(occStr)}
                     </span>
                   ) : todayFlag ? (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FAF4E8', color: '#7A5A1E', fontSize: 11, fontWeight: 500 }}>
@@ -497,14 +508,36 @@ export default function LembretesClient() {
                     </span>
                   ) : (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: SURFACE2, color: TEXT_MID, fontSize: 11, fontWeight: 500 }}>
-                      {fmtBR(nextStr)}
+                      {fmtBR(occStr)}
                     </span>
                   )}
                 </div>
               </div>
 
               {/* Actions */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
+                {/* Botão OK / texto Concluído (Problema 1) */}
+                {!done ? (
+                  <button
+                    onClick={() => void handleConfirm(r)}
+                    disabled={confirmando}
+                    style={{
+                      padding: '4px 14px', borderRadius: 6,
+                      border: `1.5px solid ${OK_GREEN}`,
+                      background: '#F0FDF4', color: OK_TEXT,
+                      fontSize: 12, fontWeight: 700,
+                      cursor: confirmando ? 'default' : 'pointer',
+                      opacity: confirmando ? 0.6 : 1,
+                      minWidth: 46,
+                    }}
+                  >
+                    {confirmando ? '…' : 'OK'}
+                  </button>
+                ) : (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: OK_TEXT, padding: '4px 2px', whiteSpace: 'nowrap' }}>
+                    Concluído ✓
+                  </span>
+                )}
                 <IconBtn onClick={() => openEdit(r)} title="Editar" danger={false}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
@@ -532,7 +565,6 @@ export default function LembretesClient() {
       {/* ── Calendar ── */}
       <hr style={{ border: 'none', borderTop: `1px solid ${BORDER}`, marginBottom: 28 }} />
       <div>
-        {/* Cal nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1) } else setCalMonth(m => m - 1) }}
             style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: TEXT_MID }}>
@@ -547,7 +579,6 @@ export default function LembretesClient() {
           </button>
         </div>
 
-        {/* Weekday headers */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
           {WEEKDAYS.map(d => (
             <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: TEXT_FAINT, padding: '6px 0' }}>
@@ -556,7 +587,6 @@ export default function LembretesClient() {
           ))}
         </div>
 
-        {/* Day grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
           {Array.from({ length: calFirstDay }).map((_, i) => (
             <div key={`e${i}`} style={{ minHeight: 72 }} />
@@ -576,16 +606,15 @@ export default function LembretesClient() {
                   {d}
                 </div>
                 {hits.slice(0, 3).map((r, i) => {
-                  const over = parseDate(ds) < todayLocal() && !r.concluido
+                  const over = parseDate(ds) < todayLocal() && !r.confirmado
                   return (
                     <div key={i} style={{
                       fontSize: 10, borderRadius: 3, padding: '1px 4px', marginBottom: 2,
-                      background: over ? '#FBF0E8' : '#EBF0FA',
-                      color: over ? '#7A3A0E' : '#1A3266',
+                      background: r.confirmado ? '#DCFCE7' : over ? '#FBF0E8' : '#EBF0FA',
+                      color: r.confirmado ? '#166534' : over ? '#7A3A0E' : '#1A3266',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      opacity: isDone(r) ? 0.4 : 1,
                     }}>
-                      {r.titulo}
+                      {r.confirmado ? '✓ ' : ''}{r.titulo}
                     </div>
                   )
                 })}
@@ -606,11 +635,11 @@ export default function LembretesClient() {
           onClick={e => { if (e.target === e.currentTarget) setHistoryTarget(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,24,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
         >
-          <div style={{ background: '#fff', borderRadius: 14, width: 460, maxWidth: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
+          <div style={{ background: '#fff', borderRadius: 14, width: 500, maxWidth: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>Histórico de confirmações</div>
-                <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 340 }}>
+                <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 360 }}>
                   {historyTarget.titulo}
                 </div>
               </div>
@@ -631,14 +660,21 @@ export default function LembretesClient() {
                     const dt = new Date(h.created_at)
                     const dateLabel = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                     const timeLabel = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    const mesLabel = h.mes_referencia
+                      ? (() => {
+                          const [y, m] = h.mes_referencia.split('-')
+                          return `${MONTHS[Number(m) - 1]} ${y}`
+                        })()
+                      : ''
                     return (
-                      <div key={h.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: '#F8F7F4', borderRadius: 8, borderLeft: `3px solid ${OK}` }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={OK} strokeWidth="2.5" style={{ flexShrink: 0 }}>
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
+                      <div key={h.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 12px', background: '#F0FDF4', borderRadius: 8, borderLeft: `3px solid ${OK_GREEN}` }}>
+                        <span style={{ fontSize: 16, lineHeight: 1, marginTop: 1 }}>✅</span>
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontWeight: 600, fontSize: 13, color: TEXT }}>{h.usuario_nome}</span>
-                          <span style={{ fontSize: 12, color: TEXT_FAINT, marginLeft: 8 }}>{dateLabel} às {timeLabel}</span>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: TEXT }}>{h.usuario_nome}</div>
+                          <div style={{ fontSize: 11, color: TEXT_MID, marginTop: 2 }}>
+                            {mesLabel && <span style={{ background: '#DCFCE7', color: '#166534', padding: '1px 6px', borderRadius: 4, marginRight: 6, fontWeight: 600 }}>{mesLabel}</span>}
+                            {dateLabel} às {timeLabel}
+                          </div>
                         </div>
                       </div>
                     )
@@ -667,7 +703,6 @@ export default function LembretesClient() {
             </div>
 
             <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Título */}
               <Field label="Título">
                 <input
                   type="text" maxLength={100} autoFocus
@@ -681,7 +716,6 @@ export default function LembretesClient() {
                 />
               </Field>
 
-              {/* Descrição */}
               <Field label="Descrição / Observação">
                 <textarea
                   value={form.descricao}
@@ -693,7 +727,6 @@ export default function LembretesClient() {
                 />
               </Field>
 
-              {/* Periodicidade + Data */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <Field label="Periodicidade">
                   <select
@@ -718,19 +751,17 @@ export default function LembretesClient() {
                 </Field>
               </div>
 
-              {/* Info sobre periodicidade */}
               {form.periodo !== 'unico' && (
                 <div style={{ background: SURFACE2, borderRadius: 6, padding: 12, fontSize: 13, color: TEXT_MID }}>
-                  {form.periodo === 'diario' && 'O lembrete aparecerá todos os dias a partir da data de início.'}
-                  {form.periodo === 'semanal' && 'O lembrete será repetido semanalmente na mesma data de início.'}
-                  {form.periodo === 'mensal' && 'O lembrete será repetido mensalmente na mesma data de início.'}
-                  {form.periodo === 'trimestral' && 'O lembrete será repetido a cada 3 meses.'}
-                  {form.periodo === 'semestral' && 'O lembrete será repetido a cada 6 meses.'}
-                  {form.periodo === 'anual' && 'O lembrete será repetido anualmente na mesma data de início.'}
+                  {form.periodo === 'diario'      && 'O lembrete aparecerá todos os dias a partir da data de início.'}
+                  {form.periodo === 'semanal'     && 'O lembrete será repetido semanalmente na mesma data de início.'}
+                  {form.periodo === 'mensal'      && 'O lembrete será repetido mensalmente na mesma data de início.'}
+                  {form.periodo === 'trimestral'  && 'O lembrete será repetido a cada 3 meses.'}
+                  {form.periodo === 'semestral'   && 'O lembrete será repetido a cada 6 meses.'}
+                  {form.periodo === 'anual'       && 'O lembrete será repetido anualmente na mesma data de início.'}
                 </div>
               )}
 
-              {/* Footer */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
                 <button onClick={() => setModalOpen(false)} style={{ padding: '9px 18px', border: `1px solid #C8C5BC`, borderRadius: 6, background: '#fff', color: TEXT_MID, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   Cancelar
