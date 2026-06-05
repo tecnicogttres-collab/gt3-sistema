@@ -44,33 +44,35 @@ export default function LoginClient() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#F4F6FA',
+        backgroundImage: 'url(/bg-login.jpeg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
       }}
     >
+      {/* overlay escuro sutil para legibilidade */}
+      <div style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(15, 30, 60, 0.45)',
+        pointerEvents: 'none',
+      }} />
+
       <div
         style={{
+          position: 'relative', zIndex: 1,
           width: 380,
-          backgroundColor: '#fff',
-          borderRadius: 12,
+          backgroundColor: 'rgba(255,255,255,0.97)',
+          borderRadius: 16,
           padding: '40px 36px',
-          boxShadow: '0 4px 24px rgba(42,79,150,0.10)',
+          boxShadow: '0 8px 48px rgba(0,0,0,0.35)',
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              backgroundColor: '#1E3A6E',
-              marginBottom: 16,
-            }}
-          >
-            <span style={{ color: '#D1AE6E', fontWeight: 800, fontSize: 20 }}>GT3</span>
-          </div>
+          <img
+            src="/logo-sidebar.jpeg"
+            alt="GT3"
+            style={{ height: 52, width: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto 16px', borderRadius: 6 }}
+          />
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1E293B' }}>
             GT3 Sistema
           </h1>

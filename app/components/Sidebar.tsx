@@ -117,9 +117,9 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       >
         {!collapsed && (
           <img
-            src="/logo-gt3.png"
+            src="/logo-sidebar.jpeg"
             alt="GT3"
-            style={{ height: 28, width: 'auto', objectFit: 'contain', display: 'block' }}
+            style={{ height: 36, width: 'auto', objectFit: 'contain', display: 'block', borderRadius: 4 }}
           />
         )}
         {mode !== 'hover' && (
