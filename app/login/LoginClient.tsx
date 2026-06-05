@@ -73,7 +73,7 @@ export default function LoginClient() {
             style={{ height: 52, width: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto 16px', borderRadius: 6 }}
           />
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1E293B' }}>
-            Sistema Interno GT3
+            Sistema Interno
           </h1>
           <p style={{ margin: '6px 0 0', fontSize: 14, color: '#6B7A99' }}>
             Entre com sua conta
