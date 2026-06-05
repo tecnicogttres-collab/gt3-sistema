@@ -182,23 +182,8 @@ function dismissLembreteNotifStorage(userId: string) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [manualCollapsed, setManualCollapsed] = useState(true)
-  const [sidebarHovered, setSidebarHovered] = useState(false)
-  const collapsed = manualCollapsed && !sidebarHovered
-  const [sidebarMode, setSidebarMode] = useState<'classic' | 'hover'>('classic')
   const [hoverVisible, setHoverVisible] = useState(false)
 
-  useEffect(() => {
-    const saved = localStorage.getItem('gt3_sidebar_mode') as 'classic' | 'hover' | null
-    if (saved === 'hover' || saved === 'classic') setSidebarMode(saved)
-  }, [])
-
-  function handleModeToggle() {
-    const next = sidebarMode === 'classic' ? 'hover' : 'classic'
-    setSidebarMode(next)
-    localStorage.setItem('gt3_sidebar_mode', next)
-    setHoverVisible(false)
-  }
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [sugestaoQueue, setSugestaoQueue] = useState<Array<{ id: string }>>([])
@@ -538,17 +523,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        {sidebarMode === 'classic' && (
-          <Sidebar
-            collapsed={collapsed}
-            onToggle={() => setManualCollapsed((c) => !c)}
-            onHoverEnter={() => setSidebarHovered(true)}
-            onHoverLeave={() => setSidebarHovered(false)}
-            mode="classic"
-            onModeToggle={handleModeToggle}
-          />
-        )}
-
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <header style={{
             backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0',
@@ -693,7 +667,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {pathname === '/' && (
         <div style={{
           position: 'fixed', bottom: 0,
-          left: sidebarMode === 'hover' ? 0 : (collapsed ? 60 : 220),
+          left: 0,
           right: 0, zIndex: 100,
           transition: 'left 0.25s ease',
         }}>
@@ -702,7 +676,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Hover-mode sidebar overlay */}
-      {sidebarMode === 'hover' && (
+      {(
         <div style={{
           position: 'fixed',
           left: 0, top: 0,
@@ -760,7 +734,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               collapsed={false}
               onToggle={() => {}}
               mode="hover"
-              onModeToggle={handleModeToggle}
             />
           </div>
         </div>
