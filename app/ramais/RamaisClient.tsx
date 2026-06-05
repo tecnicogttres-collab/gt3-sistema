@@ -69,7 +69,7 @@ export default function RamaisClient() {
   function closeModal() { setModal({ type: 'closed' }) }
 
   async function handleAdd() {
-    if (modal.type !== 'add-form') return
+    if (modal.type !== 'add-confirm') return
     if (!modal.nome.trim() || !modal.ramal.trim()) return
     const supabase = createClient()
     const { data, error } = await supabase
