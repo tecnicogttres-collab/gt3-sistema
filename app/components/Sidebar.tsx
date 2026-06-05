@@ -26,17 +26,19 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
 
   const papel = profile?.papel as Role | null
-  const visibleModules = useMemo(() => papel
-    ? MODULES.filter((m) => {
-        if (papel === 'admin') return true
-        const allowed = profile?.modulos_permitidos ?? null
-        if (allowed !== null) return allowed.includes(m.id)
-        return m.allowedRoles.includes(papel)
-      })
-    : loading
-    ? []
-    : MODULES.filter((m) => m.allowedRoles.includes('colaborador')),
-  [papel, profile?.modulos_permitidos, loading])
+  const visibleModules = useMemo(() => {
+    const filtered = papel
+      ? MODULES.filter((m) => {
+          if (papel === 'admin') return true
+          const allowed = profile?.modulos_permitidos ?? null
+          if (allowed !== null) return allowed.includes(m.id)
+          return m.allowedRoles.includes(papel)
+        })
+      : loading
+      ? []
+      : MODULES.filter((m) => m.allowedRoles.includes('colaborador'))
+    return [...filtered].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+  }, [papel, profile?.modulos_permitidos, loading])
 
   // PDI notifications (tabela pdi_notificacoes — sistema existente para colaboradores)
   useEffect(() => {
