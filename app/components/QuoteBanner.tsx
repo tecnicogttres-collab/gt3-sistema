@@ -97,11 +97,12 @@ const WEEKEND_BANNER = (
     padding: '7px 32px',
     display: 'flex',
     alignItems: 'center',
-    gap: 16,
+    justifyContent: 'center',
+    gap: 10,
     boxShadow: '0 -2px 12px rgba(0,0,0,0.15)',
   }}>
     <span style={{ fontSize: 16, flexShrink: 0 }}>🌅</span>
-    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#fff', fontStyle: 'italic' }}>
+    <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: '#fff', fontStyle: 'italic' }}>
       Bom fim de semana! As frases voltam na segunda-feira.
     </p>
   </div>
@@ -128,30 +129,29 @@ export default function QuoteBanner() {
       padding: '8px 32px',
       display: 'flex',
       alignItems: 'center',
-      gap: 16,
+      justifyContent: 'center',
+      gap: 10,
       boxShadow: '0 -2px 12px rgba(0,0,0,0.15)',
     }}>
       <span style={{ fontSize: 18, opacity: 0.5, flexShrink: 0, color: '#fff' }}>"</span>
-      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-        <p style={{
-          margin: 0,
-          fontSize: 13,
-          lineHeight: 1.45,
-          color: '#fff',
-          fontStyle: 'italic',
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 1,
-          WebkitBoxOrient: 'vertical',
-        }}>
-          {quote.texto}
-          {quote.autor && (
-            <span style={{ fontStyle: 'normal', color: 'rgba(255,255,255,0.6)', marginLeft: 8 }}>
-              — {quote.autor}
-            </span>
-          )}
-        </p>
-      </div>
+      <p style={{
+        margin: 0,
+        fontSize: 13,
+        lineHeight: 1.45,
+        color: '#fff',
+        fontStyle: 'italic',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        maxWidth: '80vw',
+      }}>
+        {quote.texto}
+        {quote.autor && (
+          <span style={{ fontStyle: 'normal', color: 'rgba(255,255,255,0.6)', marginLeft: 8 }}>
+            — {quote.autor}
+          </span>
+        )}
+      </p>
     </div>
   )
 }

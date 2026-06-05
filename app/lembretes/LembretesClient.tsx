@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useUser } from '../components/UserContext'
+import { createClient } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,13 +26,20 @@ type Lembrete = {
   concluido: boolean
   criado_por: string | null
   created_at: string
-  // enriquecido pelo GET: confirmação do usuário atual no mês corrente
-  confirmado: boolean
-  confirmado_em: string | null
-  confirmado_por_nome: string | null
 }
 
-type Filter = 'todos' | 'pendentes' | 'hoje' | 'atrasados' | 'concluidos'
+type HistoricoRow = {
+  id: string
+  lembrete_id: string
+  lembrete_titulo: string
+  usuario_id: string
+  usuario_nome: string
+  usuario_login: string
+  mes_referencia: string
+  created_at: string
+}
+
+type Filter = 'pendentes' | 'todos' | 'hoje' | 'atrasados' | 'concluidos'
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -56,7 +65,6 @@ function fmtBR(s: string): string {
   return `${d}/${m}/${y}`
 }
 
-// Primeiro dia do mês atual no formato YYYY-MM-01
 function mesReferenciaAtual(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
@@ -69,7 +77,6 @@ function formatDatetime(iso: string): string {
   return `${date} às ${time}`
 }
 
-// Retorna a data (YYYY-MM-DD) da ocorrência deste lembrete no mês/ano dado, ou null se não houver
 function findMonthOccurrence(r: Lembrete, year: number, month: number): string | null {
   const mStart = new Date(year, month, 1)
   const mEnd = new Date(year, month + 1, 0)
@@ -96,27 +103,10 @@ function findMonthOccurrence(r: Lembrete, year: number, month: number): string |
   return cur <= mEnd ? fmtDateStr(cur) : null
 }
 
-// Data de ocorrência no mês atual (para isOverdue / isToday)
 function currentMonthOccurrence(r: Lembrete): Date | null {
   const now = new Date()
   const ds = findMonthOccurrence(r, now.getFullYear(), now.getMonth())
   return ds ? parseDate(ds) : null
-}
-
-function isDone(r: Lembrete) { return r.confirmado }
-
-function isOverdue(r: Lembrete) {
-  if (r.confirmado) return false
-  const occ = currentMonthOccurrence(r)
-  if (!occ) return false
-  return occ < todayLocal()
-}
-
-function isToday(r: Lembrete) {
-  if (r.confirmado) return false
-  const occ = currentMonthOccurrence(r)
-  if (!occ) return false
-  return fmtDateStr(occ) === fmtDateStr(todayLocal())
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -124,9 +114,12 @@ function isToday(r: Lembrete) {
 const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()) }
 
 export default function LembretesClient() {
+  const { profile } = useUser()
+
   const [lembretes, setLembretes] = useState<Lembrete[]>([])
+  const [historico, setHistorico] = useState<HistoricoRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<Filter>('todos')
+  const [filter, setFilter] = useState<Filter>('pendentes')
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -134,17 +127,52 @@ export default function LembretesClient() {
   const [saving, setSaving] = useState(false)
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
-  const [historyTarget, setHistoryTarget] = useState<{ id: string; titulo: string } | null>(null)
-  const [history, setHistory] = useState<Array<{ id: string; usuario_nome: string; mes_referencia: string; created_at: string }>>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
   const [confirmandoIds, setConfirmandoIds] = useState<Set<string>>(new Set())
+  const [histExpanded, setHistExpanded] = useState(true)
+  const [calHistorico, setCalHistorico] = useState<HistoricoRow[]>([])
+  const [calHistoricoLoading, setCalHistoricoLoading] = useState(false)
+
+  // ── Confirmados deste usuário neste mês ────────────────────────────────────
+
+  const myConfirmedIds = useMemo(() => {
+    if (!profile) return new Set<string>()
+    return new Set(historico.filter(h => h.usuario_id === profile.id).map(h => h.lembrete_id))
+  }, [historico, profile])
+
+  function isDone(r: Lembrete) { return myConfirmedIds.has(r.id) }
+
+  function isOverdue(r: Lembrete) {
+    if (isDone(r)) return false
+    const occ = currentMonthOccurrence(r)
+    if (!occ) return false
+    return occ < todayLocal()
+  }
+
+  function isToday(r: Lembrete) {
+    if (isDone(r)) return false
+    const occ = currentMonthOccurrence(r)
+    if (!occ) return false
+    return fmtDateStr(occ) === fmtDateStr(todayLocal())
+  }
+
+  // ── Load ───────────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/lembretes')
-      if (!res.ok) return
-      const data: Lembrete[] = await res.json()
-      setLembretes(data)
+      const supabase = createClient()
+      const mesRef = mesReferenciaAtual()
+      const [lembretesRes, { data: histData }] = await Promise.all([
+        fetch('/api/lembretes'),
+        supabase
+          .from('lembretes_historico')
+          .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, created_at')
+          .eq('mes_referencia', mesRef)
+          .order('created_at', { ascending: false }),
+      ])
+      if (lembretesRes.ok) setLembretes(await lembretesRes.json())
+      const hist = histData ?? []
+      setHistorico(hist)
+      setCalHistorico(hist)
     } catch { /* noop */ } finally {
       setLoading(false)
     }
@@ -152,11 +180,30 @@ export default function LembretesClient() {
 
   useEffect(() => { void load() }, [load])
 
-  // ── Mês atual para filtragem ────────────────────────────────────────────────
+  useEffect(() => {
+    const today = new Date()
+    if (calYear === today.getFullYear() && calMonth === today.getMonth()) {
+      setCalHistorico(historico)
+      return
+    }
+    setCalHistoricoLoading(true)
+    const mesRef = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`
+    const supabase = createClient()
+    supabase
+      .from('lembretes_historico')
+      .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, created_at')
+      .eq('mes_referencia', mesRef)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setCalHistorico(data ?? [])
+        setCalHistoricoLoading(false)
+      })
+  }, [calYear, calMonth, historico])
+
+  // ── Mês atual ──────────────────────────────────────────────────────────────
 
   const now = useMemo(() => new Date(), [])
 
-  // Apenas lembretes com ocorrência no mês atual (Problema 3)
   const currentMonthLembretes = useMemo(() =>
     lembretes.filter(r => findMonthOccurrence(r, now.getFullYear(), now.getMonth()) !== null),
     [lembretes, now]
@@ -164,9 +211,9 @@ export default function LembretesClient() {
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
-  const total = currentMonthLembretes.length
-  const atrasados = currentMonthLembretes.filter(r => isOverdue(r)).length
-  const hoje = currentMonthLembretes.filter(r => isToday(r)).length
+  const total      = currentMonthLembretes.length
+  const atrasados  = currentMonthLembretes.filter(r => isOverdue(r)).length
+  const hoje       = currentMonthLembretes.filter(r => isToday(r)).length
   const concluidos = currentMonthLembretes.filter(r => isDone(r)).length
 
   // ── Filtered list ──────────────────────────────────────────────────────────
@@ -177,19 +224,19 @@ export default function LembretesClient() {
         const q = search.toLowerCase()
         if (!r.titulo.toLowerCase().includes(q) && !(r.descricao ?? '').toLowerCase().includes(q)) return false
       }
-      if (filter === 'pendentes') return !isDone(r)
-      if (filter === 'hoje') return isToday(r)
-      if (filter === 'atrasados') return isOverdue(r)
+      if (filter === 'pendentes')  return !isDone(r)
+      if (filter === 'hoje')       return isToday(r)
+      if (filter === 'atrasados')  return isOverdue(r)
       if (filter === 'concluidos') return isDone(r)
       return true
     })
     .sort((a, b) => {
       const ao = isOverdue(a), bo = isOverdue(b)
-      const at = isToday(a), bt = isToday(b)
-      const ad = isDone(a), bd = isDone(b)
+      const at = isToday(a),   bt = isToday(b)
+      const ad = isDone(a),    bd = isDone(b)
       if (ao && !bo) return -1; if (!ao && bo) return 1
       if (at && !bt) return -1; if (!at && bt) return 1
-      if (ad && !bd) return 1; if (!ad && bd) return -1
+      if (ad && !bd) return 1;  if (!ad && bd) return -1
       const aOcc = currentMonthOccurrence(a)
       const bOcc = currentMonthOccurrence(b)
       return (aOcc?.getTime() ?? 0) - (bOcc?.getTime() ?? 0)
@@ -209,7 +256,7 @@ export default function LembretesClient() {
         })
         if (res.ok) {
           const updated: Lembrete = await res.json()
-          setLembretes(prev => prev.map(r => r.id === editingId ? { ...updated, confirmado: r.confirmado, confirmado_em: r.confirmado_em, confirmado_por_nome: r.confirmado_por_nome } : r))
+          setLembretes(prev => prev.map(r => r.id === editingId ? updated : r))
         }
       } else {
         const res = await fetch('/api/lembretes', {
@@ -228,24 +275,41 @@ export default function LembretesClient() {
     }
   }
 
-  // ── Confirmar (Problema 1 + 2) ─────────────────────────────────────────────
+  // ── Confirmar (OK) ─────────────────────────────────────────────────────────
 
   async function handleConfirm(r: Lembrete) {
+    if (!profile) return
     if (confirmandoIds.has(r.id)) return
     setConfirmandoIds(prev => new Set([...prev, r.id]))
     try {
-      const res = await fetch(`/api/lembretes/${r.id}/confirmar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mes_referencia: mesReferenciaAtual() }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setLembretes(prev => prev.map(l => l.id === r.id
-          ? { ...l, confirmado: true, confirmado_em: data.confirmado_em, confirmado_por_nome: data.confirmado_por_nome }
-          : l
-        ))
+      const supabase = createClient()
+      const mesRef = mesReferenciaAtual()
+      const { error } = await supabase
+        .from('lembretes_historico')
+        .insert({
+          lembrete_id: r.id,
+          lembrete_titulo: r.titulo,
+          usuario_id: profile.id,
+          usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
+          usuario_login: profile.usuario ?? profile.email ?? profile.nome ?? 'Usuário',
+          mes_referencia: mesRef,
+        })
+
+      if (error) return
+
+      const novaEntrada: HistoricoRow = {
+        id: crypto.randomUUID(),
+        lembrete_id: r.id,
+        lembrete_titulo: r.titulo,
+        usuario_id: profile.id,
+        usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
+        usuario_login: profile.usuario ?? profile.email ?? 'Usuário',
+        mes_referencia: mesRef,
+        created_at: new Date().toISOString(),
       }
+      setHistorico(prev => [novaEntrada, ...prev])
+      setFilter(f => f === 'todos' ? 'pendentes' : f)
+      setHistExpanded(true)
     } finally {
       setConfirmandoIds(prev => { const n = new Set(prev); n.delete(r.id); return n })
     }
@@ -269,18 +333,6 @@ export default function LembretesClient() {
     setModalOpen(true)
   }
 
-  async function openHistory(r: Lembrete) {
-    setHistoryTarget({ id: r.id, titulo: r.titulo })
-    setHistory([])
-    setLoadingHistory(true)
-    try {
-      const res = await fetch(`/api/lembretes/${r.id}/historico`)
-      if (res.ok) setHistory(await res.json())
-    } finally {
-      setLoadingHistory(false)
-    }
-  }
-
   // ── Calendar ───────────────────────────────────────────────────────────────
 
   const calDayMap = useMemo(() => {
@@ -296,9 +348,9 @@ export default function LembretesClient() {
     return map
   }, [lembretes, calYear, calMonth])
 
-  const calFirstDay = new Date(calYear, calMonth, 1).getDay()
+  const calFirstDay  = new Date(calYear, calMonth, 1).getDay()
   const calTotalDays = new Date(calYear, calMonth + 1, 0).getDate()
-  const todayStr = fmtDateStr(todayLocal())
+  const todayStr     = fmtDateStr(todayLocal())
 
   function calDateStr(d: number): string {
     return `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -306,16 +358,16 @@ export default function LembretesClient() {
 
   // ── Colors ─────────────────────────────────────────────────────────────────
 
-  const INK = '#2A4F96'
-  const WARN = '#B85C1A'
-  const GOLD = '#D1AE6E'
+  const INK      = '#2A4F96'
+  const WARN     = '#B85C1A'
+  const GOLD     = '#D1AE6E'
   const OK_GREEN = '#22C55E'
-  const OK_TEXT = '#15803D'
-  const BORDER = '#E0DDD6'
-  const TEXT = '#1C1B18'
-  const TEXT_MID = '#5C5A54'
+  const OK_TEXT  = '#15803D'
+  const BORDER   = '#E0DDD6'
+  const TEXT     = '#1C1B18'
+  const TEXT_MID   = '#5C5A54'
   const TEXT_FAINT = '#A8A59D'
-  const SURFACE2 = '#EFEFEB'
+  const SURFACE2   = '#EFEFEB'
 
   function cardBorderColor(r: Lembrete): string {
     if (isDone(r)) return OK_GREEN
@@ -373,10 +425,10 @@ export default function LembretesClient() {
       {/* ── Stats ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Este mês', value: total, highlight: false },
-          { label: 'Atrasados', value: atrasados, highlight: atrasados > 0 },
-          { label: 'Hoje', value: hoje, highlight: false },
-          { label: 'Confirmados', value: concluidos, highlight: false },
+          { label: 'Este mês',   value: total,      highlight: false },
+          { label: 'Atrasados',  value: atrasados,  highlight: atrasados > 0 },
+          { label: 'Hoje',       value: hoje,        highlight: false },
+          { label: 'Confirmados',value: concluidos,  highlight: false },
         ].map(s => (
           <div key={s.label} style={{
             background: s.highlight ? '#FBF0E8' : '#fff',
@@ -395,8 +447,8 @@ export default function LembretesClient() {
 
       {/* ── Filter bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {(['todos','pendentes','hoje','atrasados','concluidos'] as Filter[]).map(f => {
-          const labels: Record<Filter, string> = { todos: 'Todos', pendentes: 'Pendentes', hoje: 'Hoje', atrasados: 'Atrasados', concluidos: 'Confirmados' }
+        {(['pendentes','todos','hoje','atrasados','concluidos'] as Filter[]).map(f => {
+          const labels: Record<Filter, string> = { pendentes: 'Pendentes', todos: 'Todos', hoje: 'Hoje', atrasados: 'Atrasados', concluidos: 'Confirmados' }
           const active = filter === f
           return (
             <button key={f} onClick={() => setFilter(f)} style={{
@@ -442,17 +494,22 @@ export default function LembretesClient() {
               <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
               <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>
             </svg>
-            {lembretes.length > 0
-              ? 'Nenhum lembrete programado para este mês.'
-              : 'Nenhum lembrete encontrado.'}
+            {filter === 'pendentes' && concluidos > 0
+              ? `Todos os ${concluidos} lembrete${concluidos !== 1 ? 's' : ''} deste mês já foram confirmados. ✓`
+              : lembretes.length > 0
+                ? 'Nenhum lembrete programado para este mês.'
+                : 'Nenhum lembrete encontrado.'}
           </div>
         ) : filtered.map(r => {
-          const done = isDone(r)
-          const overdue = isOverdue(r)
+          const done     = isDone(r)
+          const overdue  = isOverdue(r)
           const todayFlag = isToday(r)
-          const occDate = currentMonthOccurrence(r)
-          const occStr = occDate ? fmtDateStr(occDate) : r.data_inicio
+          const occDate  = currentMonthOccurrence(r)
+          const occStr   = occDate ? fmtDateStr(occDate) : r.data_inicio
           const confirmando = confirmandoIds.has(r.id)
+
+          // Quem confirmou (para exibir "feito por")
+          const minhaCnf = historico.find(h => h.lembrete_id === r.id && h.usuario_id === (profile?.id ?? ''))
 
           return (
             <div key={r.id} style={{
@@ -466,7 +523,6 @@ export default function LembretesClient() {
             }}>
               {/* Body */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {/* Título + ✅ */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: done ? 2 : 4 }}>
                   {done && <span style={{ fontSize: 16, lineHeight: 1 }}>✅</span>}
                   <span style={{ fontSize: 15, fontWeight: 600, color: TEXT, lineHeight: 1.3 }}>
@@ -474,10 +530,9 @@ export default function LembretesClient() {
                   </span>
                 </div>
 
-                {/* "Feito por..." quando confirmado (Problema 1) */}
-                {done && r.confirmado_em && (
+                {done && minhaCnf && (
                   <div style={{ fontSize: 11, color: '#4B7C5A', marginBottom: 6, lineHeight: 1.4 }}>
-                    Feito por {r.confirmado_por_nome ?? 'Usuário'} em {formatDatetime(r.confirmado_em)}
+                    Confirmado por <strong>{minhaCnf.usuario_login}</strong> em {formatDatetime(minhaCnf.created_at)}
                   </div>
                 )}
 
@@ -488,11 +543,9 @@ export default function LembretesClient() {
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {/* Period badge */}
                   <span style={{ padding: '2px 9px', borderRadius: 100, background: '#EBF0FA', color: '#1A3266', fontSize: 11, fontWeight: 500 }}>
                     {PERIOD_LABEL[r.periodo]}
                   </span>
-                  {/* Status badge */}
                   {done ? (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: '#DCFCE7', color: '#166534', fontSize: 11, fontWeight: 500 }}>
                       Confirmado
@@ -516,7 +569,6 @@ export default function LembretesClient() {
 
               {/* Actions */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
-                {/* Botão OK / texto Concluído (Problema 1) */}
                 {!done ? (
                   <button
                     onClick={() => void handleConfirm(r)}
@@ -544,11 +596,6 @@ export default function LembretesClient() {
                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                   </svg>
                 </IconBtn>
-                <IconBtn onClick={() => void openHistory(r)} title="Ver histórico" danger={false}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                </IconBtn>
                 <IconBtn onClick={() => void handleDelete(r.id)} title="Excluir" danger>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="3 6 5 6 21 6"/>
@@ -560,6 +607,81 @@ export default function LembretesClient() {
             </div>
           )
         })}
+      </div>
+
+      {/* ── Histórico deste mês ── */}
+      <hr style={{ border: 'none', borderTop: `1px solid ${BORDER}`, marginBottom: 24 }} />
+
+      <div style={{ marginBottom: 32 }}>
+        {/* cabeçalho colapsável */}
+        <button
+          onClick={() => setHistExpanded(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            marginBottom: histExpanded ? 16 : 0, width: '100%',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>
+            Histórico — {MONTHS[calMonth]} {calYear}
+          </span>
+          <span style={{ fontSize: 12, color: TEXT_FAINT, marginLeft: 4 }}>
+            ({calHistorico.length} confirmação{calHistorico.length !== 1 ? 'ões' : ''})
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: 14, color: TEXT_FAINT }}>
+            {histExpanded ? '▲' : '▼'}
+          </span>
+        </button>
+
+        {histExpanded && (
+          calHistoricoLoading ? (
+            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: TEXT_FAINT, fontSize: 13 }}>
+              Carregando histórico...
+            </div>
+          ) : calHistorico.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: TEXT_FAINT, fontSize: 13 }}>
+              Nenhuma confirmação registrada em {MONTHS[calMonth]} {calYear}.
+            </div>
+          ) : (
+            <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 160px 180px',
+                background: SURFACE2, padding: '8px 16px',
+                fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.08em', color: TEXT_FAINT,
+              }}>
+                <span>Lembrete</span>
+                <span>Usuário (login)</span>
+                <span>Data / hora</span>
+              </div>
+
+              {calHistorico.map((h, i) => (
+                <div key={h.id} style={{
+                  display: 'grid', gridTemplateColumns: '1fr 160px 180px',
+                  padding: '10px 16px', alignItems: 'center',
+                  background: i % 2 === 0 ? '#fff' : '#FAFAF8',
+                  borderTop: `1px solid ${BORDER}`,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 14 }}>✅</span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: TEXT }}>
+                      {h.lembrete_titulo}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: INK, fontWeight: 600 }}>
+                    {h.usuario_login}
+                  </div>
+                  <div style={{ fontSize: 12, color: TEXT_MID }}>
+                    {formatDatetime(h.created_at)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
       </div>
 
       {/* ── Calendar ── */}
@@ -592,8 +714,8 @@ export default function LembretesClient() {
             <div key={`e${i}`} style={{ minHeight: 72 }} />
           ))}
           {Array.from({ length: calTotalDays }, (_, i) => i + 1).map(d => {
-            const ds = calDateStr(d)
-            const isT = ds === todayStr
+            const ds   = calDateStr(d)
+            const isT  = ds === todayStr
             const hits = calDayMap.get(ds) ?? []
             return (
               <div key={d} style={{
@@ -605,16 +727,17 @@ export default function LembretesClient() {
                 <div style={{ fontWeight: 600, fontSize: 12, color: isT ? '#7A5A1E' : TEXT_FAINT, marginBottom: 3 }}>
                   {d}
                 </div>
-                {hits.slice(0, 3).map((r, i) => {
-                  const over = parseDate(ds) < todayLocal() && !r.confirmado
+                {hits.slice(0, 3).map((r, idx) => {
+                  const confirmed = myConfirmedIds.has(r.id)
+                  const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
-                    <div key={i} style={{
+                    <div key={idx} style={{
                       fontSize: 10, borderRadius: 3, padding: '1px 4px', marginBottom: 2,
-                      background: r.confirmado ? '#DCFCE7' : over ? '#FBF0E8' : '#EBF0FA',
-                      color: r.confirmado ? '#166534' : over ? '#7A3A0E' : '#1A3266',
+                      background: confirmed ? '#DCFCE7' : over ? '#FBF0E8' : '#EBF0FA',
+                      color: confirmed ? '#166534' : over ? '#7A3A0E' : '#1A3266',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     }}>
-                      {r.confirmado ? '✓ ' : ''}{r.titulo}
+                      {confirmed ? '✓ ' : ''}{r.titulo}
                     </div>
                   )
                 })}
@@ -628,63 +751,6 @@ export default function LembretesClient() {
           })}
         </div>
       </div>
-
-      {/* ── Modal histórico ── */}
-      {historyTarget && (
-        <div
-          onClick={e => { if (e.target === e.currentTarget) setHistoryTarget(null) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,24,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
-        >
-          <div style={{ background: '#fff', borderRadius: 14, width: 500, maxWidth: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>Histórico de confirmações</div>
-                <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 360 }}>
-                  {historyTarget.titulo}
-                </div>
-              </div>
-              <button onClick={() => setHistoryTarget(null)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                ×
-              </button>
-            </div>
-            <div style={{ padding: '16px 24px 24px', overflowY: 'auto', flex: 1 }}>
-              {loadingHistory ? (
-                <div style={{ color: TEXT_FAINT, fontSize: 13, textAlign: 'center', padding: '2rem 0' }}>Carregando...</div>
-              ) : history.length === 0 ? (
-                <div style={{ color: TEXT_FAINT, fontSize: 13, textAlign: 'center', padding: '2rem 0' }}>
-                  Nenhuma confirmação registrada ainda.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {history.map(h => {
-                    const dt = new Date(h.created_at)
-                    const dateLabel = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                    const timeLabel = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                    const mesLabel = h.mes_referencia
-                      ? (() => {
-                          const [y, m] = h.mes_referencia.split('-')
-                          return `${MONTHS[Number(m) - 1]} ${y}`
-                        })()
-                      : ''
-                    return (
-                      <div key={h.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 12px', background: '#F0FDF4', borderRadius: 8, borderLeft: `3px solid ${OK_GREEN}` }}>
-                        <span style={{ fontSize: 16, lineHeight: 1, marginTop: 1 }}>✅</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: TEXT }}>{h.usuario_nome}</div>
-                          <div style={{ fontSize: 11, color: TEXT_MID, marginTop: 2 }}>
-                            {mesLabel && <span style={{ background: '#DCFCE7', color: '#166534', padding: '1px 6px', borderRadius: 4, marginRight: 6, fontWeight: 600 }}>{mesLabel}</span>}
-                            {dateLabel} às {timeLabel}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Modal edição ── */}
       {modalOpen && (
@@ -800,7 +866,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function IconBtn({ onClick, title, danger, children }: { onClick: () => void; title: string; danger: boolean; children: React.ReactNode }) {
   const [hov, setHov] = useState(false)
-  const INK = '#2A4F96'
+  const INK  = '#2A4F96'
   const WARN = '#B85C1A'
   return (
     <button

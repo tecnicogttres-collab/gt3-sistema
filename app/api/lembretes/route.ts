@@ -8,50 +8,20 @@ async function getCaller() {
   return { user }
 }
 
-function mesReferenciaAtual(): string {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}-01`
-}
 
 export async function GET() {
   const caller = await getCaller()
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const mesRef = mesReferenciaAtual()
-
-  const [{ data: lembretes, error }, { data: confirmacoes }, { data: profile }] = await Promise.all([
-    admin
-      .from('lembretes')
-      .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at')
-      .order('data_inicio', { ascending: true }),
-    admin
-      .from('lembretes_confirmacoes')
-      .select('lembrete_id, confirmado_em')
-      .eq('user_id', caller.user.id)
-      .eq('mes_referencia', mesRef),
-    admin
-      .from('profiles')
-      .select('nome')
-      .eq('id', caller.user.id)
-      .single(),
-  ])
+  const { data: lembretes, error } = await admin
+    .from('lembretes')
+    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at')
+    .order('data_inicio', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  const userName = (profile?.nome as string | null) ?? 'Usuário'
-  const confirmMap = new Map((confirmacoes ?? []).map(c => [c.lembrete_id, c]))
-
-  const enriched = (lembretes ?? []).map(r => ({
-    ...r,
-    confirmado: confirmMap.has(r.id),
-    confirmado_em: confirmMap.get(r.id)?.confirmado_em ?? null,
-    confirmado_por_nome: confirmMap.has(r.id) ? userName : null,
-  }))
-
-  return Response.json(enriched)
+  return Response.json(lembretes ?? [])
 }
 
 export async function POST(req: NextRequest) {

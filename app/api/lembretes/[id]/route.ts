@@ -36,16 +36,6 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  // Registra no histórico quando o usuário dá "ok" (toggle concluido ou avanço de data)
-  const isToggle = body.concluido !== undefined || (body.data_inicio !== undefined && body.titulo === undefined)
-  if (isToggle) {
-    await admin.from('lembretes_historico').insert({
-      lembrete_id: id,
-      usuario_id: caller.user.id,
-      usuario_nome: caller.nome,
-    })
-  }
-
   return Response.json(data)
 }
 
