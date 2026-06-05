@@ -47,28 +47,18 @@ export default function LoginClient() {
         position: 'relative',
       }}
     >
-      {/* imagem de fundo em tela cheia */}
-      <img
-        src="/bg-login.jpeg"
-        alt=""
-        style={{
-          position: 'fixed', inset: 0,
-          width: '100%', height: '100%',
-          objectFit: 'cover', objectPosition: 'center',
-          zIndex: 0,
-        }}
-      />
+      <img src="/bg-login.jpeg" alt="" style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1 }} />
       {/* overlay escuro sutil para legibilidade */}
       <div style={{
         position: 'fixed', inset: 0,
         background: 'rgba(15, 30, 60, 0.45)',
-        zIndex: 1,
+        zIndex: 0,
         pointerEvents: 'none',
       }} />
 
       <div
         style={{
-          position: 'relative', zIndex: 2,
+          position: 'relative', zIndex: 1,
           width: 380,
           backgroundColor: 'rgba(255,255,255,0.97)',
           borderRadius: 16,
