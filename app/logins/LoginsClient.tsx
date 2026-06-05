@@ -117,6 +117,8 @@ export default function LoginsClient() {
   }, [profileLoading])
 
   const filtered = users.filter((u) => {
+    // Apenas admin vê outros admins
+    if (u.papel === 'admin' && !isAdmin) return false
     const q = search.toLowerCase()
     return (
       u.email.toLowerCase().includes(q) ||
