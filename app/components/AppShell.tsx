@@ -33,14 +33,21 @@ const PAPEL_LABELS: Record<string, string> = {
 
 // ─── UserMenu ─────────────────────────────────────────────────────────────────
 
+const ROLE_COMMANDS: Record<string, Role> = {
+  '/gestor/':      'gestor',
+  '/colaborador/': 'colaborador',
+  '/admin/':       'admin',
+  '/trainee/':     'trainee',
+}
+
 function HeaderSearch() {
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
   const router = useRouter()
-  const { profile } = useUser()
+  const { profile, roleOverride, setRoleOverride } = useUser()
   const papel = profile?.papel as Role | null
 
-  const results = query.trim()
+  const results = query.trim() && !ROLE_COMMANDS[query.trim().toLowerCase()]
     ? MODULES.filter(m => {
         if (!papel) return m.allowedRoles.includes('colaborador')
         if (papel === 'admin') return true
@@ -54,54 +61,81 @@ function HeaderSearch() {
     router.push(path)
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    const cmd = ROLE_COMMANDS[query.trim().toLowerCase()]
+    if (cmd) {
+      setRoleOverride(cmd)
+      setQuery('')
+      setFocused(false)
+      router.push('/')
+    }
+  }
+
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        border: '1px solid #E2E8F0', borderRadius: 20,
-        padding: '5px 12px', background: focused ? '#fff' : '#F8FAFC',
-        transition: 'background 0.15s, border-color 0.15s',
-        borderColor: focused ? '#2A4F96' : '#E2E8F0',
-        width: 200,
-      }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2.5" style={{ flexShrink: 0 }}>
-          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-        </svg>
-        <input
-          type="text"
-          placeholder="Buscar módulo..."
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setTimeout(() => setFocused(false), 150)}
-          style={{
-            border: 'none', outline: 'none', background: 'transparent',
-            fontSize: 12, color: '#1E293B', width: '100%', fontFamily: 'inherit',
-          }}
-        />
-      </div>
-      {focused && results.length > 0 && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {roleOverride && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0,
-          background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.10)', zIndex: 300,
-          minWidth: 200, overflow: 'hidden',
-        }}>
-          {results.map(m => (
-            <button key={m.id} onMouseDown={() => go(m.path)} style={{
-              display: 'block', width: '100%', textAlign: 'left',
-              padding: '8px 12px', border: 'none', background: 'transparent',
-              fontSize: 13, color: '#1E293B', cursor: 'pointer',
-              borderBottom: '1px solid #F1F5F9',
-            }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#EBF0FB' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-            >
-              {m.label}
-            </button>
-          ))}
+          display: 'flex', alignItems: 'center', gap: 4,
+          background: '#FEF3C7', border: '1px solid #F59E0B',
+          borderRadius: 12, padding: '2px 8px', fontSize: 11, fontWeight: 600, color: '#92400E',
+          cursor: 'pointer', userSelect: 'none',
+        }}
+          title="Clique para voltar ao perfil original"
+          onClick={() => { setRoleOverride(null); router.push('/') }}
+        >
+          ⚡ Modo {roleOverride}  ✕
         </div>
       )}
+      <div style={{ position: 'relative' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          border: '1px solid #E2E8F0', borderRadius: 20,
+          padding: '5px 12px', background: focused ? '#fff' : '#F8FAFC',
+          transition: 'background 0.15s, border-color 0.15s',
+          borderColor: focused ? '#2A4F96' : '#E2E8F0',
+          width: 200,
+        }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Buscar módulo..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setTimeout(() => setFocused(false), 150)}
+            style={{
+              border: 'none', outline: 'none', background: 'transparent',
+              fontSize: 12, color: '#1E293B', width: '100%', fontFamily: 'inherit',
+            }}
+          />
+        </div>
+        {focused && results.length > 0 && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+            background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.10)', zIndex: 300,
+            minWidth: 200, overflow: 'hidden',
+          }}>
+            {results.map(m => (
+              <button key={m.id} onMouseDown={() => go(m.path)} style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '8px 12px', border: 'none', background: 'transparent',
+                fontSize: 13, color: '#1E293B', cursor: 'pointer',
+                borderBottom: '1px solid #F1F5F9',
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#EBF0FB' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
