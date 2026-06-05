@@ -4,12 +4,12 @@
     "sheetName": "BERTOLINI BSA",
     "name": "BERTOLINI - BSA",
     "segment": "Bertolini",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
         "label": "AUTORIZAÇÃO P/CADASTRO",
-        "value": "Sim. franciele.lagunaz@bertolini.com.br;lorhana.santos@bertolini.com.br;lauri.zanon@bertolini.com.br;eduardo.flores@bertolini.com.br"
+        "value": "Sim. franciele.lagunaz@bertolini.com.br;lorhana.santos@bertolini.com.br;lauri.zanon@bertolini.com.br;eduardo.flores@bertolini.com.br;julia.berton@bertolini.com.br"
       },
       {
         "type": "text",
@@ -24,7 +24,7 @@
       {
         "type": "text",
         "label": "E-MAIL",
-        "value": "franciele.lagunaz@bertolini.com.br;lorhana.santos@bertolini.com.br;lauri.zanon@bertolini.com.br;eduardo.flores@bertolini.com.br"
+        "value": "franciele.lagunaz@bertolini.com.br;lorhana.santos@bertolini.com.br;lauri.zanon@bertolini.com.br;eduardo.flores@bertolini.com.br;julia.berton@bertolini.com.br"
       },
       {
         "type": "text",
@@ -132,12 +132,12 @@
     "sheetName": "BERTOLINI COLATINA",
     "name": "BERTOLINI - Colatina",
     "segment": "Bertolini",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
         "label": "AUTORIZAÇÃO P/CADASTRO",
-        "value": "Sim. marcus.balarini@bertolini.com.br;francieli.oliveira@bertolini.com.br;gislane.vesfal@bertolini.com.br;carlos.cosmi@bertolini.com.br\neliza.dumer@bertolini.com.br"
+        "value": "Sim. marcus.balarini@bertolini.com.br;monique.hensel@bertolini.com.br;gislane.vesfal@bertolini.com.br;carlos.cosmi@bertolini.com.br\n(Licença: eliza.dumer@bertolini.com.br)"
       },
       {
         "type": "text",
@@ -152,7 +152,7 @@
       {
         "type": "text",
         "label": "E-MAIL",
-        "value": "marcus.balarini@bertolini.com.br;francieli.oliveira@bertolini.com.br;gislane.vesfal@bertolini.com.br;carlos.cosmi@bertolini.com.br"
+        "value": "marcus.balarini@bertolini.com.br;monique.hensel@bertolini.com.br;gislane.vesfal@bertolini.com.br;carlos.cosmi@bertolini.com.br"
       },
       {
         "type": "text",
@@ -191,12 +191,12 @@
     "sheetName": "BERTOLINI MATRIZ",
     "name": "BERTOLINI - Matriz",
     "segment": "Bertolini",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
         "label": "AUTORIZAÇÃO P/CADASTRO",
-        "value": "Sim. sidclei.oliveira@bertolini.com.br; francieli.oliveira@bertolini.com.br"
+        "value": "Sim. sidclei.oliveira@bertolini.com.br; monique.hensel@bertolini.com.br"
       },
       {
         "type": "text",
@@ -211,7 +211,7 @@
       {
         "type": "text",
         "label": "E-MAIL",
-        "value": "sidclei.oliveira@bertolini.com.br; francieli.oliveira@bertolini.com.br"
+        "value": "sidclei.oliveira@bertolini.com.br; monique.hensel@bertolini.com.br"
       },
       {
         "type": "text",
@@ -250,7 +250,7 @@
     "sheetName": "MARCOPOLO ANA RECH",
     "name": "MARCOPOLO - Ana Rech",
     "segment": "Marcopolo",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -329,7 +329,7 @@
     "sheetName": "MARCOPOLO SC",
     "name": "MARCOPOLO - São Cristóvão",
     "segment": "Marcopolo",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -408,7 +408,7 @@
     "sheetName": "VOLARE",
     "name": "VOLARE",
     "segment": "Marcopolo",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -462,7 +462,7 @@
     "sheetName": "FCC BAHIA",
     "name": "FCC - Bahia",
     "segment": "FCC",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -516,7 +516,7 @@
     "sheetName": "FCC CAMPO BOM",
     "name": "FCC - Campo Bom",
     "segment": "FCC",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -565,7 +565,7 @@
     "sheetName": "BRASLUX",
     "name": "BRASLUX",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -614,7 +614,7 @@
     "sheetName": "CSG",
     "name": "CSG",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -850,7 +850,7 @@
     "sheetName": "EUROSTEC",
     "name": "EUROSTEC",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -899,7 +899,7 @@
     "sheetName": "JUNGHEINRICH",
     "name": "JUNGHEINRICH",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -953,7 +953,7 @@
     "sheetName": "MADAL",
     "name": "MADAL",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1002,7 +1002,7 @@
     "sheetName": "MEBRAFE",
     "name": "MEBRAFE",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1051,7 +1051,7 @@
     "sheetName": "MEINCOL",
     "name": "MEINCOL VOESTALPINE",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1218,7 +1218,7 @@
     "sheetName": "PETTENATI",
     "name": "PETTENATI",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1272,7 +1272,7 @@
     "sheetName": "PLS",
     "name": "PLS",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1326,7 +1326,7 @@
     "sheetName": "RONI CHAVES",
     "name": "RONI CHAVES",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1385,7 +1385,7 @@
     "sheetName": "SULBRAS",
     "name": "SULBRAS",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1439,7 +1439,7 @@
     "sheetName": "SUMIG",
     "name": "SUMIG",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1488,7 +1488,7 @@
     "sheetName": "TABONE",
     "name": "TABONE",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1537,7 +1537,7 @@
     "sheetName": "WOODBRIDGE",
     "name": "WOODBRIDGE (multi-unidade)",
     "segment": "Auto/Componentes",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1653,7 +1653,7 @@
     "sheetName": "GRUPO PRATO FEITO",
     "name": "GRUPO PRATO FEITO",
     "segment": "Alimentos/Bebidas",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1667,7 +1667,7 @@
     "sheetName": "MINUANO",
     "name": "MINUANO ALIMENTOS",
     "segment": "Alimentos/Bebidas",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1716,7 +1716,7 @@
     "sheetName": "SALTON",
     "name": "VINÍCOLA SALTON",
     "segment": "Alimentos/Bebidas",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -1992,12 +1992,12 @@
     "sheetName": "FLORENSE",
     "name": "FLORENSE",
     "segment": "Indústria Geral",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
         "label": "AUTORIZAÇÃO P/CADASTRO",
-        "value": "Sim. marlei.oliveira@florense.com.br; Talvani.Berlesi@florense.com.br;leticia.barcaro@florense.com.br;lucas.valmorbida@florense.com.br"
+        "value": "Sim. marlei.oliveira@florense.com.br; Talvani.Berlesi@florense.com.br;monique.paulus@florense.com.br;lucas.valmorbida@florense.com.br"
       },
       {
         "type": "text",
@@ -2012,7 +2012,7 @@
       {
         "type": "text",
         "label": "E-MAIL",
-        "value": "marlei.oliveira@florense.com.br; Talvani.Berlesi@florense.com.br;leticia.barcaro@florense.com.br;lucas.valmorbida@florense.com.br"
+        "value": "marlei.oliveira@florense.com.br; Talvani.Berlesi@florense.com.br;monique.paulus@florense.com.br;lucas.valmorbida@florense.com.br"
       },
       {
         "type": "text",
@@ -2056,7 +2056,7 @@
     "sheetName": "GRUPO BRINOX",
     "name": "GRUPO BRINOX",
     "segment": "Indústria Geral",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
@@ -2110,7 +2110,7 @@
     "sheetName": "GRUPO IMEC",
     "name": "GRUPO IMEC",
     "segment": "Indústria Geral",
-    "updated": "04/05/2026",
+    "updated": "05/06/2026",
     "fields": [
       {
         "type": "text",
