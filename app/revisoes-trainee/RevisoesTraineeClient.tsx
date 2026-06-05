@@ -964,9 +964,9 @@ export default function RevisoesTraineeClient() {
           {/* Add form (trainee) */}
           {isTrainee && !isFinalized && (
             <div style={{ padding: '11px 18px', borderTop: '1px solid #F1F5F9', backgroundColor: '#FAFAFA' }}>
-              {totalCount >= 150 ? (
+              {totalCount >= 300 ? (
                 <div style={{ padding: '10px 14px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, fontSize: 13, color: '#DC2626', textAlign: 'center', fontWeight: 500 }}>
-                  Limite de 150 registros por dia atingido.
+                  Limite de 300 registros por dia atingido.
                 </div>
               ) : (
                 <>
@@ -1011,7 +1011,7 @@ export default function RevisoesTraineeClient() {
                       )
                     })}
                     <span style={{ marginLeft: 'auto', fontSize: 11, color: totalCount >= 130 ? '#D97706' : '#94A3B8' }}>
-                      {totalCount} / 150
+                      {totalCount} / 300
                     </span>
                   </div>
                 </>

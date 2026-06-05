@@ -163,8 +163,8 @@ export async function POST(request: NextRequest) {
     .eq('data_dia', data_dia)
     .eq('criado_por', user.id)
 
-  if ((count ?? 0) >= 150) {
-    return Response.json({ error: 'Limite de 150 registros por dia atingido.' }, { status: 400 })
+  if ((count ?? 0) >= 300) {
+    return Response.json({ error: 'Limite de 300 registros por dia atingido.' }, { status: 400 })
   }
 
   const today = new Date().toISOString().split('T')[0]
