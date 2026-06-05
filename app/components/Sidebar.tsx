@@ -112,7 +112,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
           flexShrink: 0,
         }}
       >
-        <img src="/logo-sidebar.jpeg" alt="GT3 Logo" style={{ width: '100%', maxHeight: collapsed ? '44px' : '100px', objectFit: 'contain', display: 'block' }} />
+        <img src="/logo-sidebar.jpeg" alt="GT3 Logo" style={{ width: '100%', maxHeight: collapsed ? '44px' : '100px', objectFit: 'contain', display: 'block', borderRadius: 10 }} />
         {mode !== 'hover' && !collapsed && (
           <button
             onClick={onToggle}
