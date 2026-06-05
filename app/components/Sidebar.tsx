@@ -109,26 +109,32 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: collapsed ? 'center' : 'space-between',
-          padding: '16px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          padding: collapsed ? '12px 0' : '12px 16px',
           borderBottom: '1px solid rgba(255,255,255,0.10)',
           flexShrink: 0,
         }}
       >
-        {!collapsed && (
+        {collapsed ? (
           <img
             src="/logo-sidebar.jpeg"
             alt="GT3"
-            style={{ height: 36, width: 'auto', objectFit: 'contain', display: 'block', borderRadius: 4 }}
+            style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6, display: 'block' }}
+          />
+        ) : (
+          <img
+            src="/logo-sidebar.jpeg"
+            alt="GT3"
+            style={{ width: '100%', maxHeight: 64, objectFit: 'contain', objectPosition: 'left center', display: 'block', borderRadius: 4 }}
           />
         )}
-        {mode !== 'hover' && (
+        {mode !== 'hover' && !collapsed && (
           <button
             onClick={onToggle}
-            aria-label={collapsed ? 'Expandir' : 'Recolher'}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}
+            aria-label="Recolher"
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0 }}
           >
-            {collapsed ? '›' : '‹'}
+            ‹
           </button>
         )}
       </div>

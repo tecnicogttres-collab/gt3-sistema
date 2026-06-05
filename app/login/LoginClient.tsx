@@ -44,22 +44,31 @@ export default function LoginClient() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundImage: 'url(/bg-login.jpeg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
+        position: 'relative',
       }}
     >
+      {/* imagem de fundo em tela cheia */}
+      <img
+        src="/bg-login.jpeg"
+        alt=""
+        style={{
+          position: 'fixed', inset: 0,
+          width: '100%', height: '100%',
+          objectFit: 'cover', objectPosition: 'center',
+          zIndex: 0,
+        }}
+      />
       {/* overlay escuro sutil para legibilidade */}
       <div style={{
         position: 'fixed', inset: 0,
         background: 'rgba(15, 30, 60, 0.45)',
+        zIndex: 1,
         pointerEvents: 'none',
       }} />
 
       <div
         style={{
-          position: 'relative', zIndex: 1,
+          position: 'relative', zIndex: 2,
           width: 380,
           backgroundColor: 'rgba(255,255,255,0.97)',
           borderRadius: 16,
