@@ -17,7 +17,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const pdi = pdisMap[id]
-  return { title: pdi ? `PDI — ${pdi.nome}` : 'PDI — GT3 Sistema' }
+  return { title: pdi ? `PDI — ${pdi.nome}` : 'PDI — Sistema Interno GT3' }
 }
 
 type DbPdiRow = {

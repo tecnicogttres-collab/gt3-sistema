@@ -1,7 +1,7 @@
-import HomeOfficeClient from './HomeOfficeClient'
+﻿import HomeOfficeClient from './HomeOfficeClient'
 
 export const metadata = {
-  title: 'Home Office — GT3 Sistema',
+  title: 'Home Office — Sistema Interno GT3',
 }
 
 export default function HomeOfficePage() {

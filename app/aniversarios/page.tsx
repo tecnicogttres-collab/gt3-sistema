@@ -1,7 +1,7 @@
-import AniversariosClient from './AniversariosClient'
+﻿import AniversariosClient from './AniversariosClient'
 
 export const metadata = {
-  title: 'Aniversários — GT3 Sistema',
+  title: 'Aniversários — Sistema Interno GT3',
 }
 
 export default function AniversariosPage() {

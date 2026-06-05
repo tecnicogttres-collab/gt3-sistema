@@ -1,6 +1,6 @@
-import PrioridadesClient from './PrioridadesClient'
+﻿import PrioridadesClient from './PrioridadesClient'
 
-export const metadata = { title: 'Prioridades — GT3 Sistema' }
+export const metadata = { title: 'Prioridades — Sistema Interno GT3' }
 
 export default function PrioridadesPage() {
   return <PrioridadesClient />

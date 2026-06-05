@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
@@ -20,7 +20,7 @@ import QuoteBanner from './QuoteBanner'
 function useBreadcrumb(pathname: string): string {
   if (pathname === '/') return ''
   const mod = MODULES.find((m) => m.path === pathname)
-  return mod ? `GT3 Sistema › ${mod.label}` : 'GT3 Sistema'
+  return mod ? `Sistema Interno GT3 › ${mod.label}` : 'Sistema Interno GT3'
 }
 
 const PAPEL_LABELS: Record<string, string> = {

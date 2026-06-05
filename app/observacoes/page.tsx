@@ -1,7 +1,7 @@
-import ObservacoesClient from './ObservacoesClient'
+﻿import ObservacoesClient from './ObservacoesClient'
 
 export const metadata = {
-  title: 'Observações — GT3 Sistema',
+  title: 'Observações — Sistema Interno GT3',
 }
 
 export default function ObservacoesPage() {

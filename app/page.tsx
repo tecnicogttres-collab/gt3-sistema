@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -83,7 +83,7 @@ export default function DashboardPage() {
             {greeting(profile)}
           </h1>
           <p style={{ fontSize: 13, color: '#6B7A99', marginTop: 4 }}>
-            Bem-vindo ao GT3 Sistema — selecione um módulo abaixo
+            Bem-vindo ao Sistema Interno GT3 — selecione um módulo abaixo
           </p>
         </div>
 

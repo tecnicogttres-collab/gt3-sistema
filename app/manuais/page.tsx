@@ -1,7 +1,7 @@
-import ManuaisClient from './ManuaisClient'
+﻿import ManuaisClient from './ManuaisClient'
 
 export const metadata = {
-  title: 'Manuais — GT3 Sistema',
+  title: 'Manuais — Sistema Interno GT3',
 }
 
 export default function ManuaisPage() {

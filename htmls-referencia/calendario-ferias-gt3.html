@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Calendário de Férias — GT3 Consultoria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --gt3-blue: #2A4F96;
+    --gt3-blue-light: #3d6abf;
+    --gt3-blue-dim: #1e3a6e;
+    --gt3-gold: #D1AE6E;
+    --gt3-gold-light: #e8cfa0;
+    --bg: #F4F6FA;
+    --surface: #ffffff;
+    --surface2: #f0f2f7;
+    --border: rgba(42,79,150,0.12);
+    --border-md: rgba(42,79,150,0.2);
+    --text: #1a2744;
+    --text-muted: #6b7a9e;
+    --text-faint: #a0aac4;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --shadow: 0 2px 12px rgba(42,79,150,0.08);
+    --shadow-lg: 0 8px 32px rgba(42,79,150,0.14);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── LAYOUT ── */
+  .page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--gt3-blue);
+    padding: 0 2rem;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-logo {
+    width: 32px;
+    height: 32px;
+    background: var(--gt3-gold);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Serif Display', serif;
+    font-size: 15px;
+    color: var(--gt3-blue-dim);
+    font-weight: 400;
+    letter-spacing: -0.5px;
+  }
+  .header-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.01em;
+  }
+  .header-subtitle {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    margin-top: 1px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* ── MAIN ── */
+  .main {
+    flex: 1;
+    padding: 1.5rem 2rem 3rem;
+    max-width: 1280px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .year-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 3px;
+    box-shadow: var(--shadow);
+  }
+  .year-nav button {
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    color: var(--gt3-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .15s;
+    font-size: 16px;
+  }
+  .year-nav button:hover { background: var(--bg); }
+  .year-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 46px;
+    text-align: center;
+  }
+
+  /* ── SUMMARY PILLS ── */
+  .summary-strip {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .summary-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+    box-shadow: var(--shadow);
+  }
+  .summary-pill strong {
+    font-weight: 600;
+    color: var(--gt3-blue);
+  }
+
+  /* ── LEGEND ── */
+  .legend-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    box-shadow: var(--shadow);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .legend-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── CALENDAR CARD ── */
+  .calendar-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    margin-top: 1.25rem;
+  }
+
+  .cal-inner {
+    overflow-x: auto;
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+
+  .cal-table {
+    width: 100%;
+    min-width: 700px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  /* MONTH HEADER ROW */
+  .cal-table thead th {
+    padding: 0;
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+  }
+  .th-name {
+    width: 120px;
+    text-align: left;
+    padding-bottom: 10px !important;
+    padding-left: 8px !important;
+    color: var(--text-muted) !important;
+    font-size: 10px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .th-month {
+    text-align: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .th-month.current-month::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: var(--gt3-gold);
+    border-radius: 2px;
+  }
+
+  /* PERSON ROWS */
+  .cal-table tbody tr {
+    transition: background .12s;
+  }
+  .cal-table tbody tr:hover { background: var(--bg); }
+
+  .td-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    padding: 5px 8px;
+    white-space: nowrap;
+    width: 120px;
+  }
+
+  .td-month {
+    padding: 4px 2px;
+    position: relative;
+    height: 34px;
+    cursor: pointer;
+  }
+  .td-month:hover .cell-hint { opacity: 1; }
+  .cell-hint {
+    position: absolute;
+    inset: 3px;
+    border: 1.5px dashed var(--border-md);
+    border-radius: 5px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s;
+  }
+
+  /* VACATION BAR */
+  .vac-bar {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 20px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    transition: filter .15s, transform .12s;
+    letter-spacing: 0.03em;
+    overflow: hidden;
+    white-space: nowrap;
+    z-index: 2;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  .vac-bar:hover {
+    filter: brightness(1.1);
+    transform: translateY(-50%) scaleY(1.08);
+    z-index: 10;
+  }
+
+  /* DIVIDER ROWS */
+  .row-divider td {
+    height: 1px;
+    background: var(--border);
+    padding: 0;
+  }
+
+  /* EMPTY STATE */
+  .empty-row td {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--text-faint);
+    font-size: 14px;
+  }
+
+  /* ── BUTTONS ── */
+  .btn-primary {
+    background: var(--gt3-blue);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: background .15s, transform .1s;
+    box-shadow: 0 2px 8px rgba(42,79,150,0.25);
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--gt3-blue-light); }
+  .btn-primary:active { transform: scale(0.97); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-md);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .btn-ghost:hover { background: var(--bg); color: var(--text); }
+
+  .btn-danger {
+    background: transparent;
+    color: #b03030;
+    border: 1px solid rgba(176,48,48,0.3);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .15s;
+    margin-right: auto;
+  }
+  .btn-danger:hover { background: rgba(176,48,48,0.07); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(20,30,60,0.4);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 1.75rem;
+    width: 380px;
+    max-width: 94vw;
+    box-shadow: var(--shadow-lg);
+    animation: modalIn .18s ease;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(8px) scale(.97); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+  }
+  .modal-header h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    color: var(--gt3-blue);
+    font-weight: 400;
+  }
+  .modal-close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-faint);
+    font-size: 20px;
+    line-height: 1;
+    padding: 2px;
+    transition: color .15s;
+  }
+  .modal-close:hover { color: var(--text); }
+
+  .form-field { margin-bottom: 1rem; }
+  .form-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+  .form-field select,
+  .form-field input[type="date"],
+  .form-field textarea {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    border: 1px solid var(--border-md);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s;
+    appearance: auto;
+  }
+  .form-field select:focus,
+  .form-field input:focus,
+  .form-field textarea:focus {
+    border-color: var(--gt3-blue);
+    background: #fff;
+  }
+  .form-field textarea { resize: vertical; min-height: 60px; }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 1.5rem;
+    align-items: center;
+  }
+
+  /* ── COLOR BADGE for person avatar ── */
+  .avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    margin-right: 6px;
+  }
+
+  /* ── TOOLTIP ── */
+  .vac-tooltip {
+    position: fixed;
+    background: var(--text);
+    color: #fff;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    pointer-events: none;
+    z-index: 300;
+    white-space: nowrap;
+    display: none;
+    line-height: 1.5;
+  }
+
+  /* ── SCROLLBAR ── */
+  .cal-inner::-webkit-scrollbar { height: 4px; }
+  .cal-inner::-webkit-scrollbar-track { background: transparent; }
+  .cal-inner::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 4px; }
+
+  /* ICON fallback (inline SVG icons) */
+  .icon { display:inline-block; vertical-align:middle; }
+
+  @media (max-width: 640px) {
+    .main { padding: 1rem; }
+    .header { padding: 0 1rem; }
+    .legend-wrap { display: none; }
+    .toolbar { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-logo">GT3</div>
+      <div>
+        <div class="header-title">GT3 Consultoria</div>
+        <div class="header-subtitle">Calendário de Férias</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-primary" id="btnAdd">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="icon" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Adicionar férias
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <!-- Year nav -->
+        <div class="year-nav">
+          <button id="prevYear" aria-label="Ano anterior">&#8249;</button>
+          <span class="year-label" id="yearLabel">2025</span>
+          <button id="nextYear" aria-label="Próximo ano">&#8250;</button>
+        </div>
+        <!-- Summary -->
+        <div class="summary-strip" id="summaryStrip"></div>
+      </div>
+      <!-- Legend -->
+      <div class="legend-wrap" id="legendWrap"></div>
+    </div>
+
+    <!-- CALENDAR CARD -->
+    <div class="calendar-card">
+      <div class="cal-inner">
+        <table class="cal-table" id="calTable">
+          <thead id="calHead"></thead>
+          <tbody id="calBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- TOOLTIP -->
+<div class="vac-tooltip" id="tooltip"></div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalH">
+    <div class="modal-header">
+      <h3 id="modalH">Registrar férias</h3>
+      <button class="modal-close" id="btnCloseModal" aria-label="Fechar">&times;</button>
+    </div>
+    <div class="form-field">
+      <label>Colaborador</label>
+      <select id="mPerson"></select>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Início</label>
+        <input type="date" id="mStart"/>
+      </div>
+      <div class="form-field">
+        <label>Fim</label>
+        <input type="date" id="mEnd"/>
+      </div>
+    </div>
+    <div class="form-field">
+      <label>Observação (opcional)</label>
+      <textarea id="mObs" placeholder="Ex: 1ª parcela, férias coletivas..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-danger" id="btnDelete" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" class="icon" aria-hidden="true"><path d="M1.5 3.5h10M4.5 3.5V2.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5.5 6v4M7.5 6v4M2.5 3.5l.7 7a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Excluir
+      </button>
+      <button class="btn-ghost" id="btnCancel">Cancelar</button>
+      <button class="btn-primary" id="btnSave">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PEOPLE = ['Alexandra','Camila','Daiana','Luciane','Marcio Z.','Mariane','Marina','Rodrigo'];
+const COLORS = ['#2A4F96','#D1AE6E','#3B6D11','#993556','#185FA5','#993C1D','#0F6E56','#533AB7'];
+const MONTHS_ABBR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+function personColor(name) {
+  const i = PEOPLE.indexOf(name);
+  return i >= 0 ? COLORS[i] : '#888';
+}
+function initials(name) {
+  return name.split(' ').map(p=>p[0]).slice(0,2).join('').toUpperCase();
+}
+function daysInMonth(y,m) { return new Date(y, m+1, 0).getDate(); }
+function parseD(s) { return new Date(s + 'T00:00:00'); }
+function pad(n) { return String(n).padStart(2,'0'); }
+function fmt(s) {
+  const d = parseD(s);
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+
+// ── STATE ──
+let currentYear = new Date().getFullYear();
+let editingId = null;
+let nextId = 9;
+let vacations = [
+  {id:1,person:'Alexandra', start:'2025-01-06', end:'2025-01-24', obs:''},
+  {id:2,person:'Camila',    start:'2025-02-10', end:'2025-02-28', obs:''},
+  {id:3,person:'Daiana',    start:'2025-07-07', end:'2025-07-25', obs:''},
+  {id:4,person:'Luciane',   start:'2025-03-03', end:'2025-03-21', obs:''},
+  {id:5,person:'Marcio Z.', start:'2025-11-10', end:'2025-11-28', obs:''},
+  {id:6,person:'Marina',    start:'2025-04-01', end:'2025-04-18', obs:''},
+  {id:7,person:'Rodrigo',   start:'2025-12-22', end:'2025-12-31', obs:'Fim de ano'},
+  {id:8,person:'Mariane',   start:'2025-06-02', end:'2025-06-20', obs:''},
+];
+
+// ── HELPERS ──
+function vacsForYear(y) {
+  return vacations.filter(v => {
+    const s = parseD(v.start), e = parseD(v.end);
+    return s.getFullYear() === y || e.getFullYear() === y;
+  });
+}
+
+function getMonthCoverage(v, y, m) {
+  const ms = new Date(y, m, 1), me = new Date(y, m, daysInMonth(y,m));
+  const vs = parseD(v.start), ve = parseD(v.end);
+  const start = vs < ms ? ms : vs;
+  const end   = ve > me ? me : ve;
+  if (start > end) return null;
+  const total = daysInMonth(y, m);
+  const startDay = start.getDate() - 1;
+  const days = Math.round((end - start) / 86400000) + 1;
+  return { startPct: (startDay/total)*100, widthPct: (days/total)*100, days };
+}
+
+function totalVacDays(v) {
+  const ms = parseD(v.start), me = parseD(v.end);
+  return Math.round((me - ms) / 86400000) + 1;
+}
+
+// ── RENDER ──
+function render() {
+  document.getElementById('yearLabel').textContent = currentYear;
+  renderHead();
+  renderBody();
+  renderLegend();
+  renderSummary();
+}
+
+function renderHead() {
+  const now = new Date();
+  const head = document.getElementById('calHead');
+  let html = '<tr><th class="th-name">COLABORADOR</th>';
+  MONTHS_ABBR.forEach((m, i) => {
+    const isCurrent = now.getFullYear() === currentYear && now.getMonth() === i;
+    html += `<th class="th-month${isCurrent?' current-month':''}">${m}</th>`;
+  });
+  html += '</tr>';
+  head.innerHTML = html;
+}
+
+function renderBody() {
+  const body = document.getElementById('calBody');
+  const yr = vacsForYear(currentYear);
+  let html = '';
+
+  PEOPLE.forEach((person, pi) => {
+    const pvac = yr.filter(v => v.person === person);
+    const color = COLORS[pi];
+    const ini = initials(person);
+
+    html += `<tr>`;
+    html += `<td class="td-name">
+      <span class="avatar" style="background:${color}">${ini}</span>${person}
+    </td>`;
+
+    for (let m = 0; m < 12; m++) {
+      html += `<td class="td-month" data-person="${person}" data-year="${currentYear}" data-month="${m}" onclick="cellClick(this)">
+        <div class="cell-hint"></div>`;
+
+      pvac.forEach(v => {
+        const cov = getMonthCoverage(v, currentYear, m);
+        if (!cov) return;
+        const label = cov.widthPct > 14 ? `${cov.days}d` : '';
+        html += `<div class="vac-bar"
+          style="left:calc(${cov.startPct}% + 3px);width:calc(${cov.widthPct}% - 6px);background:${color}"
+          data-id="${v.id}"
+          onmouseenter="showTooltip(event,${v.id})"
+          onmouseleave="hideTooltip()"
+          onclick="barClick(event,${v.id})"
+        >${label}</div>`;
+      });
+
+      html += '</td>';
+    }
+    html += '</tr>';
+
+    // subtle divider between people
+    if (pi < PEOPLE.length - 1) {
+      html += `<tr class="row-divider"><td colspan="13"></td></tr>`;
+    }
+  });
+
+  if (yr.length === 0) {
+    html += `<tr class="empty-row"><td colspan="13">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;opacity:.5">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 2v3M16 2v3M3 9h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" stroke="#6b7a9e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Nenhuma férias registrada para ${currentYear}</span>
+      </div>
+    </td></tr>`;
+  }
+
+  body.innerHTML = html;
+}
+
+function renderLegend() {
+  const wrap = document.getElementById('legendWrap');
+  wrap.innerHTML = PEOPLE.map((p, i) => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${COLORS[i]}"></div>
+      <span>${p}</span>
+    </div>
+  `).join('');
+}
+
+function renderSummary() {
+  const yr = vacsForYear(currentYear);
+  const people = new Set(yr.map(v => v.person)).size;
+  const sem = [0, 0];
+  yr.forEach(v => { const mo = parseD(v.start).getMonth(); sem[mo < 6 ? 0 : 1]++; });
+  const totalDays = yr.reduce((acc, v) => acc + totalVacDays(v), 0);
+
+  document.getElementById('summaryStrip').innerHTML = [
+    `<strong>${yr.length}</strong> registro${yr.length !== 1 ? 's' : ''}`,
+    `<strong>${people}</strong> colaborador${people !== 1 ? 'es' : ''}`,
+    `<strong>${sem[0]}</strong> no 1º semestre`,
+    `<strong>${sem[1]}</strong> no 2º semestre`,
+    `<strong>${totalDays}</strong> dias no total`,
+  ].map(t => `<div class="summary-pill">${t}</div>`).join('');
+}
+
+// ── INTERACTIONS ──
+function cellClick(el) {
+  const person = el.dataset.person;
+  const year   = parseInt(el.dataset.year);
+  const month  = parseInt(el.dataset.month);
+  openModal(null, person, year, month);
+}
+
+function barClick(e, id) {
+  e.stopPropagation();
+  openModal(id);
+}
+
+// ── TOOLTIP ──
+const tooltip = document.getElementById('tooltip');
+function showTooltip(e, id) {
+  const v = vacations.find(x => x.id === id);
+  if (!v) return;
+  const days = totalVacDays(v);
+  tooltip.innerHTML = `<strong>${v.person}</strong><br>${fmt(v.start)} → ${fmt(v.end)}<br>${days} dias${v.obs ? '<br><em>'+v.obs+'</em>' : ''}`;
+  tooltip.style.display = 'block';
+  moveTooltip(e);
+}
+function hideTooltip() { tooltip.style.display = 'none'; }
+document.addEventListener('mousemove', e => {
+  if (tooltip.style.display === 'block') moveTooltip(e);
+});
+function moveTooltip(e) {
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top  = (e.clientY - 10) + 'px';
+}
+
+// ── MODAL ──
+function openModal(id, person, year, month) {
+  editingId = id || null;
+  const overlay = document.getElementById('modalOverlay');
+  const del = document.getElementById('btnDelete');
+  document.getElementById('modalH').textContent = id ? 'Editar férias' : 'Registrar férias';
+  del.style.display = id ? 'flex' : 'none';
+
+  const ps = document.getElementById('mPerson');
+  ps.innerHTML = PEOPLE.map(p => `<option value="${p}">${p}</option>`).join('');
+
+  if (id) {
+    const v = vacations.find(x => x.id === id);
+    if (v) {
+      ps.value = v.person;
+      document.getElementById('mStart').value = v.start;
+      document.getElementById('mEnd').value   = v.end;
+      document.getElementById('mObs').value   = v.obs || '';
+    }
+  } else {
+    if (person) ps.value = person;
+    if (year != null && month != null) {
+      const dim = daysInMonth(year, month);
+      document.getElementById('mStart').value = `${year}-${pad(month+1)}-01`;
+      document.getElementById('mEnd').value   = `${year}-${pad(month+1)}-${pad(dim)}`;
+    } else {
+      document.getElementById('mStart').value = '';
+      document.getElementById('mEnd').value   = '';
+    }
+    document.getElementById('mObs').value = '';
+  }
+
+  overlay.classList.add('open');
+  document.getElementById('mPerson').focus();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  editingId = null;
+}
+
+document.getElementById('btnSave').addEventListener('click', () => {
+  const person = document.getElementById('mPerson').value;
+  const start  = document.getElementById('mStart').value;
+  const end    = document.getElementById('mEnd').value;
+  const obs    = document.getElementById('mObs').value.trim();
+  if (!start || !end) { alert('Preencha início e fim.'); return; }
+  if (end < start)    { alert('A data de fim deve ser igual ou posterior ao início.'); return; }
+  if (editingId) {
+    const v = vacations.find(x => x.id === editingId);
+    if (v) { v.person = person; v.start = start; v.end = end; v.obs = obs; }
+  } else {
+    vacations.push({ id: nextId++, person, start, end, obs });
+  }
+  currentYear = parseD(start).getFullYear();
+  closeModal();
+  render();
+});
+
+document.getElementById('btnDelete').addEventListener('click', () => {
+  if (!editingId) return;
+  if (confirm('Excluir este registro de férias?')) {
+    vacations = vacations.filter(v => v.id !== editingId);
+    closeModal();
+    render();
+  }
+});
+
+document.getElementById('btnCancel').addEventListener('click', closeModal);
+document.getElementById('btnCloseModal').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+document.getElementById('prevYear').addEventListener('click', () => { currentYear--; render(); });
+document.getElementById('nextYear').addEventListener('click', () => { currentYear++; render(); });
+document.getElementById('btnAdd').addEventListener('click', () => openModal(null));
+
+// ── INIT ──
+render();
+</script>
+</body>
+</html>

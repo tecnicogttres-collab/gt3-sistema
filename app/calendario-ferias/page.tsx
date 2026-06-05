@@ -1,7 +1,7 @@
-import CalendarioFeriasClient from './CalendarioFeriasClient'
+﻿import CalendarioFeriasClient from './CalendarioFeriasClient'
 
 export const metadata = {
-  title: 'Calendário de Férias — GT3 Sistema',
+  title: 'Calendário de Férias — Sistema Interno GT3',
 }
 
 export default function CalendarioFeriasPage() {

@@ -1,6 +1,6 @@
-import LoginClient from './LoginClient'
+﻿import LoginClient from './LoginClient'
 
-export const metadata = { title: 'Login — GT3 Sistema' }
+export const metadata = { title: 'Login — Sistema Interno GT3' }
 
 export default function LoginPage() {
   return <LoginClient />

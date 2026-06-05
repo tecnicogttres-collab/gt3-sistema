@@ -74,7 +74,32 @@
       "PowerShell(Get-Content \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\.next\\\\dev\\\\logs\\\\next-development.log\" | ConvertFrom-Json | Where-Object { $_.level -eq \"ERROR\" -or $_.message -match \"Error|error|fail|FAIL\" } | Select-Object -Last 30 | ForEach-Object { $_.timestamp + \" [\" + $_.source + \"] \" + $_.message })",
       "Bash(npx supabase *)",
       "Bash(grep -E \"\\(^[^/]*page\\\\.tsx$|dashboard|root\\)\")",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\" -Directory)"
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\" -Directory)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 50)",
+      "Bash(Select-String \"env\")",
+      "Bash(xargs grep -l \"pdi_acoes\")",
+      "Bash(cat next.config.js)",
+      "Bash(cat next.config.ts)",
+      "Bash(cat next.config.mjs)",
+      "Bash(grep -E \"^[├└] [○ƒ] /$|Route|Error\")",
+      "Bash(grep -v \"^$\")",
+      "PowerShell(cd \"C:\\\\Users\\\\rodri\\\\gt3-sistema\"; Start-Process powershell -ArgumentList '-NoExit', '-Command', 'npm run dev' -WindowStyle Normal; Write-Host \"Dev server iniciado em nova janela\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\rodri\\\\gt3-sistema\" -Recurse -Filter \"*pdi*\" -Directory)",
+      "Bash(Get-ChildItem *)",
+      "PowerShell(Start-Process powershell -ArgumentList '-NoExit', '-Command', 'cd \"C:\\\\Users\\\\rodri\\\\gt3-sistema\"; npm run dev' -WindowStyle Normal; Write-Host \"Dev server iniciado\")",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\app\\\\api\\\\lembretes\\\\[id]\\\\confirmar\")",
+      "Bash(dir C:\\\\Users\\\\rodri\\\\gt3-sistema *)",
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\public\\\\logo-sidebar.jpeg\"\\); \"First bytes: $\\($bytes[0..3] | ForEach-Object { $_.ToString\\('X2'\\) }\\)\")",
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\public\\\\bg-login.jpeg\"\\); \"First bytes: $\\($bytes[0..3] | ForEach-Object { $_.ToString\\('X2'\\) }\\)\")",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/logo-sidebar.jpeg\" -UseBasicParsing | Select-Object StatusCode, @{n='Size';e={$_.RawContentLength}})",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://localhost:3000/logo-sidebar.jpeg\" -UseBasicParsing; $r.Headers['Content-Type'])",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/logo-sidebar.jpeg\" -UseBasicParsing | Select-Object -ExpandProperty Content | Select-Object -First 200)",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://localhost:3000/logo-gt3.png\" -UseBasicParsing; $r.Headers['Content-Type'])",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://localhost:3000/favicon.ico\" -UseBasicParsing; $r.Headers['Content-Type'])",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/logo-gt3.png\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue | Select-Object StatusCode, @{n='Location';e={$_.Headers['Location']}}, @{n='CT';e={$_.Headers['Content-Type']}})",
+      "PowerShell(Start-Sleep -Seconds 3; $r = Invoke-WebRequest -Uri \"http://localhost:3000/logo-sidebar.jpeg\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue; \"$\\($r.StatusCode\\) — $\\($r.Headers['Content-Type']\\)\")"
     ]
   }
 }

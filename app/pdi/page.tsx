@@ -1,9 +1,9 @@
-import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import { createClient } from '../lib/supabase-server'
 import { createAdminClient } from '../lib/supabase-admin'
 import PdiListClient from './PdiListClient'
 
-export const metadata = { title: 'PDI — GT3 Sistema' }
+export const metadata = { title: 'PDI — Sistema Interno GT3' }
 
 export type DbPdi = {
   id: string
