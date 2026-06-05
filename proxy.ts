@@ -5,11 +5,11 @@ import type { NextRequest } from 'next/server'
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Internals do Next.js, API routes e favicon: passa sem checar auth
+  // Internals do Next.js, API routes e arquivos estáticos: passa sem checar auth
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/') ||
-    pathname === '/favicon.ico'
+    /\.(ico|png|jpg|jpeg|svg|gif|webp|woff|woff2|ttf|otf|eot|mp4|pdf)$/i.test(pathname)
   ) {
     return NextResponse.next()
   }
