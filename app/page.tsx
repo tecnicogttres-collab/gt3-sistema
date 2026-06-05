@@ -111,7 +111,6 @@ export default function DashboardPage() {
                         <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: mod.color }} />
                       </div>
                       <h2 className="module-card-title">{mod.label}</h2>
-                      <p className="module-card-desc">{mod.description}</p>
                     </div>
                   </div>
                 </Link>
