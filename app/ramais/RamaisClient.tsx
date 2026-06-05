@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '../lib/supabase'
+import * as XLSX from 'xlsx'
 
-const PRIMARY = '#2A4F96'
+const PRIMARY      = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
-const BORDER = '#E2E8F0'
-const MUTED = '#6B7A99'
-const INK = '#1E253D'
-const DANGER = '#DC2626'
+const BORDER       = '#E2E8F0'
+const MUTED        = '#6B7A99'
+const INK          = '#1E253D'
+const DANGER       = '#DC2626'
 const DANGER_LIGHT = '#FEF2F2'
 
 type Ramal = { id: string; nome: string; ramal: string }
@@ -34,11 +35,23 @@ function Backdrop({ onClose, children }: { onClose: () => void; children: React.
   )
 }
 
+function exportToExcel(items: Ramal[]) {
+  const data = [
+    ['Nome', 'Ramal'],
+    ...items.map(r => [r.nome, r.ramal]),
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(data)
+  ws['!cols'] = [{ wch: 36 }, { wch: 10 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Ramais')
+  XLSX.writeFile(wb, 'Ramais GT3.xlsx')
+}
+
 export default function RamaisClient() {
   const [loading, setLoading] = useState(true)
-  const [items, setItems] = useState<Ramal[]>([])
-  const [modal, setModal] = useState<ModalState>({ type: 'closed' })
-  const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
+  const [items, setItems]     = useState<Ramal[]>([])
+  const [modal, setModal]     = useState<ModalState>({ type: 'closed' })
+  const [toast, setToast]     = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -77,7 +90,7 @@ export default function RamaisClient() {
     if (error) { console.error('Erro ao adicionar ramal:', error); return }
     setItems(prev => [...prev, { id: data.id as string, nome: data.nome as string, ramal: data.numero as string }]
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
-    showToast('Ramal adicionado com sucesso')
+    showToast('Ramal adicionado')
     if (andAnother) setModal({ type: 'add', nome: '', ramal: '' })
     else closeModal()
   }
@@ -90,11 +103,9 @@ export default function RamaisClient() {
       .update({ nome: modal.nome.trim(), numero: modal.ramal.trim() })
       .eq('id', modal.id)
     if (error) { console.error('Erro ao editar ramal:', error); return }
-    setItems(prev =>
-      prev.map(r => r.id === modal.id ? { ...r, nome: modal.nome.trim(), ramal: modal.ramal.trim() } : r)
-    )
+    setItems(prev => prev.map(r => r.id === modal.id ? { ...r, nome: modal.nome.trim(), ramal: modal.ramal.trim() } : r))
     closeModal()
-    showToast('Ramal atualizado com sucesso')
+    showToast('Ramal atualizado')
   }
 
   async function handleDelete() {
@@ -116,25 +127,25 @@ export default function RamaisClient() {
   }
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', borderRadius: 8,
-    border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
+    width: '100%', padding: '8px 10px', borderRadius: 6,
+    border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13,
     fontFamily: 'inherit', color: INK, background: '#fff', boxSizing: 'border-box',
   }
 
   const btnPrimary: React.CSSProperties = {
-    padding: '9px 18px', borderRadius: 8, border: 'none',
-    background: PRIMARY, color: '#fff', fontSize: 13,
-    fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '7px 14px', borderRadius: 6, border: 'none',
+    background: PRIMARY, color: '#fff', fontSize: 12,
+    fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
   }
 
   const btnGhost: React.CSSProperties = {
-    padding: '9px 16px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
-    background: '#fff', color: INK, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+    padding: '7px 12px', borderRadius: 6, border: `1.5px solid ${BORDER}`,
+    background: '#fff', color: INK, fontSize: 12, fontWeight: 500, cursor: 'pointer',
   }
 
   const btnDanger: React.CSSProperties = {
-    padding: '9px 18px', borderRadius: 8, border: 'none',
-    background: DANGER, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    padding: '7px 14px', borderRadius: 6, border: 'none',
+    background: DANGER, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
   }
 
   return (
@@ -143,23 +154,24 @@ export default function RamaisClient() {
       {modal.type !== 'closed' && (
         <Backdrop onClose={closeModal}>
           <div style={{
-            background: '#fff', borderRadius: 12, width: '100%', maxWidth: 420,
-            boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
-            animation: 'fadeIn 0.15s ease',
+            background: '#fff', borderRadius: 10, width: '100%', maxWidth: 380,
+            boxShadow: '0 16px 48px rgba(30,37,61,0.2)', overflow: 'hidden',
           }}>
             {/* Add */}
             {modal.type === 'add' && (
               <>
-                <ModalHeader title="Novo ramal" desc="Preencha os dados do colaborador." />
-                <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>Nome completo
-                    <input autoFocus style={{ ...inputStyle, marginTop: 6 }} value={modal.nome}
+                <ModalHeader title="Novo ramal" />
+                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    NOME COMPLETO
+                    <input autoFocus style={inputStyle} value={modal.nome}
                       onChange={e => setModal({ ...modal, nome: e.target.value })}
                       onKeyDown={e => { if (e.key === 'Enter') void handleAdd() }}
                       placeholder="Ex.: João da Silva" />
                   </label>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>Número do ramal
-                    <input style={{ ...inputStyle, marginTop: 6 }} value={modal.ramal}
+                  <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    RAMAL
+                    <input style={inputStyle} value={modal.ramal}
                       onChange={e => setModal({ ...modal, ramal: e.target.value })}
                       onKeyDown={e => { if (e.key === 'Enter') void handleAdd() }}
                       placeholder="Ex.: 1004" maxLength={6} />
@@ -186,15 +198,17 @@ export default function RamaisClient() {
             {/* Edit */}
             {modal.type === 'edit' && (
               <>
-                <ModalHeader title="Editar ramal" desc="Altere os dados do colaborador." />
-                <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>Nome completo
-                    <input autoFocus style={{ ...inputStyle, marginTop: 6 }} value={modal.nome}
+                <ModalHeader title="Editar ramal" />
+                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    NOME COMPLETO
+                    <input autoFocus style={inputStyle} value={modal.nome}
                       onChange={e => setModal({ ...modal, nome: e.target.value })}
                       onKeyDown={e => { if (e.key === 'Enter') void handleEdit() }} />
                   </label>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>Número do ramal
-                    <input style={{ ...inputStyle, marginTop: 6 }} value={modal.ramal}
+                  <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    RAMAL
+                    <input style={inputStyle} value={modal.ramal}
                       onChange={e => setModal({ ...modal, ramal: e.target.value })}
                       onKeyDown={e => { if (e.key === 'Enter') void handleEdit() }}
                       maxLength={6} />
@@ -206,7 +220,7 @@ export default function RamaisClient() {
                     style={{ ...btnPrimary, opacity: (!modal.nome.trim() || !modal.ramal.trim()) ? 0.5 : 1 }}
                     disabled={!modal.nome.trim() || !modal.ramal.trim()}
                     onClick={() => void handleEdit()}>
-                    ✓ Salvar alteração
+                    ✓ Salvar
                   </button>
                 </ModalFooter>
               </>
@@ -215,17 +229,14 @@ export default function RamaisClient() {
             {/* Delete */}
             {modal.type === 'delete' && (
               <>
-                <ModalHeader title="Excluir ramal" desc="Esta ação não pode ser desfeita." />
-                <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ background: DANGER_LIGHT, border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: DANGER }}>
-                    O registro abaixo será removido permanentemente.
-                  </div>
-                  <PreviewRow label="Nome" value={modal.nome} />
-                  <PreviewRow label="Ramal" value={modal.ramal} mono />
+                <ModalHeader title="Excluir ramal" />
+                <div style={{ padding: '16px 20px', fontSize: 13, color: INK }}>
+                  Remover <strong>{modal.nome}</strong> (ramal <strong>{modal.ramal}</strong>)?
+                  <div style={{ marginTop: 8, fontSize: 12, color: DANGER }}>Esta ação não pode ser desfeita.</div>
                 </div>
                 <ModalFooter>
                   <button style={btnGhost} onClick={closeModal}>Cancelar</button>
-                  <button style={btnDanger} onClick={() => void handleDelete()}>✕ Excluir</button>
+                  <button style={btnDanger} onClick={() => void handleDelete()}>Excluir</button>
                 </ModalFooter>
               </>
             )}
@@ -237,78 +248,73 @@ export default function RamaisClient() {
       <div style={{
         position: 'fixed', bottom: 24, right: 24,
         background: PRIMARY, color: '#fff',
-        borderRadius: 8, padding: '12px 18px', fontSize: 13, fontWeight: 500,
+        borderRadius: 6, padding: '10px 16px', fontSize: 12, fontWeight: 500,
         zIndex: 2000, pointerEvents: 'none',
         opacity: toast.show ? 1 : 0,
-        transform: toast.show ? 'translateY(0)' : 'translateY(8px)',
+        transform: toast.show ? 'translateY(0)' : 'translateY(6px)',
         transition: 'all 0.2s',
       }}>
         {toast.msg}
       </div>
 
       {/* Page */}
-      <div style={{ maxWidth: 760, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-              Ramais
-              <span style={{
-                fontSize: 11, fontWeight: 600, background: PRIMARY_LIGHT, color: PRIMARY,
-                borderRadius: 999, padding: '2px 10px', fontVariantNumeric: 'tabular-nums',
-              }}>
-                {items.length}
-              </span>
-            </h1>
-            <p style={{ fontSize: 13, color: MUTED, marginTop: 4 }}>GT3 Consultoria — lista de ramais internos</p>
+      <div style={{ maxWidth: 560, margin: '0 auto' }}>
+
+        {/* Toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Ramais</span>
+            <span style={{
+              fontSize: 11, fontWeight: 600, background: PRIMARY_LIGHT, color: PRIMARY,
+              borderRadius: 999, padding: '1px 8px',
+            }}>
+              {items.length}
+            </span>
           </div>
-          <button
-            style={btnPrimary}
-            onClick={() => setModal({ type: 'add', nome: '', ramal: '' })}
-          >
-            + Adicionar ramal
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              style={{ ...btnGhost, color: '#166534', borderColor: '#BBF7D0', background: '#F0FDF4', fontSize: 12 }}
+              onClick={() => exportToExcel(items)}
+              title="Exportar para Excel"
+            >
+              ↓ Exportar Excel
+            </button>
+            <button style={btnPrimary} onClick={() => setModal({ type: 'add', nome: '', ramal: '' })}>
+              + Adicionar
+            </button>
+          </div>
         </div>
 
-        <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
+        {/* Table */}
+        <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
           {items.length === 0 ? (
-            <div style={{ padding: '48px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
-              Nenhum ramal cadastrado ainda.
+            <div style={{ padding: '32px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>
+              Nenhum ramal cadastrado.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr>
-                  {['Nome', 'Ramal', ''].map((h, i) => (
-                    <th key={i} style={{
-                      fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em',
-                      color: MUTED, padding: '12px 20px', textAlign: i === 2 ? 'right' : 'left',
-                      borderBottom: `1px solid ${BORDER}`, background: '#FAFBFD',
-                      width: i === 0 ? '50%' : i === 1 ? '25%' : '25%',
-                    }}>
-                      {h}
-                    </th>
-                  ))}
+                <tr style={{ background: '#F8FAFC', borderBottom: `1px solid ${BORDER}` }}>
+                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', width: '65%' }}>Nome</th>
+                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', width: '15%' }}>Ramal</th>
+                  <th style={{ width: '20%' }} />
                 </tr>
               </thead>
               <tbody>
                 {items.map((r, idx) => (
                   <tr key={r.id} style={{ borderTop: idx > 0 ? `1px solid ${BORDER}` : undefined }}>
-                    <td style={{ padding: '14px 20px', fontSize: 14, fontWeight: 500, color: INK }}>{r.nome}</td>
-                    <td style={{ padding: '14px 20px', fontSize: 13, fontFamily: 'monospace', color: PRIMARY, fontWeight: 600, letterSpacing: '0.04em' }}>{r.ramal}</td>
-                    <td style={{ padding: '14px 20px' }}>
-                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <td style={{ padding: '6px 12px', color: INK, fontWeight: 400 }}>{r.nome}</td>
+                    <td style={{ padding: '6px 12px', color: PRIMARY, fontFamily: 'monospace', fontWeight: 600 }}>{r.ramal}</td>
+                    <td style={{ padding: '4px 10px' }}>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                         <button
-                          style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#F0F4FA', color: PRIMARY, cursor: 'pointer', fontWeight: 500 }}
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, border: `1px solid ${BORDER}`, background: '#F5F7FB', color: PRIMARY, cursor: 'pointer' }}
                           onClick={() => setModal({ type: 'edit', id: r.id, nome: r.nome, ramal: r.ramal })}
-                        >
-                          ✎ Editar
-                        </button>
+                        >✎</button>
                         <button
-                          style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid #FECACA', background: DANGER_LIGHT, color: DANGER, cursor: 'pointer', fontWeight: 500 }}
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid #FECACA', background: DANGER_LIGHT, color: DANGER, cursor: 'pointer' }}
                           onClick={() => setModal({ type: 'delete', id: r.id, nome: r.nome, ramal: r.ramal })}
-                        >
-                          ✕ Excluir
-                        </button>
+                        >✕</button>
                       </div>
                     </td>
                   </tr>
@@ -322,35 +328,17 @@ export default function RamaisClient() {
   )
 }
 
-function ModalHeader({ title, desc }: { title: string; desc: string }) {
+function ModalHeader({ title }: { title: string }) {
   return (
-    <div style={{ background: `linear-gradient(135deg, #2A4F96 0%, #1E3A6E 100%)`, padding: '16px 24px' }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{title}</div>
-      {desc && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 4 }}>{desc}</div>}
+    <div style={{ background: PRIMARY, padding: '14px 20px' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{title}</div>
     </div>
   )
 }
 
 function ModalFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ padding: '12px 24px', borderTop: `1px solid #E2E8F0`, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-      {children}
-    </div>
-  )
-}
-
-function PreviewRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div style={{ background: '#F8FAFC', border: `1px solid #E2E8F0`, borderRadius: 8, padding: '10px 14px' }}>
-      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#94A3B8', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 500, color: mono ? '#2A4F96' : '#1E253D', fontFamily: mono ? 'monospace' : undefined }}>{value}</div>
-    </div>
-  )
-}
-
-function InfoBox({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400E' }}>
+    <div style={{ padding: '10px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
       {children}
     </div>
   )
