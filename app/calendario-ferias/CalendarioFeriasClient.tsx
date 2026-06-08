@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '../lib/supabase'
 
-const PEOPLE = ['Alexandra', 'Camila', 'Daiana', 'Luciane', 'Marcio Z.', 'Mariane', 'Marina', 'Rodrigo']
-const COLORS = ['#2A4F96', '#D1AE6E', '#3B6D11', '#993556', '#185FA5', '#993C1D', '#0F6E56', '#533AB7']
+const PEOPLE = ['Alexandra', 'Camila', 'Daiana', 'Jose', 'Luciane', 'Marcio Bastos', 'Marcio Z.', 'Mariane', 'Marina', 'Rodrigo', 'Valmir']
+const COLORS = ['#2A4F96', '#D1AE6E', '#3B6D11', '#F06292', '#993556', '#00796B', '#185FA5', '#993C1D', '#0F6E56', '#533AB7', '#E65100']
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
