@@ -200,6 +200,16 @@ export default function CadastroClient() {
     })
   }
 
+  const reorderField = (from: number, to: number) => {
+    if (!currentId || from === to) return
+    updateCompany(currentId, c => {
+      const fields = [...c.fields]
+      const [moved] = fields.splice(from, 1)
+      fields.splice(to, 0, moved)
+      return { ...c, fields }
+    })
+  }
+
   const removeField = (idx: number) => {
     if (!currentId || !currentCompany) return
     if (!confirm(`Excluir o campo "${currentCompany.fields[idx].label}"?`)) return
@@ -464,6 +474,7 @@ export default function CadastroClient() {
             onUpdateCell={updateTableCell}
             onUpdateHeader={updateTableHeader}
             onMoveField={moveField}
+            onReorderField={reorderField}
             onRemoveField={removeField}
             onAddField={addField}
             onAddTableRow={addTableRow}
@@ -670,6 +681,7 @@ type DetailPanelProps = {
   onUpdateCell: (idx: number, ri: number, ci: number, val: string) => void
   onUpdateHeader: (idx: number, hi: number, val: string) => void
   onMoveField: (idx: number, dir: -1 | 1) => void
+  onReorderField: (from: number, to: number) => void
   onRemoveField: (idx: number) => void
   onAddField: (type: 'text' | 'table') => void
   onAddTableRow: (idx: number) => void
@@ -683,12 +695,14 @@ type DetailPanelProps = {
 function DetailPanel({
   company: c,
   onCopy, onEditText, onUpdateLabel, onUpdateCell, onUpdateHeader,
-  onMoveField, onRemoveField, onAddField, onAddTableRow, onAddTableCol, onRemoveTableRow,
+  onMoveField, onReorderField, onRemoveField, onAddField, onAddTableRow, onAddTableCol, onRemoveTableRow,
   onRename, onChangeSegment, onDelete,
 }: DetailPanelProps) {
   const color = SEGMENT_COLORS[c.segment] ?? '#8C6EDC'
   const txtCount = c.fields.filter(f => f.type === 'text').length
   const tblCount = c.fields.filter(f => f.type === 'table').length
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
 
   return (
     <>
@@ -740,6 +754,12 @@ function DetailPanel({
             onAddRow={() => onAddTableRow(idx)}
             onAddCol={() => onAddTableCol(idx)}
             onRemoveRow={ri => onRemoveTableRow(idx, ri)}
+            isDragging={dragIdx === idx}
+            isDropTarget={hoverIdx === idx && dragIdx !== null && dragIdx !== idx}
+            onDragStart={() => setDragIdx(idx)}
+            onDragOver={() => setHoverIdx(idx)}
+            onDrop={() => { if (dragIdx !== null && dragIdx !== idx) onReorderField(dragIdx, idx) }}
+            onDragEnd={() => { setDragIdx(null); setHoverIdx(null) }}
           />
         ))}
       </div>
@@ -771,37 +791,64 @@ type FieldCardProps = {
   onAddRow: () => void
   onAddCol: () => void
   onRemoveRow: (ri: number) => void
+  isDragging: boolean
+  isDropTarget: boolean
+  onDragStart: () => void
+  onDragOver: () => void
+  onDrop: () => void
+  onDragEnd: () => void
 }
 
 function FieldCard({
   field: f, idx, total, onCopy, onEditText,
   onUpdateLabel, onUpdateCell, onUpdateHeader,
   onMove, onRemove, onAddRow, onAddCol, onRemoveRow,
+  isDragging, isDropTarget, onDragStart, onDragOver, onDrop, onDragEnd,
 }: FieldCardProps) {
   const labelRef = useRef<HTMLDivElement>(null)
 
   return (
-    <div style={{
-      background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
-      marginBottom: 10, overflow: 'hidden',
-    }}>
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
+      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onDragOver() }}
+      onDrop={e => { e.preventDefault(); onDrop() }}
+      onDragEnd={onDragEnd}
+      style={{
+        background: '#fff',
+        border: isDropTarget ? '2px solid #2A4F96' : '1px solid #E2E8F0',
+        borderRadius: 10, marginBottom: 10, overflow: 'hidden',
+        opacity: isDragging ? 0.4 : 1,
+        transition: 'opacity 0.15s, border-color 0.1s',
+      }}
+    >
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 12px', borderBottom: '1px solid #EDF2F7', background: '#F7F9FC',
       }}>
-        <div
-          ref={labelRef}
-          contentEditable
-          suppressContentEditableWarning
-          spellCheck={false}
-          onBlur={() => onUpdateLabel(labelRef.current?.textContent?.trim() || 'CAMPO')}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); labelRef.current?.blur() } }}
-          style={{
-            fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#4A5568',
-            textTransform: 'uppercase', outline: 'none', flex: 1, cursor: 'text',
-          }}
-        >
-          {f.label}
+        <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+          <div
+            title="Arrastar para reordenar"
+            style={{
+              cursor: 'grab', color: '#C4CEDD', fontSize: 18, marginRight: 8,
+              userSelect: 'none', flexShrink: 0, lineHeight: 1,
+            }}
+          >⠿</div>
+          <div
+            ref={labelRef}
+            contentEditable
+            suppressContentEditableWarning
+            spellCheck={false}
+            onDragStart={e => e.stopPropagation()}
+            onBlur={() => onUpdateLabel(labelRef.current?.textContent?.trim() || 'CAMPO')}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); labelRef.current?.blur() } }}
+            style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#4A5568',
+              textTransform: 'uppercase', outline: 'none', flex: 1, cursor: 'text',
+            }}
+          >
+            {f.label}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
           {f.type === 'text' && <button onClick={onEditText} style={iconBtn} title="Editar valor">✎</button>}
