@@ -17,6 +17,8 @@ const PERIOD_LABEL: Record<Period, string> = {
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
+type Visibilidade = 'todos' | 'proprio' | 'selecionados'
+
 type Lembrete = {
   id: string
   titulo: string
@@ -26,7 +28,11 @@ type Lembrete = {
   concluido: boolean
   criado_por: string | null
   created_at: string
+  visibilidade: Visibilidade
+  destinatarios: string[] | null
 }
+
+type UserOption = { id: string; nome: string | null; usuario: string | null }
 
 type HistoricoRow = {
   id: string
@@ -111,7 +117,7 @@ function currentMonthOccurrence(r: Lembrete): Date | null {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()) }
+const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()), visibilidade: 'todos' as Visibilidade, destinatarios: [] as string[] }
 
 export default function LembretesClient() {
   const { profile } = useUser()
@@ -131,6 +137,8 @@ export default function LembretesClient() {
   const [histExpanded, setHistExpanded] = useState(true)
   const [calHistorico, setCalHistorico] = useState<HistoricoRow[]>([])
   const [calHistoricoLoading, setCalHistoricoLoading] = useState(false)
+  const [users, setUsers] = useState<UserOption[]>([])
+  const [userSearch, setUserSearch] = useState('')
 
   // ── Confirmados deste usuário neste mês ────────────────────────────────────
 
@@ -252,7 +260,7 @@ export default function LembretesClient() {
         const res = await fetch(`/api/lembretes/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio }),
+          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
         })
         if (res.ok) {
           const updated: Lembrete = await res.json()
@@ -262,7 +270,7 @@ export default function LembretesClient() {
         const res = await fetch('/api/lembretes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio }),
+          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
         })
         if (res.ok) {
           const created: Lembrete = await res.json()
@@ -321,16 +329,28 @@ export default function LembretesClient() {
     if (res.ok) setLembretes(prev => prev.filter(r => r.id !== id))
   }
 
+  async function loadUsers() {
+    if (users.length > 0) return
+    try {
+      const res = await fetch('/api/lembretes/usuarios')
+      if (res.ok) setUsers(await res.json())
+    } catch { /* noop */ }
+  }
+
   function openNew() {
     setEditingId(null)
     setForm({ ...emptyForm, data_inicio: fmtDateStr(new Date()) })
+    setUserSearch('')
     setModalOpen(true)
+    void loadUsers()
   }
 
   function openEdit(r: Lembrete) {
     setEditingId(r.id)
-    setForm({ titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio })
+    setForm({ titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio, visibilidade: r.visibilidade ?? 'todos', destinatarios: r.destinatarios ?? [] })
+    setUserSearch('')
     setModalOpen(true)
+    void loadUsers()
   }
 
   // ── Calendar ───────────────────────────────────────────────────────────────
@@ -546,6 +566,16 @@ export default function LembretesClient() {
                   <span style={{ padding: '2px 9px', borderRadius: 100, background: '#EBF0FA', color: '#1A3266', fontSize: 11, fontWeight: 500 }}>
                     {PERIOD_LABEL[r.periodo]}
                   </span>
+                  {(r.visibilidade === 'proprio') && (
+                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#F5F0FF', color: '#5B21B6', fontSize: 11, fontWeight: 500 }}>
+                      Só para mim
+                    </span>
+                  )}
+                  {(r.visibilidade === 'selecionados') && (
+                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#F0F9FF', color: '#0369A1', fontSize: 11, fontWeight: 500 }}>
+                      Grupo selecionado
+                    </span>
+                  )}
                   {done ? (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: '#DCFCE7', color: '#166534', fontSize: 11, fontWeight: 500 }}>
                       Confirmado
@@ -826,6 +856,101 @@ export default function LembretesClient() {
                   {form.periodo === 'semestral'   && 'O lembrete será repetido a cada 6 meses.'}
                   {form.periodo === 'anual'       && 'O lembrete será repetido anualmente na mesma data de início.'}
                 </div>
+              )}
+
+              <Field label="Visibilidade">
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {(['todos', 'proprio', 'selecionados'] as Visibilidade[]).map(v => {
+                    const labels: Record<Visibilidade, string> = { todos: 'Para todos', proprio: 'Só para mim', selecionados: 'Grupo selecionado' }
+                    const active = form.visibilidade === v
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, visibilidade: v }))}
+                        style={{
+                          flex: 1, padding: '8px 6px', borderRadius: 6,
+                          border: `1.5px solid ${active ? INK : BORDER}`,
+                          background: active ? '#EBF0FA' : '#fff',
+                          color: active ? INK : TEXT_MID,
+                          fontSize: 12, fontWeight: active ? 700 : 500,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {labels[v]}
+                      </button>
+                    )
+                  })}
+                </div>
+                {form.visibilidade === 'proprio' && (
+                  <div style={{ fontSize: 12, color: TEXT_MID, marginTop: 4 }}>
+                    Somente você verá este lembrete.
+                  </div>
+                )}
+              </Field>
+
+              {form.visibilidade === 'selecionados' && (
+                <Field label={`Selecionar logins${form.destinatarios.length > 0 ? ` (${form.destinatarios.length} + você)` : ''}`}>
+                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+                    <input
+                      type="text"
+                      placeholder="Filtrar por nome ou login..."
+                      value={userSearch}
+                      onChange={e => setUserSearch(e.target.value)}
+                      style={{
+                        width: '100%', padding: '8px 12px',
+                        border: 'none', borderBottom: `1px solid ${BORDER}`,
+                        fontSize: 13, background: '#FAFAF8', color: TEXT,
+                        outline: 'none', boxSizing: 'border-box',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                    <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                      {users
+                        .filter(u => u.id !== profile?.id)
+                        .filter(u => {
+                          if (!userSearch) return true
+                          const q = userSearch.toLowerCase()
+                          return (u.nome ?? '').toLowerCase().includes(q) || (u.usuario ?? '').toLowerCase().includes(q)
+                        })
+                        .map(u => {
+                          const checked = form.destinatarios.includes(u.id)
+                          const displayN = u.nome?.trim() || u.usuario?.trim() || 'Usuário'
+                          return (
+                            <label key={u.id} style={{
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '8px 12px', cursor: 'pointer',
+                              background: checked ? '#EBF0FA' : '#fff',
+                              borderTop: `1px solid ${BORDER}`,
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => setForm(f => ({
+                                  ...f,
+                                  destinatarios: checked
+                                    ? f.destinatarios.filter(id => id !== u.id)
+                                    : [...f.destinatarios, u.id],
+                                }))}
+                                style={{ width: 14, height: 14, cursor: 'pointer', accentColor: INK }}
+                              />
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{displayN}</div>
+                                {u.usuario && u.nome?.trim() && (
+                                  <div style={{ fontSize: 11, color: TEXT_FAINT }}>{u.usuario}</div>
+                                )}
+                              </div>
+                            </label>
+                          )
+                        })}
+                      {users.filter(u => u.id !== profile?.id).length === 0 && (
+                        <div style={{ padding: '12px 16px', fontSize: 13, color: TEXT_FAINT, textAlign: 'center' }}>
+                          Nenhum usuário encontrado.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Field>
               )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>

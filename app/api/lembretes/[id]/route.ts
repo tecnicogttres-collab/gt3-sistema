@@ -25,13 +25,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (body.periodo !== undefined) update.periodo = body.periodo
   if (body.data_inicio !== undefined) update.data_inicio = body.data_inicio
   if (body.concluido !== undefined) update.concluido = body.concluido
+  if (body.visibilidade !== undefined) {
+    const vis = ['todos', 'proprio', 'selecionados'].includes(body.visibilidade) ? body.visibilidade : 'todos'
+    update.visibilidade = vis
+    update.destinatarios = vis === 'selecionados' ? (body.destinatarios ?? []) : null
+  }
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('lembretes')
     .update(update)
     .eq('id', id)
-    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at')
+    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

@@ -13,15 +13,26 @@ export async function GET() {
   const caller = await getCaller()
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
+  const userId = caller.user.id
   const admin = createAdminClient()
-  const { data: lembretes, error } = await admin
+  const { data: all, error } = await admin
     .from('lembretes')
-    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at')
+    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
     .order('data_inicio', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  return Response.json(lembretes ?? [])
+  const lembretes = (all ?? []).filter(r => {
+    const vis = r.visibilidade ?? 'todos'
+    if (vis === 'todos') return true
+    if (vis === 'proprio') return r.criado_por === userId
+    if (vis === 'selecionados') {
+      return r.criado_por === userId || (r.destinatarios ?? []).includes(userId)
+    }
+    return true
+  })
+
+  return Response.json(lembretes)
 }
 
 export async function POST(req: NextRequest) {
@@ -29,10 +40,12 @@ export async function POST(req: NextRequest) {
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const body = await req.json()
-  const { titulo, descricao, periodo, data_inicio } = body
+  const { titulo, descricao, periodo, data_inicio, visibilidade, destinatarios } = body
 
   if (!titulo?.trim()) return Response.json({ error: 'Título obrigatório' }, { status: 400 })
   if (!data_inicio) return Response.json({ error: 'Data obrigatória' }, { status: 400 })
+
+  const vis = ['todos', 'proprio', 'selecionados'].includes(visibilidade) ? visibilidade : 'todos'
 
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -44,8 +57,10 @@ export async function POST(req: NextRequest) {
       data_inicio,
       concluido: false,
       criado_por: caller.user.id,
+      visibilidade: vis,
+      destinatarios: vis === 'selecionados' ? (destinatarios ?? []) : null,
     })
-    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at')
+    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
     .single()
 
   if (error || !data) return Response.json({ error: error?.message ?? 'Erro ao criar' }, { status: 500 })
