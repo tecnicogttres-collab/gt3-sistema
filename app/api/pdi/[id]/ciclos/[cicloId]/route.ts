@@ -31,6 +31,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       updates.conversa_confirmada_em = null // reseta ciência ao reagendar
     }
     if (body.conversa_confirmada_em !== undefined) updates.conversa_confirmada_em = body.conversa_confirmada_em
+    if (body.rascunho_conversa !== undefined) updates.rascunho_conversa = body.rascunho_conversa ?? null
   }
 
   if (isColab || isGestorAdmin) {

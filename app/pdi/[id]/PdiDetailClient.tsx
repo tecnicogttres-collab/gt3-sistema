@@ -19,6 +19,7 @@ type Ciclo = {
   autoavaliacao_salva: boolean
   data_conversa: string | null
   conversa_confirmada_em: string | null
+  rascunho_conversa: string | null
   criado_em: string
   arquivado_em: string | null
   data_inicio: string | null
@@ -545,14 +546,17 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
   const [ambicao, setAmbicao] = useState<number[]>(ciclo.ambicao.length ? ciclo.ambicao : competencias.map(() => 0))
   const [autoSalva, setAutoSalva] = useState(ciclo.autoavaliacao_salva)
   const [dataConversa, setDataConversa] = useState(ciclo.data_conversa ? ciclo.data_conversa.slice(0, 16) : '')
-  const [saving, setSaving] = useState<'diretiva' | 'auto' | 'conversa' | null>(null)
+  const [rascunho, setRascunho] = useState(ciclo.rascunho_conversa ?? '')
+  const [saving, setSaving] = useState<'diretiva' | 'auto' | 'conversa' | 'rascunho' | null>(null)
   const [savedDiretiva, setSavedDiretiva] = useState(false)
   const savedDiritivaTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [savedRascunho, setSavedRascunho] = useState(false)
+  const savedRascunhoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [open, setOpen] = useState(isAtivo)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [err, setErr] = useState('')
 
-  useEffect(() => { return () => { clearTimeout(savedDiritivaTimer.current) } }, [])
+  useEffect(() => { return () => { clearTimeout(savedDiritivaTimer.current); clearTimeout(savedRascunhoTimer.current) } }, [])
 
   function applyComps() {
     const newComps = compsText.split('\n').map(s => s.trim()).filter(Boolean)
@@ -620,6 +624,21 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
       if (!res.ok) throw new Error()
       onUpdate({ ...ciclo, data_conversa: new Date(dataConversa).toISOString() })
     } catch { setErr('Erro ao agendar conversa.') } finally { setSaving(null) }
+  }
+
+  async function saveRascunho() {
+    setSaving('rascunho'); setErr('')
+    try {
+      const res = await fetch(`/api/pdi/${ciclo.pdi_id}/ciclos/${ciclo.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rascunho_conversa: rascunho.trim() || null }),
+      })
+      if (!res.ok) throw new Error()
+      onUpdate({ ...ciclo, rascunho_conversa: rascunho.trim() || null })
+      setSavedRascunho(true)
+      clearTimeout(savedRascunhoTimer.current!)
+      savedRascunhoTimer.current = setTimeout(() => setSavedRascunho(false), 2500)
+    } catch { setErr('Erro ao salvar rascunho.') } finally { setSaving(null) }
   }
 
   const statusBadge = (
@@ -811,6 +830,52 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
                       : <span style={{ marginLeft: 8, color: '#F59E0B', fontWeight: 600 }}>⏳ Pendente</span>}
                   </span>
                 )}
+              </div>
+
+              {/* Rascunho do gestor */}
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #E2E8F0' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                  Rascunho / Pauta da conversa
+                </div>
+                <textarea
+                  value={rascunho}
+                  onChange={e => setRascunho(e.target.value)}
+                  placeholder="Anote pontos de pauta, perguntas ou observações para conduzir a conversa..."
+                  rows={5}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '10px 12px', border: '1px solid #CBD5E0', borderRadius: 8,
+                    fontSize: 13, lineHeight: 1.6, resize: 'vertical',
+                    fontFamily: 'inherit', color: '#1E293B', background: '#FAFBFC',
+                    outline: 'none',
+                  }}
+                  onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#5B8DEF'; (e.target as HTMLTextAreaElement).style.background = '#fff' }}
+                  onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#CBD5E0'; (e.target as HTMLTextAreaElement).style.background = '#FAFBFC' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                  {savedRascunho && (
+                    <span style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>✓ Rascunho salvo</span>
+                  )}
+                  <button
+                    onClick={saveRascunho}
+                    disabled={saving === 'rascunho'}
+                    style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#475569', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving === 'rascunho' ? 'default' : 'pointer', opacity: saving === 'rascunho' ? 0.7 : 1 }}
+                  >
+                    {saving === 'rascunho' ? 'Salvando…' : 'Salvar rascunho'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rascunho somente leitura em ciclos arquivados */}
+          {isGestorAdmin && !isAtivo && ciclo.rascunho_conversa && (
+            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                Rascunho / Pauta da conversa
+              </div>
+              <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#F8FAFC', borderRadius: 8, padding: '10px 14px', border: '1px solid #E2E8F0' }}>
+                {ciclo.rascunho_conversa}
               </div>
             </div>
           )}

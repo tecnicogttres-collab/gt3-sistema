@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '../lib/supabase'
 
 type AgendaItem = {
@@ -47,6 +47,7 @@ export default function PdiAgendaDrawer({ open, onClose, onCountChange }: Props)
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [realizadasOpen, setRealizadasOpen] = useState(false)
+  const channelName = useRef(`pdi-agenda-rt-${Math.random().toString(36).slice(2)}`)
 
   const updateBadge = useCallback((data: AgendaItem[]) => {
     const now = Date.now()
@@ -81,7 +82,7 @@ export default function PdiAgendaDrawer({ open, onClose, onCountChange }: Props)
   useEffect(() => {
     const supabase = createClient()
     const ch = supabase
-      .channel('pdi-agenda-rt')
+      .channel(channelName.current)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pdi_ciclos' }, () => void load())
       .subscribe()
     return () => { void supabase.removeChannel(ch) }

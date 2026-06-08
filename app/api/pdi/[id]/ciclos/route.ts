@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('pdi_ciclos')
-    .select('id, pdi_id, colaborador_id, numero_ciclo, status, avaliacao_diretiva, autoavaliacao, ambicao, autoavaliacao_salva, data_conversa, conversa_confirmada_em, arquivado_em, criado_em, data_inicio, data_fim')
+    .select('id, pdi_id, colaborador_id, numero_ciclo, status, avaliacao_diretiva, autoavaliacao, ambicao, autoavaliacao_salva, data_conversa, conversa_confirmada_em, rascunho_conversa, arquivado_em, criado_em, data_inicio, data_fim')
     .eq('pdi_id', id)
     .order('numero_ciclo', { ascending: false })
 
