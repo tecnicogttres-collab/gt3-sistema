@@ -238,6 +238,18 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Realtime: atualiza dashboard imediatamente quando home-office ou revisão mudar
+  useEffect(() => {
+    const supabase = createClient()
+    const ch = supabase
+      .channel(`dashboard-sheets-rt-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'home_office_sheets' }, () => loadData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'controle_revisao_sheets' }, () => loadData())
+      .subscribe()
+    return () => { void supabase.removeChannel(ch) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     void loadPrioridades()
     loadData()
