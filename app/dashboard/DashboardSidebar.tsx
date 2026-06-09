@@ -270,17 +270,17 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               const t = new Date(i.data_conversa).getTime()
               return t >= now && t <= in30
             })
-            .slice(0, 5)
+            .slice(0, 15)
         )
       } catch { /* noop */ }
     }
     void loadPdiAgenda()
   }, [role])
 
-  const sidebarWidth = priorities.length <= 4 ? 380
-    : priorities.length <= 8 ? 440
-    : priorities.length <= 14 ? 500
-    : 560
+  const sidebarWidth = Math.max(
+    priorities.length <= 4 ? 380 : priorities.length <= 8 ? 440 : priorities.length <= 14 ? 500 : 560,
+    pdiAgenda.length <= 5 ? 380 : pdiAgenda.length <= 10 ? 440 : 500
+  )
 
   return (
     <>

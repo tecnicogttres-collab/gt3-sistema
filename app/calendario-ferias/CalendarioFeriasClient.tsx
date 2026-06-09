@@ -336,8 +336,10 @@ export default function CalendarioFeriasClient() {
 
                   {/* Chips */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {vacHere.slice(0, 3).map(v => {
+                    {vacHere.slice(0, 5).map(v => {
                       const isFolga = v.tipo === 'folga'
+                      const chipFs = vacHere.length <= 3 ? 10 : 9
+                      const chipPad = vacHere.length <= 3 ? '2px 5px' : '1px 4px'
                       return (
                       <div
                         key={v.id}
@@ -346,8 +348,8 @@ export default function CalendarioFeriasClient() {
                           background: isFolga ? FOLGA_COLOR : getColor(v.pessoa),
                           color: isFolga ? '#2A2000' : '#fff',
                           borderRadius: 4,
-                          padding: '2px 5px',
-                          fontSize: 10,
+                          padding: chipPad,
+                          fontSize: chipFs,
                           fontWeight: 600,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -364,9 +366,9 @@ export default function CalendarioFeriasClient() {
                       </div>
                       )
                     })}
-                    {vacHere.length > 3 && (
+                    {vacHere.length > 5 && (
                       <div style={{ fontSize: 10, color: '#6B7A99', padding: '1px 4px' }}>
-                        +{vacHere.length - 3}
+                        +{vacHere.length - 5}
                       </div>
                     )}
                   </div>

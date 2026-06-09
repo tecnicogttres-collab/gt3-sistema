@@ -756,7 +756,7 @@ export default function LembretesClient() {
                 <div style={{ fontWeight: 600, fontSize: 12, color: isT ? '#7A5A1E' : TEXT_FAINT, marginBottom: 3 }}>
                   {d}
                 </div>
-                {hits.slice(0, 3).map((r, idx) => {
+                {hits.slice(0, 5).map((r, idx) => {
                   const confirmed = confirmedIds.has(r.id)
                   const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
@@ -770,9 +770,9 @@ export default function LembretesClient() {
                     </div>
                   )
                 })}
-                {hits.length > 3 && (
+                {hits.length > 5 && (
                   <div style={{ fontSize: 10, color: TEXT_FAINT, padding: '1px 4px', opacity: 0.5 }}>
-                    +{hits.length - 3}
+                    +{hits.length - 5}
                   </div>
                 )}
               </div>
