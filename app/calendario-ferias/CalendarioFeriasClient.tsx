@@ -473,7 +473,10 @@ export default function CalendarioFeriasClient() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
               <div>
                 <label style={fieldLabel}>Início</label>
-                <input type="date" value={mInicio} onChange={e => setMInicio(e.target.value)} style={fieldInput} />
+                <input type="date" value={mInicio} onChange={e => {
+                  setMInicio(e.target.value)
+                  if (!mFim || mFim < e.target.value) setMFim(e.target.value)
+                }} style={fieldInput} />
               </div>
               <div>
                 <label style={fieldLabel}>Fim</label>
