@@ -203,22 +203,21 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       }
     })()
 
-    // Lembretes próximos (próximos 3 dias, inclusive hoje)
+    // Lembretes próximos (próximos 3 dias, inclusive hoje) — filtrados por visibilidade e confirmação
     ;(async () => {
       try {
-        const supabase = createClient()
-        const { data } = await supabase
-          .from('lembretes')
-          .select('titulo, periodo, data_inicio, concluido')
-        if (!data) { setLembreteItems([]); return }
+        const res = await fetch('/api/lembretes')
+        if (!res.ok) { setLembreteItems([]); return }
+        const data: Array<{ titulo: string; periodo: string; data_inicio: string; concluido: boolean; confirmado: boolean }> = await res.json()
         const todayBase = new Date(); todayBase.setHours(0, 0, 0, 0)
         const items: LembreteItem[] = []
         for (const r of data) {
+          if (r.confirmado) continue
           if (r.concluido && r.periodo === 'unico') continue
-          const next = nextOccStr(r.periodo, r.data_inicio as string)
+          const next = nextOccStr(r.periodo, r.data_inicio)
           const diff = Math.round((next.getTime() - todayBase.getTime()) / 86400000)
           if (diff >= 0 && diff <= 3) {
-            items.push({ titulo: r.titulo as string, daysLeft: diff })
+            items.push({ titulo: r.titulo, daysLeft: diff })
           }
         }
         items.sort((a, b) => a.daysLeft - b.daysLeft)

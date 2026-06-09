@@ -15,22 +15,36 @@ export async function GET() {
 
   const userId = caller.user.id
   const admin = createAdminClient()
-  const { data: all, error } = await admin
-    .from('lembretes')
-    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
-    .order('data_inicio', { ascending: true })
+
+  const now = new Date()
+  const mesRef = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+  const [{ data: all, error }, { data: confirmacoes }] = await Promise.all([
+    admin
+      .from('lembretes')
+      .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
+      .order('data_inicio', { ascending: true }),
+    admin
+      .from('lembretes_historico')
+      .select('lembrete_id')
+      .eq('mes_referencia', mesRef),
+  ])
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  const lembretes = (all ?? []).filter(r => {
-    const vis = r.visibilidade ?? 'todos'
-    if (vis === 'todos') return true
-    if (vis === 'proprio') return r.criado_por === userId
-    if (vis === 'selecionados') {
-      return r.criado_por === userId || (r.destinatarios ?? []).includes(userId)
-    }
-    return true
-  })
+  const confirmedIds = new Set((confirmacoes ?? []).map(c => c.lembrete_id))
+
+  const lembretes = (all ?? [])
+    .filter(r => {
+      const vis = r.visibilidade ?? 'todos'
+      if (vis === 'todos') return true
+      if (vis === 'proprio') return r.criado_por === userId
+      if (vis === 'selecionados') {
+        return r.criado_por === userId || (r.destinatarios ?? []).includes(userId)
+      }
+      return true
+    })
+    .map(r => ({ ...r, confirmado: confirmedIds.has(r.id) }))
 
   return Response.json(lembretes)
 }

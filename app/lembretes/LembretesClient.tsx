@@ -140,14 +140,13 @@ export default function LembretesClient() {
   const [users, setUsers] = useState<UserOption[]>([])
   const [userSearch, setUserSearch] = useState('')
 
-  // ── Confirmados deste usuário neste mês ────────────────────────────────────
+  // ── Confirmados neste mês (por qualquer usuário) ───────────────────────────
 
-  const myConfirmedIds = useMemo(() => {
-    if (!profile) return new Set<string>()
-    return new Set(historico.filter(h => h.usuario_id === profile.id).map(h => h.lembrete_id))
-  }, [historico, profile])
+  const confirmedIds = useMemo(() => {
+    return new Set(historico.map(h => h.lembrete_id))
+  }, [historico])
 
-  function isDone(r: Lembrete) { return myConfirmedIds.has(r.id) }
+  function isDone(r: Lembrete) { return confirmedIds.has(r.id) }
 
   function isOverdue(r: Lembrete) {
     if (isDone(r)) return false
@@ -528,8 +527,8 @@ export default function LembretesClient() {
           const occStr   = occDate ? fmtDateStr(occDate) : r.data_inicio
           const confirmando = confirmandoIds.has(r.id)
 
-          // Quem confirmou (para exibir "feito por")
-          const minhaCnf = historico.find(h => h.lembrete_id === r.id && h.usuario_id === (profile?.id ?? ''))
+          // Quem confirmou (o primeiro registro do histórico para este lembrete)
+          const cnf = historico.find(h => h.lembrete_id === r.id)
 
           return (
             <div key={r.id} style={{
@@ -550,9 +549,9 @@ export default function LembretesClient() {
                   </span>
                 </div>
 
-                {done && minhaCnf && (
+                {done && cnf && (
                   <div style={{ fontSize: 11, color: '#4B7C5A', marginBottom: 6, lineHeight: 1.4 }}>
-                    Confirmado por <strong>{minhaCnf.usuario_login}</strong> em {formatDatetime(minhaCnf.created_at)}
+                    Confirmado por <strong>{cnf.usuario_login}</strong> em {formatDatetime(cnf.created_at)}
                   </div>
                 )}
 
@@ -758,7 +757,7 @@ export default function LembretesClient() {
                   {d}
                 </div>
                 {hits.slice(0, 3).map((r, idx) => {
-                  const confirmed = myConfirmedIds.has(r.id)
+                  const confirmed = confirmedIds.has(r.id)
                   const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
                     <div key={idx} style={{
