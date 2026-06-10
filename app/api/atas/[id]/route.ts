@@ -53,6 +53,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (body.titulo !== undefined) updates.titulo = (body.titulo as string)?.trim() || null
   if (body.conteudo !== undefined) updates.conteudo = body.conteudo
   if (body.data !== undefined) updates.data = body.data
+  if (body.cliente !== undefined) updates.cliente = (body.cliente as string)?.trim() || null
+  if (body.local_reuniao !== undefined) updates.local_reuniao = (body.local_reuniao as string)?.trim() || null
+  if (body.numero_ata !== undefined) updates.numero_ata = (body.numero_ata as string)?.trim() || null
+  if (body.participantes !== undefined) updates.participantes = (body.participantes as string)?.trim() || null
   if (body.status !== undefined) {
     if (!VALID_STATUS.includes(body.status as string)) {
       return Response.json({ error: 'Status inválido' }, { status: 400 })

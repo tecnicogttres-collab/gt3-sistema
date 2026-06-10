@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { markAtaNotifVista } from '../components/AppShell'
+import AtasEditor, { type AtaEditorData } from './AtasEditor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,10 +19,13 @@ type Ata = {
   autor: { nome: string } | null
   created_at: string
   updated_at: string
+  cliente: string | null
+  local_reuniao: string | null
+  numero_ata: string | null
+  participantes: string | null
 }
 
 type Leitura = { user_id: string; nome: string; lido_em?: string }
-type AtaForm = { titulo: string; data: string; status: string; conteudo: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,78 +78,6 @@ function buildTree(atas: Ata[]): Tree {
     }))
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
-
-function AtaFormModal({ initial, onSave, onClose }: {
-  initial?: Partial<AtaForm>
-  onSave: (f: AtaForm) => Promise<void>
-  onClose: () => void
-}) {
-  const today = new Date().toISOString().slice(0, 10)
-  const [form, setForm] = useState<AtaForm>({
-    titulo: initial?.titulo ?? '',
-    data: initial?.data ?? today,
-    status: initial?.status ?? 'Rascunho',
-    conteudo: initial?.conteudo ?? '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.data) { setErr('Data é obrigatória'); return }
-    setSaving(true); setErr('')
-    try { await onSave(form) } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Erro ao salvar')
-    } finally { setSaving(false) }
-  }
-
-  const field: React.CSSProperties = {
-    width: '100%', padding: '8px 12px', border: '1px solid #CBD5E0',
-    borderRadius: 8, fontSize: 14, boxSizing: 'border-box',
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <form onSubmit={handleSubmit} style={{ background: '#fff', borderRadius: 16, padding: 32, width: 540, maxWidth: '95vw', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <h2 style={{ margin: 0, fontSize: 18, color: '#1A2340' }}>{initial ? 'Editar Ata' : 'Nova Ata'}</h2>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: 12, color: '#6B7A99', display: 'block', marginBottom: 4 }}>Título (opcional)</label>
-            <input style={field} value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} placeholder="ex: Reunião de Planejamento" />
-          </div>
-          <div style={{ width: 160 }}>
-            <label style={{ fontSize: 12, color: '#6B7A99', display: 'block', marginBottom: 4 }}>Data *</label>
-            <input type="date" style={field} value={form.data} onChange={e => setForm(p => ({ ...p, data: e.target.value }))} required />
-          </div>
-        </div>
-        <div>
-          <label style={{ fontSize: 12, color: '#6B7A99', display: 'block', marginBottom: 4 }}>Status</label>
-          <select style={field} value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{ fontSize: 12, color: '#6B7A99', display: 'block', marginBottom: 4 }}>Conteúdo</label>
-          <textarea
-            style={{ ...field, height: 220, resize: 'vertical', fontFamily: 'inherit' }}
-            value={form.conteudo}
-            onChange={e => setForm(p => ({ ...p, conteudo: e.target.value }))}
-            placeholder="Texto da ata..."
-          />
-        </div>
-        {err && <p style={{ margin: 0, fontSize: 13, color: '#EF4444' }}>{err}</p>}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', cursor: 'pointer', fontSize: 14 }}>Cancelar</button>
-          <button type="submit" disabled={saving} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#5B8DEF', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
-            {saving ? 'Salvando…' : 'Salvar'}
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function AtasClient() {
@@ -158,7 +90,7 @@ export default function AtasClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selected, setSelected] = useState<Ata | null>(null)
   const [loadingAta, setLoadingAta] = useState(false)
-  const [showModal, setShowModal] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
   const [editingAta, setEditingAta] = useState<Ata | null>(null)
   const [openYears, setOpenYears] = useState<Set<number>>(new Set())
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set())
@@ -286,25 +218,38 @@ export default function AtasClient() {
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
 
-  async function handleCreate(form: AtaForm) {
+  function toPayload(form: AtaEditorData) {
+    return {
+      titulo: form.titulo,
+      data: form.data,
+      status: form.status,
+      conteudo: form.conteudo,
+      cliente: form.cliente,
+      local_reuniao: form.localReuniao,
+      numero_ata: form.numeroAta,
+      participantes: form.participantes,
+    }
+  }
+
+  async function handleCreate(form: AtaEditorData) {
     const res = await fetch('/api/atas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(toPayload(form)),
     })
     if (!res.ok) throw new Error((await res.json()).error ?? 'Erro')
     const nova: Ata = await res.json()
     setAtas(prev => [nova, ...prev])
-    setShowModal(false)
+    setShowEditor(false)
     selectAta(nova.id)
   }
 
-  async function handleEdit(form: AtaForm) {
+  async function handleEdit(form: AtaEditorData) {
     if (!editingAta) return
     const res = await fetch(`/api/atas/${editingAta.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(toPayload(form)),
     })
     if (!res.ok) throw new Error((await res.json()).error ?? 'Erro')
     const updated: Ata = await res.json()
@@ -366,7 +311,7 @@ export default function AtasClient() {
             <span style={{ fontWeight: 700, fontSize: 15, color: '#1A2340' }}>Atas</span>
             {isGestorOrAdmin && (
               <button
-                onClick={() => setShowModal(true)}
+                onClick={() => setShowEditor(true)}
                 style={{ padding: '4px 12px', borderRadius: 8, border: 'none', background: '#5B8DEF', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
               >
                 + Nova
@@ -502,11 +447,19 @@ export default function AtasClient() {
                   <h2 style={{ margin: 0, fontSize: 20, color: '#1A2340', fontWeight: 700 }}>{ataLabel(selected)}</h2>
                   <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, color: '#6B7A99' }}>{fmtDate(selected.data)}</span>
+                    {selected.numero_ata && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 999, background: '#D1AE6E', color: '#fff' }}>{selected.numero_ata}</span>}
                     <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 999, backgroundColor: `${STATUS_COLORS[selected.status]}22`, color: STATUS_COLORS[selected.status] }}>
                       {selected.status}
                     </span>
                     {selected.autor && <span style={{ fontSize: 12, color: '#94A3B8' }}>por {selected.autor.nome}</span>}
                   </div>
+                  {(selected.cliente || selected.local_reuniao || selected.participantes) && (
+                    <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '6px 20px' }}>
+                      {selected.cliente && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Cliente:</span> {selected.cliente}</span>}
+                      {selected.local_reuniao && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Local:</span> {selected.local_reuniao}</span>}
+                      {selected.participantes && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Participantes:</span> {selected.participantes}</span>}
+                    </div>
+                  )}
                 </div>
                 {isGestorOrAdmin && (
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -517,7 +470,7 @@ export default function AtasClient() {
                     >
                       {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <button onClick={() => setEditingAta(selected)} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
+                    <button onClick={() => { setEditingAta(selected) }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
                       Editar
                     </button>
                     <button onClick={() => handleDelete(selected.id)} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #EF4444', background: '#fff', color: '#EF4444', fontSize: 13, cursor: 'pointer' }}>
@@ -530,13 +483,37 @@ export default function AtasClient() {
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
               {selected.conteudo ? (
-                <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 14, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                  {selected.conteudo}
-                </pre>
+                <div
+                  style={{ fontSize: 14, color: '#334155', lineHeight: 1.7 }}
+                  dangerouslySetInnerHTML={{ __html: selected.conteudo }}
+                />
               ) : (
                 <p style={{ color: '#94A3B8', fontSize: 14 }}>Sem conteúdo registrado.</p>
               )}
             </div>
+            <style>{`
+              .ata-bt  { font-size:14px; line-height:1.8; color:#1a1f2e; padding:4px 0; }
+              .ata-bh1 { font-size:20px; font-weight:700; color:#2A4F96; padding:10px 0 4px; border-bottom:2px solid rgba(42,79,150,.15); margin-bottom:4px; }
+              .ata-bh2 { font-size:15px; font-weight:700; color:#2A4F96; padding:8px 0 3px; }
+              .ata-bh3 { font-size:11px; font-weight:700; color:#D1AE6E; padding:6px 0 2px; text-transform:uppercase; letter-spacing:.10em; }
+              .ata-bq  { border-left:3px solid #D1AE6E; padding:8px 16px; font-size:14px; line-height:1.8; color:#5a6178; font-style:italic; background:#f0f2f7; border-radius:0 6px 6px 0; margin:4px 0; }
+              .ata-bdiv { border:none; border-top:1px solid rgba(42,79,150,.15); margin:12px 0; }
+              .ata-bcallout { display:flex; gap:12px; padding:12px 16px; border-radius:10px; margin:4px 0; border-left:3px solid; }
+              .ata-bc-info { background:#e8f0fc; border-color:#2A4F96; }
+              .ata-bc-warn { background:#fef9e7; border-color:#D1AE6E; }
+              .ata-bc-ok   { background:#e8f5e9; border-color:#2e7d32; }
+              .ata-callout-tx { font-size:13.5px; line-height:1.7; flex:1; }
+              .ata-btable-wrap { overflow-x:auto; margin:4px 0; }
+              .ata-btable { width:100%; border-collapse:collapse; font-size:13px; }
+              .ata-btable th,.ata-btable td { border:1px solid rgba(42,79,150,.15); padding:8px 12px; text-align:left; }
+              .ata-btable th { background:#2A4F96; color:#fff; font-weight:700; font-size:11px; text-transform:uppercase; }
+              .ata-btable tr:nth-child(even) td { background:#f0f2f7; }
+              .ata-bcols { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:4px 0; }
+              .ata-bcol { border:1px dashed rgba(42,79,150,.25); border-radius:10px; padding:10px 12px; font-size:14px; line-height:1.75; }
+              .ata-block-wrapper { margin:1px 0; }
+              .ata-bside { display:none; }
+              .ata-add-bar { display:none; }
+            `}</style>
 
             {isGestorOrAdmin && selected.status === 'Validada' && (
               <div style={{ borderTop: '1px solid #F0F4FA', flexShrink: 0 }}>
@@ -583,10 +560,24 @@ export default function AtasClient() {
         )}
       </div>
 
-      {showModal && <AtaFormModal onSave={handleCreate} onClose={() => setShowModal(false)} />}
+      {showEditor && (
+        <AtasEditor
+          onSave={handleCreate}
+          onClose={() => setShowEditor(false)}
+        />
+      )}
       {editingAta && (
-        <AtaFormModal
-          initial={{ titulo: editingAta.titulo ?? '', data: editingAta.data, status: editingAta.status, conteudo: editingAta.conteudo }}
+        <AtasEditor
+          initial={{
+            titulo: editingAta.titulo ?? '',
+            data: editingAta.data,
+            status: editingAta.status,
+            conteudo: editingAta.conteudo,
+            cliente: editingAta.cliente ?? '',
+            localReuniao: editingAta.local_reuniao ?? '',
+            numeroAta: editingAta.numero_ata ?? '',
+            participantes: editingAta.participantes ?? '',
+          }}
           onSave={handleEdit}
           onClose={() => setEditingAta(null)}
         />

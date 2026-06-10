@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const q = new URL(request.url).searchParams.get('q')?.trim() ?? ''
   const escaped = q.replace(/%/g, '\\%').replace(/_/g, '\\_')
 
-  const baseSelect = 'id, titulo, data, status, autor_id, created_at, updated_at, autor:profiles!autor_id(nome)'
+  const baseSelect = 'id, titulo, data, status, autor_id, created_at, updated_at, cliente, local_reuniao, numero_ata, participantes, autor:profiles!autor_id(nome)'
   const selectFields = q ? `${baseSelect}, conteudo` : baseSelect
 
   let query = admin
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json() as {
     titulo?: string; conteudo?: string; data: string; status?: string
+    cliente?: string; local_reuniao?: string; numero_ata?: string; participantes?: string
   }
 
   const VALID_STATUS = ['Rascunho', 'Aguardando Validação', 'Validada']
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest) {
       data: body.data,
       status: body.status ?? 'Rascunho',
       autor_id: user.id,
+      cliente: body.cliente?.trim() || null,
+      local_reuniao: body.local_reuniao?.trim() || null,
+      numero_ata: body.numero_ata?.trim() || null,
+      participantes: body.participantes?.trim() || null,
     })
     .select('*, autor:profiles!autor_id(nome)')
     .single()
