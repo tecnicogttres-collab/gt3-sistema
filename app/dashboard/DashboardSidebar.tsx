@@ -288,6 +288,34 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
 
+  // Real-time: atualiza conversa PDI do colaborador imediatamente quando gestor agendar
+  useEffect(() => {
+    let cancelled = false
+    let cleanup = () => {}
+    const supabase = createClient()
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user || cancelled) return
+      const ch = supabase
+        .channel(`pdi-conversa-rt-${Math.random().toString(36).slice(2)}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'pdi_ciclos', filter: `colaborador_id=eq.${user.id}` },
+          () => {
+            if (cancelled) return
+            fetch('/api/pdi/proxima-conversa')
+              .then(r => r.ok ? r.json() : null)
+              .then((data: PdiConversaColaborador | null) => { if (!cancelled) setPdiConversaColaborador(data) })
+              .catch(() => {})
+          }
+        )
+        .subscribe()
+      cleanup = () => { void supabase.removeChannel(ch) }
+    })
+
+    return () => { cancelled = true; cleanup() }
+  }, [])
+
   useEffect(() => {
     if (!role || !['gestor', 'admin'].includes(role)) return
     async function loadPdiAgenda() {
