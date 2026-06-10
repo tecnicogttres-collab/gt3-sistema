@@ -40,10 +40,30 @@ type PdiAgendaEntry = {
   numero_ciclo: number
 }
 
+type PdiConversaColaborador = {
+  cicloId: string
+  pdiId: string
+  dataConversa: string
+  numeroCiclo: number
+}
+
 function fmtDateShort(iso: string) {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} às ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function fmtConversaLabel(iso: string): { primary: string; urgent: boolean } {
+  const d = new Date(iso)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const dMid = new Date(d); dMid.setHours(0, 0, 0, 0)
+  const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+  const diffDays = Math.round((dMid.getTime() - today.getTime()) / 86400000)
+  if (diffDays === 0) return { primary: `Hoje às ${time}`, urgent: true }
+  if (diffDays === 1) return { primary: `Amanhã às ${time}`, urgent: true }
+  if (diffDays <= 7) return { primary: `Em ${diffDays} dias · ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} às ${time}`, urgent: false }
+  return { primary: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} às ${time}`, urgent: false }
 }
 
 function nextOccStr(periodo: string, dataInicio: string): Date {
@@ -100,6 +120,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const [lembreteItems, setLembreteItems] = useState<LembreteItem[]>([])
   const [modalPrio, setModalPrio] = useState<Prioridade | null>(null)
   const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
+  const [pdiConversaColaborador, setPdiConversaColaborador] = useState<PdiConversaColaborador | null>(null)
 
   async function loadPrioridades() {
     const supabase = createClient()
@@ -200,6 +221,18 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         setBdayItems(items)
       } catch {
         setBdayItems([])
+      }
+    })()
+
+    // Conversa PDI agendada (futura) para o próprio usuário
+    ;(async () => {
+      try {
+        const res = await fetch('/api/pdi/proxima-conversa')
+        if (!res.ok) { setPdiConversaColaborador(null); return }
+        const data = await res.json() as PdiConversaColaborador | null
+        setPdiConversaColaborador(data)
+      } catch {
+        setPdiConversaColaborador(null)
       }
     })()
 
@@ -444,6 +477,39 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             </Link>
           </div>
         )}
+
+        {/* ── Block 3b: Conversa PDI agendada do próprio usuário ──────── */}
+        {pdiConversaColaborador && (() => {
+          const { primary, urgent } = fmtConversaLabel(pdiConversaColaborador.dataConversa)
+          return (
+            <div style={{
+              background: urgent ? '#FFF9EB' : '#EFF6FF',
+              borderRadius: 8,
+              borderLeft: `4px solid ${urgent ? '#D97706' : '#2A4F96'}`,
+              padding: '12px 14px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: urgent ? '#92400E' : '#2A4F96', marginBottom: 8 }}>
+                📅 Conversa PDI agendada
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: urgent ? '#78350F' : '#1E3A6E', lineHeight: 1.4 }}>
+                {primary}
+              </div>
+              <div style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }}>
+                Ciclo {pdiConversaColaborador.numeroCiclo}
+              </div>
+              <Link
+                href={`/pdi/${pdiConversaColaborador.pdiId}`}
+                style={{
+                  fontSize: 12, color: urgent ? '#D97706' : '#2A4F96',
+                  marginTop: 10, display: 'inline-block', textDecoration: 'none', fontWeight: 600,
+                }}
+              >
+                Ver meu PDI →
+              </Link>
+            </div>
+          )
+        })()}
 
         {/* ── Block 4: Lembretes próximos (conditional) ────────────────── */}
         {lembreteItems.length > 0 && (
