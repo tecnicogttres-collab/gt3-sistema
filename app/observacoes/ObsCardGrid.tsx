@@ -13,6 +13,14 @@ const MUTED = '#6B7A99'
 const INK = '#1E253D'
 const BG_CARD = '#FFFFFF'
 
+function darkenHex(hex: string, amount = 28): string {
+  const n = parseInt(hex.replace('#', ''), 16)
+  const r = Math.max(0, (n >> 16) - amount)
+  const g = Math.max(0, ((n >> 8) & 0xff) - amount)
+  const b = Math.max(0, (n & 0xff) - amount)
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type CardUI = Card & {
@@ -348,6 +356,7 @@ function ObsCard({
 export function ObsColumn({
   col, catKey, subtabKey, search, copiedId, onCopy,
   papel, onAdd, onEdit, onDelete, onInlineSave, onValidate, onInlineCreate,
+  layoutMode, columnColor, onColorChangeRequest, isColumnCopied,
 }: {
   col: ColumnUI
   catKey: string
@@ -362,6 +371,10 @@ export function ObsColumn({
   onInlineSave: (id: string, parecer: string) => Promise<void>
   onValidate: (id: string) => Promise<void>
   onInlineCreate: (catKey: string, subtabKey: string, coluna: string, motivo: string, parecer: string) => Promise<void>
+  layoutMode?: boolean
+  columnColor?: string
+  onColorChangeRequest?: () => void
+  isColumnCopied?: boolean
 }) {
   const { ungrouped, groups } = useMemo(() => {
     const ungrouped: { card: CardUI; idx: number }[] = []
@@ -386,34 +399,64 @@ export function ObsColumn({
 
   if (totalVisible === 0 && search) return null
 
-  const headerBg = col.isFixed
-    ? `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DARK} 100%)`
-    : `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`
+  const effectiveHeaderBg = columnColor
+    ? `linear-gradient(135deg, ${columnColor} 0%, ${darkenHex(columnColor)} 100%)`
+    : col.isFixed
+      ? `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DARK} 100%)`
+      : `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`
+
+  const effectiveBorderColor = columnColor ?? (col.isFixed ? ACCENT : PRIMARY)
 
   return (
     <div style={{
       background: BG_CARD,
-      border: `2px solid ${col.isFixed ? ACCENT : PRIMARY}`,
+      border: isColumnCopied ? '2px solid #22C55E' : `2px solid ${effectiveBorderColor}`,
       borderRadius: 10,
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
       overflow: 'hidden',
-      boxShadow: col.isFixed
-        ? '0 2px 8px rgba(209,174,110,0.18)'
-        : '0 2px 8px rgba(42,79,150,0.10)',
+      boxShadow: isColumnCopied
+        ? '0 0 0 3px rgba(34,197,94,0.25), 0 4px 20px rgba(34,197,94,0.20)'
+        : columnColor
+          ? '0 2px 8px rgba(0,0,0,0.13)'
+          : col.isFixed
+            ? '0 2px 8px rgba(209,174,110,0.18)'
+            : '0 2px 8px rgba(42,79,150,0.10)',
+      transition: 'box-shadow 0.4s ease, border-color 0.4s ease',
     }}>
       <div style={{
-        background: headerBg, padding: '10px 14px',
+        background: isColumnCopied
+          ? 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)'
+          : effectiveHeaderBg,
+        padding: '10px 14px',
         borderRadius: '8px 8px 0 0',
         flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        transition: 'background 0.4s ease',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {layoutMode && (
+            <span style={{
+              fontSize: 14, opacity: 0.75, cursor: 'grab', userSelect: 'none',
+              lineHeight: 1, color: '#fff', letterSpacing: -1,
+            }}>
+              ⠿
+            </span>
+          )}
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.7)', flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: 0.2 }}>
             {col.title}
           </span>
+          {isColumnCopied && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: '#16A34A',
+              background: 'rgba(255,255,255,0.93)', borderRadius: 10,
+              padding: '2px 7px', whiteSpace: 'nowrap', letterSpacing: 0.2,
+            }}>
+              ✓ copiado
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
@@ -423,7 +466,22 @@ export function ObsColumn({
           }}>
             {totalVisible}
           </span>
-          {canAdd && (
+          {layoutMode && onColorChangeRequest && (
+            <button
+              onClick={e => { e.stopPropagation(); onColorChangeRequest() }}
+              title="Alterar cor da coluna"
+              style={{
+                width: 24, height: 24, borderRadius: 6, cursor: 'pointer', flexShrink: 0,
+                background: columnColor ? columnColor : 'rgba(255,255,255,0.18)',
+                border: columnColor ? '2px solid rgba(255,255,255,0.7)' : '1px solid rgba(255,255,255,0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, lineHeight: 1, color: '#fff',
+              }}
+            >
+              🎨
+            </button>
+          )}
+          {canAdd && !layoutMode && (
             <button
               onClick={() => onAdd(col.title, subtabKey)}
               title="Nova observação"

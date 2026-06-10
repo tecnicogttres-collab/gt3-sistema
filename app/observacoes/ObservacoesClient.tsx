@@ -35,6 +35,70 @@ const INK = '#1E253D'
 const BG_CARD = '#FFFFFF'
 const BG_PAGE = '#F4F6FA'
 
+// ─── Layout customization ──────────────────────────────────────────────────────
+
+const COLOR_MATRIX = [
+  // Azuis
+  { hex: '#1A3A6E', name: 'Azul marinho' },
+  { hex: '#2A4F96', name: 'Azul padrão' },
+  { hex: '#3B6BBD', name: 'Azul royal' },
+  { hex: '#2196F3', name: 'Azul vivo' },
+  { hex: '#0288D1', name: 'Azul médio' },
+  { hex: '#3F51B5', name: 'Índigo' },
+  { hex: '#1565C0', name: 'Azul cobalto' },
+  // Verdes / Teais
+  { hex: '#1B5E20', name: 'Verde musgo' },
+  { hex: '#2E7D32', name: 'Verde escuro' },
+  { hex: '#388E3C', name: 'Verde' },
+  { hex: '#00695C', name: 'Verde teal' },
+  { hex: '#00838F', name: 'Ciano escuro' },
+  { hex: '#006064', name: 'Ciano profundo' },
+  { hex: '#26A69A', name: 'Turquesa' },
+  // Vermelhos / Pinks
+  { hex: '#B71C1C', name: 'Vermelho escuro' },
+  { hex: '#C62828', name: 'Vermelho' },
+  { hex: '#D32F2F', name: 'Vermelho médio' },
+  { hex: '#880E4F', name: 'Pink escuro' },
+  { hex: '#AD1457', name: 'Carmim' },
+  { hex: '#C2185B', name: 'Rosa escuro' },
+  { hex: '#D81B60', name: 'Rosa' },
+  // Laranjas / Âmbares / Marrons
+  { hex: '#E65100', name: 'Laranja escuro' },
+  { hex: '#F57C00', name: 'Laranja' },
+  { hex: '#FF8F00', name: 'Âmbar' },
+  { hex: '#D1AE6E', name: 'Ouro padrão' },
+  { hex: '#B8922A', name: 'Dourado' },
+  { hex: '#795548', name: 'Marrom' },
+  { hex: '#6D4C41', name: 'Marrom escuro' },
+  // Roxos / Violetas
+  { hex: '#311B92', name: 'Roxo profundo' },
+  { hex: '#4527A0', name: 'Roxo escuro' },
+  { hex: '#6A1B9A', name: 'Violeta' },
+  { hex: '#7B1FA2', name: 'Roxo' },
+  { hex: '#8E24AA', name: 'Lilás escuro' },
+  { hex: '#9C27B0', name: 'Lilás' },
+  { hex: '#AB47BC', name: 'Orquídea' },
+  // Neutros / Cinzas
+  { hex: '#212121', name: 'Preto' },
+  { hex: '#37474F', name: 'Grafite' },
+  { hex: '#455A64', name: 'Cinza azulado' },
+  { hex: '#546E7A', name: 'Cinza médio' },
+  { hex: '#607D8B', name: 'Aço' },
+  { hex: '#78909C', name: 'Cinza claro' },
+  { hex: '#90A4AE', name: 'Prateado' },
+]
+
+type DbLayoutRow = {
+  categoria: string
+  subtab: string
+  tipo: 'coluna' | 'guia'
+  chave: string
+  cor: string | null
+  ordem: number
+}
+
+type ColorPickerState = { open: false } | { open: true; catKey: string; subtabKey: string; coluna: string }
+
 type DbObservacao = {
   id: string
   categoria: string
@@ -163,6 +227,18 @@ export default function ObservacoesClient() {
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false })
   const [subtabModal, setSubtabModal] = useState<SubtabModal>({ open: false, name: '', saving: false, error: '' })
 
+  // ── Layout customization state ───────────────────────────────────────────────
+  const [layoutMode, setLayoutMode] = useState(false)
+  const [layoutSaving, setLayoutSaving] = useState(false)
+  const [colColors, setColColors] = useState<Record<string, string>>({})
+  const [colOrderMap, setColOrderMap] = useState<Record<string, string[]>>({})
+  const [guiaOrderMap, setGuiaOrderMap] = useState<Record<string, string[]>>({})
+  const [dragColIdx, setDragColIdx] = useState<number | null>(null)
+  const [hoverColIdx, setHoverColIdx] = useState<number | null>(null)
+  const [dragTabIdx, setDragTabIdx] = useState<number | null>(null)
+  const [hoverTabIdx, setHoverTabIdx] = useState<number | null>(null)
+  const [colorPicker, setColorPicker] = useState<ColorPickerState>({ open: false })
+
   useEffect(() => {
     if (!activeCatKey) return
     let cancelled = false
@@ -216,6 +292,47 @@ export default function ObservacoesClient() {
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
   }, [activeCatKey])
+
+  // ── Carrega layout salvo do banco para a categoria ativa ─────────────────────
+  const loadLayoutForCategory = useCallback((cat: string) => {
+    fetch(`/api/observacoes/layout?categoria=${encodeURIComponent(cat)}`)
+      .then(r => r.ok ? r.json() : { columns: [] as DbLayoutRow[], guias: [] as DbLayoutRow[] })
+      .then(({ columns, guias }: { columns: DbLayoutRow[]; guias: DbLayoutRow[] }) => {
+        const newColors: Record<string, string> = {}
+        for (const r of columns) {
+          if (r.cor) newColors[`${cat}||${r.subtab}||${r.chave}`] = r.cor
+        }
+        const orderGroups: Record<string, Array<{ chave: string; ordem: number }>> = {}
+        for (const r of columns) {
+          const key = `${cat}||${r.subtab}`
+          if (!orderGroups[key]) orderGroups[key] = []
+          orderGroups[key].push({ chave: r.chave, ordem: r.ordem })
+        }
+        const newColOrder: Record<string, string[]> = {}
+        Object.entries(orderGroups).forEach(([key, items]) => {
+          newColOrder[key] = items.sort((a, b) => a.ordem - b.ordem).map(i => i.chave)
+        })
+        const sortedGuias = [...guias].sort((a, b) => a.ordem - b.ordem)
+        setColColors(prev => ({
+          ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${cat}||`))),
+          ...newColors,
+        }))
+        setColOrderMap(prev => ({
+          ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${cat}||`))),
+          ...newColOrder,
+        }))
+        setGuiaOrderMap(prev => ({
+          ...prev,
+          ...(sortedGuias.length > 0 ? { [cat]: sortedGuias.map(g => g.chave) } : {}),
+        }))
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!activeCatKey) return
+    loadLayoutForCategory(activeCatKey)
+  }, [activeCatKey, loadLayoutForCategory])
 
   useEffect(() => {
     if (activeCatKey === 'Funcionários') return
@@ -273,9 +390,19 @@ export default function ObservacoesClient() {
     return [...staticSubs, ...dynSubs]
   }, [activeCategory, dbSubtabs])
 
+  const allSubtabsOrdered = useMemo(() => {
+    const order = guiaOrderMap[activeCatKey]
+    if (!order || order.length === 0) return allSubtabs
+    const map = new Map(allSubtabs.map(s => [s.key, s]))
+    return [
+      ...order.filter(k => map.has(k)).map(k => map.get(k)!),
+      ...allSubtabs.filter(s => !order.includes(s.key)),
+    ]
+  }, [allSubtabs, guiaOrderMap, activeCatKey])
+
   const activeSubtab = useMemo(
-    () => allSubtabs.find(s => s.key === activeSubtabKey) ?? allSubtabs[0],
-    [allSubtabs, activeSubtabKey]
+    () => allSubtabsOrdered.find(s => s.key === activeSubtabKey) ?? allSubtabsOrdered[0],
+    [allSubtabsOrdered, activeSubtabKey]
   )
 
   const mainCols = useMemo(
@@ -304,6 +431,33 @@ export default function ObservacoesClient() {
     [fixedCols, dbObsForSubtab]
   )
 
+  // Colunas em ordem customizada para o layout Funcionários (apenas main)
+  const displayMainCols = useMemo(() => {
+    const orderKey = `${activeCatKey}||${activeSubtab?.key ?? ''}`
+    const order = colOrderMap[orderKey]
+    if (!order || order.length === 0) return mergedMainCols
+    const map = new Map(mergedMainCols.map(c => [c.title, c]))
+    return [
+      ...order.filter(t => map.has(t)).map(t => map.get(t)!),
+      ...mergedMainCols.filter(c => !order.includes(c.title)),
+    ]
+  }, [mergedMainCols, colOrderMap, activeCatKey, activeSubtab])
+
+  // Colunas em ordem customizada para os demais layouts (main + fixed juntas)
+  const displayAllCols = useMemo(() => {
+    const baseCols = activeSubtab?.key === 'Certidões'
+      ? [...mergedFixedCols, ...mergedMainCols]
+      : [...mergedMainCols, ...mergedFixedCols]
+    const orderKey = `${activeCatKey}||${activeSubtab?.key ?? ''}`
+    const order = colOrderMap[orderKey]
+    if (!order || order.length === 0) return baseCols
+    const map = new Map(baseCols.map(c => [c.title, c]))
+    return [
+      ...order.filter(t => map.has(t)).map(t => map.get(t)!),
+      ...baseCols.filter(c => !order.includes(c.title)),
+    ]
+  }, [mergedMainCols, mergedFixedCols, colOrderMap, activeCatKey, activeSubtab])
+
   const funcFixedMergedCol = useMemo<ColumnUI | null>(() => {
     if (mergedFixedCols.length === 0) return null
     if (mergedFixedCols.length === 1) return mergedFixedCols[0]
@@ -324,6 +478,15 @@ export default function ObservacoesClient() {
       (sum, col) => sum + col.cards.filter(c => matchesSearch(c, search)).length, 0
     )
   }, [mergedMainCols, mergedFixedCols, search])
+
+  // Extrai o título da coluna do copiedId para piscar a coluna certa
+  // Formato do id: catKey|subtabKey|colTitle|idx
+  const copiedColTitle = useMemo(() => {
+    if (!copiedId) return null
+    const parts = copiedId.split('|')
+    if (parts.length < 4) return null
+    return parts[parts.length - 2]
+  }, [copiedId])
 
   useEffect(() => {
     const cols = colsScrollRef.current
@@ -347,6 +510,11 @@ export default function ObservacoesClient() {
     setActiveSubtabKey(cat?.subtabs[0]?.key ?? '')
     setDbSubtabs([])
     setSearch('')
+    setLayoutMode(false)
+    setDragColIdx(null)
+    setHoverColIdx(null)
+    setDragTabIdx(null)
+    setHoverTabIdx(null)
   }, [])
 
   const handleCopy = useCallback((id: string, text: string) => {
@@ -549,7 +717,8 @@ export default function ObservacoesClient() {
   }
 
   const canManageSubtabs = ['gestor', 'admin'].includes(papel)
-  const hasSubtabs = allSubtabs.length > 1 || canManageSubtabs
+  const canEditLayout = ['gestor', 'admin'].includes(papel)
+  const hasSubtabs = allSubtabsOrdered.length > 1 || canManageSubtabs
 
   async function handleCreateSubtab() {
     const name = subtabModal.name.trim()
@@ -571,8 +740,186 @@ export default function ObservacoesClient() {
     }
   }
 
+  // ── Layout handlers ──────────────────────────────────────────────────────────
+
+  function handleColDrop(cols: ColumnUI[], dropIdx: number) {
+    if (dragColIdx === null || dragColIdx === dropIdx) {
+      setDragColIdx(null); setHoverColIdx(null); return
+    }
+    const next = [...cols]
+    const [moved] = next.splice(dragColIdx, 1)
+    next.splice(dropIdx, 0, moved)
+    const orderKey = `${activeCatKey}||${activeSubtab?.key ?? ''}`
+    setColOrderMap(prev => ({ ...prev, [orderKey]: next.map(c => c.title) }))
+    setDragColIdx(null); setHoverColIdx(null)
+  }
+
+  function handleTabDrop(dropIdx: number) {
+    if (dragTabIdx === null || dragTabIdx === dropIdx) {
+      setDragTabIdx(null); setHoverTabIdx(null); return
+    }
+    const visibleTabs = allSubtabsOrdered.filter(st =>
+      !isImageOnlyColuna(st.key) || !!activeCategory?.subtabs.find(s => s.key === st.key)
+    )
+    const next = [...visibleTabs]
+    const [moved] = next.splice(dragTabIdx, 1)
+    next.splice(dropIdx, 0, moved)
+    setGuiaOrderMap(prev => ({ ...prev, [activeCatKey]: next.map(s => s.key) }))
+    setDragTabIdx(null); setHoverTabIdx(null)
+  }
+
+  function handleColorRequest(catKey: string, subtabKey: string, coluna: string) {
+    setColorPicker({ open: true, catKey, subtabKey, coluna })
+  }
+
+  function handleColorSelect(hex: string | null) {
+    if (!colorPicker.open) return
+    const { catKey, subtabKey, coluna } = colorPicker
+    const key = `${catKey}||${subtabKey}||${coluna}`
+    if (hex === null) {
+      setColColors(prev => { const n = { ...prev }; delete n[key]; return n })
+    } else {
+      setColColors(prev => ({ ...prev, [key]: hex }))
+    }
+    setColorPicker({ open: false })
+  }
+
+  async function handleSaveLayout() {
+    setLayoutSaving(true)
+    const records: Array<{
+      categoria: string; subtab: string; tipo: 'coluna' | 'guia'
+      chave: string; cor: string | null; ordem: number
+    }> = []
+
+    // Guias
+    const visibleTabs = allSubtabsOrdered.filter(st =>
+      !isImageOnlyColuna(st.key) || !!activeCategory?.subtabs.find(s => s.key === st.key)
+    )
+    visibleTabs.forEach((st, idx) => {
+      records.push({ categoria: activeCatKey, subtab: '', tipo: 'guia', chave: st.key, cor: null, ordem: idx })
+    })
+
+    // Colunas com ordem customizada
+    const processedColKeys = new Set<string>()
+    Object.entries(colOrderMap).forEach(([key, titles]) => {
+      const sepIdx = key.indexOf('||')
+      if (sepIdx === -1) return
+      const cat = key.slice(0, sepIdx)
+      const subtab = key.slice(sepIdx + 2)
+      if (cat !== activeCatKey) return
+      titles.forEach((title, idx) => {
+        const colKey = `${cat}||${subtab}||${title}`
+        processedColKeys.add(colKey)
+        records.push({ categoria: cat, subtab, tipo: 'coluna', chave: title, cor: colColors[colKey] ?? null, ordem: idx })
+      })
+    })
+
+    // Cores sem ordem customizada
+    Object.entries(colColors).forEach(([key, color]) => {
+      if (processedColKeys.has(key)) return
+      const firstSep = key.indexOf('||')
+      const secondSep = key.indexOf('||', firstSep + 2)
+      if (firstSep === -1 || secondSep === -1) return
+      const cat = key.slice(0, firstSep)
+      const subtab = key.slice(firstSep + 2, secondSep)
+      const coluna = key.slice(secondSep + 2)
+      if (cat !== activeCatKey) return
+      const st = allSubtabs.find(s => s.key === subtab)
+      const ordem = st?.columns.findIndex(c => c.title === coluna) ?? 999
+      records.push({ categoria: cat, subtab, tipo: 'coluna', chave: coluna, cor: color, ordem })
+    })
+
+    try {
+      const res = await fetch('/api/observacoes/layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records }),
+      })
+      if (res.ok) setLayoutMode(false)
+    } catch {}
+    setLayoutSaving(false)
+  }
+
+  function handleDiscardLayout() {
+    setLayoutMode(false)
+    setDragColIdx(null); setHoverColIdx(null)
+    setDragTabIdx(null); setHoverTabIdx(null)
+    loadLayoutForCategory(activeCatKey)
+  }
+
   return (
     <>
+      {colorPicker.open && (() => {
+        const cpKey = `${colorPicker.catKey}||${colorPicker.subtabKey}||${colorPicker.coluna}`
+        const currentColor = colColors[cpKey]
+        return (
+          <Backdrop>
+            <div style={{
+              background: '#fff', borderRadius: 16, width: '100%', maxWidth: 540,
+              boxShadow: '0 20px 60px rgba(30,37,61,0.22)', overflow: 'hidden',
+            }}>
+              <div style={{ background: `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`, padding: '16px 20px' }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Cor da Coluna</h3>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>{colorPicker.coluna}</p>
+              </div>
+              <div style={{ padding: 20 }}>
+                <div style={{ marginBottom: 14 }}>
+                  <button
+                    onClick={() => handleColorSelect(null)}
+                    style={{
+                      width: '100%', padding: '9px 14px', borderRadius: 8, cursor: 'pointer',
+                      border: `2px solid ${!currentColor ? PRIMARY : BORDER}`,
+                      background: !currentColor ? PRIMARY_LIGHT : '#fff',
+                      color: !currentColor ? PRIMARY : MUTED,
+                      fontSize: 13, fontWeight: 600,
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}
+                  >
+                    <span style={{
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                      background: `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`,
+                      border: '1px solid rgba(0,0,0,0.08)',
+                    }} />
+                    Padrão do sistema
+                    {!currentColor && <span style={{ marginLeft: 'auto', color: PRIMARY }}>✓ Ativo</span>}
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 7 }}>
+                  {COLOR_MATRIX.map(({ hex, name }) => {
+                    const isSelected = currentColor === hex
+                    return (
+                      <button
+                        key={hex}
+                        title={name}
+                        onClick={() => handleColorSelect(hex)}
+                        style={{
+                          width: '100%', aspectRatio: '1', borderRadius: 9,
+                          background: hex,
+                          border: isSelected ? '3px solid #fff' : '1.5px solid rgba(0,0,0,0.10)',
+                          boxShadow: isSelected ? `0 0 0 3px ${PRIMARY}` : '0 1px 3px rgba(0,0,0,0.10)',
+                          cursor: 'pointer', transition: 'transform 0.1s, box-shadow 0.1s',
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+              <div style={{ padding: '12px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setColorPicker({ open: false })}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                    background: '#fff', color: INK, fontSize: 13, cursor: 'pointer', fontWeight: 500,
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </Backdrop>
+        )
+      })()}
+
       {modal.open && (
         <Backdrop>
           <div style={{
@@ -877,6 +1224,18 @@ export default function ObservacoesClient() {
 
         <div style={{ display: 'flex', flexDirection: 'column', background: BG_PAGE, minWidth: 0 }}>
 
+          {layoutMode && (
+            <div style={{
+              background: '#FFF9EB', borderBottom: `1px solid #FCD34D`,
+              padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 10,
+              flexShrink: 0, fontSize: 12, color: '#92400E',
+            }}>
+              <span style={{ fontSize: 14 }}>⚙</span>
+              <span style={{ fontWeight: 600 }}>Modo layout ativo</span>
+              <span style={{ opacity: 0.75 }}>— Arraste guias e colunas para reordenar. Clique em 🎨 para trocar a cor da coluna.</span>
+            </div>
+          )}
+
           {hasSubtabs && (
             <div style={{
               background: '#fff', borderBottom: `1px solid ${BORDER}`,
@@ -886,25 +1245,38 @@ export default function ObservacoesClient() {
               <span style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginRight: 6 }}>
                 Subcat.:
               </span>
-              {allSubtabs.filter(st =>
+              {allSubtabsOrdered.filter(st =>
                 // Oculta subtabs dinâmicos imageOnly que não são da lista estática
                 !isImageOnlyColuna(st.key) || !!activeCategory?.subtabs.find(s => s.key === st.key)
-              ).map(st => {
+              ).map((st, idx) => {
                 const isActive = st.key === (activeSubtab?.key ?? '')
                 const isDynamic = !activeCategory?.subtabs.find(s => s.key === st.key)
+                const isTabDragging = layoutMode && dragTabIdx === idx
+                const isTabDropTarget = layoutMode && hoverTabIdx === idx && dragTabIdx !== null && dragTabIdx !== idx
                 return (
                   <button
                     key={st.key}
-                    onClick={() => setActiveSubtabKey(st.key)}
+                    onClick={() => !layoutMode && setActiveSubtabKey(st.key)}
+                    draggable={layoutMode}
+                    onDragStart={layoutMode ? e => { e.dataTransfer.effectAllowed = 'move'; setDragTabIdx(idx) } : undefined}
+                    onDragOver={layoutMode ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setHoverTabIdx(idx) } : undefined}
+                    onDrop={layoutMode ? () => handleTabDrop(idx) : undefined}
+                    onDragEnd={layoutMode ? () => { setDragTabIdx(null); setHoverTabIdx(null) } : undefined}
                     style={{
                       padding: '6px 14px', borderRadius: 20,
-                      border: `1.5px solid ${isActive ? PRIMARY : isDynamic ? ACCENT : BORDER}`,
-                      background: isActive ? PRIMARY : '#fff',
+                      border: `1.5px solid ${isTabDropTarget ? PRIMARY : isActive ? PRIMARY : isDynamic ? ACCENT : BORDER}`,
+                      background: isActive ? PRIMARY : isTabDropTarget ? PRIMARY_LIGHT : '#fff',
                       color: isActive ? '#fff' : isDynamic ? ACCENT_DARK : MUTED, fontSize: 12,
-                      fontWeight: isActive ? 700 : 500, cursor: 'pointer',
+                      fontWeight: isActive ? 700 : 500,
+                      cursor: layoutMode ? (isTabDragging ? 'grabbing' : 'grab') : 'pointer',
                       transition: 'all 0.15s', whiteSpace: 'nowrap',
+                      opacity: isTabDragging ? 0.45 : 1,
+                      outline: isTabDropTarget ? `2px dashed ${PRIMARY}` : 'none',
+                      outlineOffset: 2,
+                      display: 'flex', alignItems: 'center', gap: 5,
                     }}
                   >
+                    {layoutMode && <span style={{ fontSize: 11, opacity: 0.65, lineHeight: 1 }}>⠿</span>}
                     {st.key}
                   </button>
                 )
@@ -962,6 +1334,49 @@ export default function ObservacoesClient() {
                 <strong style={{ color: PRIMARY }}>{totalResults}</strong> resultado{totalResults !== 1 ? 's' : ''}
               </span>
             )}
+            {canEditLayout && (
+              layoutMode ? (
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 'auto' }}>
+                  <button
+                    onClick={handleDiscardLayout}
+                    style={{
+                      padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                      background: '#fff', color: MUTED, fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Descartar
+                  </button>
+                  <button
+                    onClick={handleSaveLayout}
+                    disabled={layoutSaving}
+                    style={{
+                      padding: '7px 16px', borderRadius: 8, border: 'none',
+                      background: layoutSaving ? MUTED : '#16A34A', color: '#fff',
+                      fontSize: 12, cursor: layoutSaving ? 'default' : 'pointer', fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {layoutSaving ? 'Salvando…' : '💾 Salvar Layout'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setLayoutMode(true)}
+                  title="Personalizar layout: reordenar colunas e guias, alterar cores"
+                  style={{
+                    padding: '7px 14px', borderRadius: 8,
+                    border: `1.5px solid ${BORDER}`,
+                    background: '#fff', color: MUTED, fontSize: 12,
+                    cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                    flexShrink: 0, marginLeft: 'auto',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  ⚙ Layout
+                </button>
+              )
+            )}
           </div>
 
           {activeSubtab ? (
@@ -975,19 +1390,39 @@ export default function ObservacoesClient() {
                   ref={colsScrollRef}
                   style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'row', gap: 16, height: '100%' }}
                 >
-                  {mergedMainCols.map(col => (
-                    <div
-                      key={`${activeSubtab.key}|${col.title}`}
-                      style={{ flex: 1, minWidth: 0, height: '100%', backgroundColor: BG_CARD, borderRadius: 10 }}
-                    >
-                      <ObsColumn
-                        col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
-                        search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
-                        onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
-                        onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
-                      />
-                    </div>
-                  ))}
+                  {displayMainCols.map((col, idx) => {
+                    const isColDragging = layoutMode && dragColIdx === idx
+                    const isColDropTarget = layoutMode && hoverColIdx === idx && dragColIdx !== null && dragColIdx !== idx
+                    return (
+                      <div
+                        key={`${activeSubtab.key}|${col.title}`}
+                        draggable={layoutMode}
+                        onDragStart={layoutMode ? e => { e.dataTransfer.effectAllowed = 'move'; setDragColIdx(idx) } : undefined}
+                        onDragOver={layoutMode ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setHoverColIdx(idx) } : undefined}
+                        onDrop={layoutMode ? () => handleColDrop(displayMainCols, idx) : undefined}
+                        onDragEnd={layoutMode ? () => { setDragColIdx(null); setHoverColIdx(null) } : undefined}
+                        style={{
+                          flex: 1, minWidth: 0, height: '100%', borderRadius: 10,
+                          opacity: isColDragging ? 0.45 : 1,
+                          outline: isColDropTarget ? `2px dashed ${PRIMARY}` : 'none',
+                          outlineOffset: 2,
+                          cursor: layoutMode ? (isColDragging ? 'grabbing' : 'grab') : undefined,
+                          transition: 'opacity 0.15s',
+                        }}
+                      >
+                        <ObsColumn
+                          col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
+                          search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
+                          onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
+                          onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
+                          layoutMode={layoutMode}
+                          columnColor={colColors[`${activeCatKey}||${activeSubtab.key}||${col.title}`]}
+                          onColorChangeRequest={() => handleColorRequest(activeCatKey, activeSubtab.key, col.title)}
+                          isColumnCopied={copiedColTitle === col.title}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
 
                 {funcFixedMergedCol && <div style={{ flexShrink: 0, width: 12 }} />}
@@ -999,6 +1434,10 @@ export default function ObservacoesClient() {
                       search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
                       onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
                       onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
+                      layoutMode={layoutMode}
+                      columnColor={colColors[`${activeCatKey}||${activeSubtab.key}||${funcFixedMergedCol.title}`]}
+                      onColorChangeRequest={() => handleColorRequest(activeCatKey, activeSubtab.key, funcFixedMergedCol.title)}
+                      isColumnCopied={copiedColTitle === funcFixedMergedCol.title}
                     />
                   </div>
                 )}
@@ -1018,22 +1457,39 @@ export default function ObservacoesClient() {
                   style={{ flex: 1, minWidth: 0, overflowX: 'auto', overflowY: 'hidden' }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'row', gap: 16, height: '100%', width: 'max-content' }}>
-                    {(activeSubtab.key === 'Certidões'
-                      ? [...mergedFixedCols, ...mergedMainCols]
-                      : [...mergedMainCols, ...mergedFixedCols]
-                    ).map(col => (
-                      <div
-                        key={`${activeSubtab.key}|${col.title}`}
-                        style={{ width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%' }}
-                      >
-                        <ObsColumn
-                          col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
-                          search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
-                          onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
-                          onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
-                        />
-                      </div>
-                    ))}
+                    {displayAllCols.map((col, idx) => {
+                      const isColDragging = layoutMode && dragColIdx === idx
+                      const isColDropTarget = layoutMode && hoverColIdx === idx && dragColIdx !== null && dragColIdx !== idx
+                      return (
+                        <div
+                          key={`${activeSubtab.key}|${col.title}`}
+                          draggable={layoutMode}
+                          onDragStart={layoutMode ? e => { e.dataTransfer.effectAllowed = 'move'; setDragColIdx(idx) } : undefined}
+                          onDragOver={layoutMode ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setHoverColIdx(idx) } : undefined}
+                          onDrop={layoutMode ? () => handleColDrop(displayAllCols, idx) : undefined}
+                          onDragEnd={layoutMode ? () => { setDragColIdx(null); setHoverColIdx(null) } : undefined}
+                          style={{
+                            width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%', borderRadius: 10,
+                            opacity: isColDragging ? 0.45 : 1,
+                            outline: isColDropTarget ? `2px dashed ${PRIMARY}` : 'none',
+                            outlineOffset: 2,
+                            cursor: layoutMode ? (isColDragging ? 'grabbing' : 'grab') : undefined,
+                            transition: 'opacity 0.15s',
+                          }}
+                        >
+                          <ObsColumn
+                            col={col} catKey={activeCatKey} subtabKey={activeSubtab.key}
+                            search={search} copiedId={copiedId} onCopy={handleCopy} papel={papel}
+                            onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
+                            onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
+                            layoutMode={layoutMode}
+                            columnColor={colColors[`${activeCatKey}||${activeSubtab.key}||${col.title}`]}
+                            onColorChangeRequest={() => handleColorRequest(activeCatKey, activeSubtab.key, col.title)}
+                            isColumnCopied={copiedColTitle === col.title}
+                          />
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
