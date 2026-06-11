@@ -481,65 +481,33 @@ export default function AtasClient() {
               </div>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', background: '#F4F6FA' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', background: '#F0F3F9' }}>
               {selected.conteudo ? (
-                <div style={{ maxWidth: 820, margin: '0 auto', background: '#fff', borderRadius: 14, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', padding: '40px 48px' }}>
-                  {/* Document sub-header */}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 16, borderBottom: '2px solid #2A4F96', gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: '#2A4F96' }}>
-                        {selected.titulo?.trim() || `Ata de ${fmtDate(selected.data)}`}
-                      </div>
-                      {selected.cliente && <div style={{ fontSize: 13, color: '#5a6178', marginTop: 3 }}>{selected.cliente}</div>}
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      {selected.numero_ata && <div style={{ display: 'inline-block', padding: '3px 10px', background: '#D1AE6E', color: '#fff', borderRadius: 20, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>{selected.numero_ata}</div>}
-                      <div style={{ fontSize: 12, color: '#6B7A99' }}>{fmtDate(selected.data)}</div>
-                      {selected.local_reuniao && <div style={{ fontSize: 12, color: '#6B7A99' }}>{selected.local_reuniao}</div>}
-                    </div>
-                  </div>
+                <div style={{ maxWidth: 880, margin: '0 auto', background: '#fff', borderRadius: 14, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', padding: '36px 44px', borderTop: '3px solid #2A4F96' }}>
                   <div
                     className="ata-view-content"
                     dangerouslySetInnerHTML={{ __html: selected.conteudo }}
                   />
-                  {/* Signature footer */}
-                  <div style={{ marginTop: 40, paddingTop: 16, borderTop: '1px solid rgba(42,79,150,0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                    <span style={{ fontSize: 11, color: '#9399ae', fontWeight: 600, opacity: 0.6 }}>GT3 Consultoria</span>
-                    <div style={{ display: 'flex', gap: 40 }}>
-                      {['Responsável GT3', 'Responsável Cliente'].map(l => (
-                        <div key={l} style={{ textAlign: 'center', fontSize: 11, color: '#9399ae', borderTop: '1px solid rgba(42,79,150,0.2)', paddingTop: 4, width: 160 }}>{l}</div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               ) : (
-                <p style={{ color: '#94A3B8', fontSize: 14 }}>Sem conteúdo registrado.</p>
+                <p style={{ color: '#94A3B8', fontSize: 14, padding: 24 }}>Sem conteúdo registrado.</p>
               )}
             </div>
             <style>{`
-              .ata-view-content { font-size:14px; color:#334155; line-height:1.7; }
-              .ata-view-content .ata-bt  { font-size:14px; line-height:1.8; color:#1a1f2e; padding:4px 0; }
-              .ata-view-content .ata-bh1 { font-size:18px; font-weight:700; color:#2A4F96; padding:14px 0 5px; border-bottom:2px solid rgba(42,79,150,.12); margin-bottom:6px; }
-              .ata-view-content .ata-bh2 { font-size:14px; font-weight:700; color:#2A4F96; padding:12px 0 4px; }
-              .ata-view-content .ata-bh3 { font-size:10px; font-weight:700; color:#D1AE6E; padding:6px 0 2px; text-transform:uppercase; letter-spacing:.10em; }
-              .ata-view-content .ata-bq  { border-left:3px solid #D1AE6E; padding:8px 16px; font-size:14px; line-height:1.8; color:#5a6178; font-style:italic; background:#f8f9fb; border-radius:0 6px 6px 0; margin:6px 0; }
-              .ata-view-content .ata-bdiv { border:none; border-top:1px solid rgba(42,79,150,.12); margin:14px 0; }
-              .ata-view-content .ata-bcallout { display:flex; gap:12px; padding:12px 16px; border-radius:10px; margin:6px 0; border-left:3px solid; }
-              .ata-view-content .ata-bc-info { background:#e8f0fc; border-color:#2A4F96; }
-              .ata-view-content .ata-bc-warn { background:#fef9e7; border-color:#D1AE6E; }
-              .ata-view-content .ata-bc-ok   { background:#e8f5e9; border-color:#2e7d32; }
-              .ata-view-content .ata-callout-tx { font-size:13.5px; line-height:1.7; flex:1; }
-              .ata-view-content .ata-btable-wrap { overflow-x:auto; margin:6px 0 12px; }
+              .ata-view-content { font-size:13.5px; color:#334155; line-height:1.65; }
+              .ata-view-content .ata-section { margin-bottom: 22px; }
+              .ata-view-content .ata-bh2 { font-size:11px; font-weight:700; color:#2A4F96; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid rgba(42,79,150,.12); }
+              .ata-view-content .ata-section-body { font-size:13.5px; line-height:1.75; color:#1a1f2e; white-space:pre-wrap; }
+              .ata-view-content .ata-btable-wrap { overflow-x:auto; margin:0; }
               .ata-view-content .ata-btable { width:100%; border-collapse:collapse; font-size:13px; }
-              .ata-view-content .ata-btable th, .ata-view-content .ata-btable td { border:1px solid rgba(42,79,150,.15); padding:9px 12px; text-align:left; vertical-align:top; }
-              .ata-view-content .ata-btable th { background:#2A4F96; color:#fff; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+              .ata-view-content .ata-btable th, .ata-view-content .ata-btable td { border:1px solid rgba(42,79,150,.14); padding:9px 11px; text-align:left; vertical-align:top; }
+              .ata-view-content .ata-btable th { background:#2A4F96; color:#fff; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
               .ata-view-content .ata-btable tr:nth-child(even) td { background:#f8f9fb; }
               .ata-view-content .ata-btable-part th { background:#4a5568; }
-              .ata-view-content .ata-bcols { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:6px 0; }
-              .ata-view-content .ata-bcol { border:1px solid rgba(42,79,150,.15); border-radius:8px; padding:10px 12px; font-size:14px; line-height:1.75; }
-              .ata-view-content .ata-block-wrapper { margin:2px 0; }
-              .ata-view-content .ata-bside { display:none; }
-              .ata-view-content .ata-add-bar { display:none; }
+              .ata-view-content .ata-assuntos .col-num { width:36px; text-align:center; font-weight:700; color:#2A4F96; }
+              .ata-view-content .ata-assuntos .col-desc { }
+              .ata-view-content .ata-assuntos .col-right { width:130px; white-space:normal; }
+              .ata-view-content .ata-assuntos .col-status { font-weight:600; }
             `}</style>
 
             {isGestorOrAdmin && selected.status === 'Validada' && (
