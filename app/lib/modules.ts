@@ -145,6 +145,15 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
     dashboardRoles: ['admin'],
   },
+  {
+    id: 'atas-contratantes',
+    label: 'Atas Contratantes',
+    color: '#4A90D9',
+    path: '/atas-contratantes',
+    description: 'Atas de reunião com contratantes',
+    allowedRoles: ['gestor', 'admin'],
+    dashboardRoles: ['admin'],
+  },
   // ── Exclusivos do Admin (sidebar + Dashboard) ────────────────
   {
     id: 'notificacoes',

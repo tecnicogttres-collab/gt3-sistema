@@ -35,6 +35,11 @@ function AtasWithSuspense() {
   return <Suspense fallback={null}><DynAtas /></Suspense>
 }
 
+const DynAtasContratantes = dynamic(() => import('../atas-contratantes/AtasContratantesClient'), { ssr: false })
+function AtasContratantesWithSuspense() {
+  return <Suspense fallback={null}><DynAtasContratantes /></Suspense>
+}
+
 export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/':                   DynDashboard,
   '/observacoes':        DynObservacoes,
@@ -51,6 +56,7 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/prioridades':        DynPrioridades,
   '/calendario-ferias':  DynCalendario,
   '/atas':               AtasWithSuspense,
+  '/atas-contratantes':  AtasContratantesWithSuspense,
   '/logins':             DynLogins,
   '/aniversarios':       DynAniversarios,
   '/ramais':             DynRamais,
