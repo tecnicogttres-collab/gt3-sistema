@@ -16,10 +16,11 @@ export type AtaEditorData = {
 const STATUS_OPTIONS = ['Rascunho', 'Aguardando Validação', 'Validada']
 
 const DEFAULT_BLOCKS: Array<{ type: string; content?: string }> = [
-  { type: 'bh2', content: 'Assuntos debatidos' },
+  { type: 'bh2', content: 'Participantes' },
+  { type: 'participants' },
+  { type: 'bh2', content: 'Assuntos' },
   { type: 'table' },
-  { type: 'bh2', content: 'Definições e encaminhamentos' },
-  { type: 'bt' },
+  { type: 'bh2', content: 'Pendências e encaminhamentos' },
   { type: 'cw', content: 'Pendências a acompanhar na próxima reunião...' },
   { type: 'bh2', content: 'Próxima reunião' },
   { type: 'bt' },
@@ -52,6 +53,8 @@ function initEditor(container: HTMLDivElement, menu: HTMLDivElement, initialHtml
       inner.className = 'ata-bdiv'
     } else if (type === 'table') {
       inner = mkTable()
+    } else if (type === 'participants') {
+      inner = mkParticipants()
     } else if (type === 'cols') {
       inner = mkCols()
     } else if (['ci', 'cw', 'co'].includes(type)) {
@@ -143,6 +146,43 @@ function initEditor(container: HTMLDivElement, menu: HTMLDivElement, initialHtml
       col.addEventListener('focus', () => { activeEdit = col })
       wrap.appendChild(col)
     })
+    return wrap
+  }
+
+  function mkParticipants(): HTMLElement {
+    const wrap = document.createElement('div'); wrap.className = 'ata-btable-wrap'
+    const t = document.createElement('table'); t.className = 'ata-btable ata-btable-part'
+    const headers = ['Participante', 'Empresa']
+    const hrow = document.createElement('tr')
+    headers.forEach(h => {
+      const th = document.createElement('th')
+      th.contentEditable = 'true'; th.textContent = h
+      th.addEventListener('focus', () => { activeEdit = th })
+      hrow.appendChild(th)
+    })
+    t.appendChild(hrow)
+    const addRow = (focusFirst = false) => {
+      const tr = document.createElement('tr')
+      headers.forEach((_, ci) => {
+        const td = document.createElement('td')
+        td.contentEditable = 'true'
+        td.addEventListener('focus', () => { activeEdit = td })
+        td.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Tab') {
+            e.preventDefault()
+            const cells = [...t.querySelectorAll<HTMLElement>('td')]
+            const i = cells.indexOf(td)
+            if (i < cells.length - 1) { cells[i + 1].focus() }
+            else { addRow(true) }
+          }
+        })
+        tr.appendChild(td)
+        if (focusFirst && ci === 0) setTimeout(() => td.focus(), 30)
+      })
+      t.appendChild(tr)
+    }
+    for (let i = 0; i < 4; i++) addRow()
+    wrap.appendChild(t)
     return wrap
   }
 
@@ -436,20 +476,21 @@ export default function AtasEditor({ initial, onSave, onClose }: {
       {/* Block menu (portal-style, fixed) */}
       <div ref={menuRef} style={{ position: 'fixed', background: '#fff', border: '1px solid rgba(42,79,150,0.22)', borderRadius: 12, padding: 6, display: 'none', zIndex: 9999, boxShadow: '0 8px 32px rgba(42,79,150,.15)', minWidth: 215 }}>
         {[
-          { type: 'bt',    icon: '¶',  label: 'Parágrafo',        desc: 'Texto livre' },
-          { type: 'bh1',   icon: 'H1', label: 'Título 1',         desc: 'Seção principal' },
-          { type: 'bh2',   icon: 'H2', label: 'Título 2',         desc: 'Subseção' },
-          { type: 'bh3',   icon: 'H3', label: 'Subtítulo',        desc: 'Rótulo de seção' },
+          { type: 'bt',           icon: '¶',  label: 'Parágrafo',        desc: 'Texto livre' },
+          { type: 'bh1',          icon: 'H1', label: 'Título 1',         desc: 'Seção principal' },
+          { type: 'bh2',          icon: 'H2', label: 'Título 2',         desc: 'Subseção' },
+          { type: 'bh3',          icon: 'H3', label: 'Subtítulo',        desc: 'Rótulo de seção' },
           { type: 'sep' },
-          { type: 'table', icon: '⊞',  label: 'Tabela de itens',  desc: 'Item / Descrição / Prazo / Status' },
-          { type: 'cols',  icon: '⫿',  label: 'Duas colunas',     desc: 'Layout lado a lado' },
+          { type: 'table',        icon: '⊞',  label: 'Tabela de assuntos', desc: 'Item / Descrição / Responsável / Prazo / Status' },
+          { type: 'participants', icon: '👤', label: 'Participantes',    desc: 'Tabela Participante / Empresa' },
+          { type: 'cols',         icon: '⫿',  label: 'Duas colunas',     desc: 'Layout lado a lado' },
           { type: 'sep' },
-          { type: 'ci',    icon: 'ℹ',  label: 'Nota informativa', desc: 'Destaque azul' },
-          { type: 'cw',    icon: '⚠',  label: 'Atenção',          desc: 'Destaque dourado' },
-          { type: 'co',    icon: '✓',  label: 'Conclusão / OK',   desc: 'Destaque verde' },
+          { type: 'ci',           icon: 'ℹ',  label: 'Nota informativa', desc: 'Destaque azul' },
+          { type: 'cw',           icon: '⚠',  label: 'Atenção',          desc: 'Destaque dourado' },
+          { type: 'co',           icon: '✓',  label: 'Conclusão / OK',   desc: 'Destaque verde' },
           { type: 'sep' },
-          { type: 'bq',    icon: '"',  label: 'Citação',          desc: 'Bloco recuado' },
-          { type: 'div',   icon: '—',  label: 'Divisor',          desc: 'Linha separadora' },
+          { type: 'bq',           icon: '"',  label: 'Citação',          desc: 'Bloco recuado' },
+          { type: 'div',          icon: '—',  label: 'Divisor',          desc: 'Linha separadora' },
         ].map((item, i) =>
           item.type === 'sep'
             ? <div key={i} style={{ height: 1, background: 'rgba(42,79,150,0.1)', margin: '4px 0' }} />
@@ -501,6 +542,8 @@ export default function AtasEditor({ initial, onSave, onClose }: {
         .ata-btable th { background: #2A4F96; color: #fff; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
         .ata-btable tr:nth-child(even) td { background: #f0f2f7; }
         .ata-btable td:focus { background: #e8f0fc; box-shadow: inset 0 0 0 1.5px #2A4F96; }
+        .ata-btable-part th { background: #4a5568; }
+        .ata-btable-part td { min-width: 120px; }
         .ata-bcols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 4px 0; }
         .ata-bcol { border: 1px dashed rgba(42,79,150,0.25); border-radius: 10px; padding: 10px 12px; min-height: 56px; outline: none; font-size: 14px; line-height: 1.75; color: #1a1f2e; }
         .ata-bcol:empty::before { content: attr(data-ph); color: #9399ae; pointer-events: none; }
