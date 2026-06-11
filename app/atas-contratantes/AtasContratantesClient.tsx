@@ -56,24 +56,34 @@ function getSnippet(text: string, query: string, maxLen = 130): string {
   return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
 }
 
-type Tree = { year: number; months: { month: number; atas: Ata[] }[] }[]
+type YearEntry   = { year: number; months: { month: number; atas: Ata[] }[] }
+type ClientEntry = { cliente: string; years: YearEntry[] }
+type Tree        = ClientEntry[]
 
 function buildTree(atas: Ata[]): Tree {
-  const map = new Map<number, Map<number, Ata[]>>()
+  const cMap = new Map<string, Map<number, Map<number, Ata[]>>>()
   for (const a of atas) {
+    const c = a.cliente?.trim() || '(Sem cliente)'
     const [y, m] = a.data.split('-').map(Number)
-    if (!map.has(y)) map.set(y, new Map())
-    const mMap = map.get(y)!
+    if (!cMap.has(c)) cMap.set(c, new Map())
+    const yMap = cMap.get(c)!
+    if (!yMap.has(y)) yMap.set(y, new Map())
+    const mMap = yMap.get(y)!
     if (!mMap.has(m)) mMap.set(m, [])
     mMap.get(m)!.push(a)
   }
-  return [...map.entries()]
-    .sort(([a], [b]) => b - a)
-    .map(([year, mMap]) => ({
-      year,
-      months: [...mMap.entries()]
+  return [...cMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+    .map(([cliente, yMap]) => ({
+      cliente,
+      years: [...yMap.entries()]
         .sort(([a], [b]) => b - a)
-        .map(([month, atas]) => ({ month, atas })),
+        .map(([year, mMap]) => ({
+          year,
+          months: [...mMap.entries()]
+            .sort(([a], [b]) => b - a)
+            .map(([month, atas]) => ({ month, atas })),
+        })),
     }))
 }
 
@@ -91,7 +101,9 @@ export default function AtasContratantesClient() {
   const [loadingAta, setLoadingAta] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
   const [editingAta, setEditingAta] = useState<Ata | null>(null)
-  const [openYears, setOpenYears] = useState<Set<number>>(new Set())
+  const [copyingAta, setCopyingAta] = useState<Ata | null>(null)
+  const [openClientes, setOpenClientes] = useState<Set<string>>(new Set())
+  const [openYears, setOpenYears] = useState<Set<string>>(new Set())
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set())
   const [leituras, setLeituras] = useState<{ leram: Leitura[]; naoLeram: Leitura[] } | null>(null)
   const [leiturasOpen, setLeiturasOpen] = useState(false)
@@ -113,9 +125,12 @@ export default function AtasContratantesClient() {
       const data: Ata[] = await res.json()
       setAtas(data)
       if (data.length > 0) {
-        const [y, m] = data[0].data.split('-').map(Number)
-        setOpenYears(new Set([y]))
-        setOpenMonths(new Set([`${y}-${m}`]))
+        const first = data[0]
+        const c = first.cliente?.trim() || '(Sem cliente)'
+        const [y, m] = first.data.split('-').map(Number)
+        setOpenClientes(new Set([c]))
+        setOpenYears(new Set([`${c}|${y}`]))
+        setOpenMonths(new Set([`${c}|${y}-${m}`]))
       }
     } finally {
       setLoading(false)
@@ -169,9 +184,11 @@ export default function AtasContratantesClient() {
       if (!res.ok) return
       const ata: Ata = await res.json()
       setSelected(ata)
+      const c = ata.cliente?.trim() || '(Sem cliente)'
       const [y, m] = ata.data.split('-').map(Number)
-      setOpenYears(prev => new Set([...prev, y]))
-      setOpenMonths(prev => new Set([...prev, `${y}-${m}`]))
+      setOpenClientes(prev => new Set([...prev, c]))
+      setOpenYears(prev => new Set([...prev, `${c}|${y}`]))
+      setOpenMonths(prev => new Set([...prev, `${c}|${y}-${m}`]))
     } finally {
       setLoadingAta(false)
     }
@@ -377,34 +394,52 @@ export default function AtasContratantesClient() {
             <>
               {loading && <p style={{ padding: 16, fontSize: 13, color: '#94A3B8' }}>Carregando…</p>}
               {!loading && atas.length === 0 && <p style={{ padding: 16, fontSize: 13, color: '#94A3B8' }}>Nenhuma ata.</p>}
-              {tree.map(({ year, months }) => (
-                <div key={year}>
+              {tree.map(({ cliente, years }) => (
+                <div key={cliente}>
+                  {/* ── Cliente folder ── */}
                   <button
-                    onClick={() => setOpenYears(prev => { const s = new Set(prev); s.has(year) ? s.delete(year) : s.add(year); return s })}
-                    style={{ width: '100%', textAlign: 'left', padding: '6px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#2A4F96', display: 'flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => setOpenClientes(prev => { const s = new Set(prev); s.has(cliente) ? s.delete(cliente) : s.add(cliente); return s })}
+                    style={{ width: '100%', textAlign: 'left', padding: '7px 16px', border: 'none', background: openClientes.has(cliente) ? '#F0F4FA' : 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#1A2340', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid #F0F4FA' }}
                   >
-                    <span style={{ fontSize: 10 }}>{openYears.has(year) ? '▼' : '▶'}</span>
-                    {year}
+                    <span style={{ fontSize: 9 }}>{openClientes.has(cliente) ? '▼' : '▶'}</span>
+                    <span style={{ fontSize: 14, marginRight: 4 }}>📁</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cliente}</span>
+                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 400, flexShrink: 0 }}>
+                      {years.reduce((acc, y) => acc + y.months.reduce((a2, m) => a2 + m.atas.length, 0), 0)}
+                    </span>
                   </button>
-                  {openYears.has(year) && months.map(({ month, atas: mAtas }) => (
-                    <div key={month}>
+                  {openClientes.has(cliente) && years.map(({ year, months }) => (
+                    <div key={year}>
+                      {/* ── Ano ── */}
                       <button
-                        onClick={() => setOpenMonths(prev => { const k = `${year}-${month}`; const s = new Set(prev); s.has(k) ? s.delete(k) : s.add(k); return s })}
-                        style={{ width: '100%', textAlign: 'left', padding: '5px 28px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#5B8DEF', display: 'flex', alignItems: 'center', gap: 6 }}
+                        onClick={() => setOpenYears(prev => { const k = `${cliente}|${year}`; const s = new Set(prev); s.has(k) ? s.delete(k) : s.add(k); return s })}
+                        style={{ width: '100%', textAlign: 'left', padding: '5px 16px 5px 30px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#2A4F96', display: 'flex', alignItems: 'center', gap: 6 }}
                       >
-                        <span style={{ fontSize: 10 }}>{openMonths.has(`${year}-${month}`) ? '▼' : '▶'}</span>
-                        {MESES[month - 1]}
-                        <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 400 }}>({mAtas.length})</span>
+                        <span style={{ fontSize: 9 }}>{openYears.has(`${cliente}|${year}`) ? '▼' : '▶'}</span>
+                        {year}
                       </button>
-                      {openMonths.has(`${year}-${month}`) && mAtas.map(a => (
-                        <button
-                          key={a.id}
-                          onClick={() => { selectAta(a.id); router.replace(`/atas-contratantes?ata=${a.id}`) }}
-                          style={rowStyle(a.id)}
-                        >
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ataLabel(a)}</div>
-                          <div style={{ fontSize: 10, color: STATUS_COLORS[a.status], marginTop: 1 }}>{a.status}</div>
-                        </button>
+                      {openYears.has(`${cliente}|${year}`) && months.map(({ month, atas: mAtas }) => (
+                        <div key={month}>
+                          {/* ── Mês ── */}
+                          <button
+                            onClick={() => setOpenMonths(prev => { const k = `${cliente}|${year}-${month}`; const s = new Set(prev); s.has(k) ? s.delete(k) : s.add(k); return s })}
+                            style={{ width: '100%', textAlign: 'left', padding: '4px 16px 4px 44px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#5B8DEF', display: 'flex', alignItems: 'center', gap: 5 }}
+                          >
+                            <span style={{ fontSize: 9 }}>{openMonths.has(`${cliente}|${year}-${month}`) ? '▼' : '▶'}</span>
+                            {MESES[month - 1]}
+                            <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 400 }}>({mAtas.length})</span>
+                          </button>
+                          {openMonths.has(`${cliente}|${year}-${month}`) && mAtas.map(a => (
+                            <button
+                              key={a.id}
+                              onClick={() => { selectAta(a.id); router.replace(`/atas-contratantes?ata=${a.id}`) }}
+                              style={{ ...rowStyle(a.id), padding: '6px 16px 6px 56px' }}
+                            >
+                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ataLabel(a)}</div>
+                              <div style={{ fontSize: 10, color: STATUS_COLORS[a.status], marginTop: 1 }}>{a.status}</div>
+                            </button>
+                          ))}
+                        </div>
                       ))}
                     </div>
                   ))}
@@ -458,6 +493,9 @@ export default function AtasContratantesClient() {
                     >
                       {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <button onClick={() => setCopyingAta(selected)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }} title="Criar nova ata usando esta como base">
+                      ⊕ Nova a partir desta
+                    </button>
                     <button onClick={() => { setEditingAta(selected) }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
                       Editar
                     </button>
@@ -562,6 +600,22 @@ export default function AtasContratantesClient() {
           }}
           onSave={handleEdit}
           onClose={() => setEditingAta(null)}
+        />
+      )}
+      {copyingAta && (
+        <AtasEditor
+          initial={{
+            titulo: copyingAta.titulo ? `${copyingAta.titulo} (cópia)` : '',
+            data: new Date().toISOString().slice(0, 10),
+            status: 'Rascunho',
+            conteudo: copyingAta.conteudo,
+            cliente: copyingAta.cliente ?? '',
+            localReuniao: copyingAta.local_reuniao ?? '',
+            numeroAta: '',
+            participantes: copyingAta.participantes ?? '',
+          }}
+          onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
+          onClose={() => setCopyingAta(null)}
         />
       )}
     </div>
