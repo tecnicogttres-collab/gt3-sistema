@@ -255,11 +255,16 @@ export default function AtasEditor({ initial, onSave, onClose }: {
           <div style={sectionBox}>
             <div style={sectionTitle}>Participantes</div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <colgroup>
+                <col style={{ width: '30%' }} />
+                <col />
+                <col style={{ width: 30 }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th style={{ ...lbl, textAlign: 'left', paddingBottom: 6 }}>Participante</th>
                   <th style={{ ...lbl, textAlign: 'left', paddingBottom: 6, paddingLeft: 8 }}>Empresa</th>
-                  <th style={{ width: 28 }} />
+                  <th style={{ width: 30 }} />
                 </tr>
               </thead>
               <tbody>
