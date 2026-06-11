@@ -99,7 +99,15 @@
       "PowerShell($r = Invoke-WebRequest -Uri \"http://localhost:3000/logo-gt3.png\" -UseBasicParsing; $r.Headers['Content-Type'])",
       "PowerShell($r = Invoke-WebRequest -Uri \"http://localhost:3000/favicon.ico\" -UseBasicParsing; $r.Headers['Content-Type'])",
       "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/logo-gt3.png\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue | Select-Object StatusCode, @{n='Location';e={$_.Headers['Location']}}, @{n='CT';e={$_.Headers['Content-Type']}})",
-      "PowerShell(Start-Sleep -Seconds 3; $r = Invoke-WebRequest -Uri \"http://localhost:3000/logo-sidebar.jpeg\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue; \"$\\($r.StatusCode\\) — $\\($r.Headers['Content-Type']\\)\")"
+      "PowerShell(Start-Sleep -Seconds 3; $r = Invoke-WebRequest -Uri \"http://localhost:3000/logo-sidebar.jpeg\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue; \"$\\($r.StatusCode\\) — $\\($r.Headers['Content-Type']\\)\")",
+      "PowerShell(Set-Content *)",
+      "Skill(run)",
+      "Bash(xargs grep -l \"pdi\\\\|ciclo\\\\|conversa\")",
+      "Bash(xargs grep -l \"Ciclo\\\\|pdi\\\\|conversa\")",
+      "Bash(xargs grep -l \"ferias\")",
+      "Bash(xargs grep -l \"profiles\\\\|colaborador\\\\|gestor\\\\|trainee\")",
+      "Bash(xargs grep -l \"contratante\\\\|cadastro\")",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
     ]
   }
 }

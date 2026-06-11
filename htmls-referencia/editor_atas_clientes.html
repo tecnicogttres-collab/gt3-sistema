@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editor de Atas — GT3 Consultoria</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --gt3-primary: #2A4F96;
+    --gt3-accent: #D1AE6E;
+    --bg-page: #F4F6FA;
+    --bg-surface: #ffffff;
+    --bg-secondary: #f0f2f7;
+    --text-primary: #1a1f2e;
+    --text-secondary: #5a6178;
+    --text-tertiary: #9399ae;
+    --border-light: rgba(42,79,150,0.10);
+    --border-medium: rgba(42,79,150,0.22);
+    --shadow-sm: 0 1px 4px rgba(42,79,150,0.07);
+    --shadow-md: 0 4px 20px rgba(42,79,150,0.10);
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+  }
+  html, body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-page); height: 100%; color: var(--text-primary); font-size: 14px; }
+  .editor-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  /* TOPBAR */
+  .topbar { display: flex; align-items: center; gap: 5px; padding: 6px 14px; background: var(--bg-surface); border-bottom: 1px solid var(--border-light); flex-shrink: 0; flex-wrap: wrap; box-shadow: var(--shadow-sm); z-index: 100; }
+  .topbar-brand { display: flex; align-items: center; gap: 8px; padding-right: 12px; border-right: 1px solid var(--border-light); margin-right: 4px; flex-shrink: 0; }
+  .brand-dot { width: 28px; height: 28px; border-radius: var(--r-sm); background: var(--gt3-primary); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 700; }
+  .brand-name { font-size: 12px; font-weight: 600; color: var(--gt3-primary); }
+  .topbar-tools { display: flex; align-items: center; gap: 3px; flex: 1; flex-wrap: wrap; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+  .tb-sep { width: 1px; height: 22px; background: var(--border-light); margin: 0 3px; }
+  .tb-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: none; background: transparent; border-radius: var(--r-sm); cursor: pointer; color: var(--text-secondary); transition: all .12s; }
+  .tb-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+  .tb-btn i { font-size: 15px; }
+  .tb-select { height: 28px; padding: 0 6px; border: 1px solid var(--border-light); border-radius: var(--r-sm); background: var(--bg-surface); color: var(--text-primary); font-size: 12px; cursor: pointer; outline: none; }
+  .tb-select:focus { border-color: var(--gt3-primary); }
+  .tb-color-wrap { position: relative; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); border: 1px solid var(--border-light); cursor: pointer; overflow: hidden; }
+  .tb-color-wrap:hover { border-color: var(--border-medium); }
+  .tb-color-wrap input[type=color] { position: absolute; width: 200%; height: 200%; top: -50%; left: -50%; border: none; opacity: 0; cursor: pointer; }
+  .tb-color-wrap i { font-size: 15px; color: var(--text-secondary); pointer-events: none; }
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; user-select: none; transition: all .15s; white-space: nowrap; }
+  .s-draft  { background: #f0f2f7; color: #5a6178; }
+  .s-review { background: #fef3e2; color: #b45309; }
+  .s-done   { background: #e8f5e9; color: #2e7d32; }
+  .status-badge i { font-size: 9px; }
+  .export-btn { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; background: var(--gt3-primary); color: #fff; border: none; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s; }
+  .export-btn:hover { background: #1d3a74; }
+
+  /* CANVAS */
+  .canvas-area { flex: 1; overflow-y: auto; padding: 36px 24px 60px; display: flex; flex-direction: column; align-items: center; }
+  .page-frame { width: 100%; max-width: 800px; background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: var(--r-xl); padding: 52px 60px; box-shadow: var(--shadow-md); position: relative; }
+
+  /* HEADER DO DOC */
+  .doc-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; padding-bottom: 22px; border-bottom: 2px solid var(--gt3-primary); gap: 16px; }
+  .doc-header-left { display: flex; align-items: center; gap: 14px; flex: 1; }
+  .logo-box { width: 52px; height: 52px; border-radius: var(--r-md); flex-shrink: 0; background: var(--bg-secondary); border: 1.5px dashed var(--border-medium); display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; transition: all .15s; color: var(--text-tertiary); }
+  .logo-box:hover { border-color: var(--gt3-primary); color: var(--gt3-primary); background: #e8f0fc; }
+  .logo-box img { width: 100%; height: 100%; object-fit: contain; }
+  .logo-box i { font-size: 22px; }
+  .doc-title-in { font-size: 20px; font-weight: 700; color: var(--gt3-primary); border: none; background: transparent; outline: none; flex: 1; line-height: 1.3; font-family: inherit; }
+  .doc-title-in::placeholder { color: var(--text-tertiary); font-weight: 400; }
+  .doc-header-meta { text-align: right; flex-shrink: 0; }
+  .meta-badge-top { display: inline-block; padding: 3px 10px; background: var(--gt3-accent); color: #fff; border-radius: 20px; font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+  .meta-date-top { font-size: 12px; color: var(--text-secondary); }
+
+  /* META FIELDS */
+  .header-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin-bottom: 30px; padding: 16px 18px; background: var(--bg-secondary); border-radius: var(--r-md); border: 1px solid var(--border-light); }
+  .meta-field { display: flex; flex-direction: column; gap: 3px; }
+  .meta-field.full { grid-column: 1 / -1; }
+  .meta-lbl { font-size: 10px; font-weight: 700; color: var(--gt3-primary); text-transform: uppercase; letter-spacing: .08em; }
+  .meta-in { font-size: 13px; color: var(--text-primary); border: none; background: transparent; outline: none; padding: 2px 0; border-bottom: 1px solid var(--border-light); transition: border-color .15s; font-family: inherit; }
+  .meta-in:focus { border-bottom-color: var(--gt3-primary); }
+  .meta-in::placeholder { color: var(--text-tertiary); }
+
+  /* BLOCOS */
+  .blocks-container { position: relative; }
+  .block-wrapper { position: relative; margin: 1px 0; }
+  .block-wrapper:hover .bside { opacity: 1; }
+  .bside { position: absolute; left: -44px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 2px; opacity: 0; transition: opacity .15s; }
+  .bside-btn { width: 22px; height: 22px; border: 1px solid var(--border-light); border-radius: var(--r-sm); background: var(--bg-surface); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 12px; transition: all .12s; }
+  .bside-btn:hover { border-color: var(--border-medium); color: var(--text-secondary); background: var(--bg-secondary); }
+  .bside-btn.del:hover { border-color: #fca5a5; color: #dc2626; background: #fef2f2; }
+
+  .be { outline: none; width: 100%; caret-color: var(--gt3-primary); }
+  .be:empty::before { content: attr(data-ph); color: var(--text-tertiary); pointer-events: none; }
+  .bt { font-size: 14px; line-height: 1.8; color: var(--text-primary); padding: 4px 0; min-height: 30px; }
+  .bh1 { font-size: 20px; font-weight: 700; color: var(--gt3-primary); padding: 10px 0 4px; min-height: 40px; border-bottom: 2px solid var(--border-light); margin-bottom: 4px; }
+  .bh2 { font-size: 15px; font-weight: 700; color: var(--gt3-primary); padding: 8px 0 3px; min-height: 34px; }
+  .bh3 { font-size: 11px; font-weight: 700; color: var(--gt3-accent); padding: 6px 0 2px; min-height: 28px; text-transform: uppercase; letter-spacing: .10em; }
+  .bq  { border-left: 3px solid var(--gt3-accent); padding: 8px 0 8px 16px; font-size: 14px; line-height: 1.8; color: var(--text-secondary); font-style: italic; min-height: 40px; background: var(--bg-secondary); border-radius: 0 var(--r-sm) var(--r-sm) 0; margin: 4px 0; }
+  .bdiv { border: none; border-top: 1px solid var(--border-light); margin: 12px 0; cursor: default; }
+
+  .bcallout { display: flex; gap: 12px; padding: 12px 16px; border-radius: var(--r-md); margin: 4px 0; border-left: 3px solid; }
+  .bc-info { background: #e8f0fc; border-color: var(--gt3-primary); }
+  .bc-warn { background: #fef9e7; border-color: var(--gt3-accent); }
+  .bc-ok   { background: #e8f5e9; border-color: #2e7d32; }
+  .callout-ic { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+  .callout-tx { font-size: 13.5px; line-height: 1.7; color: var(--text-primary); outline: none; flex: 1; min-height: 22px; }
+  .callout-tx:empty::before { content: 'Escreva uma nota...'; color: var(--text-tertiary); pointer-events: none; }
+
+  .btable-wrap { overflow-x: auto; margin: 4px 0; }
+  .btable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .btable th, .btable td { border: 1px solid var(--border-light); padding: 8px 12px; text-align: left; outline: none; min-width: 80px; }
+  .btable th { background: var(--gt3-primary); color: #fff; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .btable tr:nth-child(even) td { background: var(--bg-secondary); }
+  .btable tr:hover td { background: #e8f0fc; }
+  .btable td:focus { background: #e8f0fc; box-shadow: inset 0 0 0 1.5px var(--gt3-primary); }
+
+  .bcols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 4px 0; }
+  .bcol { border: 1px dashed var(--border-medium); border-radius: var(--r-md); padding: 10px 12px; min-height: 56px; outline: none; font-size: 14px; line-height: 1.75; color: var(--text-primary); transition: border-color .15s; }
+  .bcol:empty::before { content: attr(data-ph); color: var(--text-tertiary); pointer-events: none; }
+  .bcol:focus { border-color: var(--gt3-primary); border-style: solid; }
+
+  .bimg-wrap { text-align: center; padding: 4px 0; }
+  .bimg-wrap img { max-width: 100%; border-radius: var(--r-md); }
+  .bimg-ph { border: 2px dashed var(--border-medium); border-radius: var(--r-md); padding: 36px; cursor: pointer; color: var(--text-secondary); font-size: 13px; transition: all .15s; }
+  .bimg-ph:hover { background: var(--bg-secondary); border-color: var(--gt3-primary); color: var(--gt3-primary); }
+  .bimg-ph i { font-size: 32px; display: block; margin-bottom: 10px; color: var(--text-tertiary); }
+
+  /* ADD BAR */
+  .add-bar { display: flex; align-items: center; gap: 8px; margin: 3px 0; opacity: 0; transition: opacity .18s; height: 22px; }
+  .add-bar:hover { opacity: 1; }
+  .add-bar::before, .add-bar::after { content: ''; flex: 1; height: 1px; background: var(--border-light); }
+  .add-trig { display: flex; align-items: center; gap: 4px; padding: 2px 10px; border: 1px solid var(--border-medium); border-radius: 20px; background: var(--bg-surface); font-size: 11px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; transition: all .12s; }
+  .add-trig:hover { background: var(--gt3-primary); color: #fff; border-color: var(--gt3-primary); }
+  .add-trig i { font-size: 12px; }
+
+  /* BLOCK MENU */
+  .bmenu { position: fixed; background: var(--bg-surface); border: 1px solid var(--border-medium); border-radius: var(--r-lg); padding: 6px; display: none; z-index: 9999; box-shadow: 0 8px 32px rgba(42,79,150,.15); min-width: 215px; }
+  .bmenu.open { display: block; }
+  .bmi { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-md); cursor: pointer; transition: background .1s; }
+  .bmi:hover { background: var(--bg-secondary); }
+  .bmi i { font-size: 17px; color: var(--gt3-primary); width: 22px; text-align: center; }
+  .bmi-lbl { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .bmi-desc { font-size: 11px; color: var(--text-secondary); }
+  .bm-sep { height: 1px; background: var(--border-light); margin: 4px 0; }
+
+  /* FOOTER */
+  .page-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--border-light); font-size: 11px; color: var(--text-tertiary); }
+  .footer-brand { font-weight: 600; color: var(--gt3-primary); opacity: .5; }
+  .footer-sig { font-size: 11px; color: var(--text-tertiary); border-top: 1px solid var(--border-medium); padding-top: 2px; width: 160px; text-align: center; }
+
+  /* OVERLAY EXPORT */
+  .exp-overlay { display: none; position: fixed; inset: 0; background: rgba(26,31,46,.65); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+  .exp-overlay.show { display: flex; }
+  .exp-spin { width: 38px; height: 38px; border: 3px solid rgba(255,255,255,.2); border-top-color: #fff; border-radius: 50%; animation: spin .75s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .exp-msg { color: #fff; font-size: 14px; font-weight: 500; }
+
+  @media (max-width: 700px) {
+    .page-frame { padding: 28px 18px; border-radius: var(--r-lg); }
+    .header-meta, .bcols { grid-template-columns: 1fr; }
+    .canvas-area { padding: 16px 8px 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="editor-shell">
+
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-dot">GT3</div>
+      <span class="brand-name">Atas</span>
+    </div>
+    <div class="topbar-tools">
+      <select class="tb-select" id="blockTypeSelect" onchange="changeBlockType(this.value)">
+        <option value="bt">Parágrafo</option>
+        <option value="bh1">Título 1</option>
+        <option value="bh2">Título 2</option>
+        <option value="bh3">Subtítulo</option>
+        <option value="bq">Citação</option>
+      </select>
+      <div class="tb-sep"></div>
+      <select class="tb-select" style="width:108px" onchange="document.execCommand('fontName',false,this.value)">
+        <option>Segoe UI</option><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Courier New</option>
+      </select>
+      <select class="tb-select" style="width:50px" onchange="document.execCommand('fontSize',false,this.value)">
+        <option value="1">8</option><option value="2">10</option><option value="3" selected>12</option>
+        <option value="4">14</option><option value="5">18</option><option value="6">24</option><option value="7">36</option>
+      </select>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="document.execCommand('bold')"          title="Negrito"><i class="ti ti-bold"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('italic')"        title="Itálico"><i class="ti ti-italic"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('underline')"     title="Sublinhado"><i class="ti ti-underline"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('strikeThrough')" title="Tachado"><i class="ti ti-strikethrough"></i></button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="document.execCommand('justifyLeft')"   title="Esquerda"><i class="ti ti-align-left"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('justifyCenter')" title="Centro"><i class="ti ti-align-center"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('justifyRight')"  title="Direita"><i class="ti ti-align-right"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('justifyFull')"   title="Justificado"><i class="ti ti-align-justified"></i></button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="document.execCommand('insertUnorderedList')" title="Lista"><i class="ti ti-list"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('insertOrderedList')"   title="Numerada"><i class="ti ti-list-numbers"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('indent')"              title="Recuar"><i class="ti ti-indent-increase"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('outdent')"             title="Reduzir recuo"><i class="ti ti-indent-decrease"></i></button>
+      <div class="tb-sep"></div>
+      <label class="tb-color-wrap" title="Cor do texto">
+        <i class="ti ti-letter-a"></i>
+        <input type="color" value="#1a1f2e" onchange="document.execCommand('foreColor',false,this.value)">
+      </label>
+      <label class="tb-color-wrap" title="Destaque">
+        <i class="ti ti-highlight"></i>
+        <input type="color" value="#fef9e7" onchange="document.execCommand('hiliteColor',false,this.value)">
+      </label>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="document.execCommand('undo')" title="Desfazer"><i class="ti ti-arrow-back-up"></i></button>
+      <button class="tb-btn" onclick="document.execCommand('redo')" title="Refazer"><i class="ti ti-arrow-forward-up"></i></button>
+    </div>
+    <div class="topbar-right">
+      <span class="status-badge s-draft" id="statusBadge" onclick="cycleStatus()">
+        <i class="ti ti-circle"></i> Rascunho
+      </span>
+      <button class="export-btn" onclick="exportPDF()">
+        <i class="ti ti-file-type-pdf"></i> Exportar PDF
+      </button>
+    </div>
+  </div>
+
+  <div class="canvas-area">
+    <div class="page-frame" id="pageFrame">
+
+      <div class="doc-header">
+        <div class="doc-header-left">
+          <div class="logo-box" id="logoBox" onclick="document.getElementById('logoInput').click()" title="Adicionar logo">
+            <i class="ti ti-building"></i>
+          </div>
+          <input class="doc-title-in" id="docTitle" placeholder="Título da reunião / ata..." value="Ata de Reunião — GT3 x Cliente">
+        </div>
+        <div class="doc-header-meta">
+          <div class="meta-badge-top" id="metaNumBadge">Nº —/26</div>
+          <div class="meta-date-top" id="metaDateTop">—</div>
+        </div>
+      </div>
+
+      <div class="header-meta">
+        <div class="meta-field">
+          <span class="meta-lbl">Cliente / Empresa</span>
+          <input class="meta-in" id="metaCliente" placeholder="Ex.: Marcopolo AR / MP SC / Volare">
+        </div>
+        <div class="meta-field">
+          <span class="meta-lbl">Data</span>
+          <input class="meta-in" id="metaData" type="date" onchange="updateDate()">
+        </div>
+        <div class="meta-field">
+          <span class="meta-lbl">Local</span>
+          <input class="meta-in" id="metaLocal" placeholder="Ex.: Online / Caxias do Sul — RS">
+        </div>
+        <div class="meta-field">
+          <span class="meta-lbl">Número da ata</span>
+          <input class="meta-in" id="metaNum" placeholder="Ex.: Nº 04/26" oninput="document.getElementById('metaNumBadge').textContent=this.value||'Nº —/26'">
+        </div>
+        <div class="meta-field full">
+          <span class="meta-lbl">Participantes</span>
+          <input class="meta-in" id="metaPart" placeholder="Ex.: Fernando Almeida (Marcopolo AR), Marcio Bastos (GT3)">
+        </div>
+      </div>
+
+      <div class="blocks-container" id="blocksContainer"></div>
+
+      <div class="page-footer">
+        <span class="footer-brand">GT3 Consultoria</span>
+        <div style="display:flex;gap:32px">
+          <div class="footer-sig">Responsável GT3</div>
+          <div class="footer-sig">Responsável Cliente</div>
+        </div>
+        <span style="font-size:11px;color:var(--text-tertiary)">Pág. 1</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="bmenu" id="blockMenu">
+  <div class="bmi" onclick="insertBlock('bt')">   <i class="ti ti-text-size"></i>    <div><div class="bmi-lbl">Parágrafo</div><div class="bmi-desc">Texto livre</div></div></div>
+  <div class="bmi" onclick="insertBlock('bh1')">  <i class="ti ti-heading"></i>      <div><div class="bmi-lbl">Título 1</div><div class="bmi-desc">Seção principal</div></div></div>
+  <div class="bmi" onclick="insertBlock('bh2')">  <i class="ti ti-h-2"></i>          <div><div class="bmi-lbl">Título 2</div><div class="bmi-desc">Subseção</div></div></div>
+  <div class="bmi" onclick="insertBlock('bh3')">  <i class="ti ti-h-3"></i>          <div><div class="bmi-lbl">Subtítulo</div><div class="bmi-desc">Rótulo de seção</div></div></div>
+  <div class="bm-sep"></div>
+  <div class="bmi" onclick="insertBlock('table')"><i class="ti ti-table"></i>        <div><div class="bmi-lbl">Tabela de itens</div><div class="bmi-desc">Item / Descrição / Prazo / Status</div></div></div>
+  <div class="bmi" onclick="insertBlock('cols')"> <i class="ti ti-columns"></i>      <div><div class="bmi-lbl">Duas colunas</div><div class="bmi-desc">Layout lado a lado</div></div></div>
+  <div class="bm-sep"></div>
+  <div class="bmi" onclick="insertBlock('ci')">   <i class="ti ti-info-circle"></i>  <div><div class="bmi-lbl">Nota informativa</div><div class="bmi-desc">Destaque azul</div></div></div>
+  <div class="bmi" onclick="insertBlock('cw')">   <i class="ti ti-alert-triangle"></i><div><div class="bmi-lbl">Atenção / Pendência</div><div class="bmi-desc">Destaque dourado</div></div></div>
+  <div class="bmi" onclick="insertBlock('co')">   <i class="ti ti-circle-check"></i> <div><div class="bmi-lbl">Conclusão / OK</div><div class="bmi-desc">Destaque verde</div></div></div>
+  <div class="bm-sep"></div>
+  <div class="bmi" onclick="insertBlock('bq')">   <i class="ti ti-quote"></i>        <div><div class="bmi-lbl">Citação</div><div class="bmi-desc">Bloco recuado</div></div></div>
+  <div class="bmi" onclick="insertBlock('div')">  <i class="ti ti-separator"></i>    <div><div class="bmi-lbl">Divisor</div><div class="bmi-desc">Linha separadora</div></div></div>
+  <div class="bmi" onclick="insertBlock('img')">  <i class="ti ti-photo"></i>        <div><div class="bmi-lbl">Imagem</div><div class="bmi-desc">Upload de arquivo</div></div></div>
+</div>
+
+<input type="file" id="logoInput" accept="image/*" style="display:none" onchange="handleLogo(event)">
+<input type="file" id="imgInput"  accept="image/*" style="display:none">
+
+<div class="exp-overlay" id="expOverlay">
+  <div class="exp-spin"></div>
+  <div class="exp-msg">Gerando PDF...</div>
+</div>
+
+<script>
+let blockCount = 0, insertAfterBar = null, activeEdit = null;
+const statuses = ['s-draft','s-review','s-done'];
+const statusCfg = {
+  's-draft':  {icon:'ti-circle',        label:'Rascunho'},
+  's-review': {icon:'ti-clock',         label:'Em revisão'},
+  's-done':   {icon:'ti-circle-check',  label:'Validada'}
+};
+let curStatus = 's-draft';
+
+function updateDate(){
+  const v = document.getElementById('metaData').value;
+  document.getElementById('metaDateTop').textContent = v
+    ? new Date(v+'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})
+    : '—';
+}
+
+function cycleStatus(){
+  const i = statuses.indexOf(curStatus);
+  curStatus = statuses[(i+1)%3];
+  const b = document.getElementById('statusBadge');
+  const c = statusCfg[curStatus];
+  b.className = 'status-badge ' + curStatus;
+  b.innerHTML = `<i class="ti ${c.icon}"></i> ${c.label}`;
+}
+
+function handleLogo(e){
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    const b = document.getElementById('logoBox');
+    b.innerHTML = `<img src="${ev.target.result}" alt="logo">`;
+  };
+  r.readAsDataURL(f);
+}
+
+function makeBlock(type, content=''){
+  const idx = blockCount++;
+  const w = document.createElement('div');
+  w.className = 'block-wrapper';
+  w.dataset.idx = idx;
+
+  const side = document.createElement('div');
+  side.className = 'bside';
+  side.innerHTML = `
+    <button class="bside-btn" onclick="mvBlock(${idx},-1)" title="Mover acima"><i class="ti ti-chevron-up"></i></button>
+    <button class="bside-btn" onclick="mvBlock(${idx},1)"  title="Mover abaixo"><i class="ti ti-chevron-down"></i></button>
+    <button class="bside-btn del" onclick="rmBlock(${idx})" title="Remover"><i class="ti ti-trash"></i></button>`;
+  w.appendChild(side);
+
+  let inner;
+  if(type==='div'){
+    inner = document.createElement('hr'); inner.className = 'bdiv';
+  } else if(type==='table'){
+    inner = mkTable();
+  } else if(type==='cols'){
+    inner = mkCols();
+  } else if(type==='img'){
+    inner = mkImg();
+  } else if(['ci','cw','co'].includes(type)){
+    inner = mkCallout(type, content);
+  } else {
+    inner = document.createElement('div');
+    inner.className = 'be ' + type;
+    inner.contentEditable = 'true';
+    const ph = {bt:'Escreva aqui...',bh1:'Título da seção...',bh2:'Subtítulo...',bh3:'Rótulo...',bq:'Citação...'};
+    inner.dataset.ph = ph[type] || 'Escreva...';
+    if(content) inner.innerHTML = content;
+    inner.addEventListener('focus', () => {
+      activeEdit = inner;
+      const map = {bt:'bt',bh1:'bh1',bh2:'bh2',bh3:'bh3',bq:'bq'};
+      document.getElementById('blockTypeSelect').value = map[type] || 'bt';
+    });
+    inner.addEventListener('keydown', e => {
+      if(e.key==='Enter' && !e.shiftKey && ['bh1','bh2','bh3'].includes(type)){
+        e.preventDefault();
+        const nw = makeBlock('bt'); const nb = makeBar();
+        w.after(nw); nw.after(nb);
+        nw.querySelector('.be').focus();
+      }
+    });
+  }
+  w.appendChild(inner);
+  return w;
+}
+
+function mkTable(){
+  const wrap = document.createElement('div'); wrap.className = 'btable-wrap';
+  const t = document.createElement('table'); t.className = 'btable';
+  const headers = ['Item','Descrição','Responsável','Prazo','Status'];
+  const hrow = document.createElement('tr');
+  headers.forEach(h => {
+    const th = document.createElement('th');
+    th.contentEditable='true'; th.textContent=h;
+    th.addEventListener('focus',()=>activeEdit=th);
+    hrow.appendChild(th);
+  });
+  t.appendChild(hrow);
+  for(let r=1;r<=3;r++){
+    const tr = document.createElement('tr');
+    headers.forEach((h,ci) => {
+      const td = document.createElement('td');
+      td.contentEditable='true'; td.textContent = ci===0 ? String(r) : '';
+      td.addEventListener('focus',()=>activeEdit=td);
+      td.addEventListener('keydown', e => {
+        if(e.key==='Tab'){
+          e.preventDefault();
+          const cells=[...t.querySelectorAll('th,td')];
+          const i=cells.indexOf(td);
+          if(i<cells.length-1){ cells[i+1].focus(); }
+          else {
+            const nr=document.createElement('tr');
+            headers.forEach((_,i2)=>{
+              const ntd=document.createElement('td'); ntd.contentEditable='true';
+              ntd.textContent=i2===0?String(t.rows.length):'';
+              ntd.addEventListener('focus',()=>activeEdit=ntd);
+              nr.appendChild(ntd);
+            });
+            t.appendChild(nr); nr.cells[1].focus();
+          }
+        }
+      });
+      tr.appendChild(td);
+    });
+    t.appendChild(tr);
+  }
+  wrap.appendChild(t); return wrap;
+}
+
+function mkCallout(type, content){
+  const cfg = {ci:{cls:'bc-info',ic:'ℹ️'},cw:{cls:'bc-warn',ic:'⚠️'},co:{cls:'bc-ok',ic:'✅'}};
+  const c = cfg[type];
+  const wrap = document.createElement('div'); wrap.className = 'bcallout ' + c.cls;
+  const ic = document.createElement('span'); ic.className='callout-ic'; ic.textContent=c.ic;
+  const tx = document.createElement('div'); tx.className='callout-tx'; tx.contentEditable='true';
+  if(content) tx.innerHTML=content;
+  tx.addEventListener('focus',()=>activeEdit=tx);
+  wrap.appendChild(ic); wrap.appendChild(tx); return wrap;
+}
+
+function mkCols(){
+  const wrap = document.createElement('div'); wrap.className='bcols';
+  ['Coluna esquerda...','Coluna direita...'].forEach(ph=>{
+    const col=document.createElement('div'); col.className='bcol be';
+    col.contentEditable='true'; col.dataset.ph=ph;
+    col.addEventListener('focus',()=>activeEdit=col);
+    wrap.appendChild(col);
+  });
+  return wrap;
+}
+
+function mkImg(){
+  const wrap = document.createElement('div'); wrap.className='bimg-wrap';
+  const ph = document.createElement('div'); ph.className='bimg-ph';
+  ph.innerHTML='<i class="ti ti-photo"></i>Clique para adicionar imagem';
+  ph.onclick=()=>{
+    const inp=document.getElementById('imgInput');
+    inp.onchange=e=>{
+      const f=e.target.files[0]; if(!f) return;
+      const r=new FileReader();
+      r.onload=ev=>{ wrap.innerHTML=''; const img=document.createElement('img'); img.src=ev.target.result; wrap.appendChild(img); };
+      r.readAsDataURL(f);
+    };
+    inp.click();
+  };
+  wrap.appendChild(ph); return wrap;
+}
+
+function makeBar(){
+  const bar = document.createElement('div'); bar.className='add-bar';
+  const btn = document.createElement('button'); btn.className='add-trig';
+  btn.innerHTML='<i class="ti ti-plus"></i> Adicionar bloco';
+  btn.onclick=e=>{
+    insertAfterBar=bar;
+    const m=document.getElementById('blockMenu');
+    const rect=btn.getBoundingClientRect();
+    m.style.top=(rect.bottom+5)+'px';
+    m.style.left=Math.min(rect.left,window.innerWidth-220)+'px';
+    m.classList.toggle('open');
+    e.stopPropagation();
+  };
+  bar.appendChild(btn); return bar;
+}
+
+function insertBlock(type){
+  document.getElementById('blockMenu').classList.remove('open');
+  const nb=makeBlock(type), bar=makeBar();
+  if(insertAfterBar){ insertAfterBar.after(nb); nb.after(bar); }
+  else { const c=document.getElementById('blocksContainer'); c.appendChild(nb); c.appendChild(bar); }
+  insertAfterBar=null;
+  const ed=nb.querySelector('[contenteditable]');
+  if(ed) setTimeout(()=>ed.focus(),40);
+}
+
+function rmBlock(idx){
+  const w=document.querySelector(`[data-idx="${idx}"]`); if(!w) return;
+  const n=w.nextElementSibling;
+  if(n&&n.classList.contains('add-bar')) n.remove();
+  w.remove();
+}
+
+function mvBlock(idx,dir){
+  const w=document.querySelector(`[data-idx="${idx}"]`); if(!w) return;
+  const c=document.getElementById('blocksContainer');
+  const bl=[...c.querySelectorAll('.block-wrapper')];
+  const i=bl.indexOf(w), tgt=bl[i+dir]; if(!tgt) return;
+  if(dir===-1) c.insertBefore(w,tgt); else c.insertBefore(tgt,w);
+}
+
+function changeBlockType(type){
+  if(!activeEdit) return;
+  const w=activeEdit.closest('.block-wrapper'); if(!w) return;
+  const content=activeEdit.innerHTML;
+  const nw=makeBlock(type,content), nb=makeBar();
+  const bar=w.nextElementSibling;
+  if(bar&&bar.classList.contains('add-bar')) bar.remove();
+  w.replaceWith(nw); nw.after(nb);
+  const ed=nw.querySelector('.be');
+  if(ed) ed.focus();
+}
+
+function exportPDF(){
+  const ov=document.getElementById('expOverlay'); ov.classList.add('show');
+  setTimeout(()=>{
+    const frame=document.getElementById('pageFrame');
+    html2canvas(frame,{scale:2,useCORS:true,logging:false,backgroundColor:'#ffffff'}).then(canvas=>{
+      const {jsPDF}=window.jspdf;
+      const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+      const pW=210, pH=297, ratio=canvas.width/canvas.height;
+      const imgH=pW/ratio;
+      let y=0, rem=imgH;
+      const imgData=canvas.toDataURL('image/jpeg',0.92);
+      while(rem>0){
+        pdf.addImage(imgData,'JPEG',0,y,pW,imgH);
+        rem-=pH; y-=pH;
+        if(rem>0) pdf.addPage();
+      }
+      const title=(document.getElementById('docTitle').value||'ata').replace(/\s+/g,'_');
+      pdf.save(title+'.pdf');
+      ov.classList.remove('show');
+    });
+  },100);
+}
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#blockMenu')&&!e.target.closest('.add-trig'))
+    document.getElementById('blockMenu').classList.remove('open');
+});
+
+// INIT
+document.getElementById('metaData').value = new Date().toISOString().split('T')[0];
+updateDate();
+
+const defaults=[
+  {type:'bh2', content:'Assuntos debatidos'},
+  {type:'table'},
+  {type:'bh2', content:'Definições e encaminhamentos'},
+  {type:'bt'},
+  {type:'cw', content:'Pendências a acompanhar na próxima reunião...'},
+  {type:'bh2', content:'Próxima reunião'},
+  {type:'bt'},
+];
+const c=document.getElementById('blocksContainer');
+defaults.forEach(b=>{ c.appendChild(makeBlock(b.type,b.content||'')); c.appendChild(makeBar()); });
+</script>
+</body>
+</html>
