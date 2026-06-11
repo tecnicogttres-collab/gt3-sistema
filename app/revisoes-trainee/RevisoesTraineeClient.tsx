@@ -174,6 +174,18 @@ export default function RevisoesTraineeClient() {
   const copiedEmpresaTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => { return () => { clearTimeout(copiedEmpresaTimer.current) } }, [])
 
+  // Documento copy feedback
+  const [copiedDocId, setCopiedDocId] = useState<string | null>(null)
+  const copiedDocTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => { return () => { clearTimeout(copiedDocTimer.current) } }, [])
+
+  // Banco de documentos
+  const [docBanco, setDocBanco] = useState<{ id: string; nome: string }[]>([])
+  const [showDocSugg, setShowDocSugg] = useState(false)
+  const [docBancoOpen, setDocBancoOpen] = useState(false)
+  const [newDocBancoInput, setNewDocBancoInput] = useState('')
+  const [addingDocBanco, setAddingDocBanco] = useState(false)
+
   // Relatório
   type ReportFilters = { startDate: string; endDate: string; traineeId: string; status: '' | Status }
   const [reportOpen, setReportOpen] = useState(false)
@@ -216,9 +228,43 @@ export default function RevisoesTraineeClient() {
     setRefreshing(false)
   }
 
+  async function handleAddDocBanco() {
+    const nome = newDocBancoInput.trim()
+    if (!nome) return
+    setAddingDocBanco(true)
+    try {
+      const res = await fetch('/api/revisoes/documentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome }),
+      })
+      if (!res.ok) {
+        const err = await res.json() as { error?: string }
+        showToast(err.error ?? 'Erro ao adicionar documento')
+        return
+      }
+      const novo = await res.json() as { id: string; nome: string }
+      setDocBanco(prev => [...prev, novo].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
+      setNewDocBancoInput('')
+    } finally {
+      setAddingDocBanco(false)
+    }
+  }
+
+  async function handleDeleteDocBanco(id: string) {
+    const res = await fetch(`/api/revisoes/documentos?id=${id}`, { method: 'DELETE' })
+    if (res.ok) setDocBanco(prev => prev.filter(d => d.id !== id))
+  }
+
   useEffect(() => {
     if (!profileLoading) fetchData()
   }, [profileLoading, fetchData])
+
+  const fetchDocBanco = useCallback(async () => {
+    const res = await fetch('/api/revisoes/documentos')
+    if (res.ok) setDocBanco(await res.json())
+  }, [])
+  useEffect(() => { fetchDocBanco() }, [fetchDocBanco])
 
   useEffect(() => {
     if (editCell && editRef.current) editRef.current.focus()
@@ -285,6 +331,10 @@ export default function RevisoesTraineeClient() {
     })
     return arr
   }, [activeRecords, sortKey, sortDir])
+
+  const docSuggestions = newDocumento.trim()
+    ? docBanco.filter(d => d.nome.toLowerCase().includes(newDocumento.toLowerCase()))
+    : docBanco
 
   const pendingByTrainee = useMemo(() => {
     const map: Record<string, { nome: string; count: number }> = {}
@@ -656,9 +706,13 @@ export default function RevisoesTraineeClient() {
 
   // ── Cell renderer ──────────────────────────────────────────────
   function renderCell(rec: Registro, field: 'empresa' | 'colaborador' | 'documento') {
-    const canEdit = isTrainee && rec.criado_por === data!.currentUserId && !!activeDate && !isFinalized
+    // documento nunca abre edição inline — é sempre copy-on-click
+    const canEdit = isTrainee && rec.criado_por === data!.currentUserId && !!activeDate && !isFinalized && field !== 'documento'
     const isEditing = editCell?.id === rec.id && editCell.field === field
-    const isCopied = field === 'empresa' && copiedEmpresaId === rec.id
+    const isCopiedEmpresa = field === 'empresa' && !canEdit && copiedEmpresaId === rec.id
+    const isCopiedDoc = field === 'documento' && copiedDocId === rec.id
+    const isCopied = isCopiedEmpresa || isCopiedDoc
+    const isCopyable = (field === 'empresa' && !canEdit) || field === 'documento'
 
     if (canEdit && isEditing) {
       return (
@@ -681,18 +735,24 @@ export default function RevisoesTraineeClient() {
         clearTimeout(copiedEmpresaTimer.current)
         copiedEmpresaTimer.current = setTimeout(() => setCopiedEmpresaId(null), 1000)
       }
+      if (field === 'documento' && rec.documento) {
+        navigator.clipboard.writeText(rec.documento).catch(() => {})
+        setCopiedDocId(rec.id)
+        clearTimeout(copiedDocTimer.current)
+        copiedDocTimer.current = setTimeout(() => setCopiedDocId(null), 1000)
+      }
     }
 
     return (
       <span
         onClick={handleClick}
-        title={field === 'empresa' && !canEdit ? 'Clique para copiar' : undefined}
+        title={isCopyable ? 'Clique para copiar' : undefined}
         style={{
-          cursor: canEdit ? 'text' : field === 'empresa' ? 'pointer' : 'default',
+          cursor: canEdit ? 'text' : isCopyable ? 'pointer' : 'default',
           borderBottom: canEdit ? '1px dashed #CBD5E1' : 'none',
           fontSize: 13, color: isCopied ? '#16A34A' : '#1E293B',
           display: 'block', minWidth: 60, minHeight: 20, padding: '2px 0',
-          transition: 'color 0.15s', userSelect: field === 'empresa' ? 'none' : 'auto',
+          transition: 'color 0.15s', userSelect: isCopyable ? 'none' : 'auto',
         }}
       >
         {isCopied ? '✓ Copiado!' : (rec[field] || <span style={{ color: '#CBD5E1' }}>—</span>)}
@@ -737,6 +797,13 @@ export default function RevisoesTraineeClient() {
               )}
             </div>
           )}
+          <button
+            onClick={() => setDocBancoOpen(true)}
+            title="Banco de Documentos"
+            style={{ padding: '6px 12px', background: 'transparent', color: '#5B8DEF', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            📋 Docs
+          </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -976,13 +1043,42 @@ export default function RevisoesTraineeClient() {
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                    {([
-                      { v: newEmpresa, s: setNewEmpresa, p: 'Empresa *', f: 2 },
-                      { v: newColaborador, s: setNewColaborador, p: 'Colaborador (opcional)', f: 1 },
-                      { v: newDocumento, s: setNewDocumento, p: 'Documento *', f: 2 },
-                    ] as { v: string; s: (x: string) => void; p: string; f: number }[]).map(({ v, s, p, f }) => (
-                      <input key={p} type="text" placeholder={p} value={v} onChange={e => { s(e.target.value); if (addError) setAddError('') }} style={{ flex: f, minWidth: 110, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
-                    ))}
+                    <input type="text" placeholder="Empresa *" value={newEmpresa} onChange={e => { setNewEmpresa(e.target.value); if (addError) setAddError('') }} style={{ flex: 2, minWidth: 110, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
+                    <input type="text" placeholder="Colaborador (opcional)" value={newColaborador} onChange={e => { setNewColaborador(e.target.value); if (addError) setAddError('') }} style={{ flex: 1, minWidth: 110, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
+                    {/* Documento com autocomplete do banco */}
+                    <div style={{ position: 'relative', flex: 2, minWidth: 110 }}>
+                      <input
+                        type="text"
+                        placeholder="Documento *"
+                        value={newDocumento}
+                        onChange={e => { setNewDocumento(e.target.value); setShowDocSugg(true); if (addError) setAddError('') }}
+                        onFocus={e => { e.target.style.borderColor = '#2A4F96'; setShowDocSugg(true) }}
+                        onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setTimeout(() => setShowDocSugg(false), 150) }}
+                        onKeyDown={e => {
+                          if (e.key === 'Escape') setShowDocSugg(false)
+                          if (e.key === 'Enter' && showDocSugg && docSuggestions.length > 0) {
+                            e.preventDefault()
+                            setNewDocumento(docSuggestions[0].nome)
+                            setShowDocSugg(false)
+                          }
+                        }}
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none', backgroundColor: '#fff', boxSizing: 'border-box' }}
+                      />
+                      {showDocSugg && docSuggestions.length > 0 && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: '#fff', border: '1px solid #D1D5DB', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto', marginTop: 2 }}>
+                          {docSuggestions.map(d => (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onMouseDown={() => { setNewDocumento(d.nome); setShowDocSugg(false) }}
+                              style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid #F1F5F9', background: 'none', cursor: 'pointer', fontSize: 13, color: '#1E293B' }}
+                            >
+                              {d.nome}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <textarea
                     placeholder="Observações (opcional)"
@@ -1340,6 +1436,62 @@ export default function RevisoesTraineeClient() {
                     </div>
                   )}
                 </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Banco de Documentos ──────────────────────────────── */}
+      {docBancoOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setDocBancoOpen(false) }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>📋 Banco de Documentos</h2>
+              <button onClick={() => setDocBancoOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#94A3B8', lineHeight: 1, padding: 0 }}>×</button>
+            </div>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6B7A99' }}>Documentos disponíveis no campo de autocomplete ao adicionar revisões.</p>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <input
+                type="text"
+                placeholder="Nome do documento…"
+                value={newDocBancoInput}
+                onChange={e => setNewDocBancoInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddDocBanco() }}
+                style={{ flex: 1, padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1E293B', outline: 'none' }}
+                onFocus={e => { e.target.style.borderColor = '#2A4F96' }}
+                onBlur={e => { e.target.style.borderColor = '#D1D5DB' }}
+              />
+              <button
+                onClick={handleAddDocBanco}
+                disabled={addingDocBanco || !newDocBancoInput.trim()}
+                style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: addingDocBanco || !newDocBancoInput.trim() ? 'not-allowed' : 'pointer', opacity: addingDocBanco || !newDocBancoInput.trim() ? 0.6 : 1, whiteSpace: 'nowrap' }}
+              >
+                {addingDocBanco ? 'Salvando…' : '+ Adicionar'}
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {docBanco.length === 0 ? (
+                <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '24px 0', margin: 0 }}>Nenhum documento cadastrado.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {docBanco.map(d => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, border: '1px solid #F1F5F9', background: '#FAFAFA' }}>
+                      <span style={{ fontSize: 13, color: '#1E293B' }}>{d.nome}</span>
+                      {!isTrainee && (
+                        <button
+                          onClick={() => handleDeleteDocBanco(d.id)}
+                          title="Remover"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#EF4444', padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
