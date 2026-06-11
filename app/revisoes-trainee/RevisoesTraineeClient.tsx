@@ -142,6 +142,7 @@ export default function RevisoesTraineeClient() {
   const [historyExpanded, setHistoryExpanded] = useState(true)
   const [historyRecords, setHistoryRecords] = useState<Record<string, Registro[]>>({})
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+  const [docStatsOpen, setDocStatsOpen] = useState(false)
 
   const [toast, setToast] = useState('')
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -335,6 +336,17 @@ export default function RevisoesTraineeClient() {
   const docSuggestions = newDocumento.trim()
     ? docBanco.filter(d => d.nome.toLowerCase().includes(newDocumento.toLowerCase()))
     : docBanco
+
+  const docHistoryStats = useMemo(() => {
+    const allRecs = Object.values(historyRecords).flat()
+    if (allRecs.length === 0) return []
+    const countMap: Record<string, number> = {}
+    allRecs.forEach(r => { const k = r.documento?.trim(); if (k) countMap[k] = (countMap[k] ?? 0) + 1 })
+    const total = allRecs.length
+    return Object.entries(countMap)
+      .map(([nome, count]) => ({ nome, count, pct: Math.round((count / total) * 100) }))
+      .sort((a, b) => b.count - a.count)
+  }, [historyRecords])
 
   const pendingByTrainee = useMemo(() => {
     const map: Record<string, { nome: string; count: number }> = {}
@@ -1141,6 +1153,43 @@ export default function RevisoesTraineeClient() {
             </button>
           </div>
         </div>
+
+        {historyExpanded && docHistoryStats.length > 0 && (
+          <div style={{ marginBottom: 14, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+            <button
+              onClick={() => setDocStatsOpen(v => !v)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#2A4F96' }}>📊 Documentos mais avaliados</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 11, color: '#94A3B8' }}>
+                  {Object.values(historyRecords).flat().length} registros · {docHistoryStats.length} tipos
+                </span>
+                <span style={{ fontSize: 11, color: '#94A3B8' }}>{docStatsOpen ? '▲' : '▼'}</span>
+              </div>
+            </button>
+            {docStatsOpen && (
+              <div style={{ padding: '0 16px 14px', borderTop: '1px solid #F1F5F9' }}>
+                <p style={{ margin: '10px 0 12px', fontSize: 11, color: '#94A3B8' }}>
+                  Baseado nos dias abertos abaixo — expande mais dias para ampliar a análise.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {docHistoryStats.map(({ nome, count, pct }, i) => (
+                    <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 11, color: '#94A3B8', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+                      <span style={{ fontSize: 12, color: '#1E293B', width: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }} title={nome}>{nome}</span>
+                      <div style={{ flex: 1, height: 8, background: '#F1F5F9', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: i === 0 ? '#2A4F96' : i === 1 ? '#5B8DEF' : '#93B8F5', borderRadius: 99, transition: 'width 0.4s' }} />
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', width: 34, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
+                      <span style={{ fontSize: 11, color: '#94A3B8', width: 36, flexShrink: 0 }}>({count})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {historyExpanded && (
           data.historyDates.length === 0
