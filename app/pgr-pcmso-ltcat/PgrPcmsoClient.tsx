@@ -27,13 +27,16 @@ type Texts = {
   fechamento_restricao: string
 }
 
+type SituationKey = 'aprovado' | '60dias' | 'all'
+
 type FileEntry = {
   id: string
   name: string      // display name, editável
   filename: string  // nome original do arquivo
   mimeType: string
   sizeBytes: number
-  notes: string     // anotação livre: quando usar este arquivo
+  notes: string
+  situations: SituationKey[]  // quais tipos de e-mail incluem este arquivo
 }
 
 // ─── Defaults ──────────────────────────────────────────────────────────────────
@@ -370,6 +373,7 @@ export default function PgrPcmsoClient() {
       mimeType: file.type || 'application/octet-stream',
       sizeBytes: file.size,
       notes: '',
+      situations: ['all'],
     }
     const updated = [...fileEntries, entry]
     saveFileMeta(updated)
@@ -407,6 +411,38 @@ export default function PgrPcmsoClient() {
     }
   }
 
+  const [copyAllStatus, setCopyAllStatus] = useState<'idle' | 'ok' | 'dl'>('idle')
+  const copyAllTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function fileMatchesSituation(fe: FileEntry): boolean {
+    const sits = fe.situations ?? ['all']
+    return sits.includes('all') || sits.includes(resultado as SituationKey)
+  }
+
+  async function copyAllMatching() {
+    const matching = fileEntries.filter(fe => fileMatchesSituation(fe) && fileEnabled[fe.id])
+    if (matching.length === 0) return
+
+    // tenta clipboard; como múltiplos ClipboardItem não acumulam no Outlook,
+    // a estratégia mais confiável é baixar todos e arrastar para o e-mail
+    let downloaded = 0
+    for (const fe of matching) {
+      const blob = await idbGet(fe.id)
+      if (!blob) continue
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = fe.filename
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      downloaded++
+      await new Promise(r => setTimeout(r, 250))
+    }
+
+    setCopyAllStatus(downloaded > 0 ? 'dl' : 'idle')
+    if (copyAllTimer.current) clearTimeout(copyAllTimer.current)
+    copyAllTimer.current = setTimeout(() => setCopyAllStatus('idle'), 4000)
+  }
+
   const selectedCt = contratantes.find(c => c.id === contratanteId) ?? contratantes[0]
 
   const resultadoOptions = [
@@ -417,6 +453,17 @@ export default function PgrPcmsoClient() {
   useEffect(() => {
     if (resultado === '60dias' && !selectedCt?.has60Dias) setResultado('aprovado')
   }, [contratanteId, selectedCt?.has60Dias, resultado])
+
+  // auto-ativa arquivos da situação atual
+  useEffect(() => {
+    if (fileEntries.length === 0) return
+    setFileEnabled(Object.fromEntries(
+      fileEntries.map(fe => {
+        const sits = fe.situations ?? ['all']
+        return [fe.id, sits.includes('all') || sits.includes(resultado as SituationKey)]
+      })
+    ))
+  }, [resultado, fileEntries])
 
   // ── Email builder ────────────────────────────────────────────
 
@@ -509,7 +556,6 @@ export default function PgrPcmsoClient() {
   const assunto = buildAssunto()
   const corpo   = buildCorpo()
 
-  const activeFiles = fileEntries.filter(e => fileEnabled[e.id])
 
   return (
     <div style={{ background: C.bg, minHeight: '100%', padding: '24px 20px 48px' }}>
@@ -749,15 +795,50 @@ export default function PgrPcmsoClient() {
                           style={{ background: 'none', border: '1px solid #e8d49a', borderRadius: C.radiusSm, color: '#c0392b', cursor: 'pointer', padding: '3px 8px', fontSize: 13, flexShrink: 0 }}
                         >✕</button>
                       </div>
-                      {/* Notes */}
+                      {/* Situations */}
                       <div style={{ padding: '0 12px 10px', borderTop: '1px solid #f5e4a0' }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: '#c0922b', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4, marginTop: 6 }}>Situações de uso</div>
-                        <textarea
+                        <div style={{ fontSize: 10, fontWeight: 600, color: '#c0922b', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8, marginTop: 8 }}>Incluir neste tipo de e-mail</div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {([
+                            { val: 'all',      label: 'Todos os e-mails' },
+                            { val: 'aprovado', label: '✅ Aprovado' },
+                            { val: '60dias',   label: '⏳ 60 dias' },
+                          ] as { val: SituationKey; label: string }[]).map(opt => {
+                            const sits = fe.situations ?? ['all']
+                            const active = sits.includes(opt.val)
+                            return (
+                              <button
+                                key={opt.val}
+                                onClick={() => {
+                                  let next: SituationKey[]
+                                  if (opt.val === 'all') {
+                                    next = active ? ['aprovado'] : ['all']
+                                  } else {
+                                    const without = sits.filter(s => s !== 'all' && s !== opt.val)
+                                    next = active ? (without.length ? without : ['all']) : [...sits.filter(s => s !== 'all'), opt.val]
+                                  }
+                                  updateFileEntry(fe.id, { situations: next })
+                                }}
+                                style={{
+                                  padding: '4px 11px', borderRadius: 20, fontSize: 12, fontFamily: 'inherit',
+                                  cursor: 'pointer', transition: 'all .15s',
+                                  background: active ? C.warn : 'rgba(255,255,255,.7)',
+                                  color: active ? '#fff' : C.warn,
+                                  border: `1px solid ${active ? C.warn : '#e8d49a'}`,
+                                  fontWeight: active ? 600 : 400,
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <input
+                          type="text"
                           value={fe.notes}
                           onChange={e => updateFileEntry(fe.id, { notes: e.target.value })}
-                          placeholder="Ex: Apenas no resultado 60 dias para Marcopolo / Sempre que incluir PGR…"
-                          rows={2}
-                          style={{ width: '100%', padding: '6px 8px', border: `1px solid #e8d49a`, borderRadius: 4, fontSize: 12, lineHeight: 1.5, fontFamily: 'inherit', color: C.text, resize: 'vertical', outline: 'none', background: 'rgba(255,248,230,.5)', boxSizing: 'border-box' }}
+                          placeholder="Observação opcional…"
+                          style={{ marginTop: 8, width: '100%', padding: '5px 8px', border: `1px solid #e8d49a`, borderRadius: 4, fontSize: 12, fontFamily: 'inherit', color: C.text, outline: 'none', background: 'rgba(255,248,230,.5)', boxSizing: 'border-box' }}
                         />
                       </div>
                     </div>
@@ -864,18 +945,36 @@ export default function PgrPcmsoClient() {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '.07em' }}>Anexos</div>
                 <div style={{ fontSize: 11, color: C.hint, marginTop: 2 }}>
-                  Marque os arquivos desta mensagem e copie cada um para colar no Outlook
+                  Arquivos da situação atual selecionados automaticamente
                 </div>
               </div>
-              <div style={{ fontSize: 11, color: C.hint }}>
-                {activeFiles.length}/{fileEntries.length} selecionados
-              </div>
+              {/* Copiar todos */}
+              {fileEntries.some(fe => fileMatchesSituation(fe) && fileEnabled[fe.id]) && (
+                <button
+                  onClick={copyAllMatching}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 14px', borderRadius: C.radiusSm, fontFamily: 'inherit',
+                    border: `1px solid ${copyAllStatus === 'dl' ? '#b7caf5' : C.primary}`,
+                    background: copyAllStatus === 'dl' ? C.primaryLight : C.primary,
+                    color: copyAllStatus === 'dl' ? C.primary : '#fff',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {copyAllStatus === 'dl' ? (
+                    <><svg style={{ width: 13, height: 13 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg> Baixados!</>
+                  ) : (
+                    <><svg style={{ width: 13, height: 13 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Baixar todos</>
+                  )}
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {fileEntries.map(fe => {
                 const ti = fileTypeInfo(fe.mimeType)
                 const enabled = !!fileEnabled[fe.id]
+                const matches = fileMatchesSituation(fe)
                 const st = fileCopyStatus[fe.id] ?? 'idle'
 
                 return (
@@ -885,9 +984,9 @@ export default function PgrPcmsoClient() {
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '10px 14px',
                       background: enabled ? C.surface : '#f9fafb',
-                      border: `1px solid ${enabled ? C.border : C.borderLight}`,
+                      border: `1px solid ${matches && enabled ? C.primaryMid : enabled ? C.border : C.borderLight}`,
                       borderRadius: C.radius,
-                      opacity: enabled ? 1 : 0.55,
+                      opacity: enabled ? 1 : 0.5,
                       transition: 'opacity .15s, border-color .15s',
                     }}
                   >
@@ -906,8 +1005,15 @@ export default function PgrPcmsoClient() {
 
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {fe.name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {fe.name}
+                        </span>
+                        {matches && (
+                          <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: C.primaryLight, color: C.primary, letterSpacing: '.03em' }}>
+                            {(fe.situations ?? ['all']).includes('all') ? 'Sempre' : resultado === 'aprovado' ? 'Aprovado' : '60 dias'}
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                         {formatSize(fe.sizeBytes)}
@@ -958,9 +1064,9 @@ export default function PgrPcmsoClient() {
               })}
             </div>
 
-            {/* Clipboard hint */}
+            {/* Hint */}
             <div style={{ marginTop: 8, padding: '8px 12px', background: C.primaryLight, borderRadius: C.radiusSm, fontSize: 11.5, color: C.primary, lineHeight: 1.5 }}>
-              <strong>Como funciona:</strong> clique em "Copiar" e depois cole (Ctrl+V) diretamente no corpo do e-mail no Outlook — o arquivo é inserido como anexo. Se o seu navegador não suportar esse recurso, o arquivo será baixado automaticamente e você poderá arrastá-lo para o e-mail.
+              <strong>Baixar todos</strong> salva os arquivos da situação atual na pasta de Downloads — arraste-os para o e-mail no Outlook. <strong>Copiar</strong> (individual) tenta copiar para a área de transferência para colar diretamente.
             </div>
 
             <div style={{ height: 1, background: C.borderLight, margin: '24px 0' }} />
