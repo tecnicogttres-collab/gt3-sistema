@@ -17,6 +17,7 @@ const DynManuais          = dynamic(() => import('../manuais/ManuaisClient'),   
 const DynHomeOffice       = dynamic(() => import('../home-office/HomeOfficeClient'),                    { ssr: false })
 const DynControleRevisao  = dynamic(() => import('../controle-revisao/ControleRevisaoClient'),          { ssr: false })
 const DynRevisoesTrainee  = dynamic(() => import('../revisoes-trainee/RevisoesTraineeClient'),          { ssr: false })
+const DynPgrPcmso         = dynamic(() => import('../pgr-pcmso-ltcat/PgrPcmsoClient'),                   { ssr: false })
 const DynSugestoes        = dynamic(() => import('../sugestoes/SugestoesClient'),                       { ssr: false })
 const DynEnquetes         = dynamic(() => import('../enquetes/EnquetesClient'),                        { ssr: false })
 const DynLembretes        = dynamic(() => import('../lembretes/LembretesClient'),                      { ssr: false })
@@ -63,4 +64,5 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/frases-diarias':     DynFrases,
   '/notificacoes':       DynNotificacoes,
   '/perfil':             DynPerfil,
+  '/pgr-pcmso-ltcat':   DynPgrPcmso,
 }

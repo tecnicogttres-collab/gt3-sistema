@@ -50,6 +50,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'pgr-pcmso-ltcat',
+    label: 'PGR / PCMSO / LTCAT',
+    color: '#4A90D9',
+    path: '/pgr-pcmso-ltcat',
+    description: 'Construtor de e-mails de parecer SSO com configuração por contratante',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'manuais',
     label: 'Manuais',
     color: '#4A90D9',
