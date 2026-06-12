@@ -287,7 +287,8 @@ function Dropdown({
 export default function PgrPcmsoClient() {
   const { profile } = useUser()
   const papel = profile?.papel ?? 'colaborador'
-  const canConfig = papel === 'admin' || papel === 'gestor'
+  const canEdit               = papel === 'admin' || papel === 'gestor' || papel === 'colaborador'
+  const canManageContratantes = papel === 'admin' || papel === 'gestor'
 
   // form state
   const [empresa, setEmpresa] = useState('')
@@ -520,7 +521,7 @@ export default function PgrPcmsoClient() {
             <h1 style={{ fontSize: 18, fontWeight: 700, color: C.primary, margin: 0 }}>PGR / PCMSO / LTCAT</h1>
             <p style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Preencha os campos abaixo e copie o resultado</p>
           </div>
-          {canConfig && (
+          {canEdit && (
             <button
               onClick={() => setEditOpen(p => !p)}
               style={{
@@ -552,7 +553,7 @@ export default function PgrPcmsoClient() {
 
             {/* Section tabs */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-              {(['textos', 'contratantes', 'anexos'] as const).map(s => (
+              {(['textos', ...(canManageContratantes ? ['contratantes'] : []), 'anexos'] as ('textos' | 'contratantes' | 'anexos')[]).map(s => (
                 <button
                   key={s}
                   onClick={() => setEditSection(s)}
