@@ -119,51 +119,38 @@ const C = {
   radiusSm:     '6px',
 }
 
-// ─── Storage keys ──────────────────────────────────────────────────────────────
+// ─── Storage keys (contratantes e textos permanecem locais por serem config de UX) ───
 
-const STORAGE_KEY_CT    = 'pgr-pcmso-contratantes'
-const STORAGE_KEY_TX    = 'pgr-pcmso-texts'
-const STORAGE_KEY_FILES = 'pgr-pcmso-files-meta'
+const STORAGE_KEY_CT = 'pgr-pcmso-contratantes'
+const STORAGE_KEY_TX = 'pgr-pcmso-texts'
 
-// ─── IndexedDB helpers (file blobs) ───────────────────────────────────────────
+// ─── File API helpers ──────────────────────────────────────────────────────────
 
-const IDB_NAME  = 'pgr-files'
-const IDB_STORE = 'blobs'
-
-function openFilesDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1)
-    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror   = () => reject(req.error)
-  })
+type DbFileRow = {
+  id: string; name: string; filename: string
+  mime_type: string; size_bytes: number; notes: string; situations: string[]
 }
-async function idbPut(id: string, blob: Blob) {
-  const db = await openFilesDB()
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite')
-    tx.objectStore(IDB_STORE).put(blob, id)
-    tx.oncomplete = () => resolve()
-    tx.onerror    = () => reject(tx.error)
-  })
+
+function mapDbFile(row: DbFileRow): FileEntry {
+  return {
+    id: row.id,
+    name: row.name,
+    filename: row.filename,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
+    notes: row.notes,
+    situations: (row.situations ?? ['all']) as SituationKey[],
+  }
 }
-async function idbGet(id: string): Promise<Blob | null> {
-  const db = await openFilesDB()
-  return new Promise(resolve => {
-    const tx  = db.transaction(IDB_STORE, 'readonly')
-    const req = tx.objectStore(IDB_STORE).get(id)
-    req.onsuccess = () => resolve((req.result as Blob) ?? null)
-    req.onerror   = () => resolve(null)
-  })
-}
-async function idbDelete(id: string) {
-  const db = await openFilesDB()
-  return new Promise<void>(resolve => {
-    const tx = db.transaction(IDB_STORE, 'readwrite')
-    tx.objectStore(IDB_STORE).delete(id)
-    tx.oncomplete = () => resolve()
-    tx.onerror    = () => resolve()
-  })
+
+async function apiFetchBlob(fileId: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(`/api/pgr-arquivos/${fileId}/url`)
+    if (!res.ok) return null
+    const { url } = await res.json() as { url: string }
+    const fileRes = await fetch(url)
+    return fileRes.ok ? fileRes.blob() : null
+  } catch { return null }
 }
 
 // ─── File helpers ──────────────────────────────────────────────────────────────
@@ -317,6 +304,8 @@ export default function PgrPcmsoClient() {
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([])
   const [fileEnabled, setFileEnabled] = useState<Record<string, boolean>>({})
   const [fileCopyStatus, setFileCopyStatus] = useState<Record<string, 'idle' | 'ok' | 'dl'>>({})
+  const [filesLoading, setFilesLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
   const fileTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [editingFileId, setEditingFileId] = useState<string | null>(null)
@@ -339,13 +328,18 @@ export default function PgrPcmsoClient() {
       if (ct) setContratantes(JSON.parse(ct))
       const tx = localStorage.getItem(STORAGE_KEY_TX)
       if (tx) setTexts(prev => ({ ...prev, ...JSON.parse(tx) }))
-      const fm = localStorage.getItem(STORAGE_KEY_FILES)
-      if (fm) {
-        const entries: FileEntry[] = JSON.parse(fm)
+    } catch { /* noop */ }
+
+    // carrega arquivos compartilhados do servidor
+    fetch('/api/pgr-arquivos')
+      .then(r => r.json())
+      .then((rows: DbFileRow[]) => {
+        const entries = rows.map(mapDbFile)
         setFileEntries(entries)
         setFileEnabled(Object.fromEntries(entries.map(e => [e.id, true])))
-      }
-    } catch { /* noop */ }
+      })
+      .catch(() => {})
+      .finally(() => setFilesLoading(false))
   }, [])
 
   function saveCt(list: ContratanteConfig[]) {
@@ -358,43 +352,48 @@ export default function PgrPcmsoClient() {
     localStorage.setItem(STORAGE_KEY_TX, JSON.stringify(t))
   }
 
-  function saveFileMeta(list: FileEntry[]) {
-    setFileEntries(list)
-    localStorage.setItem(STORAGE_KEY_FILES, JSON.stringify(list))
-  }
-
-  function updateFileEntry(id: string, patch: Partial<FileEntry>) {
-    saveFileMeta(fileEntries.map(e => e.id === id ? { ...e, ...patch } : e))
+  async function updateFileEntry(id: string, patch: Partial<FileEntry>) {
+    setFileEntries(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
+    const apiPatch: Record<string, unknown> = {}
+    if ('name'       in patch) apiPatch.name       = patch.name
+    if ('notes'      in patch) apiPatch.notes      = patch.notes
+    if ('situations' in patch) apiPatch.situations = patch.situations
+    await fetch(`/api/pgr-arquivos/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(apiPatch),
+    })
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const id = `f-${Date.now()}`
-    await idbPut(id, new Blob([await file.arrayBuffer()], { type: file.type }))
-    const entry: FileEntry = {
-      id,
-      name: file.name.replace(/\.[^.]+$/, ''),
-      filename: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      sizeBytes: file.size,
-      notes: '',
-      situations: ['all'],
+    setUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('name', file.name.replace(/\.[^.]+$/, ''))
+    try {
+      const res = await fetch('/api/pgr-arquivos', { method: 'POST', body: fd })
+      if (res.ok) {
+        const row: DbFileRow = await res.json()
+        const entry = mapDbFile(row)
+        setFileEntries(prev => [...prev, entry])
+        setFileEnabled(prev => ({ ...prev, [entry.id]: true }))
+      }
+    } finally {
+      setUploading(false)
+      e.target.value = ''
     }
-    const updated = [...fileEntries, entry]
-    saveFileMeta(updated)
-    setFileEnabled(prev => ({ ...prev, [id]: true }))
-    e.target.value = ''
   }
 
   async function handleRemoveFile(id: string) {
-    await idbDelete(id)
-    saveFileMeta(fileEntries.filter(e => e.id !== id))
+    setFileEntries(prev => prev.filter(e => e.id !== id))
     setFileEnabled(prev => { const n = { ...prev }; delete n[id]; return n })
+    await fetch(`/api/pgr-arquivos/${id}`, { method: 'DELETE' })
   }
 
   async function copyFileToClipboard(entry: FileEntry) {
-    const blob = await idbGet(entry.id)
+    const blob = await apiFetchBlob(entry.id)
     if (!blob) return
 
     const setStatus = (s: 'ok' | 'dl') => {
@@ -409,7 +408,7 @@ export default function PgrPcmsoClient() {
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
         setStatus('ok')
         return
-      } catch { /* fallthrough to download */ }
+      } catch { /* fallthrough */ }
     }
 
     // PDF, DOCX, XLSX: ClipboardItem.write() não suporta esses MIME types
@@ -433,19 +432,18 @@ export default function PgrPcmsoClient() {
     const matching = fileEntries.filter(fe => fileMatchesSituation(fe) && fileEnabled[fe.id])
     if (matching.length === 0) return
 
-    // tenta clipboard; como múltiplos ClipboardItem não acumulam no Outlook,
-    // a estratégia mais confiável é baixar todos e arrastar para o e-mail
     let downloaded = 0
     for (const fe of matching) {
-      const blob = await idbGet(fe.id)
-      if (!blob) continue
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = fe.filename
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-      downloaded++
-      await new Promise(r => setTimeout(r, 250))
+      try {
+        const res = await fetch(`/api/pgr-arquivos/${fe.id}/url`)
+        if (!res.ok) continue
+        const { url } = await res.json() as { url: string }
+        const a = document.createElement('a')
+        a.href = url; a.download = fe.filename
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        downloaded++
+        await new Promise(r => setTimeout(r, 300))
+      } catch { /* skip */ }
     }
 
     setCopyAllStatus(downloaded > 0 ? 'dl' : 'idle')
@@ -743,29 +741,41 @@ export default function PgrPcmsoClient() {
                     onChange={handleFileUpload}
                   />
                   <button
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    disabled={uploading}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '9px 16px', borderRadius: C.radiusSm,
-                      border: '2px dashed #e8d49a', background: 'rgba(255,255,255,.6)',
-                      color: C.warn, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                      border: '2px dashed #e8d49a', background: uploading ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.6)',
+                      color: C.warn, fontSize: 13, fontWeight: 600, cursor: uploading ? 'default' : 'pointer', fontFamily: 'inherit',
                       width: '100%', justifyContent: 'center',
                       transition: 'background .15s',
+                      opacity: uploading ? 0.7 : 1,
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.9)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.6)')}
+                    onMouseEnter={e => { if (!uploading) (e.currentTarget.style.background = 'rgba(255,255,255,.9)') }}
+                    onMouseLeave={e => { if (!uploading) (e.currentTarget.style.background = 'rgba(255,255,255,.6)') }}
                   >
-                    <svg style={{ width: 16, height: 16 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="17 8 12 3 7 8"/>
-                      <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    Carregar arquivo (PDF, Word, Excel…)
+                    {uploading ? (
+                      <><span style={{ fontSize: 14, animation: 'spin 1s linear infinite' }}>⟳</span> Enviando…</>
+                    ) : (
+                      <>
+                        <svg style={{ width: 16, height: 16 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="17 8 12 3 7 8"/>
+                          <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        Carregar arquivo (PDF, Word, Excel…)
+                      </>
+                    )}
                   </button>
                 </div>
 
                 {/* File list */}
-                {fileEntries.length === 0 ? (
+                {filesLoading ? (
+                  <div style={{ padding: '12px 0', fontSize: 13, color: '#9b7a1a', textAlign: 'center' }}>
+                    Carregando arquivos…
+                  </div>
+                ) : fileEntries.length === 0 ? (
                   <div style={{ padding: '12px 0', fontSize: 13, color: '#9b7a1a', textAlign: 'center' }}>
                     Nenhum arquivo carregado ainda.
                   </div>
