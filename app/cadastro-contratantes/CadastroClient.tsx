@@ -1016,7 +1016,7 @@ function EditableHeader({ value, onSave }: { value: string; onSave: (v: string) 
   )
 }
 
-function EditableCell({ value, onCopy, onSave }: { value: string; onCopy: (t: string) => void; onSave: (v: string) => void }) {
+function EditableCell({ value, onCopy: _onCopy, onSave }: { value: string; onCopy: (t: string) => void; onSave: (v: string) => void }) {
   const ref = useRef<HTMLTableCellElement>(null)
   const [editing, setEditing] = useState(false)
 
@@ -1042,18 +1042,21 @@ function EditableCell({ value, onCopy, onSave }: { value: string; onCopy: (t: st
       ref={ref}
       contentEditable={editing}
       suppressContentEditableWarning
-      onClick={() => { if (!editing && value.trim()) onCopy(value) }}
-      onDoubleClick={startEdit}
+      onClick={() => { if (!editing) startEdit() }}
       onBlur={stopEdit}
-      onKeyDown={e => { if (editing && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); stopEdit() } }}
-      title={editing ? undefined : value ? 'Clique para copiar · Duplo-clique para editar' : 'Duplo-clique para editar'}
+      onKeyDown={e => {
+        if (!editing) return
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); stopEdit() }
+        if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
+      }}
+      title={editing ? undefined : 'Clique para editar · Ctrl+C para copiar após selecionar'}
       style={{
-        padding: '4px 8px', border: '1px solid #E2E8F0', cursor: editing ? 'text' : (value ? 'pointer' : 'default'),
+        padding: '4px 8px', border: '1px solid #E2E8F0', cursor: editing ? 'text' : 'pointer',
         outline: editing ? '2px solid #4299E1' : 'none', outlineOffset: -2,
         background: editing ? '#EBF4FF' : 'transparent',
         color: '#2D3748', verticalAlign: 'top',
       }}
-      onMouseEnter={e => { if (!editing && value) (e.currentTarget as HTMLElement).style.background = '#EDF2F7' }}
+      onMouseEnter={e => { if (!editing) (e.currentTarget as HTMLElement).style.background = '#EDF2F7' }}
       onMouseLeave={e => { if (!editing) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
     >
       {value}

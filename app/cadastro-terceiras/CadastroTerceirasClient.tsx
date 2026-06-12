@@ -446,7 +446,7 @@ export default function CadastroTerceirasClient() {
   const btnSm: React.CSSProperties = { padding: '4px 9px', fontSize: 11 }
 
   return (
-    <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+    <div style={{ padding: '20px 24px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -519,7 +519,16 @@ export default function CadastroTerceirasClient() {
           </div>
 
           {/* Tabela ativos */}
-          <TabelaAtivos terceiras={ativosFiltrados} selectedId={selectedId} onSelect={id => { setSelectedId(id); setDrawerTab('detalhes') }} />
+          <TabelaAtivos
+            terceiras={ativosFiltrados}
+            podeValidarGestor={podeValidarGestor}
+            onOpenEtapa={(terceira, etapa) => {
+              const estadoAtual = terceira.etapas[etapa.id] ?? etapa.estados[0]
+              setModalEtapa({ open: true, terceira, etapa, estadoAtual, novoEstado: estadoAtual, obs: '' })
+            }}
+            onUpdateInfo={handleUpdateInfo}
+            onOpenDrawer={id => { setSelectedId(id); setDrawerTab('detalhes') }}
+          />
         </>
       )}
 
@@ -826,54 +835,211 @@ function ProgBar({ pct, danger }: { pct: number; danger?: boolean }) {
   )
 }
 
-function TabelaAtivos({ terceiras, selectedId, onSelect }: { terceiras: Terceira[]; selectedId: string | null; onSelect: (id: string) => void }) {
-  const DOT_COLORS: Record<string, string> = { ok: S.ok, validar: S.validar, pendente: S.pendente }
+function TabelaAtivos({
+  terceiras,
+  podeValidarGestor,
+  onOpenEtapa,
+  onUpdateInfo,
+  onOpenDrawer,
+}: {
+  terceiras: Terceira[]
+  podeValidarGestor: boolean
+  onOpenEtapa: (t: Terceira, e: GuiaEtapa) => void
+  onUpdateInfo: (id: string, campo: string, valor: unknown) => void
+  onOpenDrawer: (id: string) => void
+}) {
+  const allEtapas = GUIAS.flatMap(g => g.etapas)
+  const SHORT: Record<EtapaId, string> = {
+    gt0100: 'GT0100', cc_notif: 'CC/Notif', pasta_rede: 'Pasta',
+    gt0180: 'GT0180', cnpj_liberado: 'CNPJ Lib.', gt8005: 'GT8005', email: 'E-mail',
+  }
+  const thSt: React.CSSProperties = {
+    padding: '8px 10px', fontSize: 10, fontWeight: 700, color: S.textMuted,
+    textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap',
+    borderBottom: `2px solid ${S.border}`, textAlign: 'left', background: '#f8f9fc',
+  }
   return (
     <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: S.radius, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead style={{ background: '#f8f9fc' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
             <tr>
-              {['Contratante', 'Razão social', 'Guias', 'Progresso', 'Contato', 'Data'].map((h, i) => (
-                <th key={h} style={{ textAlign: i === 2 ? 'center' : 'left', padding: '9px 12px', fontSize: 11, fontWeight: 700, color: S.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: `1px solid ${S.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+              <th style={{ ...thSt, minWidth: 100 }}>Contratante</th>
+              <th style={{ ...thSt, minWidth: 200 }}>Empresa</th>
+              <th style={{ ...thSt, minWidth: 118 }}>Contato</th>
+              <th style={{ ...thSt, minWidth: 140 }}>Sub</th>
+              {allEtapas.map(e => (
+                <th key={e.id} style={{ ...thSt, minWidth: 74, textAlign: 'center' }}>
+                  {SHORT[e.id]}{e.reqGestor && <span style={{ opacity: 0.5, marginLeft: 2 }}>🔒</span>}
+                </th>
               ))}
+              <th style={{ ...thSt, minWidth: 88 }}>Progresso</th>
+              <th style={{ ...thSt, minWidth: 66 }}>Data</th>
+              <th style={{ ...thSt, minWidth: 46, textAlign: 'center' }}>Obs</th>
             </tr>
           </thead>
           <tbody>
             {terceiras.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: S.textMuted, fontSize: 13 }}>Nenhuma terceira encontrada</td></tr>
-            ) : terceiras.map(t => {
-              const prog = calcProgresso(t)
-              const isSelected = t.id === selectedId
-              return (
-                <tr key={t.id} onClick={() => onSelect(t.id)} style={{ cursor: 'pointer', background: isSelected ? S.primaryLight : undefined, transition: 'background 0.12s' }}
-                  onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '#f8f9fc' }}
-                  onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '' }}>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}` }}>
-                    <span style={{ background: S.primaryLight, color: S.primary, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{t.contratante?.nome ?? '—'}</span>
-                  </td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, maxWidth: 280 }}>
-                    <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.razao_social}>{t.razao_social}</div>
-                    {t.tem_sub && t.subcontratante && <span style={{ fontSize: 10, color: '#92400e', fontWeight: 500 }}>⚠ Sub: {t.subcontratante}</span>}
-                  </td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
-                      {GUIAS.map(g => {
-                        const s = statusGuia(t, g)
-                        return <span key={g.id} title={`${g.label}: ${s}`} style={{ width: 8, height: 8, borderRadius: '50%', background: DOT_COLORS[s] ?? S.borderStrong, display: 'inline-block' }} />
-                      })}
-                    </div>
-                  </td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}` }}><ProgBar pct={prog} /></td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, color: S.textMuted, fontSize: 12 }}>{t.contato ?? '—'}</td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, color: S.textMuted, fontSize: 12, whiteSpace: 'nowrap' }}>{fmtData(t.data)}</td>
-                </tr>
-              )
-            })}
+              <tr>
+                <td colSpan={4 + allEtapas.length + 3} style={{ padding: '40px', textAlign: 'center', color: S.textMuted }}>
+                  Nenhuma terceira encontrada
+                </td>
+              </tr>
+            ) : terceiras.map(t => (
+              <TerceiraRow
+                key={t.id}
+                terceira={t}
+                podeValidarGestor={podeValidarGestor}
+                allEtapas={allEtapas}
+                onOpenEtapa={onOpenEtapa}
+                onUpdateInfo={onUpdateInfo}
+                onOpenDrawer={onOpenDrawer}
+              />
+            ))}
           </tbody>
         </table>
       </div>
     </div>
+  )
+}
+
+function TerceiraRow({
+  terceira: t,
+  podeValidarGestor,
+  allEtapas,
+  onOpenEtapa,
+  onUpdateInfo,
+  onOpenDrawer,
+}: {
+  terceira: Terceira
+  podeValidarGestor: boolean
+  allEtapas: GuiaEtapa[]
+  onOpenEtapa: (t: Terceira, e: GuiaEtapa) => void
+  onUpdateInfo: (id: string, campo: string, valor: unknown) => void
+  onOpenDrawer: (id: string) => void
+}) {
+  const [contato, setContato] = useState(t.contato ?? '')
+  const [temSub, setTemSub] = useState(t.tem_sub)
+  const [sub, setSub] = useState(t.subcontratante ?? '')
+
+  useEffect(() => { setContato(t.contato ?? '') }, [t.contato])
+  useEffect(() => { setTemSub(t.tem_sub) }, [t.tem_sub])
+  useEffect(() => { setSub(t.subcontratante ?? '') }, [t.subcontratante])
+
+  const requerCC = !!t.contratante?.requer_cc
+  const prog = calcProgresso(t)
+  const tdSt: React.CSSProperties = { padding: '6px 10px', borderBottom: `1px solid ${S.border}`, verticalAlign: 'middle' }
+  const inp: React.CSSProperties = {
+    width: '100%', padding: '4px 7px', border: `1px solid ${S.border}`, borderRadius: 4,
+    fontSize: 12, fontFamily: 'inherit', background: S.surface, outline: 'none', color: S.text,
+    boxSizing: 'border-box' as const,
+  }
+
+  return (
+    <tr
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafbfd' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+    >
+      {/* Contratante */}
+      <td style={tdSt}>
+        <span style={{ background: S.primaryLight, color: S.primary, padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+          {t.contratante?.nome ?? '—'}
+        </span>
+      </td>
+
+      {/* Empresa */}
+      <td style={{ ...tdSt, maxWidth: 220 }}>
+        <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 12 }} title={t.razao_social}>
+          {t.razao_social}
+        </div>
+      </td>
+
+      {/* Contato */}
+      <td style={tdSt}>
+        <input
+          type="text" value={contato} placeholder="—"
+          onChange={e => setContato(e.target.value)}
+          onBlur={e => { const v = e.target.value.trim() || null; if (v !== t.contato) onUpdateInfo(t.id, 'contato', v) }}
+          style={inp}
+        />
+      </td>
+
+      {/* Sub */}
+      <td style={tdSt}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, cursor: 'pointer', marginBottom: temSub ? 4 : 0, whiteSpace: 'nowrap' }}>
+          <input
+            type="checkbox" checked={temSub}
+            onChange={e => {
+              const c = e.target.checked
+              setTemSub(c)
+              onUpdateInfo(t.id, 'tem_sub', c)
+              if (!c) { setSub(''); onUpdateInfo(t.id, 'subcontratante', null) }
+            }}
+          />
+          Subcontratada
+        </label>
+        {temSub && (
+          <input
+            type="text" value={sub} placeholder="Empresa principal…"
+            onChange={e => setSub(e.target.value)}
+            onBlur={e => { const v = e.target.value.trim() || null; if (v !== t.subcontratante) onUpdateInfo(t.id, 'subcontratante', v) }}
+            style={{ ...inp, fontSize: 11, color: '#92400e' }}
+          />
+        )}
+      </td>
+
+      {/* Etapas */}
+      {allEtapas.map(etapa => {
+        if (etapa.condicional && !requerCC) {
+          return (
+            <td key={etapa.id} style={{ ...tdSt, textAlign: 'center' }}>
+              <span style={{ fontSize: 10, color: '#d1d5db' }}>N/A</span>
+            </td>
+          )
+        }
+        const estado = t.etapas[etapa.id] ?? 'pendente'
+        const info = ESTADOS[estado] ?? ESTADOS.pendente
+        const aguardaGestor = etapa.reqGestor && !podeValidarGestor && estado === 'validar'
+        return (
+          <td key={etapa.id} style={{ ...tdSt, textAlign: 'center' }}>
+            <button
+              onClick={() => onOpenEtapa(t, etapa)}
+              title={`${etapa.label}: ${info.label}${aguardaGestor ? ' — aguardando gestor' : ' — clique para alterar'}`}
+              style={{
+                padding: '4px 8px', borderRadius: 5, border: `1px solid ${info.color}44`,
+                cursor: 'pointer', background: info.bg, color: info.color,
+                fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+                lineHeight: 1, minWidth: 30, opacity: aguardaGestor ? 0.6 : 1,
+              }}
+            >
+              {info.ico}
+            </button>
+          </td>
+        )
+      })}
+
+      {/* Progresso */}
+      <td style={tdSt}><ProgBar pct={prog} /></td>
+
+      {/* Data */}
+      <td style={{ ...tdSt, color: S.textMuted, whiteSpace: 'nowrap', fontSize: 11 }}>{fmtData(t.data)}</td>
+
+      {/* Obs / Drawer */}
+      <td style={{ ...tdSt, textAlign: 'center' }}>
+        <button
+          onClick={() => onOpenDrawer(t.id)}
+          title={t.observacao ? t.observacao : 'Observação e histórico'}
+          style={{
+            background: t.observacao ? S.pendenteBg : 'transparent',
+            color: t.observacao ? S.pendente : S.textMuted,
+            border: `1px solid ${t.observacao ? S.pendente + '55' : S.border}`,
+            borderRadius: 5, cursor: 'pointer', fontSize: 13, padding: '3px 8px', fontFamily: 'inherit',
+          }}
+        >
+          📝
+        </button>
+      </td>
+    </tr>
   )
 }
 
