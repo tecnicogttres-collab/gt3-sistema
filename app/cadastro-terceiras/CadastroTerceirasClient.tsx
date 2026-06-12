@@ -853,35 +853,99 @@ function TabelaAtivos({
     gt0100: 'GT0100', cc_notif: 'CC/Notif', pasta_rede: 'Pasta',
     gt0180: 'GT0180', cnpj_liberado: 'CNPJ Lib.', gt8005: 'GT8005', email: 'E-mail',
   }
-  const thSt: React.CSSProperties = {
-    padding: '8px 10px', fontSize: 10, fontWeight: 700, color: S.textMuted,
-    textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap',
-    borderBottom: `2px solid ${S.border}`, textAlign: 'left', background: '#f8f9fc',
+
+  const [colWidths, setColWidths] = useState<number[]>(() => [
+    100, 200, 118, 140,
+    ...allEtapas.map(() => 74),
+    90, 68, 50,
+  ])
+
+  const dragging = useRef<{ colIdx: number; startX: number; startW: number } | null>(null)
+
+  function startResize(e: React.MouseEvent, colIdx: number) {
+    e.preventDefault()
+    dragging.current = { colIdx, startX: e.clientX, startW: colWidths[colIdx] }
+    function onMove(ev: MouseEvent) {
+      if (!dragging.current) return
+      const delta = ev.clientX - dragging.current.startX
+      const newW = Math.max(40, dragging.current.startW + delta)
+      setColWidths(prev => prev.map((w, i) => i === dragging.current!.colIdx ? newW : w))
+    }
+    function onUp() {
+      dragging.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
+
+  type ColDef = { label: string; align: 'left' | 'center' }
+  const cols: ColDef[] = [
+    { label: 'Contratante', align: 'left' },
+    { label: 'Empresa', align: 'left' },
+    { label: 'Contato', align: 'left' },
+    { label: 'Sub', align: 'left' },
+    ...allEtapas.map(e => ({
+      label: SHORT[e.id] + (e.reqGestor ? ' 🔒' : ''),
+      align: 'center' as const,
+    })),
+    { label: 'Progresso', align: 'left' },
+    { label: 'Data', align: 'left' },
+    { label: 'Obs', align: 'center' },
+  ]
+
+  const thBase: React.CSSProperties = {
+    padding: 0, fontSize: 10, fontWeight: 700, color: S.textMuted,
+    textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap',
+    borderBottom: `2px solid ${S.border}`, background: '#f8f9fc', userSelect: 'none',
+  }
+
+  const totalWidth = colWidths.reduce((a, b) => a + b, 0)
+
   return (
     <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: S.radius, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed', width: totalWidth }}>
+          <colgroup>
+            {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+          </colgroup>
           <thead>
             <tr>
-              <th style={{ ...thSt, minWidth: 100 }}>Contratante</th>
-              <th style={{ ...thSt, minWidth: 200 }}>Empresa</th>
-              <th style={{ ...thSt, minWidth: 118 }}>Contato</th>
-              <th style={{ ...thSt, minWidth: 140 }}>Sub</th>
-              {allEtapas.map(e => (
-                <th key={e.id} style={{ ...thSt, minWidth: 74, textAlign: 'center' }}>
-                  {SHORT[e.id]}{e.reqGestor && <span style={{ opacity: 0.5, marginLeft: 2 }}>🔒</span>}
+              {cols.map((col, i) => (
+                <th key={i} style={{ ...thBase, textAlign: col.align }}>
+                  {/* position:relative em <th> com border-collapse falha no browser; usa div interno */}
+                  <div style={{ position: 'relative', padding: '8px 18px 8px 10px', overflow: 'hidden' }}>
+                    <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {col.label}
+                    </span>
+                    <div
+                      onMouseDown={e => startResize(e, i)}
+                      title="Arraste para redimensionar coluna"
+                      style={{
+                        position: 'absolute', right: 0, top: 0, bottom: 0, width: 12,
+                        cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                      onMouseEnter={e => {
+                        const bar = e.currentTarget.lastElementChild as HTMLElement
+                        if (bar) bar.style.background = S.primary
+                      }}
+                      onMouseLeave={e => {
+                        const bar = e.currentTarget.lastElementChild as HTMLElement
+                        if (bar) bar.style.background = '#b0bcd0'
+                      }}
+                    >
+                      <div style={{ width: 3, height: '65%', background: '#b0bcd0', borderRadius: 2, pointerEvents: 'none', transition: 'background 0.1s' }} />
+                    </div>
+                  </div>
                 </th>
               ))}
-              <th style={{ ...thSt, minWidth: 88 }}>Progresso</th>
-              <th style={{ ...thSt, minWidth: 66 }}>Data</th>
-              <th style={{ ...thSt, minWidth: 46, textAlign: 'center' }}>Obs</th>
             </tr>
           </thead>
           <tbody>
             {terceiras.length === 0 ? (
               <tr>
-                <td colSpan={4 + allEtapas.length + 3} style={{ padding: '40px', textAlign: 'center', color: S.textMuted }}>
+                <td colSpan={cols.length} style={{ padding: '40px', textAlign: 'center', color: S.textMuted }}>
                   Nenhuma terceira encontrada
                 </td>
               </tr>

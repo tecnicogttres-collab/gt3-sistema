@@ -95,6 +95,7 @@ type DbLayoutRow = {
   chave: string
   cor: string | null
   ordem: number
+  largura: number | null
 }
 
 type ColorPickerState = { open: false } | { open: true; catKey: string; subtabKey: string; coluna: string }
@@ -238,6 +239,8 @@ export default function ObservacoesClient() {
   const [dragTabIdx, setDragTabIdx] = useState<number | null>(null)
   const [hoverTabIdx, setHoverTabIdx] = useState<number | null>(null)
   const [colorPicker, setColorPicker] = useState<ColorPickerState>({ open: false })
+  const [colWidthMap, setColWidthMap] = useState<Record<string, number>>({})
+  const resizeDragging = useRef<{ key: string; startX: number; startW: number } | null>(null)
 
   useEffect(() => {
     if (!activeCatKey) return
@@ -299,8 +302,10 @@ export default function ObservacoesClient() {
       .then(r => r.ok ? r.json() : { columns: [] as DbLayoutRow[], guias: [] as DbLayoutRow[] })
       .then(({ columns, guias }: { columns: DbLayoutRow[]; guias: DbLayoutRow[] }) => {
         const newColors: Record<string, string> = {}
+        const newWidths: Record<string, number> = {}
         for (const r of columns) {
           if (r.cor) newColors[`${cat}||${r.subtab}||${r.chave}`] = r.cor
+          if (r.largura) newWidths[`${cat}||${r.subtab}||${r.chave}`] = r.largura
         }
         const orderGroups: Record<string, Array<{ chave: string; ordem: number }>> = {}
         for (const r of columns) {
@@ -316,6 +321,10 @@ export default function ObservacoesClient() {
         setColColors(prev => ({
           ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${cat}||`))),
           ...newColors,
+        }))
+        setColWidthMap(prev => ({
+          ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${cat}||`))),
+          ...newWidths,
         }))
         setColOrderMap(prev => ({
           ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${cat}||`))),
@@ -788,7 +797,7 @@ export default function ObservacoesClient() {
     setLayoutSaving(true)
     const records: Array<{
       categoria: string; subtab: string; tipo: 'coluna' | 'guia'
-      chave: string; cor: string | null; ordem: number
+      chave: string; cor: string | null; ordem: number; largura: number | null
     }> = []
 
     // Guias
@@ -796,7 +805,7 @@ export default function ObservacoesClient() {
       !isImageOnlyColuna(st.key) || !!activeCategory?.subtabs.find(s => s.key === st.key)
     )
     visibleTabs.forEach((st, idx) => {
-      records.push({ categoria: activeCatKey, subtab: '', tipo: 'guia', chave: st.key, cor: null, ordem: idx })
+      records.push({ categoria: activeCatKey, subtab: '', tipo: 'guia', chave: st.key, cor: null, ordem: idx, largura: null })
     })
 
     // Colunas com ordem customizada
@@ -810,12 +819,28 @@ export default function ObservacoesClient() {
       titles.forEach((title, idx) => {
         const colKey = `${cat}||${subtab}||${title}`
         processedColKeys.add(colKey)
-        records.push({ categoria: cat, subtab, tipo: 'coluna', chave: title, cor: colColors[colKey] ?? null, ordem: idx })
+        records.push({ categoria: cat, subtab, tipo: 'coluna', chave: title, cor: colColors[colKey] ?? null, ordem: idx, largura: colWidthMap[colKey] ?? null })
       })
     })
 
     // Cores sem ordem customizada
     Object.entries(colColors).forEach(([key, color]) => {
+      if (processedColKeys.has(key)) return
+      processedColKeys.add(key)
+      const firstSep = key.indexOf('||')
+      const secondSep = key.indexOf('||', firstSep + 2)
+      if (firstSep === -1 || secondSep === -1) return
+      const cat = key.slice(0, firstSep)
+      const subtab = key.slice(firstSep + 2, secondSep)
+      const coluna = key.slice(secondSep + 2)
+      if (cat !== activeCatKey) return
+      const st = allSubtabs.find(s => s.key === subtab)
+      const ordem = st?.columns.findIndex(c => c.title === coluna) ?? 999
+      records.push({ categoria: cat, subtab, tipo: 'coluna', chave: coluna, cor: color, ordem, largura: colWidthMap[key] ?? null })
+    })
+
+    // Larguras sem ordem ou cor customizadas
+    Object.entries(colWidthMap).forEach(([key, largura]) => {
       if (processedColKeys.has(key)) return
       const firstSep = key.indexOf('||')
       const secondSep = key.indexOf('||', firstSep + 2)
@@ -826,7 +851,7 @@ export default function ObservacoesClient() {
       if (cat !== activeCatKey) return
       const st = allSubtabs.find(s => s.key === subtab)
       const ordem = st?.columns.findIndex(c => c.title === coluna) ?? 999
-      records.push({ categoria: cat, subtab, tipo: 'coluna', chave: coluna, cor: color, ordem })
+      records.push({ categoria: cat, subtab, tipo: 'coluna', chave: coluna, cor: null, ordem, largura })
     })
 
     try {
@@ -845,6 +870,25 @@ export default function ObservacoesClient() {
     setDragColIdx(null); setHoverColIdx(null)
     setDragTabIdx(null); setHoverTabIdx(null)
     loadLayoutForCategory(activeCatKey)
+  }
+
+  function startColResize(e: React.MouseEvent, colKey: string, currentWidth: number) {
+    e.preventDefault()
+    e.stopPropagation()
+    resizeDragging.current = { key: colKey, startX: e.clientX, startW: currentWidth }
+    function onMove(ev: MouseEvent) {
+      if (!resizeDragging.current) return
+      const delta = ev.clientX - resizeDragging.current.startX
+      const newW = Math.max(180, resizeDragging.current.startW + delta)
+      setColWidthMap(prev => ({ ...prev, [resizeDragging.current!.key]: newW }))
+    }
+    function onUp() {
+      resizeDragging.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   return (
@@ -1460,6 +1504,8 @@ export default function ObservacoesClient() {
                     {displayAllCols.map((col, idx) => {
                       const isColDragging = layoutMode && dragColIdx === idx
                       const isColDropTarget = layoutMode && hoverColIdx === idx && dragColIdx !== null && dragColIdx !== idx
+                      const colKey = `${activeCatKey}||${activeSubtab.key}||${col.title}`
+                      const colW = colWidthMap[colKey] ?? colWidth
                       return (
                         <div
                           key={`${activeSubtab.key}|${col.title}`}
@@ -1469,7 +1515,8 @@ export default function ObservacoesClient() {
                           onDrop={layoutMode ? () => handleColDrop(displayAllCols, idx) : undefined}
                           onDragEnd={layoutMode ? () => { setDragColIdx(null); setHoverColIdx(null) } : undefined}
                           style={{
-                            width: colWidth, minWidth: colWidth, flexShrink: 0, height: '100%', borderRadius: 10,
+                            width: colW, minWidth: colW, flexShrink: 0, height: '100%', borderRadius: 10,
+                            position: 'relative',
                             opacity: isColDragging ? 0.45 : 1,
                             outline: isColDropTarget ? `2px dashed ${PRIMARY}` : 'none',
                             outlineOffset: 2,
@@ -1483,10 +1530,31 @@ export default function ObservacoesClient() {
                             onAdd={handleAdd} onEdit={handleEditOpen} onDelete={handleDeleteRequest}
                             onInlineSave={handleInlineSave} onValidate={handleValidate} onInlineCreate={handleInlineCreate}
                             layoutMode={layoutMode}
-                            columnColor={colColors[`${activeCatKey}||${activeSubtab.key}||${col.title}`]}
+                            columnColor={colColors[colKey]}
                             onColorChangeRequest={() => handleColorRequest(activeCatKey, activeSubtab.key, col.title)}
                             isColumnCopied={copiedColTitle === col.title}
                           />
+                          {layoutMode && (
+                            <div
+                              onMouseDown={e => startColResize(e, colKey, colW)}
+                              title="Arraste para redimensionar a coluna"
+                              style={{
+                                position: 'absolute', right: -8, top: 0, bottom: 0, width: 16,
+                                cursor: 'col-resize', zIndex: 10,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}
+                              onMouseEnter={e => {
+                                const bar = e.currentTarget.lastElementChild as HTMLElement
+                                if (bar) bar.style.background = PRIMARY
+                              }}
+                              onMouseLeave={e => {
+                                const bar = e.currentTarget.lastElementChild as HTMLElement
+                                if (bar) bar.style.background = 'rgba(42,79,150,0.3)'
+                              }}
+                            >
+                              <div style={{ width: 4, height: '35%', background: 'rgba(42,79,150,0.3)', borderRadius: 2, pointerEvents: 'none', transition: 'background 0.12s' }} />
+                            </div>
+                          )}
                         </div>
                       )
                     })}

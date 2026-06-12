@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('observacoes_layout')
-    .select('categoria, subtab, tipo, chave, cor, ordem')
+    .select('categoria, subtab, tipo, chave, cor, ordem, largura')
     .eq('categoria', categoria)
 
   const rows = data ?? []
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       chave: string
       cor: string | null
       ordem: number
+      largura: number | null
     }>
   }
 
