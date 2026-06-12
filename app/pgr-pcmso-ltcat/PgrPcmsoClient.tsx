@@ -288,7 +288,7 @@ export default function PgrPcmsoClient() {
   const { profile } = useUser()
   const papel = profile?.papel ?? 'colaborador'
   const canEdit               = papel === 'admin' || papel === 'gestor' || papel === 'colaborador'
-  const canManageContratantes = papel === 'admin' || papel === 'gestor'
+  const canManageContratantes = papel === 'admin' || papel === 'gestor' || papel === 'colaborador'
 
   // form state
   const [empresa, setEmpresa] = useState('')
