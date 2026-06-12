@@ -175,6 +175,12 @@ function fileTypeInfo(mime: string): { color: string; label: string; bg: string 
   return { color: '#718096', bg: '#f7fafc', label: 'ARQ' }
 }
 
+// Navegadores só suportam ClipboardItem.write() para imagens e texto.
+// PDF, DOCX, XLSX não são suportados — nunca chegam à área de transferência.
+function supportsClipboardCopy(mime: string): boolean {
+  return /^image\/(png|jpeg|gif|webp|svg\+xml)/.test(mime) || mime === 'text/plain' || mime === 'text/html'
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024)           return `${bytes} B`
   if (bytes < 1024 * 1024)    return `${(bytes / 1024).toFixed(0)} KB`
@@ -398,17 +404,21 @@ export default function PgrPcmsoClient() {
         setFileCopyStatus(prev => ({ ...prev, [entry.id]: 'idle' })), 3500)
     }
 
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
-      setStatus('ok')
-    } catch {
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = entry.filename
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-      setStatus('dl')
+    if (supportsClipboardCopy(blob.type)) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+        setStatus('ok')
+        return
+      } catch { /* fallthrough to download */ }
     }
+
+    // PDF, DOCX, XLSX: ClipboardItem.write() não suporta esses MIME types
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = entry.filename
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setStatus('dl')
   }
 
   const [copyAllStatus, setCopyAllStatus] = useState<'idle' | 'ok' | 'dl'>('idle')
@@ -1023,42 +1033,38 @@ export default function PgrPcmsoClient() {
                       </div>
                     </div>
 
-                    {/* Copy button */}
-                    <button
-                      onClick={() => enabled && copyFileToClipboard(fe)}
-                      disabled={!enabled}
-                      style={{
-                        flexShrink: 0,
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '7px 14px', borderRadius: C.radiusSm,
-                        border: `1px solid ${
-                          st === 'ok' ? '#a3d4b5' :
-                          st === 'dl' ? '#b7caf5' :
-                          enabled ? C.border : C.borderLight
-                        }`,
-                        background: st === 'ok' ? C.okBg : st === 'dl' ? C.primaryLight : C.bg,
-                        color: st === 'ok' ? C.ok : st === 'dl' ? C.primary : enabled ? C.muted : C.hint,
-                        fontSize: 12, fontWeight: 500, cursor: enabled ? 'pointer' : 'default',
-                        fontFamily: 'inherit', transition: 'all .15s', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {st === 'ok' ? (
-                        <>
-                          <svg style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>
-                          Copiado
-                        </>
-                      ) : st === 'dl' ? (
-                        <>
-                          <svg style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                          Baixado
-                        </>
-                      ) : (
-                        <>
-                          <svg style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                          Copiar
-                        </>
-                      )}
-                    </button>
+                    {/* Copy/Download button */}
+                    {(() => {
+                      const canClip = supportsClipboardCopy(fe.mimeType)
+                      const isOk = st === 'ok'
+                      const isDl = st === 'dl'
+                      return (
+                        <button
+                          onClick={() => enabled && copyFileToClipboard(fe)}
+                          disabled={!enabled}
+                          style={{
+                            flexShrink: 0,
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '7px 14px', borderRadius: C.radiusSm,
+                            border: `1px solid ${isOk ? '#a3d4b5' : isDl ? '#b7caf5' : enabled ? C.border : C.borderLight}`,
+                            background: isOk ? C.okBg : isDl ? C.primaryLight : C.bg,
+                            color: isOk ? C.ok : isDl ? C.primary : enabled ? C.muted : C.hint,
+                            fontSize: 12, fontWeight: 500, cursor: enabled ? 'pointer' : 'default',
+                            fontFamily: 'inherit', transition: 'all .15s', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {isOk ? (
+                            <><svg style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg> Copiado</>
+                          ) : isDl ? (
+                            <><svg style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Baixado</>
+                          ) : canClip ? (
+                            <><svg style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar</>
+                          ) : (
+                            <><svg style={{ width: 12, height: 12 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Baixar</>
+                          )}
+                        </button>
+                      )
+                    })()}
                   </div>
                 )
               })}
@@ -1066,7 +1072,7 @@ export default function PgrPcmsoClient() {
 
             {/* Hint */}
             <div style={{ marginTop: 8, padding: '8px 12px', background: C.primaryLight, borderRadius: C.radiusSm, fontSize: 11.5, color: C.primary, lineHeight: 1.5 }}>
-              <strong>Baixar todos</strong> salva os arquivos da situação atual na pasta de Downloads — arraste-os para o e-mail no Outlook. <strong>Copiar</strong> (individual) tenta copiar para a área de transferência para colar diretamente.
+              PDF, Word e Excel não podem ser copiados para a área de transferência por limitação dos navegadores. <strong>Baixar</strong> salva o arquivo — depois arraste da pasta Downloads para o e-mail aberto no Outlook.
             </div>
 
             <div style={{ height: 1, background: C.borderLight, margin: '24px 0' }} />
