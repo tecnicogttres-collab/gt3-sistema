@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import { TabContentCache } from './TabContentCache'
@@ -315,7 +315,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, loading, signOut } = useUser()
   const router = useRouter()
 
-  const [introVisible, setIntroVisible] = useState(() => shouldShowIntro())
+  const [introVisible, setIntroVisible] = useState(false)
+
+  useLayoutEffect(() => {
+    if (shouldShowIntro()) setIntroVisible(true)
+  }, [])
 
   const isColabOrTrainee = profile?.papel === 'colaborador' || profile?.papel === 'trainee'
 
