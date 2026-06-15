@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Repositório de Modelos — GT3</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary: #2A4F96;
+    --primary-dark: #1e3d78;
+    --accent: #D1AE6E;
+    --bg: #F4F6FA;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.1);
+    --border-md: rgba(0,0,0,0.18);
+    --text: #1a1a2e;
+    --text-muted: #6b7280;
+    --text-light: #9ca3af;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* HEADER */
+  .header {
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .header-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--primary);
+  }
+  .header-logo span {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 13px;
+  }
+
+  /* LAYOUT */
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  /* TOP BAR */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+  .top-bar-left h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .top-bar-left p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .top-bar-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 0.5px solid var(--border-md);
+    border-radius: var(--radius-md);
+    padding: 7px 12px;
+  }
+  .search-box i { color: var(--text-light); font-size: 16px; }
+  .search-box input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 13px;
+    color: var(--text);
+    width: 200px;
+  }
+  .search-box input::placeholder { color: var(--text-light); }
+  .btn-primary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn-primary:hover { background: var(--primary-dark); }
+
+  /* STATS */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+  }
+  .stat-card .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .stat-card .stat-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .stat-card .stat-sub {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 2px;
+  }
+
+  /* CATEGORY PILLS */
+  .cats {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+  .cat-pill {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border-md);
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all .15s;
+    font-weight: 500;
+  }
+  .cat-pill:hover { border-color: var(--primary); color: var(--primary); }
+  .cat-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* FILES GRID */
+  .files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .file-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.1rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    cursor: default;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .file-card:hover {
+    border-color: var(--border-md);
+    box-shadow: 0 2px 12px rgba(42,79,150,0.07);
+  }
+  .file-header { display: flex; align-items: flex-start; gap: 10px; }
+  .file-icon {
+    width: 42px; height: 42px;
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .file-ext {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 2px;
+    text-transform: uppercase;
+  }
+  .badge-cat {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 20px;
+    line-height: 1.4;
+  }
+  .file-footer {
+    font-size: 11px;
+    color: var(--text-light);
+    padding-top: 6px;
+    border-top: 0.5px solid var(--border);
+  }
+  .file-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .file-actions button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 4px;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-md);
+    background: transparent;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .file-actions button:hover { background: var(--bg); color: var(--text); border-color: var(--border-md); }
+  .file-actions .btn-del:hover { border-color: #e24b4a; color: #e24b4a; background: #fff5f5; }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 1rem;
+    color: var(--text-muted);
+    grid-column: 1/-1;
+  }
+  .empty-state i { font-size: 44px; display: block; margin-bottom: 12px; opacity: .3; }
+  .empty-state p { font-size: 14px; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    border: 0.5px solid var(--border-md);
+    padding: 1.75rem;
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .modal-header h3 { font-size: 16px; font-weight: 600; color: var(--text); }
+  .modal-close {
+    width: 30px; height: 30px;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-md);
+    background: transparent;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+  .modal-close:hover { background: var(--bg); }
+  .form-field { margin-bottom: 1rem; }
+  .form-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 6px;
+  }
+  .form-field input,
+  .form-field select {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-md);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .form-field input:focus,
+  .form-field select:focus { border-color: var(--primary); background: #fff; }
+  .drop-zone {
+    border: 1.5px dashed var(--border-md);
+    border-radius: var(--radius-md);
+    padding: 1.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 13px;
+    transition: all .15s;
+    background: var(--bg);
+  }
+  .drop-zone:hover, .drop-zone.drag { border-color: var(--primary); background: #eef2fb; }
+  .drop-zone i { font-size: 30px; display: block; margin-bottom: 8px; opacity: .4; }
+  .drop-zone .hint { font-size: 11px; opacity: .6; margin-top: 4px; }
+  .drop-zone .chosen { color: var(--primary); font-weight: 500; font-size: 12px; margin-top: 8px; }
+  .modal-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 0.5px solid var(--border);
+  }
+  .btn-cancel {
+    padding: 8px 18px;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-md);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-cancel:hover { background: var(--bg); }
+  .btn-save {
+    padding: 8px 20px;
+    border-radius: var(--radius-md);
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-save:hover { background: var(--primary-dark); }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #1a1a2e;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    z-index: 300;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  }
+  .toast.show { display: flex; }
+  .toast i { color: #4ade80; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-logo">
+    <i class="ti ti-building-community" style="font-size:20px"></i>
+    GT3 Consultoria
+    <span>/ Repositório de Modelos</span>
+  </div>
+  <div style="font-size:12px;color:var(--text-muted)">Sistema interno</div>
+</header>
+
+<div class="page">
+
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <h1>Repositório de Modelos</h1>
+      <p>Arquivos modelo disponibilizados para as empresas contratantes</p>
+    </div>
+    <div class="top-bar-right">
+      <div class="search-box">
+        <i class="ti ti-search"></i>
+        <input type="text" id="searchInput" placeholder="Buscar por nome ou categoria...">
+      </div>
+      <button class="btn-primary" onclick="openModal()">
+        <i class="ti ti-upload"></i> Novo arquivo
+      </button>
+    </div>
+  </div>
+
+  <div class="stats-row" id="statsRow"></div>
+  <div class="cats" id="catPills"></div>
+  <div class="files-grid" id="filesGrid"></div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Adicionar arquivo</h3>
+      <button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="form-field">
+      <label>Nome do modelo</label>
+      <input type="text" id="inputNome" placeholder="Ex: Contrato de Prestação de Serviços">
+    </div>
+    <div class="form-field">
+      <label>Categoria</label>
+      <select id="inputCat">
+        <option value="SST">SST</option>
+        <option value="Fiscal">Fiscal</option>
+        <option value="Jurídico">Jurídico</option>
+        <option value="RH">RH</option>
+        <option value="Outros">Outros</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label>Arquivo</label>
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <i class="ti ti-cloud-upload"></i>
+        Clique ou arraste o arquivo aqui
+        <div class="hint">Formatos aceitos: DOCX, XLS, XLSX, PDF, JPG</div>
+        <div class="chosen" id="fileChosen"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".docx,.xls,.xlsx,.pdf,.jpg,.jpeg" style="display:none">
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveFile()">Salvar arquivo</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <i class="ti ti-check"></i>
+  <span id="toastMsg"></span>
+</div>
+
+<script>
+const CAT_COLORS = {
+  'SST':      { bg: '#E1F5EE', text: '#0F6E56' },
+  'Fiscal':   { bg: '#E6F1FB', text: '#185FA5' },
+  'Jurídico': { bg: '#EEEDFE', text: '#534AB7' },
+  'RH':       { bg: '#FAEEDA', text: '#854F0B' },
+  'Outros':   { bg: '#F1EFE8', text: '#5F5E5A' }
+};
+const EXT_META = {
+  pdf:  { icon: 'ti-file-type-pdf',  bg: '#FCEBEB', color: '#A32D2D' },
+  docx: { icon: 'ti-file-type-docx', bg: '#E6F1FB', color: '#185FA5' },
+  doc:  { icon: 'ti-file-type-doc',  bg: '#E6F1FB', color: '#185FA5' },
+  xls:  { icon: 'ti-file-spreadsheet', bg: '#EAF3DE', color: '#3B6D11' },
+  xlsx: { icon: 'ti-file-spreadsheet', bg: '#EAF3DE', color: '#3B6D11' },
+  jpg:  { icon: 'ti-file-type-jpg',  bg: '#FAEEDA', color: '#854F0B' },
+  jpeg: { icon: 'ti-file-type-jpg',  bg: '#FAEEDA', color: '#854F0B' }
+};
+
+let files = [
+  { id:1, nome:'PGR Modelo Base',              cat:'SST',      ext:'pdf',  size:'1.2 MB', by:'Rodrigo', date:'10/06/2025' },
+  { id:2, nome:'PCMSO Template',               cat:'SST',      ext:'docx', size:'245 KB', by:'Rodrigo', date:'08/06/2025' },
+  { id:3, nome:'Planilha de Vencimentos',       cat:'Fiscal',   ext:'xlsx', size:'88 KB',  by:'Marcio',  date:'05/06/2025' },
+  { id:4, nome:'Contrato de Prestação',         cat:'Jurídico', ext:'docx', size:'190 KB', by:'Rodrigo', date:'01/06/2025' },
+  { id:5, nome:'Ficha de Integração',           cat:'RH',       ext:'pdf',  size:'320 KB', by:'Camila',  date:'28/05/2025' },
+  { id:6, nome:'Checklist NR-01',               cat:'SST',      ext:'xlsx', size:'64 KB',  by:'Rodrigo', date:'20/05/2025' },
+  { id:7, nome:'Declaração de Optante Simples', cat:'Fiscal',   ext:'docx', size:'55 KB',  by:'Marina',  date:'15/05/2025' },
+];
+let nextId = 8;
+let activeCat = 'Todos';
+let editingId = null;
+let chosenFile = null;
+
+function allCats() {
+  return ['Todos', ...new Set(files.map(f => f.cat))];
+}
+
+function extOf(fname) {
+  return (fname || '').split('.').pop().toLowerCase();
+}
+
+function formatSize(b) {
+  if (b > 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  return Math.round(b / 1024) + ' KB';
+}
+
+function today() {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+function renderStats() {
+  const total = files.length;
+  const cats = new Set(files.map(f => f.cat)).size;
+  const thisMonth = files.filter(f => {
+    const parts = f.date.split('/');
+    const d = new Date(parts[2], parts[1]-1, parts[0]);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total de arquivos</div>
+      <div class="stat-value">${total}</div>
+      <div class="stat-sub">modelos disponíveis</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Categorias</div>
+      <div class="stat-value">${cats}</div>
+      <div class="stat-sub">áreas cobertas</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Adicionados</div>
+      <div class="stat-value">${thisMonth}</div>
+      <div class="stat-sub">este mês</div>
+    </div>
+  `;
+}
+
+function renderCats() {
+  document.getElementById('catPills').innerHTML = allCats().map(c =>
+    `<div class="cat-pill${activeCat===c?' active':''}" onclick="setCat('${c}')">${c}</div>`
+  ).join('');
+}
+
+function setCat(c) { activeCat = c; renderCats(); renderFiles(); }
+
+function filtered() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  return files.filter(f => {
+    const catOk = activeCat === 'Todos' || f.cat === activeCat;
+    const qOk = !q || f.nome.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q) || f.ext.includes(q);
+    return catOk && qOk;
+  });
+}
+
+function renderFiles() {
+  const list = filtered();
+  const grid = document.getElementById('filesGrid');
+  if (!list.length) {
+    grid.innerHTML = `<div class="empty-state"><i class="ti ti-file-off"></i><p>Nenhum arquivo encontrado.</p></div>`;
+    return;
+  }
+  grid.innerHTML = list.map(f => {
+    const em = EXT_META[f.ext] || { icon: 'ti-file', bg: '#F1EFE8', color: '#5F5E5A' };
+    const cc = CAT_COLORS[f.cat] || { bg: '#F1EFE8', text: '#5F5E5A' };
+    return `<div class="file-card">
+      <div class="file-header">
+        <div class="file-icon" style="background:${em.bg}">
+          <i class="ti ${em.icon}" style="color:${em.color}"></i>
+        </div>
+        <div class="file-info">
+          <div class="file-name">${f.nome}</div>
+          <div class="file-ext">${f.ext} · ${f.size}</div>
+        </div>
+      </div>
+      <div>
+        <span class="badge-cat" style="background:${cc.bg};color:${cc.text}">${f.cat}</span>
+      </div>
+      <div class="file-footer">Enviado por <strong>${f.by}</strong> · ${f.date}</div>
+      <div class="file-actions">
+        <button onclick="downloadFile(${f.id})" title="Baixar"><i class="ti ti-download" style="font-size:14px"></i> Baixar</button>
+        <button onclick="editFile(${f.id})" title="Editar"><i class="ti ti-edit" style="font-size:14px"></i></button>
+        <button class="btn-del" onclick="deleteFile(${f.id})" title="Excluir"><i class="ti ti-trash" style="font-size:14px"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openModal(id) {
+  editingId = id || null;
+  chosenFile = null;
+  document.getElementById('fileChosen').textContent = '';
+  if (id) {
+    const f = files.find(x => x.id === id);
+    document.getElementById('modalTitle').textContent = 'Editar arquivo';
+    document.getElementById('inputNome').value = f.nome;
+    document.getElementById('inputCat').value = f.cat;
+  } else {
+    document.getElementById('modalTitle').textContent = 'Adicionar arquivo';
+    document.getElementById('inputNome').value = '';
+    document.getElementById('inputCat').value = 'SST';
+  }
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function editFile(id) { openModal(id); }
+
+function saveFile() {
+  const nome = document.getElementById('inputNome').value.trim();
+  const cat  = document.getElementById('inputCat').value;
+  if (!nome) { document.getElementById('inputNome').focus(); return; }
+  if (editingId) {
+    const f = files.find(x => x.id === editingId);
+    f.nome = nome; f.cat = cat;
+    if (chosenFile) { f.ext = extOf(chosenFile.name); f.size = formatSize(chosenFile.size); }
+    showToast('Arquivo atualizado com sucesso');
+  } else {
+    const ext  = chosenFile ? extOf(chosenFile.name) : 'docx';
+    const size = chosenFile ? formatSize(chosenFile.size) : '—';
+    files.push({ id: nextId++, nome, cat, ext, size, by: 'Você', date: today() });
+    showToast('Arquivo adicionado com sucesso');
+  }
+  closeModal();
+  renderStats(); renderCats(); renderFiles();
+}
+
+function deleteFile(id) {
+  if (!confirm('Excluir este arquivo do repositório?')) return;
+  files = files.filter(f => f.id !== id);
+  renderStats(); renderCats(); renderFiles();
+  showToast('Arquivo removido');
+}
+
+function downloadFile(id) {
+  const f = files.find(x => x.id === id);
+  showToast(`Baixando "${f.nome}"…`);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+document.getElementById('fileInput').addEventListener('change', function () {
+  if (this.files[0]) {
+    chosenFile = this.files[0];
+    document.getElementById('fileChosen').textContent = '✓ ' + this.files[0].name;
+  }
+});
+
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) { chosenFile = f; document.getElementById('fileChosen').textContent = '✓ ' + f.name; }
+});
+
+document.getElementById('modalOverlay').addEventListener('click', function (e) {
+  if (e.target === this) closeModal();
+});
+
+document.getElementById('searchInput').addEventListener('input', renderFiles);
+
+renderStats(); renderCats(); renderFiles();
+</script>
+</body>
+</html>

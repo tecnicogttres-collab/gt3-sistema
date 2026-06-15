@@ -162,6 +162,15 @@ export const MODULES: Module[] = [
     allowedRoles: ['gestor', 'admin'],
     dashboardRoles: ['admin'],
   },
+  {
+    id: 'repositorio-modelos',
+    label: 'Repositório de Modelos',
+    color: '#4A90D9',
+    path: '/repositorio-modelos',
+    description: 'Armazenamento de arquivos modelo para as contratantes',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+    dashboardRoles: ['gestor', 'admin'],
+  },
   // ── Exclusivos do Admin (sidebar + Dashboard) ────────────────
   {
     id: 'notificacoes',

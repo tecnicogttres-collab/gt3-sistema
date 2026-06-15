@@ -36,7 +36,8 @@ function AtasWithSuspense() {
   return <Suspense fallback={null}><DynAtas /></Suspense>
 }
 
-const DynAtasContratantes = dynamic(() => import('../atas-contratantes/AtasContratantesClient'), { ssr: false })
+const DynAtasContratantes   = dynamic(() => import('../atas-contratantes/AtasContratantesClient'), { ssr: false })
+const DynRepositorioModelos = dynamic(() => import('../repositorio-modelos/RepositorioClient'),    { ssr: false })
 function AtasContratantesWithSuspense() {
   return <Suspense fallback={null}><DynAtasContratantes /></Suspense>
 }
@@ -64,5 +65,6 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/frases-diarias':     DynFrases,
   '/notificacoes':       DynNotificacoes,
   '/perfil':             DynPerfil,
-  '/pgr-pcmso-ltcat':   DynPgrPcmso,
+  '/pgr-pcmso-ltcat':       DynPgrPcmso,
+  '/repositorio-modelos':   DynRepositorioModelos,
 }
