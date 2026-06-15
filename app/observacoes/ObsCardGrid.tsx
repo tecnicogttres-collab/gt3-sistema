@@ -423,7 +423,9 @@ export function ObsColumn({
     )}
     <div style={{
       background: BG_CARD,
-      border: isColumnCopied ? '2px solid #22C55E' : `2px solid ${effectiveBorderColor}`,
+      border: isColumnCopied
+        ? `2px solid ${columnColor ?? '#22C55E'}`
+        : `2px solid ${effectiveBorderColor}`,
       borderRadius: 10,
       display: 'flex',
       flexDirection: 'column',
@@ -441,7 +443,9 @@ export function ObsColumn({
     }}>
       <div style={{
         background: isColumnCopied
-          ? 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)'
+          ? (columnColor
+              ? `linear-gradient(135deg, ${columnColor} 0%, ${darkenHex(columnColor)} 100%)`
+              : 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)')
           : effectiveHeaderBg,
         padding: '10px 14px',
         borderRadius: '8px 8px 0 0',
