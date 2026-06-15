@@ -550,7 +550,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const fullName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
 
   if (introVisible && profile) {
-    return <IntroScreen name={displayName(profile)} onDone={() => setIntroVisible(false)} />
+    return <IntroScreen name={displayName(profile).split(' ')[0]} onDone={() => setIntroVisible(false)} />
   }
 
   function dismissTopPrio() {
