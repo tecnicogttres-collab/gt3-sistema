@@ -412,11 +412,12 @@ export function ObsColumn({
     {isColumnCopied && (
       <style>{`
         @keyframes obs-col-blink {
-          0%   { box-shadow: 0 0 0 3px rgba(34,197,94,0.25), 0 4px 20px rgba(34,197,94,0.20); }
-          25%  { box-shadow: 0 0 0 10px rgba(34,197,94,0.70), 0 4px 24px rgba(34,197,94,0.55); }
-          50%  { box-shadow: 0 0 0 3px rgba(34,197,94,0.25), 0 4px 20px rgba(34,197,94,0.20); }
-          75%  { box-shadow: 0 0 0 10px rgba(34,197,94,0.70), 0 4px 24px rgba(34,197,94,0.55); }
-          100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.25), 0 4px 20px rgba(34,197,94,0.20); }
+          0%   { opacity: 1; }
+          20%  { opacity: 0.15; }
+          40%  { opacity: 1; }
+          65%  { opacity: 0.15; }
+          85%  { opacity: 1; }
+          100% { opacity: 1; }
         }
       `}</style>
     )}
