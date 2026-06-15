@@ -8,7 +8,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('profiles')
-    .select('id, nome, usuario')
+    .select('id, nome, usuario, papel')
     .order('nome', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

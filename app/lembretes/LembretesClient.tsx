@@ -32,7 +32,7 @@ type Lembrete = {
   destinatarios: string[] | null
 }
 
-type UserOption = { id: string; nome: string | null; usuario: string | null }
+type UserOption = { id: string; nome: string | null; usuario: string | null; papel: string | null }
 
 type HistoricoRow = {
   id: string
@@ -139,6 +139,16 @@ export default function LembretesClient() {
   const [calHistoricoLoading, setCalHistoricoLoading] = useState(false)
   const [users, setUsers] = useState<UserOption[]>([])
   const [userSearch, setUserSearch] = useState('')
+
+  // ── Lembretes de outros (gestor/admin) ─────────────────────────────────────
+  const papel = profile?.papel ?? ''
+  const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
+
+  const [outrosOpen, setOutrosOpen] = useState(false)
+  const [outrosUserId, setOutrosUserId] = useState<string | null>(null)
+  const [outrosData, setOutrosData] = useState<{ lembretes: (Lembrete & { confirmado: boolean })[]; historico: { lembrete_id: string; created_at: string }[] } | null>(null)
+  const [outrosLoading, setOutrosLoading] = useState(false)
+  const [outrosUserSearch, setOutrosUserSearch] = useState('')
 
   // ── Confirmados neste mês (por qualquer usuário) ───────────────────────────
 
@@ -352,6 +362,33 @@ export default function LembretesClient() {
     void loadUsers()
   }
 
+  // ── Outros: carregar ao selecionar usuário ─────────────────────────────────
+
+  async function loadOutros(userId: string) {
+    setOutrosUserId(userId)
+    setOutrosData(null)
+    setOutrosLoading(true)
+    try {
+      const res = await fetch(`/api/lembretes/outros?userId=${userId}`)
+      if (res.ok) setOutrosData(await res.json())
+    } finally {
+      setOutrosLoading(false)
+    }
+  }
+
+  async function openOutros() {
+    setOutrosOpen(true)
+    setOutrosUserId(null)
+    setOutrosData(null)
+    setOutrosUserSearch('')
+    if (users.length === 0) {
+      try {
+        const res = await fetch('/api/lembretes/usuarios')
+        if (res.ok) setUsers(await res.json())
+      } catch { /* noop */ }
+    }
+  }
+
   // ── Calendar ───────────────────────────────────────────────────────────────
 
   const calDayMap = useMemo(() => {
@@ -424,21 +461,41 @@ export default function LembretesClient() {
             {MONTHS[now.getMonth()]} {now.getFullYear()}
           </div>
         </div>
-        <button
-          onClick={openNew}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: INK, color: '#fff', border: 'none', borderRadius: 6,
-            padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#4A6DB5' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = INK }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          Novo lembrete
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {isGestorOrAdmin && (
+            <button
+              onClick={openOutros}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: '#fff', color: INK, border: `1.5px solid ${INK}`, borderRadius: 6,
+                padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#EBF0FA' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#fff' }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
+                <path d="M16 3.13a4 4 0 010 7.75"/><path d="M21 21v-2a4 4 0 00-3-3.87"/>
+              </svg>
+              Lembretes demais colaboradores
+            </button>
+          )}
+          <button
+            onClick={openNew}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: INK, color: '#fff', border: 'none', borderRadius: 6,
+              padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#4A6DB5' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = INK }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Novo lembrete
+          </button>
+        </div>
       </div>
 
       {/* ── Stats ── */}
@@ -780,6 +837,173 @@ export default function LembretesClient() {
           })}
         </div>
       </div>
+
+      {/* ── Modal lembretes de outros ── */}
+      {outrosOpen && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setOutrosOpen(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,24,0.55)', zIndex: 300, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '2rem 1rem' }}
+        >
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 860, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 16px 60px rgba(0,0,0,0.18)' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: TEXT }}>Lembretes demais colaboradores</div>
+                <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 2 }}>
+                  {papel === 'gestor' ? 'Você pode ver lembretes de colaboradores e trainees.' : 'Você pode ver lembretes de todos os usuários.'}
+                </div>
+              </div>
+              <button onClick={() => setOutrosOpen(false)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+            </div>
+
+            {/* Body — dois painéis */}
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+              {/* Lista de usuários */}
+              <div style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ padding: '10px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+                  <input
+                    type="text"
+                    placeholder="Buscar colaborador..."
+                    value={outrosUserSearch}
+                    onChange={e => setOutrosUserSearch(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13, color: TEXT, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', background: '#FAFAF8' }}
+                    onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK }}
+                    onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER }}
+                  />
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  {users
+                    .filter(u => u.id !== profile?.id)
+                    .filter(u => papel === 'gestor' ? ['colaborador', 'trainee'].includes(u.papel ?? '') : true)
+                    .filter(u => {
+                      if (!outrosUserSearch) return true
+                      const q = outrosUserSearch.toLowerCase()
+                      return (u.nome ?? '').toLowerCase().includes(q) || (u.usuario ?? '').toLowerCase().includes(q)
+                    })
+                    .map(u => {
+                      const active = outrosUserId === u.id
+                      const displayN = u.nome?.trim() || u.usuario?.trim() || 'Usuário'
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => void loadOutros(u.id)}
+                          style={{
+                            width: '100%', textAlign: 'left', padding: '10px 14px',
+                            border: 'none', borderBottom: `1px solid ${BORDER}`,
+                            background: active ? '#EBF0FA' : '#fff', cursor: 'pointer',
+                            borderLeft: `3px solid ${active ? INK : 'transparent'}`,
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 600, color: active ? INK : TEXT }}>{displayN}</div>
+                          {u.usuario && u.nome?.trim() && (
+                            <div style={{ fontSize: 11, color: TEXT_FAINT }}>{u.usuario}</div>
+                          )}
+                          <div style={{ fontSize: 10, color: TEXT_FAINT, marginTop: 2, textTransform: 'capitalize' }}>{u.papel ?? ''}</div>
+                        </button>
+                      )
+                    })}
+                </div>
+              </div>
+
+              {/* Lembretes do usuário selecionado */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+                {!outrosUserId && (
+                  <div style={{ textAlign: 'center', paddingTop: 60, color: TEXT_FAINT, fontSize: 14 }}>
+                    Selecione um colaborador para ver seus lembretes deste mês.
+                  </div>
+                )}
+                {outrosUserId && outrosLoading && (
+                  <div style={{ textAlign: 'center', paddingTop: 60, color: TEXT_FAINT, fontSize: 14 }}>Carregando…</div>
+                )}
+                {outrosUserId && !outrosLoading && outrosData && (() => {
+                  const selectedUser = users.find(u => u.id === outrosUserId)
+                  const userName = selectedUser?.nome?.trim() || selectedUser?.usuario?.trim() || 'Usuário'
+                  const nowD = new Date()
+                  const thisMonthLembretes = outrosData.lembretes.filter(r => findMonthOccurrence(r, nowD.getFullYear(), nowD.getMonth()) !== null)
+                  const confirmedSet = new Set(outrosData.historico.map(h => h.lembrete_id))
+
+                  return (
+                    <>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 14 }}>
+                        {userName} — {MONTHS[nowD.getMonth()]} {nowD.getFullYear()}
+                        <span style={{ fontWeight: 400, color: TEXT_FAINT, marginLeft: 8 }}>
+                          {thisMonthLembretes.length} lembrete{thisMonthLembretes.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      {thisMonthLembretes.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: TEXT_FAINT, fontSize: 13 }}>
+                          Nenhum lembrete programado para este mês.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {thisMonthLembretes
+                            .sort((a, b) => {
+                              const ad = confirmedSet.has(a.id), bd = confirmedSet.has(b.id)
+                              if (!ad && bd) return -1; if (ad && !bd) return 1
+                              const ao = currentMonthOccurrence(a), bo = currentMonthOccurrence(b)
+                              return (ao?.getTime() ?? 0) - (bo?.getTime() ?? 0)
+                            })
+                            .map(r => {
+                              const done = confirmedSet.has(r.id)
+                              const occ = currentMonthOccurrence(r)
+                              const occStr = occ ? fmtDateStr(occ) : r.data_inicio
+                              const overdue = !done && occ ? occ < todayLocal() : false
+                              const todayFlag = !done && occ ? fmtDateStr(occ) === fmtDateStr(todayLocal()) : false
+                              return (
+                                <div key={r.id} style={{
+                                  background: done ? '#F0FDF4' : '#fff',
+                                  border: `1px solid ${done ? '#86EFAC' : BORDER}`,
+                                  borderLeft: `3px solid ${done ? OK_GREEN : overdue ? WARN : todayFlag ? GOLD : INK}`,
+                                  borderRadius: 8, padding: '12px 14px',
+                                  display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+                                }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 14, fontWeight: 600, color: TEXT, marginBottom: 4 }}>
+                                      {done && <span style={{ marginRight: 6 }}>✅</span>}{r.titulo}
+                                    </div>
+                                    {r.descricao && (
+                                      <div style={{ fontSize: 12, color: TEXT_MID, marginBottom: 6 }}>{r.descricao}</div>
+                                    )}
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                      <span style={{ padding: '2px 8px', borderRadius: 100, background: '#EBF0FA', color: '#1A3266', fontSize: 11 }}>
+                                        {PERIOD_LABEL[r.periodo]}
+                                      </span>
+                                      {done ? (
+                                        <span style={{ padding: '2px 8px', borderRadius: 100, background: '#DCFCE7', color: '#166534', fontSize: 11, fontWeight: 600 }}>
+                                          Confirmado
+                                        </span>
+                                      ) : overdue ? (
+                                        <span style={{ padding: '2px 8px', borderRadius: 100, background: '#FBF0E8', color: '#7A3A0E', fontSize: 11, fontWeight: 600 }}>
+                                          Atrasado · {fmtBR(occStr)}
+                                        </span>
+                                      ) : todayFlag ? (
+                                        <span style={{ padding: '2px 8px', borderRadius: 100, background: '#FAF4E8', color: '#7A5A1E', fontSize: 11, fontWeight: 600 }}>
+                                          Hoje
+                                        </span>
+                                      ) : (
+                                        <span style={{ padding: '2px 8px', borderRadius: 100, background: SURFACE2, color: TEXT_MID, fontSize: 11 }}>
+                                          {fmtBR(occStr)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal edição ── */}
       {modalOpen && (
