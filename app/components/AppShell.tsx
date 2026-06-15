@@ -17,6 +17,8 @@ import EnqueteNotificacao from './EnqueteNotificacao'
 import LembreteNotificacao from './LembreteNotificacao'
 import PdiCriadoNotificacao from './PdiCriadoNotificacao'
 import QuoteBanner from './QuoteBanner'
+import IntroScreen, { shouldShowIntro } from './IntroScreen'
+import { displayName } from './UserContext'
 
 function useBreadcrumb(pathname: string): string {
   if (pathname === '/') return ''
@@ -313,6 +315,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, loading, signOut } = useUser()
   const router = useRouter()
 
+  const [introVisible, setIntroVisible] = useState(false)
+  const [introChecked, setIntroChecked] = useState(false)
+
+  useEffect(() => {
+    if (!profile || introChecked) return
+    setIntroChecked(true)
+    if (shouldShowIntro()) setIntroVisible(true)
+  }, [profile, introChecked])
+
   const isColabOrTrainee = profile?.papel === 'colaborador' || profile?.papel === 'trainee'
 
   const loadUnreadAtas = useCallback(async (userId: string) => {
@@ -537,6 +548,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === '/login') return <>{children}</>
 
   const fullName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
+
+  if (introVisible && profile) {
+    return <IntroScreen name={displayName(profile)} onDone={() => setIntroVisible(false)} />
+  }
 
   function dismissTopPrio() {
     const top = prioQueue[0]
