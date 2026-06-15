@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUser } from '../components/UserContext'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ type ContratanteConfig = {
   name: string
   has60Dias: boolean
   portal: string
+  texts?: Partial<Texts>
 }
 
 type Texts = {
@@ -25,6 +26,8 @@ type Texts = {
   frente_inventario: string
   fechamento_aprovado: string
   fechamento_restricao: string
+  texto_60dias_intro: string
+  aviso_gt0100: string
 }
 
 type SituationKey = 'aprovado' | '60dias' | 'all'
@@ -36,7 +39,8 @@ type FileEntry = {
   mimeType: string
   sizeBytes: number
   notes: string
-  situations: SituationKey[]  // quais tipos de e-mail incluem este arquivo
+  situations: SituationKey[]
+  contratantes: string[]  // 'all' ou lista de IDs de contratante
 }
 
 // ─── Defaults ──────────────────────────────────────────────────────────────────
@@ -58,9 +62,13 @@ const DEFAULT_TEXTS: Texts = {
   frente_inventario: `Para facilitar a verificação dos riscos, o Grupo Marcopolo disponibilizou o Inventário de Riscos para os terceiros (em anexo), que você encontra dentro do Portal no caminho: Pasta Contratantes > Download Documentos > {portal} > Inventário de Riscos-PGR.\n\nAlém do inventário, também em anexo, você encontrará uma sugestão de modelo, onde pode preencher as informações e anexar junto ao seu PGR, bem como o(s) CNPJ de sua(s) contratante(s), para facilitar o preenchimento dos dados no campo "Dados da contratante".`,
   fechamento_aprovado: `Se necessário atualizá-los antes do prazo do portal, por favor nos contate.`,
   fechamento_restricao: `Dúvidas, estamos à disposição.`,
+  texto_60dias_intro: `Finalizamos a verificação {plural} de SSO enviados ao portal de terceiros, {ambos} com restrição por 60 dias para que sejam atualizados com a indicação da frente de trabalho {contratante}{sufixo}:`,
+  aviso_gt0100: `Antes de enviar, verifique se a empresa em questão possui alguma particularidade no campo de observações do GT0100.`,
 }
 
 const TEXT_LABELS: Record<keyof Texts, string> = {
+  aviso_gt0100:         'Aviso interno — Verificar GT0100',
+  texto_60dias_intro:   'Introdução — Restrição 60 dias (tokens: {plural}, {ambos}, {contratante}, {sufixo})',
   trein_aprovado:       'Bloco de treinamentos NR — Aprovação',
   trein_restricao:      'Bloco de treinamentos NR — Restrição 60 dias',
   consideracoes:        'Considerações — Restrição 60 dias',
@@ -128,7 +136,7 @@ const STORAGE_KEY_TX = 'pgr-pcmso-texts'
 
 type DbFileRow = {
   id: string; name: string; filename: string
-  mime_type: string; size_bytes: number; notes: string; situations: string[]
+  mime_type: string; size_bytes: number; notes: string; situations: string[]; contratantes: string[]
 }
 
 function mapDbFile(row: DbFileRow): FileEntry {
@@ -140,6 +148,7 @@ function mapDbFile(row: DbFileRow): FileEntry {
     sizeBytes: row.size_bytes,
     notes: row.notes,
     situations: (row.situations ?? ['all']) as SituationKey[],
+    contratantes: (row.contratantes ?? ['all']) as string[],
   }
 }
 
@@ -317,6 +326,9 @@ export default function PgrPcmsoClient() {
   const [newCtName, setNewCtName] = useState('')
   const [newCtPortal, setNewCtPortal] = useState('Marcopolo')
   const [newCt60, setNewCt60] = useState(true)
+  const [newCtTexts, setNewCtTexts] = useState<Partial<Texts>>({})
+  const [newCtTextsOpen, setNewCtTextsOpen] = useState(false)
+  const [expandedCtId, setExpandedCtId] = useState<string | null>(null)
 
   // copy text
   const [copied, setCopied] = useState<'assunto' | 'corpo' | null>(null)
@@ -355,9 +367,10 @@ export default function PgrPcmsoClient() {
   async function updateFileEntry(id: string, patch: Partial<FileEntry>) {
     setFileEntries(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
     const apiPatch: Record<string, unknown> = {}
-    if ('name'       in patch) apiPatch.name       = patch.name
-    if ('notes'      in patch) apiPatch.notes      = patch.notes
-    if ('situations' in patch) apiPatch.situations = patch.situations
+    if ('name'         in patch) apiPatch.name         = patch.name
+    if ('notes'        in patch) apiPatch.notes        = patch.notes
+    if ('situations'   in patch) apiPatch.situations   = patch.situations
+    if ('contratantes' in patch) apiPatch.contratantes = patch.contratantes
     await fetch(`/api/pgr-arquivos/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -423,13 +436,16 @@ export default function PgrPcmsoClient() {
   const [copyAllStatus, setCopyAllStatus] = useState<'idle' | 'ok' | 'dl'>('idle')
   const copyAllTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function fileMatchesSituation(fe: FileEntry): boolean {
+  function fileMatchesContext(fe: FileEntry): boolean {
     const sits = fe.situations ?? ['all']
-    return sits.includes('all') || sits.includes(resultado as SituationKey)
+    const matchSit = sits.includes('all') || sits.includes(resultado as SituationKey)
+    const cts = fe.contratantes ?? ['all']
+    const matchCt = cts.includes('all') || cts.includes(contratanteId)
+    return matchSit && matchCt
   }
 
   async function copyAllMatching() {
-    const matching = fileEntries.filter(fe => fileMatchesSituation(fe) && fileEnabled[fe.id])
+    const matching = fileEntries.filter(fe => fileMatchesContext(fe) && fileEnabled[fe.id])
     if (matching.length === 0) return
 
     let downloaded = 0
@@ -452,6 +468,11 @@ export default function PgrPcmsoClient() {
   }
 
   const selectedCt = contratantes.find(c => c.id === contratanteId) ?? contratantes[0]
+  const effectiveTexts: Texts = useMemo(
+    () => ({ ...texts, ...(selectedCt?.texts ?? {}) }),
+    [texts, selectedCt]
+  )
+  const isBSA = selectedCt?.name?.toUpperCase().includes('BSA') ?? false
 
   const resultadoOptions = [
     { val: 'aprovado', label: '✅ Aprovado' },
@@ -462,16 +483,19 @@ export default function PgrPcmsoClient() {
     if (resultado === '60dias' && !selectedCt?.has60Dias) setResultado('aprovado')
   }, [contratanteId, selectedCt?.has60Dias, resultado])
 
-  // auto-ativa arquivos da situação atual
+  // auto-ativa arquivos da situação e contratante atuais
   useEffect(() => {
     if (fileEntries.length === 0) return
     setFileEnabled(Object.fromEntries(
       fileEntries.map(fe => {
         const sits = fe.situations ?? ['all']
-        return [fe.id, sits.includes('all') || sits.includes(resultado as SituationKey)]
+        const matchSit = sits.includes('all') || sits.includes(resultado as SituationKey)
+        const cts = fe.contratantes ?? ['all']
+        const matchCt = cts.includes('all') || cts.includes(contratanteId)
+        return [fe.id, matchSit && matchCt]
       })
     ))
-  }, [resultado, fileEntries])
+  }, [resultado, contratanteId, fileEntries])
 
   // ── Email builder ────────────────────────────────────────────
 
@@ -485,6 +509,7 @@ export default function PgrPcmsoClient() {
     const plural = DOC_PLURAL[docs]
     const ambos  = DOC_AMBOS[docs]
     const cont   = selectedCt?.name ?? ''
+    const et = effectiveTexts
 
     if (resultado === 'aprovado') {
       let periLine = ''
@@ -493,28 +518,33 @@ export default function PgrPcmsoClient() {
           ? ` (PGR com periodicidade bienal e PCMSO com periodicidade ${periodicidade}, podendo ambos ser bienais conforme NR 1, a critério do elaborador)`
           : ` (PCMSO com periodicidade ${periodicidade})`
       }
-      let body = `${s}\n\nFinalizamos a verificação ${plural} de SSO, ${ambos}${periLine}. ${texts.fechamento_aprovado}`
-      if (treinamentos === 'sim') body += `\n\n${texts.trein_aprovado}`
+      let body = `${s}\n\nFinalizamos a verificação ${plural} de SSO, ${ambos}${periLine}. ${et.fechamento_aprovado}`
+      if (treinamentos === 'sim') body += `\n\n${et.trein_aprovado}`
       return body + `\n\nAtenciosamente,`
     }
 
     if (resultado === '60dias') {
       const r = restricoes
       const sufixo = r.has('portal') ? ', bem como demais itens informados no portal' : ''
-      let body = `${s}\n\nFinalizamos a verificação ${plural} de SSO enviados ao portal de terceiros, ${ambos} com restrição por 60 dias para que sejam atualizados com a indicação da frente de trabalho ${cont}${sufixo}:\n`
+      const intro = et.texto_60dias_intro
+        .replace('{plural}', plural)
+        .replace('{ambos}', ambos)
+        .replace('{contratante}', cont)
+        .replace('{sufixo}', sufixo)
+      let body = `${s}\n\n${intro}\n`
       if (hasPgr(docs))   body += `\nPGR:\n`
       if (hasPcmso(docs)) body += `\nPCMSO:\n`
       if (hasLtcat(docs)) body += `\nLTCAT:\n`
-      body += `\n${texts.frente_intro}\n\n`
-      body += texts.frente_inventario.replace('{portal}', selectedCt?.portal ?? 'Marcopolo')
-      if (r.has('assinatura')) body += `\n\n${texts.assinatura}`
-      body += `\n\n${texts.consideracoes}`
-      if (r.has('treinamentos')) body += `\n\n${texts.trein_restricao}`
-      return body + `\n\n${texts.fechamento_restricao}\n\nAtenciosamente,`
+      body += `\n${et.frente_intro}\n\n`
+      body += et.frente_inventario.replace('{portal}', selectedCt?.portal ?? 'Marcopolo')
+      if (r.has('assinatura')) body += `\n\n${et.assinatura}`
+      body += `\n\n${et.consideracoes}`
+      if (r.has('treinamentos')) body += `\n\n${et.trein_restricao}`
+      return body + `\n\n${et.fechamento_restricao}\n\nAtenciosamente,`
     }
 
     return ''
-  }, [resultado, docs, saudacao, selectedCt, periodicidade, treinamentos, restricoes, texts])
+  }, [resultado, docs, saudacao, selectedCt, periodicidade, treinamentos, restricoes, effectiveTexts])
 
   function copiar(tipo: 'assunto' | 'corpo') {
     const txt = tipo === 'assunto' ? buildAssunto() : buildCorpo()
@@ -540,8 +570,12 @@ export default function PgrPcmsoClient() {
     const name = newCtName.trim()
     if (!name) return
     const id = `custom-${Date.now()}`
-    saveCt([...contratantes, { id, name, has60Dias: newCt60, portal: newCtPortal }])
+    const newCt: ContratanteConfig = { id, name, has60Dias: newCt60, portal: newCtPortal }
+    if (Object.keys(newCtTexts).length > 0) newCt.texts = newCtTexts
+    saveCt([...contratantes, newCt])
     setNewCtName('')
+    setNewCtTexts({})
+    setNewCtTextsOpen(false)
   }
 
   function removeContratante(id: string) {
@@ -669,22 +703,77 @@ export default function PgrPcmsoClient() {
             {/* Contratantes */}
             {editSection === 'contratantes' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {contratantes.map(ct => (
-                  <div key={ct.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: '1px solid #e8d49a', borderRadius: C.radiusSm, background: 'rgba(255,255,255,.7)' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{ct.name}</div>
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>Portal: {ct.portal}</div>
+                {contratantes.map(ct => {
+                  const ctExpanded = expandedCtId === ct.id
+                  const hasOverrides = ct.texts && Object.keys(ct.texts).length > 0
+                  return (
+                    <div key={ct.id} style={{ border: '1px solid #e8d49a', borderRadius: C.radiusSm, background: 'rgba(255,255,255,.7)', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{ct.name}</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>
+                            Portal: {ct.portal}{hasOverrides ? ' · Textos personalizados' : ''}
+                          </div>
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', color: ct.has60Dias ? C.warn : C.muted }}>
+                          <input type="checkbox" checked={ct.has60Dias} onChange={() => saveCt(contratantes.map(c => c.id === ct.id ? { ...c, has60Dias: !c.has60Dias } : c))} style={{ cursor: 'pointer' }} />
+                          60 dias
+                        </label>
+                        <button
+                          onClick={() => setExpandedCtId(ctExpanded ? null : ct.id)}
+                          style={{ background: ctExpanded ? C.warn : 'rgba(255,255,255,.5)', border: `1px solid ${ctExpanded ? C.warn : '#e8d49a'}`, borderRadius: C.radiusSm, color: ctExpanded ? '#fff' : C.warn, cursor: 'pointer', padding: '3px 9px', fontSize: 11.5, fontFamily: 'inherit', fontWeight: 600, whiteSpace: 'nowrap' }}
+                        >
+                          Textos{hasOverrides ? ' ●' : ''}
+                        </button>
+                        <button
+                          onClick={() => removeContratante(ct.id)}
+                          style={{ background: 'none', border: '1px solid #e8d49a', borderRadius: C.radiusSm, color: '#c0392b', cursor: 'pointer', padding: '3px 8px', fontSize: 13, flexShrink: 0 }}
+                        >✕</button>
+                      </div>
+                      {ctExpanded && (
+                        <div style={{ borderTop: '1px solid #f5e4a0', padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#c0922b', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
+                            Textos personalizados — sobrescrevem o padrão global
+                          </div>
+                          {(Object.keys(TEXT_LABELS) as (keyof Texts)[]).map(key => {
+                            const override = ct.texts?.[key]
+                            const hasOverride = override !== undefined
+                            return (
+                              <div key={key} style={{ marginBottom: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: hasOverride ? 5 : 0 }}>
+                                  <span style={{ flex: 1, fontSize: 12, color: hasOverride ? C.warn : C.muted }}>{TEXT_LABELS[key]}</span>
+                                  {hasOverride ? (
+                                    <button
+                                      onClick={() => {
+                                        const newT = { ...ct.texts }
+                                        delete newT[key]
+                                        saveCt(contratantes.map(c => c.id === ct.id ? { ...c, texts: Object.keys(newT).length ? newT : undefined } : c))
+                                      }}
+                                      style={{ fontSize: 11, color: '#c0392b', background: 'none', border: '1px solid #e8d49a', borderRadius: 4, cursor: 'pointer', padding: '2px 7px', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                    >Remover</button>
+                                  ) : (
+                                    <button
+                                      onClick={() => saveCt(contratantes.map(c => c.id === ct.id ? { ...c, texts: { ...c.texts, [key]: texts[key] } } : c))}
+                                      style={{ fontSize: 11, color: C.primary, background: 'none', border: '1px solid #c4d0ee', borderRadius: 4, cursor: 'pointer', padding: '2px 7px', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                    >Personalizar</button>
+                                  )}
+                                </div>
+                                {hasOverride && (
+                                  <textarea
+                                    value={override}
+                                    onChange={e => saveCt(contratantes.map(c => c.id === ct.id ? { ...c, texts: { ...c.texts, [key]: e.target.value } } : c))}
+                                    rows={3}
+                                    style={{ width: '100%', padding: '6px 8px', border: '1px solid #e8d49a', borderRadius: 4, fontSize: 12, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+                                  />
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', color: ct.has60Dias ? C.warn : C.muted }}>
-                      <input type="checkbox" checked={ct.has60Dias} onChange={() => saveCt(contratantes.map(c => c.id === ct.id ? { ...c, has60Dias: !c.has60Dias } : c))} style={{ cursor: 'pointer' }} />
-                      60 dias
-                    </label>
-                    <button
-                      onClick={() => removeContratante(ct.id)}
-                      style={{ background: 'none', border: '1px solid #e8d49a', borderRadius: C.radiusSm, color: '#c0392b', cursor: 'pointer', padding: '3px 8px', fontSize: 13 }}
-                    >✕</button>
-                  </div>
-                ))}
+                  )
+                })}
 
                 <div style={{ marginTop: 4, padding: '12px 14px', border: '1px dashed #e8d49a', borderRadius: C.radiusSm, background: 'rgba(255,255,255,.5)' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.warn, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Novo contratante</div>
@@ -694,7 +783,7 @@ export default function PgrPcmsoClient() {
                     onKeyDown={e => e.key === 'Enter' && addContratante()}
                     style={{ width: '100%', padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: C.radiusSm, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 8, boxSizing: 'border-box' }}
                   />
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                     <select
                       value={newCtPortal} onChange={e => setNewCtPortal(e.target.value)}
                       style={{ flex: 1, padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: C.radiusSm, fontSize: 12, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
@@ -712,6 +801,52 @@ export default function PgrPcmsoClient() {
                     >
                       + Adicionar
                     </button>
+                  </div>
+                  {/* Personalizar textos do novo contratante */}
+                  <div style={{ borderTop: '1px solid #f0e0a0', paddingTop: 8 }}>
+                    <button
+                      onClick={() => setNewCtTextsOpen(p => !p)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.warn, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 500 }}
+                    >
+                      <svg style={{ width: 12, height: 12, transition: 'transform .2s', transform: newCtTextsOpen ? 'rotate(180deg)' : 'none' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="6 9 12 15 18 9"/></svg>
+                      Personalizar textos
+                      {Object.keys(newCtTexts).length > 0 && (
+                        <span style={{ marginLeft: 4, fontSize: 11, background: C.warn, color: '#fff', borderRadius: 10, padding: '1px 7px' }}>{Object.keys(newCtTexts).length}</span>
+                      )}
+                    </button>
+                    {newCtTextsOpen && (
+                      <div style={{ marginTop: 8 }}>
+                        {(Object.keys(TEXT_LABELS) as (keyof Texts)[]).map(key => {
+                          const hasOverride = key in newCtTexts
+                          return (
+                            <div key={key} style={{ marginBottom: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: hasOverride ? 4 : 0 }}>
+                                <span style={{ flex: 1, fontSize: 12, color: hasOverride ? C.warn : C.muted }}>{TEXT_LABELS[key]}</span>
+                                {hasOverride ? (
+                                  <button
+                                    onClick={() => { const n = { ...newCtTexts }; delete n[key]; setNewCtTexts(n) }}
+                                    style={{ fontSize: 11, color: '#c0392b', background: 'none', border: '1px solid #e8d49a', borderRadius: 4, cursor: 'pointer', padding: '2px 7px', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                  >Remover</button>
+                                ) : (
+                                  <button
+                                    onClick={() => setNewCtTexts(n => ({ ...n, [key]: DEFAULT_TEXTS[key] }))}
+                                    style={{ fontSize: 11, color: C.primary, background: 'none', border: '1px solid #c4d0ee', borderRadius: 4, cursor: 'pointer', padding: '2px 7px', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                  >Personalizar</button>
+                                )}
+                              </div>
+                              {hasOverride && (
+                                <textarea
+                                  value={newCtTexts[key] ?? ''}
+                                  onChange={e => setNewCtTexts(n => ({ ...n, [key]: e.target.value }))}
+                                  rows={3}
+                                  style={{ width: '100%', padding: '6px 8px', border: '1px solid #e8d49a', borderRadius: 4, fontSize: 12, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+                                />
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -853,6 +988,42 @@ export default function PgrPcmsoClient() {
                             )
                           })}
                         </div>
+                        {/* Contratantes */}
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: '#c0922b', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Mostrar para contratante</div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {([{ id: 'all', name: 'Todos' }, ...contratantes] as { id: string; name: string }[]).map(ct => {
+                              const feCts = fe.contratantes ?? ['all']
+                              const active = ct.id === 'all' ? feCts.includes('all') : feCts.includes(ct.id) && !feCts.includes('all')
+                              return (
+                                <button
+                                  key={ct.id}
+                                  onClick={() => {
+                                    if (ct.id === 'all') {
+                                      updateFileEntry(fe.id, { contratantes: ['all'] })
+                                      return
+                                    }
+                                    const current = feCts.filter(c => c !== 'all')
+                                    const next = current.includes(ct.id)
+                                      ? (current.filter(c => c !== ct.id).length ? current.filter(c => c !== ct.id) : ['all'])
+                                      : [...current, ct.id]
+                                    updateFileEntry(fe.id, { contratantes: next })
+                                  }}
+                                  style={{
+                                    padding: '4px 11px', borderRadius: 20, fontSize: 11.5, fontFamily: 'inherit',
+                                    cursor: 'pointer', transition: 'all .15s',
+                                    background: active ? C.primary : 'rgba(255,255,255,.7)',
+                                    color: active ? '#fff' : C.muted,
+                                    border: `1px solid ${active ? C.primary : '#d8dde8'}`,
+                                    fontWeight: active ? 600 : 400,
+                                  }}
+                                >
+                                  {ct.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
                         <input
                           type="text"
                           value={fe.notes}
@@ -969,7 +1140,7 @@ export default function PgrPcmsoClient() {
                 </div>
               </div>
               {/* Copiar todos */}
-              {fileEntries.some(fe => fileMatchesSituation(fe) && fileEnabled[fe.id]) && (
+              {fileEntries.some(fe => fileMatchesContext(fe) && fileEnabled[fe.id]) && (
                 <button
                   onClick={copyAllMatching}
                   style={{
@@ -994,7 +1165,7 @@ export default function PgrPcmsoClient() {
               {fileEntries.map(fe => {
                 const ti = fileTypeInfo(fe.mimeType)
                 const enabled = !!fileEnabled[fe.id]
-                const matches = fileMatchesSituation(fe)
+                const matches = fileMatchesContext(fe)
                 const st = fileCopyStatus[fe.id] ?? 'idle'
 
                 return (
@@ -1088,6 +1259,22 @@ export default function PgrPcmsoClient() {
             <div style={{ height: 1, background: C.borderLight, margin: '24px 0' }} />
           </>
         )}
+
+        {/* ── Aviso GT0100 ── */}
+        <div style={{ padding: '12px 16px', background: '#fffbe6', border: '2px solid #f0b429', borderRadius: C.radius, marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>⚠️</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#7d5a00', marginBottom: 3 }}>GT0100 — Observações da empresa</div>
+            <div style={{ fontSize: 12, color: '#9b7a1a', lineHeight: 1.5 }}>
+              {effectiveTexts.aviso_gt0100}
+            </div>
+            {isBSA && (
+              <div style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#c53030', background: '#fff5f5', border: '1px solid #feb2b2', borderRadius: 6, padding: '5px 10px' }}>
+                ⛔ Necessário copiar a contratante no parecer
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* ── Preview ── */}
 

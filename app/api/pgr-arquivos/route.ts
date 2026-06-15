@@ -11,7 +11,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('pgr_arquivos')
-    .select('id, name, filename, mime_type, size_bytes, notes, situations, created_at')
+    .select('id, name, filename, mime_type, size_bytes, notes, situations, contratantes, created_at')
     .order('created_at', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
@@ -55,10 +55,11 @@ export async function POST(req: NextRequest) {
       size_bytes: file.size,
       notes: '',
       situations: ['all'],
+      contratantes: ['all'],
       storage_path: storagePath,
       created_by: caller.user.id,
     })
-    .select('id, name, filename, mime_type, size_bytes, notes, situations, created_at')
+    .select('id, name, filename, mime_type, size_bytes, notes, situations, contratantes, created_at')
     .single()
 
   if (error) {

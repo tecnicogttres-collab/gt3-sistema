@@ -11,14 +11,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const caller = await getCaller()
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const body = await req.json() as Partial<{ name: string; notes: string; situations: string[] }>
+  const body = await req.json() as Partial<{ name: string; notes: string; situations: string[]; contratantes: string[] }>
   const admin = createAdminClient()
 
   const { data, error } = await admin
     .from('pgr_arquivos')
     .update(body)
     .eq('id', id)
-    .select('id, name, filename, mime_type, size_bytes, notes, situations, created_at')
+    .select('id, name, filename, mime_type, size_bytes, notes, situations, contratantes, created_at')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
