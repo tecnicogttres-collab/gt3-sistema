@@ -7,7 +7,7 @@ import { useState, useRef } from 'react'
 export type AtaEditorData = {
   titulo: string
   data: string
-  cliente: string
+  cliente?: string
   localReuniao: string
   numeroAta: string
   participantes: string
@@ -130,7 +130,6 @@ export default function AtasEditor({ initial, onSave, onClose }: {
   // Meta fields
   const [titulo, setTitulo]     = useState(initial?.titulo ?? '')
   const [data, setData]         = useState(initial?.data ?? new Date().toISOString().slice(0, 10))
-  const [cliente, setCliente]   = useState(initial?.cliente ?? '')
   const [local, setLocal]       = useState(initial?.localReuniao ?? '')
   const [numAta, setNumAta]     = useState(initial?.numeroAta ?? '')
   const [status, setStatus]     = useState(initial?.status ?? 'Rascunho')
@@ -179,7 +178,7 @@ export default function AtasEditor({ initial, onSave, onClose }: {
     setSaving(true); setErr('')
     try {
       await onSave({
-        titulo, data, cliente, localReuniao: local, numeroAta: numAta,
+        titulo, data, localReuniao: local, numeroAta: numAta,
         participantes: participants.filter(p => p.nome).map(p => `${p.nome} (${p.empresa})`).join(', '),
         status,
         conteudo: serializeConteudo(participants, assuntos, sections),
@@ -201,7 +200,7 @@ export default function AtasEditor({ initial, onSave, onClose }: {
       {/* Topbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 18px', background: '#fff', borderBottom: '1px solid rgba(42,79,150,0.1)', flexShrink: 0, boxShadow: '0 1px 4px rgba(42,79,150,0.07)' }}>
         <div style={{ width: 28, height: 28, borderRadius: 6, background: '#2A4F96', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>GT3</div>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#2A4F96', paddingRight: 12, borderRight: '1px solid rgba(42,79,150,0.12)', marginRight: 4 }}>Atas</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#2A4F96', paddingRight: 12, borderRight: '1px solid rgba(42,79,150,0.12)', marginRight: 4 }}>Atas GT3</span>
         <span style={{ fontSize: 13, color: '#5a6178', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {titulo || 'Nova ata…'}
         </span>
@@ -236,12 +235,11 @@ export default function AtasEditor({ initial, onSave, onClose }: {
                 </div>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px 16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px 16px' }}>
               {[
-                { label: 'Cliente / Empresa', val: cliente,  set: setCliente, type: 'text',  placeholder: 'Ex.: Marcopolo AR' },
-                { label: 'Data',              val: data,     set: setData,    type: 'date',  placeholder: '' },
-                { label: 'Local',             val: local,    set: setLocal,   type: 'text',  placeholder: 'Ex.: Online' },
-                { label: 'Número da ata',     val: numAta,   set: setNumAta,  type: 'text',  placeholder: 'Ex.: Nº 04/26' },
+                { label: 'Data',          val: data,   set: setData,    type: 'date', placeholder: '' },
+                { label: 'Local',         val: local,  set: setLocal,   type: 'text', placeholder: 'Ex.: Online' },
+                { label: 'Número da ata', val: numAta, set: setNumAta,  type: 'text', placeholder: 'Ex.: Nº 04/26' },
               ].map(f => (
                 <div key={f.label}>
                   <span style={lbl}>{f.label}</span>

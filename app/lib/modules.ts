@@ -146,10 +146,10 @@ export const MODULES: Module[] = [
   },
   {
     id: 'atas',
-    label: 'Atas',
+    label: 'Atas GT3',
     color: '#4A90D9',
     path: '/atas',
-    description: 'Atas por hierarquia Ano › Mês › Data',
+    description: 'Atas internas GT3 — Ano › Mês › Data',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
     dashboardRoles: ['admin'],
   },
