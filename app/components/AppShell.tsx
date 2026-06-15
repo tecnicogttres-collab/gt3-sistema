@@ -315,14 +315,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { profile, loading, signOut } = useUser()
   const router = useRouter()
 
-  const [introVisible, setIntroVisible] = useState(false)
-  const [introChecked, setIntroChecked] = useState(false)
-
-  useEffect(() => {
-    if (!profile || introChecked) return
-    setIntroChecked(true)
-    if (shouldShowIntro()) setIntroVisible(true)
-  }, [profile, introChecked])
+  const [introVisible, setIntroVisible] = useState(() => shouldShowIntro())
 
   const isColabOrTrainee = profile?.papel === 'colaborador' || profile?.papel === 'trainee'
 
@@ -549,8 +542,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const fullName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
 
-  if (introVisible && profile) {
-    return <IntroScreen name={displayName(profile).split(' ')[0]} onDone={() => setIntroVisible(false)} />
+  if (introVisible) {
+    return <IntroScreen name={profile ? displayName(profile).split(' ')[0] : ''} onDone={() => setIntroVisible(false)} />
   }
 
   function dismissTopPrio() {
