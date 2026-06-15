@@ -87,7 +87,7 @@ export default function EmailsClient() {
     supabase
       .from('email_templates')
       .select('id, title, client, category, subject, tags, notes, created_at, updated_at')
-      .order('created_at', { ascending: false })
+      .order('title', { ascending: true })
       .then(({ data, error }) => {
         if (cancelled) return
         if (error) console.error('Erro ao carregar templates:', error)

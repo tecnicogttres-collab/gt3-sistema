@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     .from('repositorio_modelos')
     .select(SELECT)
     .eq('tipo', tipo)
-    .order('created_at', { ascending: false })
+    .order('nome', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json(data ?? [])
