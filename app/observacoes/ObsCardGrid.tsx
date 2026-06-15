@@ -408,6 +408,18 @@ export function ObsColumn({
   const effectiveBorderColor = columnColor ?? (col.isFixed ? ACCENT : PRIMARY)
 
   return (
+    <>
+    {isColumnCopied && (
+      <style>{`
+        @keyframes obs-col-blink {
+          0%   { box-shadow: 0 0 0 3px rgba(34,197,94,0.25), 0 4px 20px rgba(34,197,94,0.20); }
+          25%  { box-shadow: 0 0 0 10px rgba(34,197,94,0.70), 0 4px 24px rgba(34,197,94,0.55); }
+          50%  { box-shadow: 0 0 0 3px rgba(34,197,94,0.25), 0 4px 20px rgba(34,197,94,0.20); }
+          75%  { box-shadow: 0 0 0 10px rgba(34,197,94,0.70), 0 4px 24px rgba(34,197,94,0.55); }
+          100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.25), 0 4px 20px rgba(34,197,94,0.20); }
+        }
+      `}</style>
+    )}
     <div style={{
       background: BG_CARD,
       border: isColumnCopied ? '2px solid #22C55E' : `2px solid ${effectiveBorderColor}`,
@@ -423,7 +435,8 @@ export function ObsColumn({
           : col.isFixed
             ? '0 2px 8px rgba(209,174,110,0.18)'
             : '0 2px 8px rgba(42,79,150,0.10)',
-      transition: 'box-shadow 0.4s ease, border-color 0.4s ease',
+      transition: isColumnCopied ? 'none' : 'box-shadow 0.4s ease, border-color 0.4s ease',
+      animation: isColumnCopied ? 'obs-col-blink 0.6s ease forwards' : 'none',
     }}>
       <div style={{
         background: isColumnCopied
@@ -557,5 +570,6 @@ export function ObsColumn({
         ))}
       </div>
     </div>
+    </>
   )
 }
