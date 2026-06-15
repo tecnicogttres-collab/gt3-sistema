@@ -17,12 +17,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }
 
-  const body = await req.json() as Partial<{ nome: string; categoria: string }>
+  const body = await req.json() as Partial<{ nome: string; categoria: string; tipo: string }>
   const { data, error } = await admin
     .from('repositorio_modelos')
     .update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select('id, nome, categoria, filename, mime_type, size_bytes, criado_por_nome, created_at, updated_at')
+    .select('id, nome, categoria, tipo, filename, mime_type, size_bytes, criado_por_nome, created_at, updated_at')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

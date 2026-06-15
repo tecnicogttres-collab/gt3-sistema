@@ -5,10 +5,13 @@ import { useUser } from '../components/UserContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type Tipo = 'empresas' | 'funcionarios'
+
 type Modelo = {
   id: string
   nome: string
   categoria: string
+  tipo: Tipo
   filename: string
   mime_type: string
   size_bytes: number
@@ -80,6 +83,7 @@ export default function RepositorioClient() {
   const papel = profile?.papel ?? ''
   const canManage = papel === 'gestor' || papel === 'admin'
 
+  const [tipo, setTipo]           = useState<Tipo>('empresas')
   const [modelos, setModelos]     = useState<Modelo[]>([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
@@ -98,16 +102,20 @@ export default function RepositorioClient() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (t: Tipo) => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/repositorio-modelos')
+      const res = await fetch(`/api/repositorio-modelos?tipo=${t}`)
       if (res.ok) setModelos(await res.json())
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    setActiveCat('Todos')
+    void load(tipo)
+  }, [tipo, load])
 
   useEffect(() => {
     if (!toast) return
@@ -175,6 +183,7 @@ export default function RepositorioClient() {
         fd.append('file', file!)
         fd.append('nome', form.nome.trim())
         fd.append('categoria', form.categoria)
+        fd.append('tipo', tipo)
         const res = await fetch('/api/repositorio-modelos', { method: 'POST', body: fd })
         if (!res.ok) throw new Error((await res.json()).error ?? 'Erro')
         const created: Modelo = await res.json()
@@ -220,14 +229,6 @@ export default function RepositorioClient() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div style={{ maxWidth: 1100, margin: '0 auto', paddingTop: 60, textAlign: 'center', color: TEXT_FAINT, fontSize: 14 }}>
-        Carregando repositório…
-      </div>
-    )
-  }
-
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
@@ -236,7 +237,7 @@ export default function RepositorioClient() {
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: PRIMARY }}>GT3 Consultoria</div>
           <div style={{ fontSize: 26, fontWeight: 700, color: TEXT, letterSpacing: -0.5, lineHeight: 1, marginTop: 4 }}>Repositório de Modelos</div>
-          <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 4 }}>Arquivos modelo para as empresas contratantes</div>
+          <div style={{ fontSize: 12, color: TEXT_FAINT, marginTop: 4 }}>Arquivos modelo para uso interno e contratantes</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
@@ -267,12 +268,32 @@ export default function RepositorioClient() {
         </div>
       </div>
 
+      {/* ── Switch Empresas / Funcionários ── */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 24, background: '#F1EFF8', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+        {(['empresas', 'funcionarios'] as Tipo[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setTipo(t)}
+            style={{
+              padding: '7px 22px', borderRadius: 8, border: 'none', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600,
+              background: tipo === t ? '#fff' : 'transparent',
+              color: tipo === t ? PRIMARY : TEXT_FAINT,
+              boxShadow: tipo === t ? '0 1px 4px rgba(42,79,150,0.10)' : 'none',
+              transition: 'all .15s',
+            }}
+          >
+            {t === 'empresas' ? 'Empresas' : 'Funcionários'}
+          </button>
+        ))}
+      </div>
+
       {/* ── Stats ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Total de arquivos', value: modelos.length,                                    sub: 'modelos disponíveis' },
-          { label: 'Categorias',        value: new Set(modelos.map(m => m.categoria)).size,        sub: 'áreas cobertas' },
-          { label: 'Adicionados',       value: thisMonth,                                          sub: 'este mês' },
+          { label: 'Total de arquivos', value: modelos.length,                                 sub: 'modelos disponíveis' },
+          { label: 'Categorias',        value: new Set(modelos.map(m => m.categoria)).size,     sub: 'áreas cobertas' },
+          { label: 'Adicionados',       value: thisMonth,                                       sub: 'este mês' },
         ].map(s => (
           <div key={s.label} style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 16px' }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: TEXT_FAINT }}>{s.label}</div>
@@ -303,11 +324,11 @@ export default function RepositorioClient() {
 
       {/* ── Count ── */}
       <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: TEXT_FAINT, marginBottom: 12 }}>
-        {filtered.length} arquivo{filtered.length !== 1 ? 's' : ''}
+        {loading ? 'Carregando…' : `${filtered.length} arquivo${filtered.length !== 1 ? 's' : ''}`}
       </div>
 
       {/* ── Grid ── */}
-      {filtered.length === 0 ? (
+      {loading ? null : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '4rem 1rem', color: TEXT_FAINT, fontSize: 14 }}>
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#CBD5E0" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 12px' }}>
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
@@ -318,9 +339,9 @@ export default function RepositorioClient() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12, marginBottom: 32 }}>
           {filtered.map(m => {
-            const ext = extOf(m.filename)
-            const em  = EXT_META[ext] ?? { bg: '#F1EFE8', color: '#5F5E5A' }
-            const cc  = CAT_COLORS[m.categoria] ?? { bg: '#F1EFE8', color: '#5F5E5A' }
+            const ext  = extOf(m.filename)
+            const em   = EXT_META[ext] ?? { bg: '#F1EFE8', color: '#5F5E5A' }
+            const cc   = CAT_COLORS[m.categoria] ?? { bg: '#F1EFE8', color: '#5F5E5A' }
             const isDl = downloading === m.id
             return (
               <div key={m.id} style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '14px 14px 10px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'box-shadow .15s', boxShadow: '0 1px 4px rgba(42,79,150,0.05)' }}
@@ -411,7 +432,7 @@ export default function RepositorioClient() {
           <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: `1px solid ${BORDER}` }}>
               <h2 style={{ fontWeight: 700, fontSize: 18, color: TEXT, margin: 0 }}>
-                {editingId ? 'Editar arquivo' : 'Adicionar arquivo'}
+                {editingId ? 'Editar arquivo' : `Adicionar em ${tipo === 'empresas' ? 'Empresas' : 'Funcionários'}`}
               </h2>
               <button onClick={() => setModalOpen(false)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
             </div>
