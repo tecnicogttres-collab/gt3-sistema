@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('observacoes')
-    .select('id, categoria, subtab, coluna, motivo, parecer, group_name, imagem_url, criado_por, editado_por, atualizado_por, atualizado_em, status_edicao, created_at, updated_at')
+    .select('id, categoria, subtab, coluna, motivo, parecer, parecer_anterior, group_name, imagem_url, criado_por, editado_por, atualizado_por, atualizado_em, status_edicao, created_at, updated_at')
     .eq('categoria', categoria)
     .order('created_at', { ascending: true })
 

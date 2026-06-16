@@ -31,6 +31,7 @@ export type CardUI = Card & {
   _atualizado_em?: string | null
   _status_edicao?: string | null
   _atualizado_por_nome?: string | null
+  _parecer_anterior?: string | null
 }
 
 export type ColumnUI = Omit<Column, 'cards'> & { cards: CardUI[] }
@@ -94,6 +95,7 @@ function ObsCard({
   const [inlineSaving, setInlineSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [lightbox, setLightbox] = useState(false)
+  const [diffOpen, setDiffOpen] = useState(false)
 
   // ── Modo repositório de imagem ──────────────────────────────────────────────
   if (imageOnly) {
@@ -266,17 +268,95 @@ function ObsCard({
             return `✏️ ${parts ? `Atualizado ${parts} — ` : ''}Aguardando validação`
           })()}
           {canValidate && (
-            <button
-              onClick={() => card._id && onValidate?.(card._id)}
-              style={{
-                display: 'block', marginTop: 5, fontSize: 11, padding: '3px 10px', borderRadius: 5,
-                border: '1px solid #2A4F96', background: '#fff', color: '#2A4F96',
-                cursor: 'pointer', fontWeight: 600,
-              }}
-            >
-              ✓ Validar atualização
-            </button>
+            <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center' }}>
+              <button
+                onClick={() => card._id && onValidate?.(card._id)}
+                style={{
+                  fontSize: 11, padding: '3px 10px', borderRadius: 5,
+                  border: '1px solid #2A4F96', background: '#fff', color: '#2A4F96',
+                  cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                ✓ Validar atualização
+              </button>
+              {card._parecer_anterior != null && (
+                <button
+                  onClick={() => setDiffOpen(true)}
+                  title="Comparar alteração"
+                  style={{
+                    width: 26, height: 26, borderRadius: 5, border: '1px solid #BFDBFE',
+                    background: '#EFF6FF', color: '#2A4F96', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, flexShrink: 0,
+                  }}
+                >
+                  ⇄
+                </button>
+              )}
+            </div>
           )}
+        </div>
+      )}
+
+      {diffOpen && card._parecer_anterior != null && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(30,37,61,0.55)',
+            zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onMouseDown={e => { if (e.target === e.currentTarget) setDiffOpen(false) }}
+        >
+          <div style={{
+            background: '#fff', borderRadius: 14, width: '100%', maxWidth: 760,
+            boxShadow: '0 8px 40px rgba(30,37,61,0.22)', overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: '14px 20px', background: PRIMARY, color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Comparar alteração — {card.motivo}</span>
+              <button
+                onClick={() => setDiffOpen(false)}
+                style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 16, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+              <div style={{ padding: '16px 18px', borderRight: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
+                  Texto anterior
+                </div>
+                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#FEF2F2', borderRadius: 8, padding: '10px 12px', border: '1px solid #FECACA' }}>
+                  {card._parecer_anterior}
+                </div>
+              </div>
+              <div style={{ padding: '16px 18px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
+                  Proposta de alteração
+                </div>
+                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#F0FDF4', borderRadius: 8, padding: '10px 12px', border: '1px solid #BBF7D0' }}>
+                  {card.parecer}
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setDiffOpen(false)}
+                style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: MUTED, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}
+              >
+                Fechar
+              </button>
+              {onValidate && card._id && (
+                <button
+                  onClick={() => { setDiffOpen(false); onValidate(card._id!) }}
+                  style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}
+                >
+                  ✓ Validar atualização
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

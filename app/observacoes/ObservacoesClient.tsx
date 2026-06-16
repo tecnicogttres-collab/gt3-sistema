@@ -107,6 +107,7 @@ type DbObservacao = {
   coluna: string
   motivo: string
   parecer: string
+  parecer_anterior: string | null
   group_name: string | null
   imagem_url: string | null
   criado_por: string | null
@@ -134,6 +135,7 @@ function buildColumnUI(col: { title: string; isFixed?: boolean; imageOnly?: bool
       _atualizado_em: o.atualizado_em,
       _status_edicao: o.status_edicao,
       _atualizado_por_nome: o.atualizado_por_profile?.nome ?? null,
+      _parecer_anterior: o.parecer_anterior ?? null,
     }
   }
 
@@ -1218,12 +1220,13 @@ export default function ObservacoesClient() {
 
       <div style={{
         display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0,
-        minHeight: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'clip',
+        height: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'clip',
         border: `1px solid ${BORDER}`, boxShadow: '0 1px 6px rgba(30,37,61,0.06)',
       }}>
         <nav style={{
           background: '#fff', borderRight: `1px solid ${BORDER}`,
           padding: '14px 8px', display: 'flex', flexDirection: 'column', gap: 2,
+          overflowY: 'auto',
         }}>
           <div style={{
             fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase',
@@ -1266,7 +1269,7 @@ export default function ObservacoesClient() {
           })}
         </nav>
 
-        <div style={{ display: 'flex', flexDirection: 'column', background: BG_PAGE, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', background: BG_PAGE, minWidth: 0, overflow: 'hidden' }}>
 
           {layoutMode && (
             <div style={{

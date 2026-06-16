@@ -80,10 +80,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { parecer } = body
   if (!parecer?.trim()) return Response.json({ error: 'parecer obrigatório' }, { status: 400 })
 
+  const { data: current } = await admin
+    .from('observacoes')
+    .select('parecer')
+    .eq('id', id)
+    .single()
+
   const { data, error } = await admin
     .from('observacoes')
     .update({
       parecer: parecer.trim(),
+      parecer_anterior: current?.parecer ?? null,
       atualizado_por: user.id,
       atualizado_em: new Date().toISOString(),
       status_edicao: 'pendente_validacao',
