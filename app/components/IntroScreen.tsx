@@ -48,9 +48,9 @@ export default function IntroScreen({ name, onDone }: { name: string; onDone?: (
   const [cols] = useState<Col[]>(buildColumns)
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('text'), 800)
-    const t2 = setTimeout(() => setPhase('exit'), 2500)
-    const t3 = setTimeout(() => { setPhase('done'); markIntroShown(); onDone?.() }, 3200)
+    const t1 = setTimeout(() => setPhase('text'), 400)
+    const t2 = setTimeout(() => setPhase('exit'), 1250)
+    const t3 = setTimeout(() => { setPhase('done'); markIntroShown(); onDone?.() }, 1600)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [onDone])
 
@@ -90,7 +90,7 @@ export default function IntroScreen({ name, onDone }: { name: string; onDone?: (
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden',
-          animation: isExit ? 'gt3-fade-out 0.7s ease forwards' : 'none',
+          animation: isExit ? 'gt3-fade-out 0.35s ease forwards' : 'none',
         }}
       >
         {/* Chuva Matrix — barrinhas azuis subindo e descendo */}

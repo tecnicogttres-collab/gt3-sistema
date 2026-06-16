@@ -104,6 +104,7 @@ export default function AtasClient() {
   const [searchLoading, setSearchLoading] = useState(false)
   const readingRegistered = useRef<Set<string>>(new Set())
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ataCache = useRef<Map<string, Ata>>(new Map())
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -165,15 +166,28 @@ export default function AtasClient() {
   async function selectAta(id: string) {
     if (selectedId === id) return
     setSelectedId(id)
-    setSelected(null)
     setLeituras(null)
     setLeiturasOpen(false)
-    setLoadingAta(true)
+
+    // serve from cache instantly
+    if (ataCache.current.has(id)) {
+      setSelected(ataCache.current.get(id)!)
+      setLoadingAta(false)
+      return
+    }
+
+    // show partial data from list while loading full conteudo
+    const partial = atas.find(a => a.id === id)
+    if (partial) { setSelected(partial); setLoadingAta(false) }
+    else { setSelected(null); setLoadingAta(true) }
+
     try {
       const res = await fetch(`/api/atas/${id}`)
       if (!res.ok) return
       const ata: Ata = await res.json()
+      ataCache.current.set(id, ata)
       setSelected(ata)
+      setLoadingAta(false)
       const [y, m] = ata.data.split('-').map(Number)
       setOpenYears(prev => new Set([...prev, `${y}`]))
       setOpenMonths(prev => new Set([...prev, `${y}-${m}`]))
@@ -254,6 +268,7 @@ export default function AtasClient() {
     })
     if (!res.ok) throw new Error((await res.json()).error ?? 'Erro')
     const updated: Ata = await res.json()
+    ataCache.current.set(updated.id, updated)
     setAtas(prev => prev.map(a => a.id === updated.id ? updated : a))
     setSelected(updated)
     setEditingAta(null)
@@ -263,6 +278,7 @@ export default function AtasClient() {
     if (!confirm('Excluir esta ata?')) return
     const res = await fetch(`/api/atas/${id}`, { method: 'DELETE' })
     if (!res.ok) return
+    ataCache.current.delete(id)
     setAtas(prev => prev.filter(a => a.id !== id))
     if (selectedId === id) { setSelectedId(null); setSelected(null) }
     router.replace('/atas')
@@ -281,6 +297,7 @@ export default function AtasClient() {
     })
     if (!res.ok) return
     const updated: Ata = await res.json()
+    ataCache.current.set(updated.id, updated)
     setAtas(prev => prev.map(a => a.id === updated.id ? updated : a))
     setSelected(updated)
   }
