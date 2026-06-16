@@ -25,6 +25,7 @@ type Lembrete = {
   descricao: string | null
   periodo: Period
   data_inicio: string
+  hora_inicio: string | null
   concluido: boolean
   criado_por: string | null
   created_at: string
@@ -117,7 +118,7 @@ function currentMonthOccurrence(r: Lembrete): Date | null {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()), visibilidade: 'todos' as Visibilidade, destinatarios: [] as string[] }
+const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()), hora_inicio: '', visibilidade: 'todos' as Visibilidade, destinatarios: [] as string[] }
 
 export default function LembretesClient() {
   const { profile } = useUser()
@@ -162,6 +163,12 @@ export default function LembretesClient() {
     if (isDone(r)) return false
     const occ = currentMonthOccurrence(r)
     if (!occ) return false
+    if (r.hora_inicio) {
+      const [h, m] = r.hora_inicio.split(':').map(Number)
+      const deadline = new Date(occ)
+      deadline.setHours(h, m, 0, 0)
+      return deadline < new Date()
+    }
     return occ < todayLocal()
   }
 
@@ -269,7 +276,7 @@ export default function LembretesClient() {
         const res = await fetch(`/api/lembretes/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
+          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, hora_inicio: form.hora_inicio || null, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
         })
         if (res.ok) {
           const updated: Lembrete = await res.json()
@@ -279,7 +286,7 @@ export default function LembretesClient() {
         const res = await fetch('/api/lembretes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
+          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, hora_inicio: form.hora_inicio || null, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
         })
         if (res.ok) {
           const created: Lembrete = await res.json()
@@ -356,7 +363,7 @@ export default function LembretesClient() {
 
   function openEdit(r: Lembrete) {
     setEditingId(r.id)
-    setForm({ titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio, visibilidade: r.visibilidade ?? 'todos', destinatarios: r.destinatarios ?? [] })
+    setForm({ titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio, hora_inicio: r.hora_inicio ?? '', visibilidade: r.visibilidade ?? 'todos', destinatarios: r.destinatarios ?? [] })
     setUserSearch('')
     setModalOpen(true)
     void loadUsers()
@@ -639,15 +646,15 @@ export default function LembretesClient() {
                   ) : overdue ? (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FBF0E8', color: '#7A3A0E', fontSize: 11, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                      Atrasado · {fmtBR(occStr)}
+                      Atrasado · {fmtBR(occStr)}{r.hora_inicio ? ` às ${r.hora_inicio}` : ''}
                     </span>
                   ) : todayFlag ? (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FAF4E8', color: '#7A5A1E', fontSize: 11, fontWeight: 500 }}>
-                      Hoje
+                      {r.hora_inicio ? `Hoje às ${r.hora_inicio}` : 'Hoje'}
                     </span>
                   ) : (
                     <span style={{ padding: '2px 9px', borderRadius: 100, background: SURFACE2, color: TEXT_MID, fontSize: 11, fontWeight: 500 }}>
-                      {fmtBR(occStr)}
+                      {fmtBR(occStr)}{r.hora_inicio ? ` às ${r.hora_inicio}` : ''}
                     </span>
                   )}
                 </div>
@@ -1046,7 +1053,7 @@ export default function LembretesClient() {
                 />
               </Field>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                 <Field label="Periodicidade">
                   <select
                     value={form.periodo}
@@ -1063,6 +1070,16 @@ export default function LembretesClient() {
                     type="date"
                     value={form.data_inicio}
                     onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))}
+                    style={inputStyle}
+                    onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK }}
+                    onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER }}
+                  />
+                </Field>
+                <Field label="Hora (opcional)">
+                  <input
+                    type="time"
+                    value={form.hora_inicio}
+                    onChange={e => setForm(f => ({ ...f, hora_inicio: e.target.value }))}
                     style={inputStyle}
                     onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK }}
                     onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER }}

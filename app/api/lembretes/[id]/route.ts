@@ -24,6 +24,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (body.descricao !== undefined) update.descricao = body.descricao?.trim() || null
   if (body.periodo !== undefined) update.periodo = body.periodo
   if (body.data_inicio !== undefined) update.data_inicio = body.data_inicio
+  if (body.hora_inicio !== undefined) update.hora_inicio = body.hora_inicio ?? null
   if (body.concluido !== undefined) update.concluido = body.concluido
   if (body.visibilidade !== undefined) {
     const vis = ['todos', 'proprio', 'selecionados'].includes(body.visibilidade) ? body.visibilidade : 'todos'
@@ -36,7 +37,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     .from('lembretes')
     .update(update)
     .eq('id', id)
-    .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
+    .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
