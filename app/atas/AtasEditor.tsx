@@ -15,7 +15,7 @@ export type AtaEditorData = {
   conteudo: string
 }
 
-type Participant = { id: string; nome: string; empresa: string }
+type Participant = { id: string; nome: string; cargo: string }
 type Assunto     = { id: string; descricao: string; responsavel: string; prazo: string; status: string }
 type Section     = { id: string; titulo: string; conteudo: string }
 
@@ -34,13 +34,13 @@ function serializeConteudo(participants: Participant[], assuntos: Assunto[], sec
   let html = ''
 
   // Participants table
-  const pts = participants.filter(p => p.nome || p.empresa)
+  const pts = participants.filter(p => p.nome || p.cargo)
   if (pts.length) {
     html += '<div class="ata-section ata-participants-section">'
     html += '<div class="ata-bh2">Participantes</div>'
     html += '<div class="ata-btable-wrap"><table class="ata-btable ata-btable-part">'
-    html += '<tr><th>Participante</th><th>Empresa</th></tr>'
-    pts.forEach(p => { html += `<tr><td>${esc(p.nome)}</td><td>${esc(p.empresa)}</td></tr>` })
+    html += '<tr><th>Participante</th><th>Cargo / Função</th></tr>'
+    pts.forEach(p => { html += `<tr><td>${esc(p.nome)}</td><td>${esc(p.cargo)}</td></tr>` })
     html += '</table></div></div>'
   }
 
@@ -72,7 +72,7 @@ function serializeConteudo(participants: Participant[], assuntos: Assunto[], sec
 
 function parseConteudo(html: string): { participants: Participant[]; assuntos: Assunto[]; sections: Section[] } {
   const dflt = {
-    participants: [{ id: uid(), nome: '', empresa: '' }, { id: uid(), nome: '', empresa: '' }],
+    participants: [{ id: uid(), nome: '', cargo: '' }, { id: uid(), nome: '', cargo: '' }],
     assuntos: [{ id: uid(), descricao: '', responsavel: '', prazo: '', status: '' }, { id: uid(), descricao: '', responsavel: '', prazo: '', status: '' }],
     sections: [],
   }
@@ -86,7 +86,7 @@ function parseConteudo(html: string): { participants: Participant[]; assuntos: A
     doc.querySelectorAll('.ata-btable-part tr').forEach((tr, i) => {
       if (i === 0) return
       const cells = tr.querySelectorAll('td')
-      participants.push({ id: uid(), nome: cells[0]?.textContent ?? '', empresa: cells[1]?.textContent ?? '' })
+      participants.push({ id: uid(), nome: cells[0]?.textContent ?? '', cargo: cells[1]?.textContent ?? '' })
     })
     if (!participants.length) participants.push(...dflt.participants)
 
@@ -144,10 +144,10 @@ export default function AtasEditor({ initial, onSave, onClose }: {
   const [err, setErr]       = useState('')
 
   // ── Participants ────────────────────────────────────────────────────────────
-  function setPart(id: string, field: 'nome' | 'empresa', val: string) {
+  function setPart(id: string, field: 'nome' | 'cargo', val: string) {
     setParticipants(prev => prev.map(p => p.id === id ? { ...p, [field]: val } : p))
   }
-  function addParticipant() { setParticipants(prev => [...prev, { id: uid(), nome: '', empresa: '' }]) }
+  function addParticipant() { setParticipants(prev => [...prev, { id: uid(), nome: '', cargo: '' }]) }
   function removePart(id: string) { setParticipants(prev => prev.filter(p => p.id !== id)) }
 
   // ── Assuntos ────────────────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ export default function AtasEditor({ initial, onSave, onClose }: {
     try {
       await onSave({
         titulo, data, localReuniao: local, numeroAta: numAta,
-        participantes: participants.filter(p => p.nome).map(p => `${p.nome} (${p.empresa})`).join(', '),
+        participantes: participants.filter(p => p.nome).map(p => p.cargo ? `${p.nome} (${p.cargo})` : p.nome).join(', '),
         status,
         conteudo: serializeConteudo(participants, assuntos, sections),
       })
@@ -261,7 +261,7 @@ export default function AtasEditor({ initial, onSave, onClose }: {
               <thead>
                 <tr>
                   <th style={{ ...lbl, textAlign: 'left', paddingBottom: 6 }}>Participante</th>
-                  <th style={{ ...lbl, textAlign: 'left', paddingBottom: 6, paddingLeft: 8 }}>Empresa</th>
+                  <th style={{ ...lbl, textAlign: 'left', paddingBottom: 6, paddingLeft: 8 }}>Cargo / Função</th>
                   <th style={{ width: 30 }} />
                 </tr>
               </thead>
@@ -272,7 +272,7 @@ export default function AtasEditor({ initial, onSave, onClose }: {
                       <input value={p.nome} onChange={e => setPart(p.id, 'nome', e.target.value)} placeholder={`Participante ${i + 1}`} style={inp} />
                     </td>
                     <td style={{ paddingBottom: 6, paddingRight: 8 }}>
-                      <input value={p.empresa} onChange={e => setPart(p.id, 'empresa', e.target.value)} placeholder="Empresa" style={inp} />
+                      <input value={p.cargo} onChange={e => setPart(p.id, 'cargo', e.target.value)} placeholder="Ex.: Técnico SST" style={inp} />
                     </td>
                     <td style={{ paddingBottom: 6 }}>
                       <button onClick={() => removePart(p.id)} style={{ width: 26, height: 26, border: '1px solid rgba(239,68,68,0.3)', borderRadius: 5, background: 'transparent', color: '#EF4444', cursor: 'pointer', fontSize: 14, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
