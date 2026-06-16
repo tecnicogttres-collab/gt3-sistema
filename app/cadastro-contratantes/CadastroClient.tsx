@@ -12,13 +12,15 @@ function rowToCompany(row: {
   updated: string
   fields: unknown
 }): Company {
+  const fields = (row.fields as Field[]) ?? []
+  const hasIntegration = fields.some(f => /integra[çc][ãa]o/i.test(f.label))
   return {
     id: row.id,
     name: row.name,
     sheetName: row.sheet_name,
     segment: row.segment,
     updated: row.updated,
-    fields: (row.fields as Field[]) ?? [],
+    fields: hasIntegration ? fields : [...fields, { type: 'text' as const, label: 'INTEGRAÇÃO', value: '' }],
   }
 }
 
@@ -89,6 +91,18 @@ export default function CadastroClient() {
         if (favsRes.error) console.error('Erro ao carregar favoritos:', favsRes.error)
         setCompanies((compRes.data ?? []).map(rowToCompany))
         setFavorites((favsRes.data ?? []).map(r => r.company_id))
+
+        // Migração: persiste INTEGRAÇÃO no banco para quem ainda não tem
+        const semIntegracao = (compRes.data ?? []).filter(row => {
+          const fs = (row.fields as Field[]) ?? []
+          return !fs.some(f => /integra[çc][ãa]o/i.test(f.label))
+        })
+        if (semIntegracao.length > 0) {
+          void Promise.all(semIntegracao.map(row => {
+            const fs = [...((row.fields as Field[]) ?? []), { type: 'text' as const, label: 'INTEGRAÇÃO', value: '' }]
+            return supabase.from('contratantes').update({ fields: fs }).eq('id', row.id)
+          }))
+        }
       } catch (err) {
         console.error('Erro ao inicializar cadastro:', err)
       } finally {
