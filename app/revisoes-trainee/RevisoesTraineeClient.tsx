@@ -92,6 +92,18 @@ function rowBorderLeft(status: Status) {
   return '3px solid transparent'
 }
 
+// Quando colaborador é um número puro (ex: "15"), representa N documentos de uma vez
+function docWeight(rec: Registro): number {
+  const col = rec.colaborador?.trim()
+  if (!col) return 1
+  const n = parseInt(col, 10)
+  return !isNaN(n) && String(n) === col && n > 0 ? n : 1
+}
+
+function sumWeight(recs: Registro[]): number {
+  return recs.reduce((s, r) => s + docWeight(r), 0)
+}
+
 export default function RevisoesTraineeClient() {
   const { profile, loading: profileLoading } = useUser()
 
@@ -306,12 +318,12 @@ export default function RevisoesTraineeClient() {
       : []
 
   const activeRecords = visibleRecords.filter(r => r.status !== 'green' && r.status !== 'erro_corrigido')
-  const pendingCount = visibleRecords.filter(r => r.status === 'pending').length
-  const redCount = visibleRecords.filter(r => r.status === 'red').length
-  const yellowCount = visibleRecords.filter(r => r.status === 'yellow').length
-  const greenCount = visibleRecords.filter(r => r.status === 'green').length
-  const erroCorrigidoCount = visibleRecords.filter(r => r.status === 'erro_corrigido').length
-  const totalCount = visibleRecords.length
+  const pendingCount = sumWeight(visibleRecords.filter(r => r.status === 'pending'))
+  const redCount = sumWeight(visibleRecords.filter(r => r.status === 'red'))
+  const yellowCount = sumWeight(visibleRecords.filter(r => r.status === 'yellow'))
+  const greenCount = sumWeight(visibleRecords.filter(r => r.status === 'green'))
+  const erroCorrigidoCount = sumWeight(visibleRecords.filter(r => r.status === 'erro_corrigido'))
+  const totalCount = sumWeight(visibleRecords)
 
   const sortedRecords = useMemo(() => {
     const arr = [...activeRecords]
@@ -341,8 +353,8 @@ export default function RevisoesTraineeClient() {
     const allRecs = Object.values(historyRecords).flat()
     if (allRecs.length === 0) return []
     const countMap: Record<string, number> = {}
-    allRecs.forEach(r => { const k = r.documento?.trim(); if (k) countMap[k] = (countMap[k] ?? 0) + 1 })
-    const total = allRecs.length
+    allRecs.forEach(r => { const k = r.documento?.trim(); if (k) countMap[k] = (countMap[k] ?? 0) + docWeight(r) })
+    const total = sumWeight(allRecs)
     return Object.entries(countMap)
       .map(([nome, count]) => ({ nome, count, pct: Math.round((count / total) * 100) }))
       .sort((a, b) => b.count - a.count)
@@ -353,7 +365,7 @@ export default function RevisoesTraineeClient() {
     records.filter(r => r.status === 'pending').forEach(r => {
       const key = r.criado_por
       if (!map[key]) map[key] = { nome: r.criado_por_profile?.nome ?? key.slice(0, 8), count: 0 }
-      map[key].count++
+      map[key].count += docWeight(r)
     })
     return map
   }, [records])
@@ -755,6 +767,9 @@ export default function RevisoesTraineeClient() {
       }
     }
 
+    const rawVal = rec[field]
+    const isMultiplier = field === 'colaborador' && !!rawVal && /^\d+$/.test(rawVal.trim()) && parseInt(rawVal) > 1
+
     return (
       <span
         onClick={handleClick}
@@ -767,7 +782,12 @@ export default function RevisoesTraineeClient() {
           transition: 'color 0.15s', userSelect: isCopyable ? 'none' : 'auto',
         }}
       >
-        {isCopied ? '✓ Copiado!' : (rec[field] || <span style={{ color: '#CBD5E1' }}>—</span>)}
+        {isCopied ? '✓ Copiado!' : isMultiplier ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontWeight: 700, color: '#D97706' }}>×{rawVal}</span>
+            <span style={{ fontSize: 10, color: '#94A3B8', background: '#FEF3C7', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>docs</span>
+          </span>
+        ) : (rawVal || <span style={{ color: '#CBD5E1' }}>—</span>)}
       </span>
     )
   }
@@ -867,7 +887,7 @@ export default function RevisoesTraineeClient() {
                 {t.nome.split(' ')[0]}
                 {tFlagged > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#DC2626', display: 'inline-block' }} />}
                 <span style={{ backgroundColor: isActive ? '#1E3A6E' : '#E2E8F0', color: isActive ? '#D1AE6E' : '#6B7A99', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10 }}>
-                  {tRecs.filter(r => r.status !== 'green').length}
+                  {sumWeight(tRecs.filter(r => r.status !== 'green'))}
                 </span>
               </button>
             )
@@ -1197,10 +1217,10 @@ export default function RevisoesTraineeClient() {
             : data.historyDates.map(hd => {
               const isOpen = expandedDays.has(hd.data)
               const hRecs = historyRecords[hd.data] ?? []
-              const hGreen = hRecs.filter(r => r.status === 'green').length
-              const hRed = hRecs.filter(r => r.status === 'red').length
-              const hYellow = hRecs.filter(r => r.status === 'yellow').length
-              const hPending = hRecs.filter(r => r.status === 'pending').length
+              const hGreen = sumWeight(hRecs.filter(r => r.status === 'green'))
+              const hRed = sumWeight(hRecs.filter(r => r.status === 'red'))
+              const hYellow = sumWeight(hRecs.filter(r => r.status === 'yellow'))
+              const hPending = sumWeight(hRecs.filter(r => r.status === 'pending'))
 
               const traineeMap: Record<string, { nome: string; recs: Registro[] }> = {}
               hRecs.forEach(r => {
@@ -1252,7 +1272,14 @@ export default function RevisoesTraineeClient() {
                                   <tr key={r.id} style={{ borderBottom: '1px solid #F8FAFC', backgroundColor: rowBg(r.status) }}>
                                     <td style={{ padding: '8px 14px', color: '#6B7A99', fontSize: 11, whiteSpace: 'nowrap' }}>{formatTime(r.created_at)}</td>
                                     <td style={{ padding: '8px 14px' }}>{r.empresa}</td>
-                                    <td style={{ padding: '8px 14px' }}>{r.colaborador}</td>
+                                    <td style={{ padding: '8px 14px' }}>
+                                      {r.colaborador && /^\d+$/.test(r.colaborador.trim()) && parseInt(r.colaborador) > 1 ? (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                          <span style={{ fontWeight: 700, color: '#D97706' }}>×{r.colaborador}</span>
+                                          <span style={{ fontSize: 10, color: '#94A3B8', background: '#FEF3C7', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>docs</span>
+                                        </span>
+                                      ) : (r.colaborador ?? '—')}
+                                    </td>
                                     <td style={{ padding: '8px 14px' }}>
                                       {r.documento}
                                       {r.nota_revisor && <div style={{ fontSize: 10, color: '#6B7A99', fontStyle: 'italic', marginTop: 2 }}>"{r.nota_revisor}"</div>}
@@ -1418,11 +1445,11 @@ export default function RevisoesTraineeClient() {
                   {/* Totais */}
                   <div style={{ display: 'flex', gap: 10, padding: '14px 0 12px', flexWrap: 'wrap' }}>
                     {[
-                      { label: 'Total', value: reportResult.length, color: '#1E293B' },
-                      { label: 'Aprovados', value: reportResult.filter(r => r.status === 'green').length, color: '#16A34A' },
-                      { label: 'Erros', value: reportResult.filter(r => r.status === 'red').length, color: '#DC2626' },
-                      { label: 'A discutir', value: reportResult.filter(r => r.status === 'yellow').length, color: '#D97706' },
-                      { label: 'Pendentes', value: reportResult.filter(r => r.status === 'pending').length, color: '#6B7A99' },
+                      { label: 'Total', value: sumWeight(reportResult), color: '#1E293B' },
+                      { label: 'Aprovados', value: sumWeight(reportResult.filter(r => r.status === 'green')), color: '#16A34A' },
+                      { label: 'Erros', value: sumWeight(reportResult.filter(r => r.status === 'red')), color: '#DC2626' },
+                      { label: 'A discutir', value: sumWeight(reportResult.filter(r => r.status === 'yellow')), color: '#D97706' },
+                      { label: 'Pendentes', value: sumWeight(reportResult.filter(r => r.status === 'pending')), color: '#6B7A99' },
                     ].map(s => (
                       <div key={s.label} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 14px', minWidth: 80 }}>
                         <div style={{ fontSize: 10, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{s.label}</div>
@@ -1460,7 +1487,14 @@ export default function RevisoesTraineeClient() {
                               <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: '#6B7A99' }}>{formatDate(r.data_dia)}</td>
                               <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>{r.criado_por_profile?.nome ?? '—'}</td>
                               <td style={{ padding: '7px 12px' }}>{r.empresa}</td>
-                              <td style={{ padding: '7px 12px' }}>{r.colaborador ?? '—'}</td>
+                              <td style={{ padding: '7px 12px' }}>
+                                {r.colaborador && /^\d+$/.test(r.colaborador.trim()) && parseInt(r.colaborador) > 1 ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ fontWeight: 700, color: '#D97706' }}>×{r.colaborador}</span>
+                                    <span style={{ fontSize: 10, color: '#94A3B8', background: '#FEF3C7', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>docs</span>
+                                  </span>
+                                ) : (r.colaborador ?? '—')}
+                              </td>
                               <td style={{ padding: '7px 12px' }}>
                                 {r.documento}
                                 {r.nota_revisor && <div style={{ fontSize: 10, color: '#6B7A99', fontStyle: 'italic', marginTop: 1 }}>"{r.nota_revisor}"</div>}
