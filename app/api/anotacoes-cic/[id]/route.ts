@@ -24,6 +24,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  // Auto-populate banco_empresas_cic with any new company names
+  if (body.dados && Array.isArray(body.dados)) {
+    const nomes = (body.dados as { nome?: string }[])
+      .map(e => (e.nome ?? '').trim())
+      .filter(Boolean)
+      .map(nome => ({ nome }))
+    if (nomes.length) {
+      await admin.from('banco_empresas_cic').upsert(nomes, { onConflict: 'nome', ignoreDuplicates: true })
+    }
+  }
+
   return Response.json(data)
 }
 

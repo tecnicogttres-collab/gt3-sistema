@@ -65,19 +65,11 @@ function migrateEmpresa(raw: Record<string, unknown>): Empresa {
       status: STATUS_ORDER.includes(raw.status as Empresa['status']) ? raw.status as Empresa['status'] : 'sem',
       obs: String(raw.obs ?? ''),
       expanded: false,
-      concessoes: anots.map(a => ({
-        id: a.id ?? uid(), tipo: 'empresa' as const,
-        documento: a.doc ?? '', pessoa: a.pessoa ?? '',
-        concedido_por: a.responsavel ?? '', obs: a.obs ?? '',
-      })),
+      concessoes: anots.map(a => ({ id: a.id ?? uid(), tipo: 'empresa' as const, documento: a.doc ?? '', pessoa: a.pessoa ?? '', concedido_por: a.responsavel ?? '', obs: a.obs ?? '' })),
     }
   }
   const emp = raw as Empresa
-  return {
-    ...emp,
-    status: STATUS_ORDER.includes(emp.status) ? emp.status : 'sem',
-    concessoes: Array.isArray(emp.concessoes) ? emp.concessoes : [],
-  }
+  return { ...emp, status: STATUS_ORDER.includes(emp.status) ? emp.status : 'sem', concessoes: Array.isArray(emp.concessoes) ? emp.concessoes : [] }
 }
 
 function rowFromApi(row: { id: string; nome: string; periodo: string; dados: unknown; created_at: string }): PastaFull {
@@ -86,13 +78,16 @@ function rowFromApi(row: { id: string; nome: string; periodo: string; dados: unk
   if (Array.isArray(raw) && raw.length > 0) {
     const first = raw[0] as Record<string, unknown>
     if ('empresas' in first) {
-      empresas = (raw as { empresas?: Record<string, unknown>[] }[])
-        .flatMap(c => (c.empresas ?? []).map(migrateEmpresa))
+      empresas = (raw as { empresas?: Record<string, unknown>[] }[]).flatMap(c => (c.empresas ?? []).map(migrateEmpresa))
     } else {
       empresas = (raw as Record<string, unknown>[]).map(migrateEmpresa)
     }
   }
   return { id: row.id, nome: row.nome, periodo: row.periodo, empresas, created_at: row.created_at }
+}
+
+function cloneEmpresa(emp: Empresa): Empresa {
+  return { ...emp, id: uid(), expanded: false, concessoes: emp.concessoes.map(c => ({ ...c, id: uid() })) }
 }
 
 // ─── Report / Export ─────────────────────────────────────────────────────────
@@ -112,23 +107,17 @@ function buildReportHtml(pasta: PastaFull, wordMode = false): string {
       <tr>
         <td style="text-align:center;color:#888;width:28px">${i + 1}</td>
         <td style="white-space:nowrap;font-weight:600;color:${c.tipo === 'empresa' ? '#1d3a74' : '#6b21a8'}">${c.tipo === 'empresa' ? 'Docs Empresa' : 'Docs Pessoa'}</td>
-        <td>${esc(c.documento)}</td>
-        <td>${esc(c.pessoa)}</td>
+        <td>${esc(c.documento)}</td><td>${esc(c.pessoa)}</td>
         <td style="font-weight:600">${esc(c.concedido_por)}</td>
         <td style="color:#555">${esc(c.obs)}</td>
       </tr>`).join('')
-    return `
-      <div class="emp-section">
-        <h3>${esc(emp.nome)}</h3>
-        <p class="emp-meta">Situação: <b>${sc.label}</b>${emp.obs ? ` &nbsp;·&nbsp; ${esc(emp.obs)}` : ''} &nbsp;·&nbsp; <b>${emp.concessoes.length}</b> concessão(ões)</p>
-        <table>
-          <thead><tr>
-            <th>Nº</th><th>Tipo</th><th>Documento / Concessão</th>
-            <th>Pessoa / Situação</th><th>Autorizado por</th><th>Observações</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`
+    return `<div class="emp-section">
+      <h3>${esc(emp.nome)}</h3>
+      <p class="emp-meta">Situação: <b>${sc.label}</b>${emp.obs ? ` &nbsp;·&nbsp; ${esc(emp.obs)}` : ''} &nbsp;·&nbsp; <b>${emp.concessoes.length}</b> concessão(ões)</p>
+      <table>
+        <thead><tr><th>Nº</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa / Situação</th><th>Autorizado por</th><th>Observações</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`
   }).join('')
 
   const ns = wordMode ? " xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'" : ''
@@ -148,10 +137,8 @@ function buildReportHtml(pasta: PastaFull, wordMode = false): string {
 </style></head>
 <body>
   <h1>Relatório de Concessões</h1>
-  <p class="sub">
-    <b>${esc(pasta.nome)}</b>${pasta.periodo ? ` — ${esc(pasta.periodo)}` : ''}<br>
-    Emissão: ${date} &nbsp;·&nbsp; ${withC.length} empresa(s) com concessões registradas
-  </p>
+  <p class="sub"><b>${esc(pasta.nome)}</b>${pasta.periodo ? ` — ${esc(pasta.periodo)}` : ''}<br>
+  Emissão: ${date} &nbsp;·&nbsp; ${withC.length} empresa(s) com concessões</p>
   ${sections || '<p style="color:#888;font-style:italic">Nenhuma concessão registrada.</p>'}
 </body></html>`
 }
@@ -160,29 +147,122 @@ function buildExcelHtml(pasta: PastaFull): string {
   const sorted = [...pasta.empresas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   const rows = sorted.flatMap(emp => {
     const sc = STATUS_CFG[emp.status] ?? STATUS_CFG.sem
-    if (!(emp.concessoes ?? []).length) return []
-    return emp.concessoes.map(c => `<tr>
+    return (emp.concessoes ?? []).map(c => `<tr>
       <td>${esc(emp.nome)}</td><td>${sc.label}</td><td>${esc(emp.obs)}</td>
       <td>${c.tipo === 'empresa' ? 'Docs Empresa' : 'Docs Pessoa'}</td>
       <td>${esc(c.documento)}</td><td>${esc(c.pessoa)}</td>
       <td>${esc(c.concedido_por)}</td><td>${esc(c.obs)}</td>
     </tr>`)
   }).join('')
-  return `<html><head><meta charset='utf-8'></head><body>
-    <table><thead><tr>
-      <th>Empresa</th><th>Situação</th><th>Obs. Empresa</th>
-      <th>Tipo</th><th>Documento / Concessão</th><th>Pessoa / Situação</th>
-      <th>Autorizado por</th><th>Observações</th>
-    </tr></thead><tbody>${rows}</tbody></table>
-  </body></html>`
+  return `<html><head><meta charset='utf-8'></head><body><table>
+    <thead><tr><th>Empresa</th><th>Situação</th><th>Obs. Empresa</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa / Situação</th><th>Autorizado por</th><th>Observações</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></body></html>`
 }
 
 function dlBlob(content: string, filename: string, type: string) {
   const blob = new Blob(['﻿' + content], { type: type + ';charset=utf-8;' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename; a.click()
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// ─── Autocomplete ─────────────────────────────────────────────────────────────
+
+function useAutocomplete(allNomes: string[], query: string) {
+  if (!query.trim() || query.length < 2) return []
+  const q = query.toLowerCase()
+  return allNomes.filter(n => n.toLowerCase().includes(q)).slice(0, 8)
+}
+
+// ─── Import Modal ─────────────────────────────────────────────────────────────
+
+function ImportModal({ pastas, currentId, onImport, onClose }: {
+  pastas: PastaFull[]
+  currentId: string
+  onImport: (empresas: Empresa[]) => void
+  onClose: () => void
+}) {
+  const outras = pastas.filter(p => p.id !== currentId)
+  const [selectedPastaId, setSelectedPastaId] = useState(outras[0]?.id ?? '')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const selectedPasta = outras.find(p => p.id === selectedPastaId)
+
+  function toggleAll() {
+    if (!selectedPasta) return
+    setSelectedIds(selectedIds.size === selectedPasta.empresas.length ? new Set() : new Set(selectedPasta.empresas.map(e => e.id)))
+  }
+
+  function doImport() {
+    if (!selectedPasta || selectedIds.size === 0) return
+    onImport(selectedPasta.empresas.filter(e => selectedIds.has(e.id)).map(cloneEmpresa))
+    onClose()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: PRIMARY }}>📥 Importar de outra pasta</div>
+
+        {outras.length === 0 ? (
+          <p style={{ color: MUTED, fontSize: 13 }}>Não há outras pastas disponíveis para importar.</p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pasta de origem</label>
+              <select value={selectedPastaId} onChange={e => { setSelectedPastaId(e.target.value); setSelectedIds(new Set()) }}
+                style={{ height: 34, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', background: BG_SURF, color: TEXT }}>
+                {outras.map(p => <option key={p.id} value={p.id}>{p.nome}{p.periodo ? ` — ${p.periodo}` : ''}</option>)}
+              </select>
+            </div>
+
+            {selectedPasta && (
+              <div style={{ flex: 1, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, maxHeight: 320 }}>
+                <div style={{ padding: '8px 12px', background: BG_SEC, borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>
+                    {selectedPasta.empresas.length} empresa(s) &nbsp;·&nbsp; {selectedIds.size} selecionada(s)
+                  </span>
+                  <button onClick={toggleAll} style={{ fontSize: 11, color: PRIMARY, background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                    {selectedIds.size === selectedPasta.empresas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </button>
+                </div>
+                {selectedPasta.empresas.map(emp => {
+                  const sc = STATUS_CFG[emp.status] ?? STATUS_CFG.sem
+                  const checked = selectedIds.has(emp.id)
+                  return (
+                    <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', background: checked ? '#e8f0fc' : 'transparent' }}>
+                      <input type="checkbox" checked={checked} onChange={() => {
+                        const next = new Set(selectedIds); checked ? next.delete(emp.id) : next.add(emp.id); setSelectedIds(next)
+                      }} style={{ width: 15, height: 15, accentColor: PRIMARY, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.nome}</div>
+                        {emp.obs && <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.obs}</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                        <span style={{ fontSize: 10.5, color: sc.color, background: sc.bg, padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{sc.label}</span>
+                        {(emp.concessoes ?? []).length > 0 && (
+                          <span style={{ fontSize: 10.5, color: PRIMARY, background: '#e8f0fc', padding: '2px 7px', borderRadius: 20, fontWeight: 600 }}>{emp.concessoes.length} conc.</span>
+                        )}
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={onClose} style={{ height: 32, padding: '0 14px', borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={doImport} disabled={selectedIds.size === 0}
+                style={{ height: 32, padding: '0 16px', borderRadius: 7, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 600, cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer', opacity: selectedIds.size === 0 ? 0.6 : 1 }}>
+                Importar {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -197,15 +277,27 @@ export default function AnotacoesCICClient() {
   const [modalNome, setModalNome] = useState('')
   const [modalPeriodo, setModalPeriodo] = useState('')
   const [quickAdd, setQuickAdd] = useState('')
+  const [bancNomes, setBancNomes] = useState<string[]>([])
+  const [acSuggs, setAcSuggs] = useState<string[]>([])
+  const [acIdx, setAcIdx] = useState(-1)
+  const [showImport, setShowImport] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const quickRef = useRef<HTMLInputElement>(null)
+
+  const suggestions = useAutocomplete(bancNomes, quickAdd)
 
   useEffect(() => {
     fetch('/api/anotacoes-cic')
       .then(r => r.ok ? r.json() : [])
       .then((rows: unknown[]) => setPastas((rows as Parameters<typeof rowFromApi>[0][]).map(rowFromApi)))
       .finally(() => setLoading(false))
+    fetch('/api/banco-empresas-cic')
+      .then(r => r.ok ? r.json() : [])
+      .then((nomes: string[]) => setBancNomes(nomes))
   }, [])
+
+  // sync autocomplete suggestions with query
+  useEffect(() => { setAcSuggs(suggestions); setAcIdx(-1) }, [quickAdd]) // eslint-disable-line
 
   const scheduleSave = useCallback((pasta: PastaFull) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -233,7 +325,7 @@ export default function AnotacoesCICClient() {
   function openPasta(p: PastaFull) { setCurrent(p); setView('detail') }
   function backToList() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    setSaving(false); setCurrent(null); setView('list'); setQuickAdd('')
+    setSaving(false); setCurrent(null); setView('list'); setQuickAdd(''); setAcSuggs([])
   }
 
   async function handleCreatePasta() {
@@ -251,10 +343,17 @@ export default function AnotacoesCICClient() {
     setPastas(prev => prev.filter(p => p.id !== id))
   }
 
-  function addEmpresa(nome = '') {
-    updateCurrent(p => ({ ...p, empresas: [...p.empresas, { ...novaEmpresa(nome), expanded: !!nome }] }))
-    setQuickAdd('')
+  function commitQuickAdd(nome: string) {
+    if (!nome.trim()) return
+    const trimmed = nome.trim()
+    updateCurrent(p => ({ ...p, empresas: [...p.empresas, { ...novaEmpresa(trimmed), expanded: true }] }))
+    setQuickAdd(''); setAcSuggs([])
+    if (!bancNomes.includes(trimmed)) {
+      setBancNomes(prev => [...prev, trimmed].sort())
+      fetch('/api/banco-empresas-cic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([trimmed]) })
+    }
   }
+
   function deleteEmpresa(id: string) {
     if (!confirm('Excluir esta empresa?')) return
     updateCurrent(p => ({ ...p, empresas: p.empresas.filter(e => e.id !== id) }))
@@ -276,12 +375,20 @@ export default function AnotacoesCICClient() {
     updateCurrent(p => ({ ...p, empresas: p.empresas.map(e => e.id === empId ? { ...e, concessoes: e.concessoes.map(c => c.id === cId ? { ...c, ...patch } : c) } : e) }))
   }
 
+  function handleImport(empresas: Empresa[]) {
+    updateCurrent(p => ({ ...p, empresas: [...p.empresas, ...empresas] }))
+    const novos = empresas.map(e => e.nome.trim()).filter(n => n && !bancNomes.includes(n))
+    if (novos.length) {
+      setBancNomes(prev => [...new Set([...prev, ...novos])].sort())
+      fetch('/api/banco-empresas-cic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(novos) })
+    }
+  }
+
   function exportPDF() {
     if (!current) return
     const win = window.open('', '_blank', 'width=950,height=750')
     if (!win) return
-    win.document.write(buildReportHtml(current))
-    win.document.close(); win.focus()
+    win.document.write(buildReportHtml(current)); win.document.close(); win.focus()
     setTimeout(() => win.print(), 400)
   }
   function exportWord() { if (current) dlBlob(buildReportHtml(current, true), `${current.nome} — Concessões.doc`, 'application/msword') }
@@ -295,7 +402,7 @@ export default function AnotacoesCICClient() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, color: TEXT }}>Anotações CIC</div>
-          <div style={{ fontSize: 13, color: MUTED, marginTop: 3 }}>Registro de concessões e autorizações por feira, para apresentação ao cliente.</div>
+          <div style={{ fontSize: 13, color: MUTED, marginTop: 3 }}>Registro de concessões e autorizações por feira.</div>
         </div>
         <button onClick={() => setModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 16px', borderRadius: 7, background: PRIMARY, color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
           + Nova pasta
@@ -320,9 +427,7 @@ export default function AnotacoesCICClient() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => openPasta(p)} style={{ background: 'none', border: 'none', color: PRIMARY, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0, alignSelf: 'flex-start' }}>
-                Abrir →
-              </button>
+              <button onClick={() => openPasta(p)} style={{ background: 'none', border: 'none', color: PRIMARY, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0, alignSelf: 'flex-start' }}>Abrir →</button>
             </div>
           )
         })}
@@ -330,8 +435,7 @@ export default function AnotacoesCICClient() {
           style={{ border: `2px dashed ${BORDER}`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: MUTED, cursor: 'pointer', minHeight: 140 }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = PRIMARY; (e.currentTarget as HTMLElement).style.color = PRIMARY }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = BORDER; (e.currentTarget as HTMLElement).style.color = MUTED }}>
-          <span style={{ fontSize: 26 }}>📂</span>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>Nova pasta</span>
+          <span style={{ fontSize: 26 }}>📂</span><span style={{ fontSize: 12, fontWeight: 600 }}>Nova pasta</span>
         </div>
       </div>
 
@@ -340,10 +444,10 @@ export default function AnotacoesCICClient() {
           onMouseDown={e => { if (e.target === e.currentTarget) { setModal(false); setModalNome(''); setModalPeriodo('') } }}>
           <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 360, boxShadow: '0 8px 30px rgba(42,79,150,0.15)' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: PRIMARY, marginBottom: 16 }}>📁 Nova pasta</div>
-            {[{ label: 'Nome da feira', value: modalNome, setter: setModalNome, ph: 'Ex.: Expobento 2027' }, { label: 'Período', value: modalPeriodo, setter: setModalPeriodo, ph: 'Ex.: Agosto/2027' }].map((f, i) => (
+            {([{ label: 'Nome da feira', value: modalNome, setter: setModalNome, ph: 'Ex.: Expobento 2027' }, { label: 'Período', value: modalPeriodo, setter: setModalPeriodo, ph: 'Ex.: Agosto/2027' }] as const).map((f, i) => (
               <div key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</label>
-                <input autoFocus={i === 0} value={f.value} onChange={e => f.setter(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreatePasta()} placeholder={f.ph}
+                <input autoFocus={i === 0} value={f.value} onChange={e => (f.setter as (v: string) => void)(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreatePasta()} placeholder={f.ph}
                   style={{ height: 34, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '0 10px', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
               </div>
             ))}
@@ -363,7 +467,6 @@ export default function AnotacoesCICClient() {
 
   return (
     <div style={{ padding: '24px 28px 60px', maxWidth: 1020, margin: '0 auto' }}>
-
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 220 }}>
@@ -382,41 +485,27 @@ export default function AnotacoesCICClient() {
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
           {saving && <span style={{ fontSize: 12, color: MUTED }}>Salvando...</span>}
-          <button onClick={exportPDF} title="Abrir relatório para imprimir / salvar como PDF"
-            style={{ height: 32, padding: '0 12px', borderRadius: 7, border: `1px solid ${BORDER}`, background: '#fff', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-            📄 PDF
-          </button>
-          <button onClick={exportExcel} title="Baixar planilha Excel"
-            style={{ height: 32, padding: '0 12px', borderRadius: 7, border: `1px solid ${BORDER}`, background: '#fff', color: '#2e7d32', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-            📊 Excel
-          </button>
-          <button onClick={exportWord} title="Baixar documento Word"
+          <button onClick={() => setShowImport(true)} title="Importar empresas de outra pasta"
             style={{ height: 32, padding: '0 12px', borderRadius: 7, border: `1px solid ${BORDER}`, background: '#fff', color: '#1d3a74', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-            📝 Word
+            📥 Importar de outra pasta
           </button>
-          <button onClick={backToList}
-            style={{ height: 32, padding: '0 14px', borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            ← Voltar
-          </button>
+          <button onClick={exportPDF} style={{ height: 32, padding: '0 12px', borderRadius: 7, border: `1px solid ${BORDER}`, background: '#fff', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>📄 PDF</button>
+          <button onClick={exportExcel} style={{ height: 32, padding: '0 12px', borderRadius: 7, border: `1px solid ${BORDER}`, background: '#fff', color: '#2e7d32', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>📊 Excel</button>
+          <button onClick={exportWord} style={{ height: 32, padding: '0 12px', borderRadius: 7, border: `1px solid ${BORDER}`, background: '#fff', color: '#1d3a74', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>📝 Word</button>
+          <button onClick={backToList} style={{ height: 32, padding: '0 14px', borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>← Voltar</button>
         </div>
       </div>
 
-      {/* Stats strip */}
+      {/* Stats */}
       <div style={{ display: 'flex', gap: 20, marginBottom: 20, padding: '12px 16px', background: BG_SURF, borderRadius: 10, border: `1px solid ${BORDER}`, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Empresas', val: stats.total, color: TEXT },
-          { label: 'Concessões', val: stats.totalConcessoes, color: PRIMARY },
-          { label: 'Pendências', val: stats.pend, color: '#b45309' },
-          { label: 'OK', val: stats.ok, color: '#2e7d32' },
-        ].map(x => (
+        {[{ label: 'Empresas', val: stats.total, color: TEXT }, { label: 'Concessões', val: stats.totalConcessoes, color: PRIMARY }, { label: 'Pendências', val: stats.pend, color: '#b45309' }, { label: 'OK', val: stats.ok, color: '#2e7d32' }].map(x => (
           <div key={x.label} style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             {x.label}<div style={{ fontSize: 20, fontWeight: 700, color: x.color, textTransform: 'none', marginTop: 1 }}>{x.val}</div>
           </div>
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 5, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           {STATUS_ORDER.map(s => {
-            const cfg = STATUS_CFG[s]
-            const count = current.empresas.filter(e => e.status === s).length
+            const cfg = STATUS_CFG[s]; const count = current.empresas.filter(e => e.status === s).length
             if (!count) return null
             return <div key={s} style={{ fontSize: 10.5, color: cfg.color, background: cfg.bg, padding: '3px 9px', borderRadius: 20, fontWeight: 600 }}>{count} {cfg.label}</div>
           })}
@@ -427,7 +516,7 @@ export default function AnotacoesCICClient() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {current.empresas.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: MUTED, fontSize: 13, fontStyle: 'italic' }}>
-            Nenhuma empresa registrada. Adicione a primeira abaixo.
+            Nenhuma empresa registrada. Adicione abaixo ou importe de outra pasta.
           </div>
         )}
 
@@ -436,7 +525,6 @@ export default function AnotacoesCICClient() {
           const concessoes = emp.concessoes ?? []
           return (
             <div key={emp.id} style={{ background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
-              {/* Empresa row */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11, color: MUTED, minWidth: 20, textAlign: 'right', flexShrink: 0 }}>{idx + 1}</span>
                 <button onClick={() => updateEmpresa(emp.id, { expanded: !emp.expanded })}
@@ -447,7 +535,7 @@ export default function AnotacoesCICClient() {
                   style={{ flex: '2', minWidth: 180, fontSize: 13.5, fontWeight: 600, color: TEXT, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'inherit' }} />
                 <button onClick={() => cycleStatus(emp.id)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 11px', borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', border: 'none', background: sc.bg, color: sc.color, flexShrink: 0, whiteSpace: 'nowrap' }}
-                  title="Clique para alterar o status">
+                  title="Clique para alterar">
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
                   {sc.label}
                 </button>
@@ -459,15 +547,12 @@ export default function AnotacoesCICClient() {
                     {concessoes.length} conc.
                   </span>
                 )}
-                <button onClick={() => deleteEmpresa(emp.id)}
-                  style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, flexShrink: 0, fontSize: 13 }}>🗑</button>
+                <button onClick={() => deleteEmpresa(emp.id)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, flexShrink: 0, fontSize: 13 }}>🗑</button>
               </div>
 
-              {/* Expanded: concessões */}
               {emp.expanded && (
                 <div style={{ padding: '10px 14px 14px 54px', borderTop: `1px solid ${BORDER}`, background: BG_SEC }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Concessões</div>
-
                   {concessoes.length > 0 && (
                     <div style={{ overflowX: 'auto', marginBottom: 10 }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: BG_SURF, borderRadius: 6, overflow: 'hidden' }}>
@@ -482,8 +567,6 @@ export default function AnotacoesCICClient() {
                           {concessoes.map((c, i) => (
                             <tr key={c.id} style={{ background: i % 2 === 1 ? BG_SEC : BG_SURF }}>
                               <td style={{ border: `1px solid ${BORDER}`, padding: '5px 8px', textAlign: 'center', color: MUTED, fontSize: 11 }}>{i + 1}</td>
-
-                              {/* Tipo toggle */}
                               <td style={{ border: `1px solid ${BORDER}`, padding: '4px 8px', whiteSpace: 'nowrap' }}>
                                 <button onClick={() => updateConcessao(emp.id, c.id, { tipo: c.tipo === 'empresa' ? 'pessoa' : 'empresa' })}
                                   style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer', background: c.tipo === 'empresa' ? '#e8f0fc' : '#f3e8ff', color: c.tipo === 'empresa' ? '#1d3a74' : '#6b21a8', whiteSpace: 'nowrap' }}
@@ -491,7 +574,6 @@ export default function AnotacoesCICClient() {
                                   {c.tipo === 'empresa' ? 'Docs Empresa' : 'Docs Pessoa'}
                                 </button>
                               </td>
-
                               {(['documento', 'pessoa', 'concedido_por', 'obs'] as const).map(field => (
                                 <td key={field} style={{ border: `1px solid ${BORDER}`, padding: '4px 6px' }}>
                                   <input value={c[field]} onChange={e => updateConcessao(emp.id, c.id, { [field]: e.target.value })}
@@ -501,10 +583,8 @@ export default function AnotacoesCICClient() {
                                     onBlur={e => (e.target.style.background = 'transparent')} />
                                 </td>
                               ))}
-
                               <td style={{ border: `1px solid ${BORDER}`, padding: '4px', textAlign: 'center' }}>
-                                <button onClick={() => deleteConcessao(emp.id, c.id)}
-                                  style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, fontSize: 12 }}>✕</button>
+                                <button onClick={() => deleteConcessao(emp.id, c.id)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, fontSize: 12 }}>✕</button>
                               </td>
                             </tr>
                           ))}
@@ -512,11 +592,7 @@ export default function AnotacoesCICClient() {
                       </table>
                     </div>
                   )}
-
-                  {concessoes.length === 0 && (
-                    <div style={{ fontSize: 12, color: MUTED, fontStyle: 'italic', marginBottom: 8 }}>Nenhuma concessão registrada ainda.</div>
-                  )}
-
+                  {concessoes.length === 0 && <div style={{ fontSize: 12, color: MUTED, fontStyle: 'italic', marginBottom: 8 }}>Nenhuma concessão registrada ainda.</div>}
                   <button onClick={() => addConcessao(emp.id)}
                     style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: PRIMARY, background: 'transparent', border: `1px dashed ${BORDER}`, borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontWeight: 600 }}>
                     + Nova concessão
@@ -528,19 +604,45 @@ export default function AnotacoesCICClient() {
         })}
       </div>
 
-      {/* Quick-add */}
-      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input ref={quickRef} value={quickAdd} onChange={e => setQuickAdd(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && quickAdd.trim()) addEmpresa(quickAdd.trim()) }}
-          placeholder="Digite o nome da empresa e pressione Enter para adicionar..."
-          style={{ flex: 1, height: 40, border: `1.5px dashed ${BORDER}`, borderRadius: 9, padding: '0 14px', fontSize: 13, color: TEXT, background: BG_SURF, outline: 'none', fontFamily: 'inherit' }}
-          onFocus={e => (e.target.style.borderColor = PRIMARY)}
-          onBlur={e => (e.target.style.borderColor = BORDER)} />
-        <button onClick={() => { if (quickAdd.trim()) addEmpresa(quickAdd.trim()); else quickRef.current?.focus() }}
-          style={{ height: 40, padding: '0 18px', borderRadius: 9, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-          + Empresa
-        </button>
+      {/* Quick-add with autocomplete */}
+      <div style={{ marginTop: 10, position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input ref={quickRef} value={quickAdd}
+            onChange={e => setQuickAdd(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setAcIdx(i => Math.min(i + 1, acSuggs.length - 1)) }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); setAcIdx(i => Math.max(i - 1, -1)) }
+              else if (e.key === 'Enter') { e.preventDefault(); if (acIdx >= 0 && acSuggs[acIdx]) commitQuickAdd(acSuggs[acIdx]); else if (quickAdd.trim()) commitQuickAdd(quickAdd) }
+              else if (e.key === 'Escape') { setAcSuggs([]) }
+            }}
+            onFocus={() => { if (quickAdd.length >= 2) setAcSuggs(suggestions) }}
+            onBlur={() => setTimeout(() => setAcSuggs([]), 150)}
+            placeholder="Digite o nome da empresa e pressione Enter para adicionar..."
+            style={{ flex: 1, height: 40, border: `1.5px dashed ${BORDER}`, borderRadius: 9, padding: '0 14px', fontSize: 13, color: TEXT, background: BG_SURF, outline: 'none', fontFamily: 'inherit' }}
+            onFocusCapture={e => (e.target.style.borderColor = PRIMARY)}
+            onBlurCapture={e => (e.target.style.borderColor = BORDER)} />
+          <button onClick={() => { if (quickAdd.trim()) commitQuickAdd(quickAdd); else quickRef.current?.focus() }}
+            style={{ height: 40, padding: '0 18px', borderRadius: 9, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+            + Empresa
+          </button>
+        </div>
+
+        {acSuggs.length > 0 && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 56, background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 16px rgba(42,79,150,0.12)', zIndex: 100, marginTop: 4, overflow: 'hidden' }}>
+            {acSuggs.map((s, i) => (
+              <div key={s} onMouseDown={() => commitQuickAdd(s)}
+                style={{ padding: '9px 14px', fontSize: 13, color: i === acIdx ? PRIMARY : TEXT, background: i === acIdx ? '#e8f0fc' : 'transparent', cursor: 'pointer', fontWeight: i === acIdx ? 600 : 400 }}>
+                {s}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Import modal */}
+      {showImport && (
+        <ImportModal pastas={pastas} currentId={current.id} onImport={handleImport} onClose={() => setShowImport(false)} />
+      )}
     </div>
   )
 }
