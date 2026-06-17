@@ -13,14 +13,16 @@ function rowToCompany(row: {
   fields: unknown
 }): Company {
   const fields = (row.fields as Field[]) ?? []
-  const hasIntegration = fields.some(f => /integra[çc][ãa]o/i.test(f.label))
+  const withoutInteg = fields.filter(f => !/integra[çc][ãa]o/i.test(f.label))
+  const existingInteg = fields.find(f => /integra[çc][ãa]o/i.test(f.label))
+  const integField = existingInteg ?? { type: 'text' as const, label: 'INTEGRAÇÃO', value: '' }
   return {
     id: row.id,
     name: row.name,
     sheetName: row.sheet_name,
     segment: row.segment,
     updated: row.updated,
-    fields: hasIntegration ? fields : [...fields, { type: 'text' as const, label: 'INTEGRAÇÃO', value: '' }],
+    fields: [...withoutInteg, integField],
   }
 }
 
@@ -92,15 +94,19 @@ export default function CadastroClient() {
         setCompanies((compRes.data ?? []).map(rowToCompany))
         setFavorites((favsRes.data ?? []).map(r => r.company_id))
 
-        // Migração: persiste INTEGRAÇÃO no banco para quem ainda não tem
-        const semIntegracao = (compRes.data ?? []).filter(row => {
+        // Migração: garante que INTEGRAÇÃO existe e está sempre no final
+        const precisaReordenar = (compRes.data ?? []).filter(row => {
           const fs = (row.fields as Field[]) ?? []
-          return !fs.some(f => /integra[çc][ãa]o/i.test(f.label))
+          const last = fs[fs.length - 1]
+          return !last || !/integra[çc][ãa]o/i.test(last.label)
         })
-        if (semIntegracao.length > 0) {
-          void Promise.all(semIntegracao.map(row => {
-            const fs = [...((row.fields as Field[]) ?? []), { type: 'text' as const, label: 'INTEGRAÇÃO', value: '' }]
-            return supabase.from('contratantes').update({ fields: fs }).eq('id', row.id)
+        if (precisaReordenar.length > 0) {
+          void Promise.all(precisaReordenar.map(row => {
+            const fs = (row.fields as Field[]) ?? []
+            const withoutInteg = fs.filter(f => !/integra[çc][ãa]o/i.test(f.label))
+            const existingInteg = fs.find(f => /integra[çc][ãa]o/i.test(f.label))
+            const integField = existingInteg ?? { type: 'text' as const, label: 'INTEGRAÇÃO', value: '' }
+            return supabase.from('contratantes').update({ fields: [...withoutInteg, integField] }).eq('id', row.id)
           }))
         }
       } catch (err) {
