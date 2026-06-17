@@ -188,6 +188,20 @@ export default function CadastroTerceirasClient() {
   const [salvandoContratante, setSalvandoContratante] = useState(false)
   const [modoEdicao, setModoEdicao] = useState(false)
 
+  // Editor de estados por coluna
+  const [showEditor, setShowEditor] = useState(false)
+  const [customEstados, setCustomEstados] = useState<Partial<Record<EtapaId, EtapaEstado[]>>>(() => {
+    try { return JSON.parse(localStorage.getItem('gt3_etapa_estados') ?? '{}') } catch { return {} }
+  })
+
+  function updateCustomEstados(etapaId: EtapaId, estados: EtapaEstado[]) {
+    setCustomEstados(prev => {
+      const next = { ...prev, [etapaId]: estados }
+      localStorage.setItem('gt3_etapa_estados', JSON.stringify(next))
+      return next
+    })
+  }
+
   // Toast
   const [toast, setToast] = useState<{ msg: string; tipo: string } | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -319,31 +333,38 @@ export default function CadastroTerceirasClient() {
   }
 
   async function executarCycle(terceira: Terceira, etapa: GuiaEtapa, novoEstado: EtapaEstado) {
-    const etapasOtimistas = { ...(terceira.etapas as Record<string, string>), [etapa.id]: novoEstado }
-    setTerceiras(prev => prev.map(t => t.id === terceira.id ? { ...t, etapas: etapasOtimistas } : t))
+    // Atualiza só a etapa específica — evita sobrescrever outras atualizações em voo
+    setTerceiras(prev => prev.map(t => t.id !== terceira.id ? t : { ...t, etapas: { ...t.etapas, [etapa.id]: novoEstado } }))
     const res = await fetch(`/api/terceiras/${terceira.id}/etapa`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ etapa_id: etapa.id, novo_estado: novoEstado, obs: '' }),
     })
     if (!res.ok) {
-      setTerceiras(prev => prev.map(t => t.id === terceira.id ? terceira : t))
+      // Reverte só esta etapa para o valor pré-clique
+      const anterior = terceira.etapas[etapa.id] ?? etapa.estados[0]
+      setTerceiras(prev => prev.map(t => t.id !== terceira.id ? t : { ...t, etapas: { ...t.etapas, [etapa.id]: anterior } }))
       showToast('Erro ao salvar', 'danger')
       return
     }
     const { terceira: atualizada, arquivada, motivo } = await res.json()
-    setTerceiras(prev => prev.map(t => t.id === atualizada.id ? atualizada : t))
     if (arquivada) {
+      setTerceiras(prev => prev.map(t => t.id === atualizada.id ? atualizada : t))
       setSelectedId(null)
       showToast(motivo === 'nao_evoluiu' ? '✕ Terceira arquivada como "Não evoluiu"' : '✓ Cadastro concluído! Movido para o histórico.', motivo === 'nao_evoluiu' ? 'danger' : 'success')
+    } else {
+      // Merge: mantém etapas em voo mais recentes, absorve historico/metadata do servidor
+      setTerceiras(prev => prev.map(t => t.id !== atualizada.id ? t : { ...atualizada, etapas: { ...atualizada.etapas, ...t.etapas } }))
     }
   }
 
   async function handleCycleEtapa(terceira: Terceira, etapa: GuiaEtapa) {
     if (terceira.status !== 'ativo') return
-    const currentEstado = terceira.etapas[etapa.id] ?? etapa.estados[0]
-    const currentIdx = etapa.estados.indexOf(currentEstado)
-    const nextEstado = etapa.estados[(currentIdx + 1) % etapa.estados.length]
+    const estados = customEstados[etapa.id] ?? etapa.estados
+    if (estados.length === 0) return
+    const currentEstado = terceira.etapas[etapa.id] ?? estados[0]
+    const currentIdx = estados.indexOf(currentEstado)
+    const nextEstado = estados[(currentIdx + 1) % estados.length]
     if (etapa.reqGestor && !podeValidarGestor && nextEstado === 'validado') {
       showToast('Esta etapa requer aprovação de gestor', 'danger'); return
     }
@@ -510,7 +531,62 @@ export default function CadastroTerceirasClient() {
             <label style={{ fontSize: 11, color: S.textMuted, display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="checkbox" checked={fSoSub} onChange={e => setFSoSub(e.target.checked)} /> Só subcontratadas
             </label>
+            <button onClick={() => setShowEditor(v => !v)}
+              style={{ marginLeft: 'auto', height: 30, padding: '0 12px', borderRadius: 6, border: `1px solid ${showEditor ? S.primary : S.border}`, background: showEditor ? S.primaryLight : 'transparent', color: showEditor ? S.primary : S.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+              ⚙ Estados
+            </button>
           </div>
+
+          {/* Editor de estados por coluna */}
+          {showEditor && (() => {
+            const allEtapas = GUIAS.flatMap(g => g.etapas)
+            const disponiveis: EtapaEstado[] = ['pendente', 'ok', 'na', 'sob_demanda', 'mensal', 'validar', 'validado', 'nao_liberado', 'liberado']
+            return (
+              <div style={{ background: S.surface, border: `1px solid ${S.primary}33`, borderRadius: S.radius, padding: '14px 16px', marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: S.primary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+                  Configurar ciclo de estados por coluna
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {allEtapas.map(etapa => {
+                    const estados = customEstados[etapa.id] ?? etapa.estados
+                    const naoUsados = disponiveis.filter(s => !estados.includes(s))
+                    return (
+                      <div key={etapa.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: S.text, minWidth: 100, flexShrink: 0 }}>{etapa.label}</span>
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {estados.map(s => {
+                            const info = ESTADOS[s]
+                            if (!info) return null
+                            return (
+                              <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600, background: info.bg, color: info.color, border: `1px solid ${info.color}44` }}>
+                                {info.ico} {info.label}
+                                <button onClick={() => updateCustomEstados(etapa.id, estados.filter(x => x !== s))}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: info.color, fontSize: 11, padding: '0 0 0 3px', lineHeight: 1, opacity: 0.7 }}>×</button>
+                              </span>
+                            )
+                          })}
+                          {naoUsados.length > 0 && (
+                            <select onChange={e => { if (!e.target.value) return; updateCustomEstados(etapa.id, [...estados, e.target.value as EtapaEstado]); e.target.value = '' }}
+                              defaultValue=""
+                              style={{ fontSize: 11, padding: '3px 6px', border: `1px dashed ${S.border}`, borderRadius: 6, background: S.bg, color: S.textMuted, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              <option value="">+ Adicionar</option>
+                              {naoUsados.map(s => <option key={s} value={s}>{ESTADOS[s].ico} {ESTADOS[s].label}</option>)}
+                            </select>
+                          )}
+                          {(customEstados[etapa.id] !== undefined) && (
+                            <button onClick={() => updateCustomEstados(etapa.id, etapa.estados)}
+                              style={{ fontSize: 10, color: S.textMuted, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                              Resetar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Tabela ativos */}
           <TabelaAtivos
