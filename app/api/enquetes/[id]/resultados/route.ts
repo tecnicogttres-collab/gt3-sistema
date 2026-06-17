@@ -12,7 +12,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('papel').eq('id', user.id).single()
-  const role = (profile?.papel as string) ?? 'colaborador'
+  const rawRole = (profile?.papel as string) ?? 'colaborador'
+  const role = rawRole === 'trainee' ? 'colaborador' : rawRole
   const isGestorAdmin = ['admin', 'gestor'].includes(role)
 
   const { data: enquete } = await admin

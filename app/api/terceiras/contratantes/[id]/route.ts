@@ -10,7 +10,8 @@ async function getCaller() {
   if (!user) return null
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('papel').eq('id', user.id).single()
-  return { user, papel: (profile?.papel as string | null) ?? 'colaborador' }
+  const rawPapel = (profile?.papel as string | null) ?? 'colaborador'
+  return { user, papel: rawPapel === 'trainee' ? 'colaborador' : rawPapel }
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {

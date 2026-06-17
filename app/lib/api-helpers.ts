@@ -7,7 +7,8 @@ export async function getCaller() {
   if (!user) return null
   const admin = createAdminClient()
   const { data } = await admin.from('profiles').select('papel').eq('id', user.id).single()
-  return { user, role: (data?.papel as string) ?? 'colaborador' }
+  const raw = (data?.papel as string) ?? 'colaborador'
+  return { user, role: raw === 'trainee' ? 'colaborador' : raw }
 }
 
 export async function getCallerWithNome() {
@@ -16,7 +17,8 @@ export async function getCallerWithNome() {
   if (!user) return null
   const admin = createAdminClient()
   const { data } = await admin.from('profiles').select('papel, nome').eq('id', user.id).single()
-  return { user, role: (data?.papel as string) ?? 'colaborador', nome: (data?.nome as string) ?? '' }
+  const raw = (data?.papel as string) ?? 'colaborador'
+  return { user, role: raw === 'trainee' ? 'colaborador' : raw, nome: (data?.nome as string) ?? '' }
 }
 
 export async function getAuthUser() {

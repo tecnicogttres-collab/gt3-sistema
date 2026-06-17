@@ -12,7 +12,8 @@ async function getCallerAndRole() {
     .select('papel')
     .eq('id', user.id)
     .single()
-  return { user, papel: profile?.papel as string | null }
+  const raw = profile?.papel as string | null
+  return { user, papel: raw === 'trainee' ? 'colaborador' : raw }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

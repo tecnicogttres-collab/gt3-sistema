@@ -10,7 +10,8 @@ async function getCaller() {
   if (!user) return null
   const admin = createAdminClient()
   const { data } = await admin.from('profiles').select('papel').eq('id', user.id).single()
-  return { user, role: (data?.papel as string) ?? 'colaborador' }
+  const raw = (data?.papel as string) ?? 'colaborador'
+  return { user, role: raw === 'trainee' ? 'colaborador' : raw }
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {

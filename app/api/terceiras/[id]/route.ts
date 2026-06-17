@@ -10,7 +10,8 @@ async function getCaller() {
   if (!user) return null
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('nome, papel').eq('id', user.id).single()
-  return { user, nome: (profile?.nome as string | null) ?? 'Usuário', papel: (profile?.papel as string | null) ?? 'colaborador' }
+  const rawPapel = (profile?.papel as string | null) ?? 'colaborador'
+  return { user, nome: (profile?.nome as string | null) ?? 'Usuário', papel: rawPapel === 'trainee' ? 'colaborador' : rawPapel }
 }
 
 const CAMPO_LABELS: Record<string, string> = {
