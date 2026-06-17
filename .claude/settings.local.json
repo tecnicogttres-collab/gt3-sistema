@@ -107,7 +107,15 @@
       "Bash(xargs grep -l \"ferias\")",
       "Bash(xargs grep -l \"profiles\\\\|colaborador\\\\|gestor\\\\|trainee\")",
       "Bash(xargs grep -l \"contratante\\\\|cadastro\")",
-      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")",
+      "Bash(mkdir -p \"C:/Users/rodri/gt3-sistema/app/api/atas-contratantes/[id]/leitura\")",
+      "Bash(mkdir -p \"C:/Users/rodri/gt3-sistema/app/api/atas-contratantes/[id]/leituras\")",
+      "Bash(python3 -c ' *)",
+      "Bash(Select-Object -First 5 -ExpandProperty Name)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\rodri\\\\gt3-sistema\" -Directory | Where-Object { $_.Name -notmatch \"node_modules|\\\\.next|\\\\.git\" } | Select-Object Name, FullName)",
+      "Bash(sed -i 's/\\(profile\\\\?\\\\.papel as string | null\\) ?? '\\\\''colaborador'\\\\''/\\(\\(profile?.papel as string | null\\) ?? '\\\\''colaborador'\\\\''\\) === '\\\\''trainee'\\\\'' ? '\\\\''colaborador'\\\\'' : \\(\\(profile?.papel as string | null\\) ?? '\\\\''colaborador'\\\\''\\)/g' C:/Users/rodri/gt3-sistema/app/api/terceiras/route.ts C:/Users/rodri/gt3-sistema/app/api/terceiras/[id]/route.ts C:/Users/rodri/gt3-sistema/app/api/terceiras/[id]/etapa/route.ts C:/Users/rodri/gt3-sistema/app/api/terceiras/contratantes/route.ts C:/Users/rodri/gt3-sistema/app/api/terceiras/contratantes/[id]/route.ts)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(python -c ' *)"
     ]
   }
 }
