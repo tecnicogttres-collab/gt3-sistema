@@ -220,6 +220,7 @@ function ImportModal({ pastas, currentId, onImport, onClose }: {
   const outras = pastas.filter(p => p.id !== currentId)
   const [selectedPastaId, setSelectedPastaId] = useState(outras[0]?.id ?? '')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [importarConcessoes, setImportarConcessoes] = useState(true)
   const selectedPasta = outras.find(p => p.id === selectedPastaId)
 
   function toggleAll() {
@@ -229,7 +230,15 @@ function ImportModal({ pastas, currentId, onImport, onClose }: {
 
   function doImport() {
     if (!selectedPasta || selectedIds.size === 0) return
-    onImport(selectedPasta.empresas.filter(e => selectedIds.has(e.id)).map(cloneEmpresa))
+    onImport(
+      selectedPasta.empresas
+        .filter(e => selectedIds.has(e.id))
+        .map(e => {
+          const clone = cloneEmpresa(e)
+          if (!importarConcessoes) clone.concessoes = []
+          return clone
+        })
+    )
     onClose()
   }
 
@@ -285,12 +294,19 @@ function ImportModal({ pastas, currentId, onImport, onClose }: {
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={onClose} style={{ height: 32, padding: '0 14px', borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={doImport} disabled={selectedIds.size === 0}
-                style={{ height: 32, padding: '0 16px', borderRadius: 7, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 600, cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer', opacity: selectedIds.size === 0 ? 0.6 : 1 }}>
-                Importar {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: TEXT, cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={importarConcessoes} onChange={e => setImportarConcessoes(e.target.checked)}
+                  style={{ width: 15, height: 15, accentColor: PRIMARY, flexShrink: 0 }} />
+                Incluir concessões
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={onClose} style={{ height: 32, padding: '0 14px', borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={doImport} disabled={selectedIds.size === 0}
+                  style={{ height: 32, padding: '0 16px', borderRadius: 7, border: 'none', background: PRIMARY, color: '#fff', fontSize: 13, fontWeight: 600, cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer', opacity: selectedIds.size === 0 ? 0.6 : 1 }}>
+                  Importar {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+                </button>
+              </div>
             </div>
           </>
         )}
