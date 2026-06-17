@@ -795,8 +795,8 @@ function TabelaAtivos({
 
   const [colWidths, setColWidths] = useState<number[]>(() => [
     100, 200, 118, 140,
-    ...allEtapas.map(() => 74),
-    90, 68, 50,
+    ...allEtapas.map(e => ['gt0180', 'cnpj_liberado'].includes(e.id) ? 130 : 74),
+    100, 180,
   ])
 
   const dragging = useRef<{ colIdx: number; startX: number; startW: number } | null>(null)
@@ -829,9 +829,8 @@ function TabelaAtivos({
       label: SHORT[e.id] + (e.reqGestor ? ' 🔒' : ''),
       align: 'center' as const,
     })),
-    { label: 'Progresso', align: 'left' },
     { label: 'Data', align: 'left' },
-    { label: 'Obs', align: 'center' },
+    { label: 'Observação', align: 'left' },
   ]
 
   const thBase: React.CSSProperties = {
@@ -1003,44 +1002,37 @@ function TerceiraRow({
         const estado = t.etapas[etapa.id] ?? 'pendente'
         const info = ESTADOS[estado] ?? ESTADOS.pendente
         const aguardaGestor = etapa.reqGestor && !podeValidarGestor && estado === 'validar'
+        const showText = etapa.id === 'gt0180' || etapa.id === 'cnpj_liberado'
         return (
           <td key={etapa.id} style={{ ...tdSt, textAlign: 'center' }}>
             <button
               onClick={() => onCycleEtapa(t, etapa)}
               title={`${etapa.label}: ${info.label}${aguardaGestor ? ' — aguardando gestor' : ' — clique para avançar'}`}
               style={{
-                padding: '4px 8px', borderRadius: 5, border: `1px solid ${info.color}44`,
+                padding: showText ? '4px 9px' : '4px 8px', borderRadius: 5, border: `1px solid ${info.color}44`,
                 cursor: 'pointer', background: info.bg, color: info.color,
-                fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-                lineHeight: 1, minWidth: 30, opacity: aguardaGestor ? 0.6 : 1,
+                fontSize: showText ? 11 : 13, fontWeight: 700, fontFamily: 'inherit',
+                lineHeight: 1.3, minWidth: 30, opacity: aguardaGestor ? 0.6 : 1,
+                display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
               }}
             >
-              {info.ico}
+              {info.ico}{showText && <span>{info.label}</span>}
             </button>
           </td>
         )
       })}
 
-      {/* Progresso */}
-      <td style={tdSt}><ProgBar pct={prog} /></td>
-
       {/* Data */}
       <td style={{ ...tdSt, color: S.textMuted, whiteSpace: 'nowrap', fontSize: 11 }}>{fmtData(t.data)}</td>
 
       {/* Obs / Drawer */}
-      <td style={{ ...tdSt, textAlign: 'center' }}>
-        <button
-          onClick={() => onOpenDrawer(t.id)}
-          title={t.observacao ? t.observacao : 'Observação e histórico'}
-          style={{
-            background: t.observacao ? S.pendenteBg : 'transparent',
-            color: t.observacao ? S.pendente : S.textMuted,
-            border: `1px solid ${t.observacao ? S.pendente + '55' : S.border}`,
-            borderRadius: 5, cursor: 'pointer', fontSize: 13, padding: '3px 8px', fontFamily: 'inherit',
-          }}
-        >
-          📝
-        </button>
+      <td style={{ ...tdSt, cursor: 'pointer', maxWidth: 0 }} onClick={() => onOpenDrawer(t.id)} title={t.observacao || 'Clique para abrir'}>
+        <span style={{
+          display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 11, color: t.observacao ? S.text : S.textMuted,
+        }}>
+          {t.observacao || '—'}
+        </span>
       </td>
     </tr>
   )
