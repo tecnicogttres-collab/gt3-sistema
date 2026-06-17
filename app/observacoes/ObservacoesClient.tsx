@@ -705,8 +705,9 @@ export default function ObservacoesClient() {
     const { id, motivo, parecer, imagemUrl } = confirm
     setConfirm({ open: false })
     setModal(m => ({ ...m, saving: true }))
+    const isColaborador = papel === 'colaborador'
     const res = await fetch(`/api/observacoes/${id}`, {
-      method: 'PUT',
+      method: isColaborador ? 'PATCH' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ motivo, parecer, imagem_url: imagemUrl }),
     })
