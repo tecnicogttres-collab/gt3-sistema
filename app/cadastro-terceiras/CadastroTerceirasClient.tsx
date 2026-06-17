@@ -45,7 +45,7 @@ const GUIAS: Guia[] = [
       { id: 'cc_notif',      label: 'CC / Notificação', estados: ['pendente', 'ok', 'na'], condicional: true },
       { id: 'pasta_rede',    label: 'Pasta Rede',       estados: ['pendente', 'ok', 'na'] },
       { id: 'gt0180',        label: 'GT0180',           estados: ['pendente', 'sob_demanda', 'mensal', 'na', 'validado'], reqGestor: true },
-      { id: 'cnpj_liberado', label: 'CNPJ Liberado',    estados: ['nao_liberado', 'liberado', 'na', 'nao_evoluiu'] },
+      { id: 'cnpj_liberado', label: 'CNPJ Liberado',    estados: ['nao_liberado', 'liberado', 'na'] },
       { id: 'gt8005',        label: 'Cadastro GT8005',  estados: ['pendente', 'ok', 'na'] },
     ],
   },
@@ -347,18 +347,20 @@ export default function CadastroTerceirasClient() {
     if (etapa.reqGestor && !podeValidarGestor && nextEstado === 'validado') {
       showToast('Esta etapa requer aprovação de gestor', 'danger'); return
     }
-    if (etapa.id === 'cnpj_liberado' && nextEstado === 'nao_evoluiu') {
-      setModalConfirm({
-        open: true,
-        texto: `Ao confirmar, a terceira <strong>${terceira.razao_social}</strong> será marcada como "Não evoluiu" e movida para o histórico.<br><br>Esta ação pode ser revertida pelo botão "Reativar".`,
-        onConfirm: async () => {
-          setModalConfirm(p => ({ ...p, open: false }))
-          await executarCycle(terceira, etapa, nextEstado)
-        },
-      })
-      return
-    }
     await executarCycle(terceira, etapa, nextEstado)
+  }
+
+  function handleDescartarCnpj(terceira: Terceira) {
+    if (terceira.status !== 'ativo') return
+    const cnpjEtapa = GUIAS[0].etapas.find(e => e.id === 'cnpj_liberado')!
+    setModalConfirm({
+      open: true,
+      texto: `Ao confirmar, a terceira <strong>${terceira.razao_social}</strong> será marcada como <strong>"CNPJ Descartado / Não evoluiu"</strong> e movida para o histórico.<br><br>Esta ação pode ser revertida pelo botão "Reativar".`,
+      onConfirm: async () => {
+        setModalConfirm(p => ({ ...p, open: false }))
+        await executarCycle(terceira, cnpjEtapa, 'nao_evoluiu')
+      },
+    })
   }
 
   async function handleReativar(id: string) {
@@ -515,6 +517,7 @@ export default function CadastroTerceirasClient() {
             terceiras={ativosFiltrados}
             podeValidarGestor={podeValidarGestor}
             onCycleEtapa={handleCycleEtapa}
+            onDescartar={handleDescartarCnpj}
             onUpdateInfo={handleUpdateInfo}
             onOpenDrawer={id => { setSelectedId(id); setDrawerTab('detalhes') }}
           />
@@ -778,12 +781,14 @@ function TabelaAtivos({
   terceiras,
   podeValidarGestor,
   onCycleEtapa,
+  onDescartar,
   onUpdateInfo,
   onOpenDrawer,
 }: {
   terceiras: Terceira[]
   podeValidarGestor: boolean
   onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
+  onDescartar: (t: Terceira) => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
   onOpenDrawer: (id: string) => void
 }) {
@@ -795,8 +800,8 @@ function TabelaAtivos({
 
   const [colWidths, setColWidths] = useState<number[]>(() => [
     100, 200, 118, 140,
-    ...allEtapas.map(e => ['gt0180', 'cnpj_liberado'].includes(e.id) ? 130 : 74),
-    100, 180,
+    ...allEtapas.map(e => e.id === 'gt0180' ? 130 : 74),
+    100, 180, 130,
   ])
 
   const dragging = useRef<{ colIdx: number; startX: number; startW: number } | null>(null)
@@ -831,6 +836,7 @@ function TabelaAtivos({
     })),
     { label: 'Data', align: 'left' },
     { label: 'Observação', align: 'left' },
+    { label: 'CNPJ Descartado', align: 'center' },
   ]
 
   const thBase: React.CSSProperties = {
@@ -894,6 +900,7 @@ function TabelaAtivos({
                 podeValidarGestor={podeValidarGestor}
                 allEtapas={allEtapas}
                 onCycleEtapa={onCycleEtapa}
+                onDescartar={onDescartar}
                 onUpdateInfo={onUpdateInfo}
                 onOpenDrawer={onOpenDrawer}
               />
@@ -910,6 +917,7 @@ function TerceiraRow({
   podeValidarGestor,
   allEtapas,
   onCycleEtapa,
+  onDescartar,
   onUpdateInfo,
   onOpenDrawer,
 }: {
@@ -917,6 +925,7 @@ function TerceiraRow({
   podeValidarGestor: boolean
   allEtapas: GuiaEtapa[]
   onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
+  onDescartar: (t: Terceira) => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
   onOpenDrawer: (id: string) => void
 }) {
@@ -1033,6 +1042,23 @@ function TerceiraRow({
         }}>
           {t.observacao || '—'}
         </span>
+      </td>
+
+      {/* CNPJ Descartado */}
+      <td style={{ ...tdSt, textAlign: 'center' }}>
+        <button
+          onClick={() => onDescartar(t)}
+          title="Marcar CNPJ como descartado e arquivar"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
+            border: '1.5px solid #fca5a5', background: '#fff5f5', color: '#dc2626',
+            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+          }}
+        >
+          <span style={{ width: 13, height: 13, border: '1.5px solid #dc2626', borderRadius: 3, display: 'inline-block', flexShrink: 0 }} />
+          Descartar
+        </button>
       </td>
     </tr>
   )
