@@ -609,7 +609,7 @@ export default function ObservacoesClient() {
 
   function buildParecer(): string {
     if (isImageOnlyColuna(modal.coluna)) return modal.parecerBody || ''
-    return papel === 'colaborador'
+    return !['gestor', 'admin'].includes(papel)
       ? 'Favor rever: ' + modal.parecerBody
       : modal.parecerBody
   }
@@ -705,7 +705,7 @@ export default function ObservacoesClient() {
     const { id, motivo, parecer, imagemUrl } = confirm
     setConfirm({ open: false })
     setModal(m => ({ ...m, saving: true }))
-    const isColaborador = papel === 'colaborador'
+    const isColaborador = !['gestor', 'admin'].includes(papel)
     const res = await fetch(`/api/observacoes/${id}`, {
       method: isColaborador ? 'PATCH' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1028,7 +1028,7 @@ export default function ObservacoesClient() {
                   <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
                     Observação
                   </label>
-                  {papel === 'colaborador' ? (
+                  {!['gestor', 'admin'].includes(papel) ? (
                     <div style={{
                       border: `1.5px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden',
                       background: '#fff',

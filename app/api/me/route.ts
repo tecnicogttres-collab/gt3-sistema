@@ -13,6 +13,5 @@ export async function GET() {
     .eq('id', user.id)
     .single()
 
-  if (data && data.papel === 'trainee') data.papel = 'colaborador'
   return Response.json(data)
 }
