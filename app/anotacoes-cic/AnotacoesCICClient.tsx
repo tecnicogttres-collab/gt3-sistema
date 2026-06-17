@@ -40,10 +40,17 @@ function pastaStats(empresas: Empresa[]) {
 }
 
 function rowFromApi(row: { id: string; nome: string; periodo: string; dados: unknown; created_at: string }): PastaFull {
-  const raw = row.dados as { empresas?: Empresa[] } | Empresa[] | null
-  const empresas: Empresa[] = Array.isArray(raw)
-    ? (raw as Empresa[])
-    : (raw as { empresas?: Empresa[] })?.empresas ?? []
+  const raw = row.dados
+  let empresas: Empresa[] = []
+  if (Array.isArray(raw) && raw.length > 0) {
+    const first = raw[0] as Record<string, unknown>
+    if ('empresas' in first) {
+      // formato antigo: array de categorias → achata para lista plana de empresas
+      empresas = (raw as { empresas?: Empresa[] }[]).flatMap(c => c.empresas ?? [])
+    } else {
+      empresas = raw as Empresa[]
+    }
+  }
   return { id: row.id, nome: row.nome, periodo: row.periodo, empresas, created_at: row.created_at }
 }
 
