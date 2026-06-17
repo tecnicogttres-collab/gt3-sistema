@@ -169,11 +169,6 @@ export default function CadastroTerceirasClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [drawerTab, setDrawerTab] = useState<'detalhes' | 'historico'>('detalhes')
 
-  // Modal etapa
-  const [modalEtapa, setModalEtapa] = useState<{
-    open: boolean; terceira: Terceira | null; etapa: GuiaEtapa | null; estadoAtual: EtapaEstado; novoEstado: EtapaEstado | null; obs: string
-  }>({ open: false, terceira: null, etapa: null, estadoAtual: 'pendente', novoEstado: null, obs: '' })
-
   // Modal confirmar arquivamento
   const [modalConfirm, setModalConfirm] = useState<{ open: boolean; texto: string; onConfirm: () => void }>({
     open: false, texto: '', onConfirm: () => {}
@@ -225,14 +220,13 @@ export default function CadastroTerceirasClient() {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
       if (modalConfirm.open) { setModalConfirm(p => ({ ...p, open: false })); return }
-      if (modalEtapa.open) { setModalEtapa(p => ({ ...p, open: false })); return }
       if (modalNova) { setModalNova(false); return }
       if (modalContratantes) { setModalContratantes(false); setModoEdicao(false); return }
       if (selectedId) setSelectedId(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [modalConfirm.open, modalEtapa.open, modalNova, modalContratantes, selectedId])
+  }, [modalConfirm.open, modalNova, modalContratantes, selectedId])
 
   // ── Dados computados ──────────────────────────────────────────────────────────
 
@@ -324,49 +318,47 @@ export default function CadastroTerceirasClient() {
     }
   }
 
-  async function handleSalvarEtapa(estado: EtapaEstado) {
-    const { terceira, etapa, obs } = modalEtapa
-    if (!terceira || !etapa) return
-
-    async function executar() {
-      // Optimistic update — fecha o modal e reflete a mudança imediatamente
-      const etapasOtimistas = { ...(terceira!.etapas as Record<string, string>), [etapa!.id]: estado }
-      setModalEtapa(p => ({ ...p, open: false }))
-      setTerceiras(prev => prev.map(t => t.id === terceira!.id ? { ...t, etapas: etapasOtimistas } : t))
-
-      const res = await fetch(`/api/terceiras/${terceira!.id}/etapa`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ etapa_id: etapa!.id, novo_estado: estado, obs }),
-      })
-      if (!res.ok) {
-        // Reverte em caso de erro
-        setTerceiras(prev => prev.map(t => t.id === terceira!.id ? terceira! : t))
-        showToast('Erro ao salvar', 'danger')
-        return
-      }
-      const { terceira: atualizada, arquivada, motivo } = await res.json()
-      // Substitui com dados completos do servidor (historico, status, etc.)
-      setTerceiras(prev => prev.map(t => t.id === atualizada.id ? atualizada : t))
-      if (arquivada) {
-        setSelectedId(null)
-        showToast(motivo === 'nao_evoluiu' ? '✕ Terceira arquivada como "Não evoluiu"' : '✓ Cadastro concluído! Movido para o histórico.', motivo === 'nao_evoluiu' ? 'danger' : 'success')
-      }
+  async function executarCycle(terceira: Terceira, etapa: GuiaEtapa, novoEstado: EtapaEstado) {
+    const etapasOtimistas = { ...(terceira.etapas as Record<string, string>), [etapa.id]: novoEstado }
+    setTerceiras(prev => prev.map(t => t.id === terceira.id ? { ...t, etapas: etapasOtimistas } : t))
+    const res = await fetch(`/api/terceiras/${terceira.id}/etapa`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ etapa_id: etapa.id, novo_estado: novoEstado, obs: '' }),
+    })
+    if (!res.ok) {
+      setTerceiras(prev => prev.map(t => t.id === terceira.id ? terceira : t))
+      showToast('Erro ao salvar', 'danger')
+      return
     }
+    const { terceira: atualizada, arquivada, motivo } = await res.json()
+    setTerceiras(prev => prev.map(t => t.id === atualizada.id ? atualizada : t))
+    if (arquivada) {
+      setSelectedId(null)
+      showToast(motivo === 'nao_evoluiu' ? '✕ Terceira arquivada como "Não evoluiu"' : '✓ Cadastro concluído! Movido para o histórico.', motivo === 'nao_evoluiu' ? 'danger' : 'success')
+    }
+  }
 
-    if (etapa.id === 'cnpj_liberado' && estado === 'nao_evoluiu') {
-      setModalEtapa(p => ({ ...p, open: false }))
+  async function handleCycleEtapa(terceira: Terceira, etapa: GuiaEtapa) {
+    if (terceira.status !== 'ativo') return
+    const currentEstado = terceira.etapas[etapa.id] ?? etapa.estados[0]
+    const currentIdx = etapa.estados.indexOf(currentEstado)
+    const nextEstado = etapa.estados[(currentIdx + 1) % etapa.estados.length]
+    if (etapa.reqGestor && !podeValidarGestor && nextEstado === 'validado') {
+      showToast('Esta etapa requer aprovação de gestor', 'danger'); return
+    }
+    if (etapa.id === 'cnpj_liberado' && nextEstado === 'nao_evoluiu') {
       setModalConfirm({
         open: true,
         texto: `Ao confirmar, a terceira <strong>${terceira.razao_social}</strong> será marcada como "Não evoluiu" e movida para o histórico.<br><br>Esta ação pode ser revertida pelo botão "Reativar".`,
         onConfirm: async () => {
           setModalConfirm(p => ({ ...p, open: false }))
-          await executar()
+          await executarCycle(terceira, etapa, nextEstado)
         },
       })
       return
     }
-    await executar()
+    await executarCycle(terceira, etapa, nextEstado)
   }
 
   async function handleReativar(id: string) {
@@ -522,10 +514,7 @@ export default function CadastroTerceirasClient() {
           <TabelaAtivos
             terceiras={ativosFiltrados}
             podeValidarGestor={podeValidarGestor}
-            onOpenEtapa={(terceira, etapa) => {
-              const estadoAtual = terceira.etapas[etapa.id] ?? etapa.estados[0]
-              setModalEtapa({ open: true, terceira, etapa, estadoAtual, novoEstado: estadoAtual, obs: '' })
-            }}
+            onCycleEtapa={handleCycleEtapa}
             onUpdateInfo={handleUpdateInfo}
             onOpenDrawer={id => { setSelectedId(id); setDrawerTab('detalhes') }}
           />
@@ -598,62 +587,12 @@ export default function CadastroTerceirasClient() {
                 contratantes={contratantes}
                 onClose={() => setSelectedId(null)}
                 onUpdateInfo={handleUpdateInfo}
-                onOpenEtapa={(terceira, etapa) => {
-                  const estadoAtual = terceira.etapas[etapa.id] ?? etapa.estados[0]
-                  setModalEtapa({ open: true, terceira, etapa, estadoAtual, novoEstado: estadoAtual, obs: '' })
-                }}
+                onCycleEtapa={handleCycleEtapa}
                 onReativar={handleReativar}
               />
             )}
           </aside>
         </>
-      )}
-
-      {/* ── Modal Etapa ── */}
-      {modalEtapa.open && modalEtapa.terceira && modalEtapa.etapa && (
-        <div onClick={e => { if (e.target === e.currentTarget) setModalEtapa(p => ({ ...p, open: false })) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: 20 }}>
-          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 500, width: '100%', padding: 20, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: 16, color: S.primary, marginBottom: 4 }}>{modalEtapa.etapa.label}</h3>
-            <p style={{ fontSize: 12, color: S.textMuted, marginBottom: 14 }}>
-              {modalEtapa.terceira.contratante?.nome} · {modalEtapa.terceira.razao_social}
-            </p>
-            {modalEtapa.etapa.reqGestor && !podeValidarGestor && (
-              <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', color: '#78350f', padding: '10px 12px', borderRadius: S.radiusSm, fontSize: 12, marginBottom: 12 }}>
-                🔒 Esta etapa requer validação de gestor. Você pode marcar como "Aguardando validação" — gestor/admin confirmará depois.
-              </div>
-            )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 6, marginBottom: 14 }}>
-              {modalEtapa.etapa.estados
-                .filter(s => s !== 'validado' || podeValidarGestor)
-                .map(s => {
-                  const info = ESTADOS[s]
-                  const isActive = modalEtapa.estadoAtual === s
-                  const isDanger = s === 'nao_evoluiu'
-                  return (
-                    <button key={s}
-                      onClick={() => handleSalvarEtapa(s)}
-                      style={{
-                        padding: '9px 11px', border: `1px solid ${isActive ? (isDanger ? S.danger : S.primary) : (isDanger ? '#fca5a5' : S.border)}`,
-                        borderRadius: S.radiusSm, fontSize: 12, cursor: 'pointer', textAlign: 'left',
-                        background: isActive ? (isDanger ? S.dangerBg : S.primaryLight) : S.surface,
-                        color: isActive ? (isDanger ? S.danger : S.primary) : S.text, fontWeight: isActive ? 600 : 400,
-                        display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'inherit',
-                      }}>
-                      <span style={{ fontWeight: 'bold' }}>{info.ico}</span> {info.label}
-                    </button>
-                  )
-                })}
-            </div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: S.text, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Observação (opcional)</label>
-            <textarea value={modalEtapa.obs} onChange={e => setModalEtapa(p => ({ ...p, obs: e.target.value }))}
-              placeholder="Ex.: aguardando retorno, documento incompleto…"
-              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${S.borderStrong}`, borderRadius: S.radiusSm, fontFamily: 'inherit', fontSize: 13, resize: 'vertical', outline: 'none', minHeight: 60 }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18, gap: 10 }}>
-              <button style={btnSecondary} onClick={() => setModalEtapa(p => ({ ...p, open: false }))}>Cancelar</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* ── Modal Confirmar ── */}
@@ -838,13 +777,13 @@ function ProgBar({ pct, danger }: { pct: number; danger?: boolean }) {
 function TabelaAtivos({
   terceiras,
   podeValidarGestor,
-  onOpenEtapa,
+  onCycleEtapa,
   onUpdateInfo,
   onOpenDrawer,
 }: {
   terceiras: Terceira[]
   podeValidarGestor: boolean
-  onOpenEtapa: (t: Terceira, e: GuiaEtapa) => void
+  onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
   onOpenDrawer: (id: string) => void
 }) {
@@ -955,7 +894,7 @@ function TabelaAtivos({
                 terceira={t}
                 podeValidarGestor={podeValidarGestor}
                 allEtapas={allEtapas}
-                onOpenEtapa={onOpenEtapa}
+                onCycleEtapa={onCycleEtapa}
                 onUpdateInfo={onUpdateInfo}
                 onOpenDrawer={onOpenDrawer}
               />
@@ -971,14 +910,14 @@ function TerceiraRow({
   terceira: t,
   podeValidarGestor,
   allEtapas,
-  onOpenEtapa,
+  onCycleEtapa,
   onUpdateInfo,
   onOpenDrawer,
 }: {
   terceira: Terceira
   podeValidarGestor: boolean
   allEtapas: GuiaEtapa[]
-  onOpenEtapa: (t: Terceira, e: GuiaEtapa) => void
+  onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
   onOpenDrawer: (id: string) => void
 }) {
@@ -1067,8 +1006,8 @@ function TerceiraRow({
         return (
           <td key={etapa.id} style={{ ...tdSt, textAlign: 'center' }}>
             <button
-              onClick={() => onOpenEtapa(t, etapa)}
-              title={`${etapa.label}: ${info.label}${aguardaGestor ? ' — aguardando gestor' : ' — clique para alterar'}`}
+              onClick={() => onCycleEtapa(t, etapa)}
+              title={`${etapa.label}: ${info.label}${aguardaGestor ? ' — aguardando gestor' : ' — clique para avançar'}`}
               style={{
                 padding: '4px 8px', borderRadius: 5, border: `1px solid ${info.color}44`,
                 cursor: 'pointer', background: info.bg, color: info.color,
@@ -1163,7 +1102,7 @@ function TabelaHistorico({ terceiras, selectedId, onSelect, onReativar }: { terc
   )
 }
 
-function DrawerContent({ terceira, drawerTab, setDrawerTab, podeValidarGestor, contratantes, onClose, onUpdateInfo, onOpenEtapa, onReativar }: {
+function DrawerContent({ terceira, drawerTab, setDrawerTab, podeValidarGestor, contratantes, onClose, onUpdateInfo, onCycleEtapa, onReativar }: {
   terceira: Terceira
   drawerTab: 'detalhes' | 'historico'
   setDrawerTab: (t: 'detalhes' | 'historico') => void
@@ -1171,7 +1110,7 @@ function DrawerContent({ terceira, drawerTab, setDrawerTab, podeValidarGestor, c
   contratantes: Contratante[]
   onClose: () => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
-  onOpenEtapa: (t: Terceira, e: GuiaEtapa) => void
+  onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
   onReativar: (id: string) => void
 }) {
   const prog = calcProgresso(terceira)
@@ -1311,7 +1250,7 @@ function DrawerContent({ terceira, drawerTab, setDrawerTab, podeValidarGestor, c
                       const bloqueada = etapa.reqGestor && !podeValidarGestor && estado === 'validar'
                       return (
                         <div key={etapa.id}
-                          onClick={() => !isArchived && onOpenEtapa(terceira, etapa)}
+                          onClick={() => !isArchived && onCycleEtapa(terceira, etapa)}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
                             border: `1px solid ${S.border}`, borderRadius: S.radiusSm,

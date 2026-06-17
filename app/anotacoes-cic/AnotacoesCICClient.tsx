@@ -9,6 +9,7 @@ type Concessao = {
   tipo: 'empresa' | 'pessoa'
   documento: string
   pessoa: string
+  situacao: string
   concedido_por: string
   obs: string
 }
@@ -43,7 +44,7 @@ const BG_SURF = '#ffffff'
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7) }
-function novaConcessao(): Concessao { return { id: uid(), tipo: 'empresa', documento: '', pessoa: '', concedido_por: '', obs: '' } }
+function novaConcessao(): Concessao { return { id: uid(), tipo: 'empresa', documento: '', pessoa: '', situacao: '', concedido_por: '', obs: '' } }
 function novaEmpresa(nome = ''): Empresa { return { id: uid(), nome, status: 'sem', obs: '', expanded: false, concessoes: [] } }
 
 function pastaStats(empresas: Empresa[]) {
@@ -65,7 +66,7 @@ function migrateEmpresa(raw: Record<string, unknown>): Empresa {
       status: STATUS_ORDER.includes(raw.status as Empresa['status']) ? raw.status as Empresa['status'] : 'sem',
       obs: String(raw.obs ?? ''),
       expanded: false,
-      concessoes: anots.map(a => ({ id: a.id ?? uid(), tipo: 'empresa' as const, documento: a.doc ?? '', pessoa: a.pessoa ?? '', concedido_por: a.responsavel ?? '', obs: a.obs ?? '' })),
+      concessoes: anots.map(a => ({ id: a.id ?? uid(), tipo: 'empresa' as const, documento: a.doc ?? '', pessoa: a.pessoa ?? '', situacao: '', concedido_por: a.responsavel ?? '', obs: a.obs ?? '' })),
     }
   }
   const emp = raw as Empresa
@@ -107,15 +108,17 @@ function buildReportHtml(pasta: PastaFull, wordMode = false): string {
       <tr>
         <td style="text-align:center;color:#888;width:28px">${i + 1}</td>
         <td style="white-space:nowrap;font-weight:600;color:${c.tipo === 'empresa' ? '#1d3a74' : '#6b21a8'}">${c.tipo === 'empresa' ? 'Docs Empresa' : 'Docs Pessoa'}</td>
-        <td>${esc(c.documento)}</td><td>${esc(c.pessoa)}</td>
+        <td style="word-break:break-word">${esc(c.documento)}</td>
+        <td style="word-break:break-word">${c.tipo === 'pessoa' ? esc(c.pessoa) : '—'}</td>
+        <td style="word-break:break-word">${c.tipo === 'pessoa' ? esc((c as {situacao?: string}).situacao ?? '') : '—'}</td>
         <td style="font-weight:600">${esc(c.concedido_por)}</td>
-        <td style="color:#555">${esc(c.obs)}</td>
+        <td style="color:#555;word-break:break-word">${esc(c.obs)}</td>
       </tr>`).join('')
     return `<div class="emp-section">
       <h3>${esc(emp.nome)}</h3>
       <p class="emp-meta">Situação: <b>${sc.label}</b>${emp.obs ? ` &nbsp;·&nbsp; ${esc(emp.obs)}` : ''} &nbsp;·&nbsp; <b>${emp.concessoes.length}</b> concessão(ões)</p>
       <table>
-        <thead><tr><th>Nº</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa / Situação</th><th>Autorizado por</th><th>Observações</th></tr></thead>
+        <thead><tr><th>Nº</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa</th><th>Situação</th><th>Autorizado por</th><th>Observações</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`
   }).join('')
@@ -150,12 +153,14 @@ function buildExcelHtml(pasta: PastaFull): string {
     return (emp.concessoes ?? []).map(c => `<tr>
       <td>${esc(emp.nome)}</td><td>${sc.label}</td><td>${esc(emp.obs)}</td>
       <td>${c.tipo === 'empresa' ? 'Docs Empresa' : 'Docs Pessoa'}</td>
-      <td>${esc(c.documento)}</td><td>${esc(c.pessoa)}</td>
+      <td>${esc(c.documento)}</td>
+      <td>${c.tipo === 'pessoa' ? esc(c.pessoa) : ''}</td>
+      <td>${c.tipo === 'pessoa' ? esc((c as {situacao?: string}).situacao ?? '') : ''}</td>
       <td>${esc(c.concedido_por)}</td><td>${esc(c.obs)}</td>
     </tr>`)
   }).join('')
   return `<html><head><meta charset='utf-8'></head><body><table>
-    <thead><tr><th>Empresa</th><th>Situação</th><th>Obs. Empresa</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa / Situação</th><th>Autorizado por</th><th>Observações</th></tr></thead>
+    <thead><tr><th>Empresa</th><th>Situação</th><th>Obs. Empresa</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa</th><th>Situação Pessoa</th><th>Autorizado por</th><th>Observações</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></body></html>`
 }
@@ -165,6 +170,35 @@ function dlBlob(content: string, filename: string, type: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// ─── AutoArea ────────────────────────────────────────────────────────────────
+
+function AutoArea({ value, onChange, placeholder, style }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; style?: React.CSSProperties
+}) {
+  function resize(el: HTMLTextAreaElement | null) {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }
+  return (
+    <textarea rows={1} value={value ?? ''} placeholder={placeholder}
+      onChange={e => { onChange(e.target.value); resize(e.target) }}
+      ref={el => { if (el) { setTimeout(() => resize(el), 0) } }}
+      style={{ resize: 'none', overflow: 'hidden', width: '100%', border: 'none', background: 'transparent', outline: 'none', font: 'inherit', lineHeight: '1.45', padding: 0, ...style }} />
+  )
+}
+
+function FieldBox({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div style={{ gridColumn: full ? '1 / -1' : 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+      <div style={{ padding: '5px 8px', background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 6, minHeight: 28 }}>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 // ─── Autocomplete ─────────────────────────────────────────────────────────────
@@ -521,7 +555,6 @@ export default function AnotacoesCICClient() {
         )}
 
         {current.empresas.map((emp, idx) => {
-          const sc = STATUS_CFG[emp.status] ?? STATUS_CFG.sem
           const concessoes = emp.concessoes ?? []
           return (
             <div key={emp.id} style={{ background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -533,12 +566,6 @@ export default function AnotacoesCICClient() {
                 </button>
                 <input value={emp.nome} onChange={e => updateEmpresa(emp.id, { nome: e.target.value })} placeholder="Nome da empresa..."
                   style={{ flex: '2', minWidth: 180, fontSize: 13.5, fontWeight: 600, color: TEXT, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'inherit' }} />
-                <button onClick={() => cycleStatus(emp.id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 11px', borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', border: 'none', background: sc.bg, color: sc.color, flexShrink: 0, whiteSpace: 'nowrap' }}
-                  title="Clique para alterar">
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
-                  {sc.label}
-                </button>
                 <input value={emp.obs} onChange={e => updateEmpresa(emp.id, { obs: e.target.value })} placeholder="Observação..."
                   style={{ flex: '3', minWidth: 130, fontSize: 12.5, color: MUTED, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'inherit' }} />
                 {concessoes.length > 0 && (
@@ -552,47 +579,58 @@ export default function AnotacoesCICClient() {
 
               {emp.expanded && (
                 <div style={{ padding: '10px 14px 14px 54px', borderTop: `1px solid ${BORDER}`, background: BG_SEC }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Concessões</div>
-                  {concessoes.length > 0 && (
-                    <div style={{ overflowX: 'auto', marginBottom: 10 }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: BG_SURF, borderRadius: 6, overflow: 'hidden' }}>
-                        <thead>
-                          <tr>
-                            {['', 'Tipo', 'Documento / Concessão', 'Pessoa / Situação', 'Autorizado por', 'Observações', ''].map((h, i) => (
-                              <th key={i} style={{ border: `1px solid ${BORDER}`, padding: '6px 9px', textAlign: 'left', background: PRIMARY, color: '#fff', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', width: i === 0 || i === 6 ? 28 : undefined }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {concessoes.map((c, i) => (
-                            <tr key={c.id} style={{ background: i % 2 === 1 ? BG_SEC : BG_SURF }}>
-                              <td style={{ border: `1px solid ${BORDER}`, padding: '5px 8px', textAlign: 'center', color: MUTED, fontSize: 11 }}>{i + 1}</td>
-                              <td style={{ border: `1px solid ${BORDER}`, padding: '4px 8px', whiteSpace: 'nowrap' }}>
-                                <button onClick={() => updateConcessao(emp.id, c.id, { tipo: c.tipo === 'empresa' ? 'pessoa' : 'empresa' })}
-                                  style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer', background: c.tipo === 'empresa' ? '#e8f0fc' : '#f3e8ff', color: c.tipo === 'empresa' ? '#1d3a74' : '#6b21a8', whiteSpace: 'nowrap' }}
-                                  title="Clique para alternar">
-                                  {c.tipo === 'empresa' ? 'Docs Empresa' : 'Docs Pessoa'}
-                                </button>
-                              </td>
-                              {(['documento', 'pessoa', 'concedido_por', 'obs'] as const).map(field => (
-                                <td key={field} style={{ border: `1px solid ${BORDER}`, padding: '4px 6px' }}>
-                                  <input value={c[field]} onChange={e => updateConcessao(emp.id, c.id, { [field]: e.target.value })}
-                                    placeholder={field === 'concedido_por' ? 'Ex.: Renato' : '—'}
-                                    style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', font: 'inherit', color: TEXT, minWidth: field === 'obs' ? 80 : 100 }}
-                                    onFocus={e => (e.target.style.background = '#e8f0fc')}
-                                    onBlur={e => (e.target.style.background = 'transparent')} />
-                                </td>
-                              ))}
-                              <td style={{ border: `1px solid ${BORDER}`, padding: '4px', textAlign: 'center' }}>
-                                <button onClick={() => deleteConcessao(emp.id, c.id)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, fontSize: 12 }}>✕</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {concessoes.length === 0 && <div style={{ fontSize: 12, color: MUTED, fontStyle: 'italic', marginBottom: 8 }}>Nenhuma concessão registrada ainda.</div>}
+                  {/* Situação (status cycling) */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Situação</span>
+                    <button onClick={() => cycleStatus(emp.id)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: 'none', background: STATUS_CFG[emp.status].bg, color: STATUS_CFG[emp.status].color }}
+                      title="Clique para alterar">
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_CFG[emp.status].dot, display: 'inline-block' }} />
+                      {STATUS_CFG[emp.status].label}
+                    </button>
+                  </div>
+
+                  {/* Concessões */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Concessões</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                    {concessoes.length === 0 && <div style={{ fontSize: 12, color: MUTED, fontStyle: 'italic' }}>Nenhuma concessão registrada ainda.</div>}
+                    {concessoes.map((c, i) => (
+                      <div key={c.id} style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px 10px', background: i % 2 === 0 ? BG_SURF : '#f0f3f9' }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 10, color: MUTED, minWidth: 18 }}>{i + 1}</span>
+                          <button onClick={() => updateConcessao(emp.id, c.id, { tipo: c.tipo === 'empresa' ? 'pessoa' : 'empresa' })} title="Clique para alternar"
+                            style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', background: c.tipo === 'empresa' ? '#e8f0fc' : '#f3e8ff', color: c.tipo === 'empresa' ? '#1d3a74' : '#6b21a8' }}>
+                            {c.tipo === 'empresa' ? '● Docs Empresa' : '● Docs Pessoa'}
+                          </button>
+                          <div style={{ flex: 1 }} />
+                          <button onClick={() => deleteConcessao(emp.id, c.id)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', fontSize: 12, padding: '2px 4px', borderRadius: 4 }}>✕</button>
+                        </div>
+                        {/* Fields */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                          <FieldBox label="Documento / Concessão" full>
+                            <AutoArea value={c.documento} onChange={v => updateConcessao(emp.id, c.id, { documento: v })} placeholder="Descreva a concessão..." style={{ color: TEXT, fontSize: 12.5 }} />
+                          </FieldBox>
+                          {c.tipo === 'pessoa' && (
+                            <>
+                              <FieldBox label="Pessoa">
+                                <AutoArea value={c.pessoa} onChange={v => updateConcessao(emp.id, c.id, { pessoa: v })} placeholder="Nome da pessoa..." style={{ color: TEXT, fontSize: 12.5 }} />
+                              </FieldBox>
+                              <FieldBox label="Situação">
+                                <AutoArea value={c.situacao ?? ''} onChange={v => updateConcessao(emp.id, c.id, { situacao: v })} placeholder="Situação / contexto..." style={{ color: TEXT, fontSize: 12.5 }} />
+                              </FieldBox>
+                            </>
+                          )}
+                          <FieldBox label="Autorizado por">
+                            <AutoArea value={c.concedido_por} onChange={v => updateConcessao(emp.id, c.id, { concedido_por: v })} placeholder="Ex.: Renato" style={{ color: TEXT, fontSize: 12.5 }} />
+                          </FieldBox>
+                          <FieldBox label="Observações">
+                            <AutoArea value={c.obs} onChange={v => updateConcessao(emp.id, c.id, { obs: v })} placeholder="—" style={{ color: TEXT, fontSize: 12.5 }} />
+                          </FieldBox>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                   <button onClick={() => addConcessao(emp.id)}
                     style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: PRIMARY, background: 'transparent', border: `1px dashed ${BORDER}`, borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontWeight: 600 }}>
                     + Nova concessão
