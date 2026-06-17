@@ -340,7 +340,7 @@ export default function AnotacoesCICClient() {
         )}
 
         {current.empresas.map((emp, idx) => {
-          const sc = STATUS_CFG[emp.status]
+          const sc = STATUS_CFG[emp.status] ?? STATUS_CFG.sem
           return (
             <div key={emp.id} style={{ background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
               {/* Main row */}
