@@ -97,6 +97,14 @@ export const MODULES: Module[] = [
     description: 'Plano de Desenvolvimento Individual',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
+  {
+    id: 'anotacoes-cic',
+    label: 'Anotações CIC',
+    color: '#4A90D9',
+    path: '/anotacoes-cic',
+    description: 'Registros de exceções, concessões e pendências de contratantes por feira',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
   // ── Trainee, Gestor e Admin ─────────────────────────────────
   {
     id: 'revisoes-trainee',
