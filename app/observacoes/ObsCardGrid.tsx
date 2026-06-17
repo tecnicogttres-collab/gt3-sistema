@@ -402,27 +402,27 @@ function ObsCard({
             >
               ✏️ Editar
             </button>
+            {card._source === 'db' && onEdit && (
+              <button
+                onClick={onEdit}
+                style={{
+                  fontSize: 11, padding: '2px 8px', borderRadius: 5, border: `1px solid ${BORDER}`,
+                  background: '#F0F4FA', color: PRIMARY, cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                ✎ Editar completo
+              </button>
+            )}
             {canManage && card._source === 'db' && (
-              <>
-                <button
-                  onClick={onEdit}
-                  style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 5, border: `1px solid ${BORDER}`,
-                    background: '#F0F4FA', color: PRIMARY, cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  ✎ Editar completo
-                </button>
-                <button
-                  onClick={onDelete}
-                  style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 5, border: '1px solid #FCA5A5',
-                    background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  🗑 Excluir
-                </button>
-              </>
+              <button
+                onClick={onDelete}
+                style={{
+                  fontSize: 11, padding: '2px 8px', borderRadius: 5, border: '1px solid #FCA5A5',
+                  background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                🗑 Excluir
+              </button>
             )}
           </>
         )}
@@ -648,6 +648,7 @@ export function ObsColumn({
                   onInlineSave={onInlineSave}
                   onValidate={onValidate}
                   canValidate={canManage}
+                  onInlineCreate={async (motivo, parecer) => onInlineCreate(catKey, subtabKey, col.title, motivo, parecer)}
                 />
               )
             })}
