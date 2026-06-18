@@ -29,7 +29,7 @@ export default function RevisaoNRClient() {
   const [loadingIds, setLoadingIds]     = useState<Set<string>>(new Set())
   const [toast, setToast]               = useState('')
   const nomeRef                         = useRef<HTMLInputElement>(null)
-  const toastTimer                      = useRef<ReturnType<typeof setTimeout>>()
+  const toastTimer                      = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)

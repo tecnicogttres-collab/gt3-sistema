@@ -126,7 +126,7 @@ export default function LegislacoesClient() {
   const [catSaving, setCatSaving]       = useState(false)
 
   const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
-  const toastTimer        = useRef<ReturnType<typeof setTimeout>>()
+  const toastTimer        = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
