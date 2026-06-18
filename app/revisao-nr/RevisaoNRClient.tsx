@@ -8,7 +8,8 @@ type Registro = {
   nome: string
   empresa: string
   aso: boolean
-  epi: boolean
+  epi_capacete: boolean
+  epi_cinto: boolean
   corrigido: boolean
   created_at: string
 }
@@ -26,8 +27,9 @@ export default function RevisaoNRClient() {
   const [busca, setBusca]               = useState('')
   const [inputNome, setInputNome]       = useState('')
   const [inputEmpresa, setInputEmpresa] = useState('')
-  const [inputAso, setInputAso]         = useState(false)
-  const [inputEpi, setInputEpi]         = useState(false)
+  const [inputAso, setInputAso]               = useState(false)
+  const [inputEpiCapacete, setInputEpiCapacete] = useState(false)
+  const [inputEpiCinto, setInputEpiCinto]       = useState(false)
   const [modoCorrecao, setModoCorrecao] = useState(false)
   const [adding, setAdding]             = useState(false)
   const [loadingIds, setLoadingIds]     = useState<Set<string>>(new Set())
@@ -74,7 +76,7 @@ export default function RevisaoNRClient() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  async function toggle(id: string, field: 'aso' | 'epi' | 'corrigido') {
+  async function toggle(id: string, field: 'aso' | 'epi_capacete' | 'epi_cinto' | 'corrigido') {
     const reg = registros.find(r => r.id === id)
     if (!reg) return
     const newVal = !reg[field]
@@ -96,7 +98,7 @@ export default function RevisaoNRClient() {
     const res = await fetch('/api/revisao-nr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: inputNome, empresa: inputEmpresa, aso: inputAso, epi: inputEpi }),
+      body: JSON.stringify({ nome: inputNome, empresa: inputEmpresa, aso: inputAso, epi_capacete: inputEpiCapacete, epi_cinto: inputEpiCinto }),
     })
     setAdding(false)
     if (res.ok) {
@@ -105,7 +107,8 @@ export default function RevisaoNRClient() {
       setInputNome('')
       setInputEmpresa('')
       setInputAso(false)
-      setInputEpi(false)
+      setInputEpiCapacete(false)
+      setInputEpiCinto(false)
       nomeRef.current?.focus()
     } else {
       showToast('Erro ao adicionar.')
@@ -120,12 +123,12 @@ export default function RevisaoNRClient() {
 
   async function clearAll() {
     if (!confirm('Limpar todas as marcações de ASO e EPI?')) return
-    const marked = registros.filter(r => r.aso || r.epi)
+    const marked = registros.filter(r => r.aso || r.epi_capacete || r.epi_cinto)
     await Promise.all(marked.map(r =>
       fetch(`/api/revisao-nr/${r.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aso: false, epi: false }),
+        body: JSON.stringify({ aso: false, epi_capacete: false, epi_cinto: false }),
       })
     ))
   }
@@ -135,12 +138,13 @@ export default function RevisaoNRClient() {
     if (!win) return
     const sorted = [...registros].sort((a, b) => a.empresa.localeCompare(b.empresa, 'pt-BR'))
     const rows = sorted.map((r, i) => `
-      <tr style="background:${r.corrigido ? '#f0fdf4' : r.aso || r.epi ? '#fff8f0' : '#fff'}">
+      <tr style="background:${r.corrigido ? '#f0fdf4' : r.aso || r.epi_capacete || r.epi_cinto ? '#fff8f0' : '#fff'}">
         <td style="padding:6px 10px;text-align:center;color:#aaa;font-size:11px">${i + 1}</td>
         <td style="padding:6px 10px;font-weight:600;${r.corrigido ? 'text-decoration:line-through;color:#aaa' : ''}">${r.nome}</td>
         <td style="padding:6px 10px;color:#4a5568">${r.empresa}</td>
         <td style="padding:6px 10px;text-align:center;color:${r.aso ? '#c0392b' : '#aaa'};font-weight:${r.aso ? 'bold' : 'normal'}">${r.aso ? 'PENDENTE' : '—'}</td>
-        <td style="padding:6px 10px;text-align:center;color:${r.epi ? '#c0392b' : '#aaa'};font-weight:${r.epi ? 'bold' : 'normal'}">${r.epi ? 'PENDENTE' : '—'}</td>
+        <td style="padding:6px 10px;text-align:center;color:${r.epi_capacete ? '#c0392b' : '#aaa'};font-weight:${r.epi_capacete ? 'bold' : 'normal'}">${r.epi_capacete ? 'PENDENTE' : '—'}</td>
+        <td style="padding:6px 10px;text-align:center;color:${r.epi_cinto ? '#c0392b' : '#aaa'};font-weight:${r.epi_cinto ? 'bold' : 'normal'}">${r.epi_cinto ? 'PENDENTE' : '—'}</td>
         <td style="padding:6px 10px;text-align:center;color:${r.corrigido ? '#16a34a' : '#aaa'};font-weight:${r.corrigido ? 'bold' : 'normal'}">${r.corrigido ? 'CORRIGIDO' : '—'}</td>
       </tr>`).join('')
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pendências SST</title>
@@ -154,16 +158,18 @@ export default function RevisaoNRClient() {
     </div>
     <div style="display:flex;gap:20px;margin-bottom:14px;font-size:12px;color:#556">
       <span>Total: <b>${registros.length}</b></span>
-      <span style="color:#c47a00">Com pendência: <b>${registros.filter(r => r.aso || r.epi).length}</b></span>
+      <span style="color:#c47a00">Com pendência: <b>${registros.filter(r => r.aso || r.epi_capacete || r.epi_cinto).length}</b></span>
       <span>ASO s/ aptidão: <b>${registros.filter(r => r.aso).length}</b></span>
-      <span>EPI s/ entrega: <b>${registros.filter(r => r.epi).length}</b></span>
+      <span>EPI capacete: <b>${registros.filter(r => r.epi_capacete).length}</b></span>
+      <span>EPI cinto: <b>${registros.filter(r => r.epi_cinto).length}</b></span>
       <span style="color:#16a34a">Corrigidos: <b>${registros.filter(r => r.corrigido).length}</b></span>
     </div>
     <button class="no-print" onclick="window.print()" style="margin-bottom:12px;padding:6px 14px;background:#2A4F96;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir</button>
     <table><thead><tr>
       <th style="width:36px">#</th><th>Nome</th><th>Empresa</th>
       <th style="width:120px;text-align:center">ASO S/ Aptidão</th>
-      <th style="width:150px;text-align:center">EPI S/ Entrega p/ Altura</th>
+      <th style="width:130px;text-align:center">EPI Altura<br><span style="font-weight:400;opacity:.8">Capacete</span></th>
+      <th style="width:130px;text-align:center">EPI Altura<br><span style="font-weight:400;opacity:.8">Cinto c/ Talabarte</span></th>
       <th style="width:110px;text-align:center">Corrigido</th>
     </tr></thead><tbody>${rows}</tbody></table>
     <p style="margin-top:16px;font-size:10px;color:#aaa">GT3 Consultoria — Documento interno</p>
@@ -181,11 +187,12 @@ export default function RevisaoNRClient() {
   }, [registros, busca])
 
   const stats = useMemo(() => ({
-    total:      registros.length,
-    pendentes:  registros.filter(r => r.aso || r.epi).length,
-    aso:        registros.filter(r => r.aso).length,
-    epi:        registros.filter(r => r.epi).length,
-    corrigidos: registros.filter(r => r.corrigido).length,
+    total:        registros.length,
+    pendentes:    registros.filter(r => r.aso || r.epi_capacete || r.epi_cinto).length,
+    aso:          registros.filter(r => r.aso).length,
+    epiCapacete:  registros.filter(r => r.epi_capacete).length,
+    epiCinto:     registros.filter(r => r.epi_cinto).length,
+    corrigidos:   registros.filter(r => r.corrigido).length,
   }), [registros])
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -260,11 +267,12 @@ export default function RevisaoNRClient() {
       {/* Stats */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
-          { n: stats.total,      label: 'registros',       color: '#2A4F96' },
-          { n: stats.pendentes,  label: 'com pendência',   color: '#c47a00' },
-          { n: stats.aso,        label: 'ASO s/ aptidão',  color: '#2A4F96' },
-          { n: stats.epi,        label: 'EPI s/ entrega',  color: '#2A4F96' },
-          { n: stats.corrigidos, label: 'corrigidos',      color: '#16a34a' },
+          { n: stats.total,        label: 'registros',            color: '#2A4F96' },
+          { n: stats.pendentes,    label: 'com pendência',        color: '#c47a00' },
+          { n: stats.aso,          label: 'ASO s/ aptidão',       color: '#2A4F96' },
+          { n: stats.epiCapacete,  label: 'EPI capacete',         color: '#2A4F96' },
+          { n: stats.epiCinto,     label: 'EPI cinto/talabarte',  color: '#2A4F96' },
+          { n: stats.corrigidos,   label: 'corrigidos',           color: '#16a34a' },
         ].map(s => (
           <div key={s.label} style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#556', display: 'flex', alignItems: 'center', gap: 5 }}>
             <strong style={{ color: s.color, fontSize: 14 }}>{s.n}</strong>
@@ -289,8 +297,11 @@ export default function RevisaoNRClient() {
                     <th style={{ ...TH, width: 160, textAlign: 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px' }}>
                       ASO<br /><span style={{ fontWeight: 400, opacity: .75 }}>S/ Aptidão</span>
                     </th>
-                    <th style={{ ...TH, width: 160, textAlign: 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px' }}>
-                      EPI para Altura<br /><span style={{ fontWeight: 400, opacity: .75 }}>S/ Entrega</span>
+                    <th style={{ ...TH, width: 140, textAlign: 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px' }}>
+                      EPI p/ Altura<br /><span style={{ fontWeight: 400, opacity: .75 }}>S/ Capacete</span>
+                    </th>
+                    <th style={{ ...TH, width: 150, textAlign: 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px' }}>
+                      EPI p/ Altura<br /><span style={{ fontWeight: 400, opacity: .75 }}>S/ Cinto c/ Talabarte</span>
                     </th>
                     {modoCorrecao && (
                       <th style={{ ...TH, width: 120, textAlign: 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px', background: '#15803d' }}>
@@ -303,20 +314,21 @@ export default function RevisaoNRClient() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={modoCorrecao ? 7 : 6} style={{ textAlign: 'center', padding: '40px 20px', color: '#aab2c2', fontSize: 13 }}>
+                      <td colSpan={modoCorrecao ? 8 : 7} style={{ textAlign: 'center', padding: '40px 20px', color: '#aab2c2', fontSize: 13 }}>
                         {registros.length === 0 ? 'Nenhum registro. Use o formulário abaixo para adicionar.' : 'Nenhum registro encontrado.'}
                       </td>
                     </tr>
                   ) : filtered.map((reg, idx) => (
                     <tr key={reg.id}
-                      style={{ borderBottom: '1px solid #f0f3f8', background: reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi ? '#fff8f0' : 'transparent', transition: 'background .1s' }}
-                      onMouseEnter={e => { if (!reg.corrigido && !(reg.aso || reg.epi)) (e.currentTarget as HTMLElement).style.background = '#f7f9fd' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi ? '#fff8f0' : 'transparent' }}>
+                      style={{ borderBottom: '1px solid #f0f3f8', background: reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi_capacete || reg.epi_cinto ? '#fff8f0' : 'transparent', transition: 'background .1s' }}
+                      onMouseEnter={e => { if (!reg.corrigido && !(reg.aso || reg.epi_capacete || reg.epi_cinto)) (e.currentTarget as HTMLElement).style.background = '#f7f9fd' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi_capacete || reg.epi_cinto ? '#fff8f0' : 'transparent' }}>
                       <td style={{ padding: '11px 16px', textAlign: 'center', color: '#aab2c2', fontSize: 11 }}>{idx + 1}</td>
                       <td style={{ padding: '11px 16px', fontWeight: 600, color: reg.corrigido ? '#86a890' : '#1a2340', textDecoration: reg.corrigido ? 'line-through' : 'none' }}>{reg.nome}</td>
                       <td style={{ padding: '11px 16px', color: '#4a5568' }}>{reg.empresa}</td>
                       <ToggleCell checked={reg.aso} onClick={() => toggle(reg.id, 'aso')} />
-                      <ToggleCell checked={reg.epi} onClick={() => toggle(reg.id, 'epi')} />
+                      <ToggleCell checked={reg.epi_capacete} onClick={() => toggle(reg.id, 'epi_capacete')} />
+                      <ToggleCell checked={reg.epi_cinto} onClick={() => toggle(reg.id, 'epi_cinto')} />
                       {modoCorrecao && <ToggleCell checked={reg.corrigido} onClick={() => toggle(reg.id, 'corrigido')} color="#16a34a" />}
                       <td style={{ textAlign: 'center', padding: 8 }}>
                         <button
@@ -371,19 +383,33 @@ export default function RevisaoNRClient() {
                 </div>
                 ASO
               </div>
-              {/* EPI toggle */}
+              {/* EPI Capacete toggle */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#556', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                onClick={() => setInputEpi(v => !v)}>
+                onClick={() => setInputEpiCapacete(v => !v)}>
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   width: 32, height: 32, borderRadius: 7, transition: 'all .15s',
-                  border: inputEpi ? '2px solid #c0392b' : '2px solid #dce3ef',
-                  background: inputEpi ? '#c0392b' : '#f9fafc',
+                  border: inputEpiCapacete ? '2px solid #c0392b' : '2px solid #dce3ef',
+                  background: inputEpiCapacete ? '#c0392b' : '#f9fafc',
                   color: '#fff',
                 }}>
-                  {inputEpi && CHECK_ICON}
+                  {inputEpiCapacete && CHECK_ICON}
                 </div>
-                EPI
+                Capacete
+              </div>
+              {/* EPI Cinto toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#556', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setInputEpiCinto(v => !v)}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 32, height: 32, borderRadius: 7, transition: 'all .15s',
+                  border: inputEpiCinto ? '2px solid #c0392b' : '2px solid #dce3ef',
+                  background: inputEpiCinto ? '#c0392b' : '#f9fafc',
+                  color: '#fff',
+                }}>
+                  {inputEpiCinto && CHECK_ICON}
+                </div>
+                Cinto/Talabarte
               </div>
               <button
                 onClick={addRow} disabled={adding || !inputNome.trim()}
