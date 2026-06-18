@@ -116,7 +116,7 @@ export const MODULES: Module[] = [
   {
     id: 'revisao-nr',
     label: 'Revisão NR',
-    color: '#C0392B',
+    color: '#4A90D9',
     path: '/revisao-nr',
     description: 'Controle de pendências SST — ASO e EPI',
     allowedRoles: ['colaborador', 'gestor', 'admin'],
