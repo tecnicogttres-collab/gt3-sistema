@@ -137,16 +137,23 @@ export default function RevisaoNRClient() {
     const win = window.open('', '_blank')
     if (!win) return
     const sorted = [...registros].sort((a, b) => a.empresa.localeCompare(b.empresa, 'pt-BR'))
-    const rows = sorted.map((r, i) => `
-      <tr style="background:${r.corrigido ? '#f0fdf4' : r.aso || r.epi_capacete || r.epi_cinto ? '#fff8f0' : '#fff'}">
-        <td style="padding:6px 10px;text-align:center;color:#aaa;font-size:11px">${i + 1}</td>
-        <td style="padding:6px 10px;font-weight:600;${r.corrigido ? 'text-decoration:line-through;color:#aaa' : ''}">${r.nome}</td>
-        <td style="padding:6px 10px;color:#4a5568">${r.empresa}</td>
-        <td style="padding:6px 10px;text-align:center;color:${r.aso ? '#c0392b' : '#aaa'};font-weight:${r.aso ? 'bold' : 'normal'}">${r.aso ? 'PENDENTE' : '—'}</td>
-        <td style="padding:6px 10px;text-align:center;color:${r.epi_capacete ? '#c0392b' : '#aaa'};font-weight:${r.epi_capacete ? 'bold' : 'normal'}">${r.epi_capacete ? 'PENDENTE' : '—'}</td>
-        <td style="padding:6px 10px;text-align:center;color:${r.epi_cinto ? '#c0392b' : '#aaa'};font-weight:${r.epi_cinto ? 'bold' : 'normal'}">${r.epi_cinto ? 'PENDENTE' : '—'}</td>
-        <td style="padding:6px 10px;text-align:center;color:${r.corrigido ? '#16a34a' : '#aaa'};font-weight:${r.corrigido ? 'bold' : 'normal'}">${r.corrigido ? 'CORRIGIDO' : '—'}</td>
-      </tr>`).join('')
+    let lastEmpresa = ''
+    const rows = sorted.map((r, i) => {
+      const newGroup = r.empresa !== lastEmpresa
+      lastEmpresa = r.empresa
+      const sep = newGroup && i > 0 ? 'border-top:2px solid #bbc8dc;' : ''
+      const bg = r.corrigido ? '#f0fdf4' : r.aso || r.epi_capacete || r.epi_cinto ? '#fff8f0' : '#fff'
+      return `
+      <tr style="background:${bg}">
+        <td style="padding:6px 10px;text-align:center;color:#aaa;font-size:11px;${sep}">${i + 1}</td>
+        <td style="padding:6px 10px;font-weight:600;${r.corrigido ? 'text-decoration:line-through;color:#aaa;' : ''}${sep}">${r.nome}</td>
+        <td style="padding:6px 10px;${newGroup ? 'color:#1e3a6e;font-weight:700;' : 'color:transparent;'}${sep}">${newGroup ? r.empresa : '·'}</td>
+        <td style="padding:6px 10px;text-align:center;color:${r.aso ? '#c0392b' : '#aaa'};font-weight:${r.aso ? 'bold' : 'normal'};${sep}">${r.aso ? 'PENDENTE' : '—'}</td>
+        <td style="padding:6px 10px;text-align:center;color:${r.epi_capacete ? '#c0392b' : '#aaa'};font-weight:${r.epi_capacete ? 'bold' : 'normal'};${sep}">${r.epi_capacete ? 'PENDENTE' : '—'}</td>
+        <td style="padding:6px 10px;text-align:center;color:${r.epi_cinto ? '#c0392b' : '#aaa'};font-weight:${r.epi_cinto ? 'bold' : 'normal'};${sep}">${r.epi_cinto ? 'PENDENTE' : '—'}</td>
+        <td style="padding:6px 10px;text-align:center;color:${r.corrigido ? '#16a34a' : '#aaa'};font-weight:${r.corrigido ? 'bold' : 'normal'};${sep}">${r.corrigido ? 'CORRIGIDO' : '—'}</td>
+      </tr>`
+    }).join('')
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pendências SST</title>
     <style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse;font-size:12px}
     th{background:#2A4F96;color:#fff;padding:9px 10px;text-align:left;font-size:11px;font-weight:600}
