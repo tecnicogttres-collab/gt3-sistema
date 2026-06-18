@@ -13,6 +13,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const updates: Record<string, unknown> = {}
   if (body.aso !== undefined) updates.aso = Boolean(body.aso)
   if (body.epi !== undefined) updates.epi = Boolean(body.epi)
+  if (body.corrigido !== undefined) updates.corrigido = Boolean(body.corrigido)
   if (body.nome !== undefined) updates.nome = String(body.nome).trim()
   if (body.empresa !== undefined) updates.empresa = String(body.empresa).trim()
 

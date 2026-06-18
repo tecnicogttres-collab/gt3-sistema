@@ -9,6 +9,7 @@ type Registro = {
   empresa: string
   aso: boolean
   epi: boolean
+  corrigido: boolean
   created_at: string
 }
 
@@ -27,6 +28,7 @@ export default function RevisaoNRClient() {
   const [inputEmpresa, setInputEmpresa] = useState('')
   const [inputAso, setInputAso]         = useState(false)
   const [inputEpi, setInputEpi]         = useState(false)
+  const [modoCorrecao, setModoCorrecao] = useState(false)
   const [adding, setAdding]             = useState(false)
   const [loadingIds, setLoadingIds]     = useState<Set<string>>(new Set())
   const [toast, setToast]               = useState('')
@@ -72,7 +74,7 @@ export default function RevisaoNRClient() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  async function toggle(id: string, field: 'aso' | 'epi') {
+  async function toggle(id: string, field: 'aso' | 'epi' | 'corrigido') {
     const reg = registros.find(r => r.id === id)
     if (!reg) return
     const newVal = !reg[field]
@@ -131,13 +133,15 @@ export default function RevisaoNRClient() {
   function printReport() {
     const win = window.open('', '_blank')
     if (!win) return
-    const rows = registros.map((r, i) => `
-      <tr style="background:${r.aso || r.epi ? '#fff8f0' : '#fff'}">
+    const sorted = [...registros].sort((a, b) => a.empresa.localeCompare(b.empresa, 'pt-BR'))
+    const rows = sorted.map((r, i) => `
+      <tr style="background:${r.corrigido ? '#f0fdf4' : r.aso || r.epi ? '#fff8f0' : '#fff'}">
         <td style="padding:6px 10px;text-align:center;color:#aaa;font-size:11px">${i + 1}</td>
-        <td style="padding:6px 10px;font-weight:600">${r.nome}</td>
+        <td style="padding:6px 10px;font-weight:600;${r.corrigido ? 'text-decoration:line-through;color:#aaa' : ''}">${r.nome}</td>
         <td style="padding:6px 10px;color:#4a5568">${r.empresa}</td>
         <td style="padding:6px 10px;text-align:center;color:${r.aso ? '#c0392b' : '#aaa'};font-weight:${r.aso ? 'bold' : 'normal'}">${r.aso ? 'PENDENTE' : '—'}</td>
         <td style="padding:6px 10px;text-align:center;color:${r.epi ? '#c0392b' : '#aaa'};font-weight:${r.epi ? 'bold' : 'normal'}">${r.epi ? 'PENDENTE' : '—'}</td>
+        <td style="padding:6px 10px;text-align:center;color:${r.corrigido ? '#16a34a' : '#aaa'};font-weight:${r.corrigido ? 'bold' : 'normal'}">${r.corrigido ? 'CORRIGIDO' : '—'}</td>
       </tr>`).join('')
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pendências SST</title>
     <style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse;font-size:12px}
@@ -153,12 +157,14 @@ export default function RevisaoNRClient() {
       <span style="color:#c47a00">Com pendência: <b>${registros.filter(r => r.aso || r.epi).length}</b></span>
       <span>ASO s/ aptidão: <b>${registros.filter(r => r.aso).length}</b></span>
       <span>EPI s/ entrega: <b>${registros.filter(r => r.epi).length}</b></span>
+      <span style="color:#16a34a">Corrigidos: <b>${registros.filter(r => r.corrigido).length}</b></span>
     </div>
     <button class="no-print" onclick="window.print()" style="margin-bottom:12px;padding:6px 14px;background:#2A4F96;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir</button>
     <table><thead><tr>
       <th style="width:36px">#</th><th>Nome</th><th>Empresa</th>
       <th style="width:120px;text-align:center">ASO S/ Aptidão</th>
       <th style="width:150px;text-align:center">EPI S/ Entrega p/ Altura</th>
+      <th style="width:110px;text-align:center">Corrigido</th>
     </tr></thead><tbody>${rows}</tbody></table>
     <p style="margin-top:16px;font-size:10px;color:#aaa">GT3 Consultoria — Documento interno</p>
     </body></html>`)
@@ -175,10 +181,11 @@ export default function RevisaoNRClient() {
   }, [registros, busca])
 
   const stats = useMemo(() => ({
-    total:     registros.length,
-    pendentes: registros.filter(r => r.aso || r.epi).length,
-    aso:       registros.filter(r => r.aso).length,
-    epi:       registros.filter(r => r.epi).length,
+    total:      registros.length,
+    pendentes:  registros.filter(r => r.aso || r.epi).length,
+    aso:        registros.filter(r => r.aso).length,
+    epi:        registros.filter(r => r.epi).length,
+    corrigidos: registros.filter(r => r.corrigido).length,
   }), [registros])
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -189,16 +196,16 @@ export default function RevisaoNRClient() {
     letterSpacing: '0.3px',
   }
 
-  function ToggleCell({ checked, onClick }: { checked: boolean; onClick: () => void }) {
+  function ToggleCell({ checked, onClick, color = '#c0392b' }: { checked: boolean; onClick: () => void; color?: string }) {
     return (
       <td onClick={onClick}
-        title={checked ? 'Clique para desmarcar' : 'Clique para marcar pendência'}
+        title={checked ? 'Clique para desmarcar' : 'Clique para marcar'}
         style={{ textAlign: 'center', cursor: 'pointer', padding: 8, userSelect: 'none' }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           width: 38, height: 38, borderRadius: 8, margin: 'auto', transition: 'all .15s',
-          border: checked ? '2px solid #c0392b' : '2px solid #dce3ef',
-          background: checked ? '#c0392b' : '#f9fafc',
+          border: checked ? `2px solid ${color}` : '2px solid #dce3ef',
+          background: checked ? color : '#f9fafc',
           color: '#fff',
         }}>
           {checked && CHECK_ICON}
@@ -231,6 +238,10 @@ export default function RevisaoNRClient() {
             onFocus={e => { e.target.style.borderColor = '#2A4F96' }}
             onBlur={e => { e.target.style.borderColor = '#d6dce8' }}
           />
+          <button onClick={() => setModoCorrecao(v => !v)}
+            style={{ padding: '8px 14px', background: modoCorrecao ? '#16a34a' : '#fff', color: modoCorrecao ? '#fff' : '#16a34a', border: `1.5px solid ${modoCorrecao ? '#16a34a' : '#bbf7d0'}`, borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all .15s' }}>
+            {modoCorrecao ? '✓ Modo Correção ativo' : 'Marcar Correções'}
+          </button>
           <button onClick={clearAll}
             style={{ padding: '8px 14px', background: '#fff', color: '#2A4F96', border: '1.5px solid #c2cedf', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             Limpar marcações
@@ -249,13 +260,14 @@ export default function RevisaoNRClient() {
       {/* Stats */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
-          { n: stats.total,     label: 'registros',       warn: false },
-          { n: stats.pendentes, label: 'com pendência',   warn: true  },
-          { n: stats.aso,       label: 'ASO s/ aptidão',  warn: false },
-          { n: stats.epi,       label: 'EPI s/ entrega',  warn: false },
+          { n: stats.total,      label: 'registros',       color: '#2A4F96' },
+          { n: stats.pendentes,  label: 'com pendência',   color: '#c47a00' },
+          { n: stats.aso,        label: 'ASO s/ aptidão',  color: '#2A4F96' },
+          { n: stats.epi,        label: 'EPI s/ entrega',  color: '#2A4F96' },
+          { n: stats.corrigidos, label: 'corrigidos',      color: '#16a34a' },
         ].map(s => (
           <div key={s.label} style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#556', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <strong style={{ color: s.warn ? '#c47a00' : '#2A4F96', fontSize: 14 }}>{s.n}</strong>
+            <strong style={{ color: s.color, fontSize: 14 }}>{s.n}</strong>
             {s.label}
           </div>
         ))}
@@ -280,26 +292,32 @@ export default function RevisaoNRClient() {
                     <th style={{ ...TH, width: 160, textAlign: 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px' }}>
                       EPI para Altura<br /><span style={{ fontWeight: 400, opacity: .75 }}>S/ Entrega</span>
                     </th>
+                    {modoCorrecao && (
+                      <th style={{ ...TH, width: 120, textAlign: 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px', background: '#15803d' }}>
+                        Corrigido
+                      </th>
+                    )}
                     <th style={{ ...TH, width: 40, padding: '13px 8px' }} />
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: '#aab2c2', fontSize: 13 }}>
+                      <td colSpan={modoCorrecao ? 7 : 6} style={{ textAlign: 'center', padding: '40px 20px', color: '#aab2c2', fontSize: 13 }}>
                         {registros.length === 0 ? 'Nenhum registro. Use o formulário abaixo para adicionar.' : 'Nenhum registro encontrado.'}
                       </td>
                     </tr>
                   ) : filtered.map((reg, idx) => (
                     <tr key={reg.id}
-                      style={{ borderBottom: '1px solid #f0f3f8', background: reg.aso || reg.epi ? '#fff8f0' : 'transparent', transition: 'background .1s' }}
-                      onMouseEnter={e => { if (!(reg.aso || reg.epi)) (e.currentTarget as HTMLElement).style.background = '#f7f9fd' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = reg.aso || reg.epi ? '#fff8f0' : 'transparent' }}>
+                      style={{ borderBottom: '1px solid #f0f3f8', background: reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi ? '#fff8f0' : 'transparent', transition: 'background .1s' }}
+                      onMouseEnter={e => { if (!reg.corrigido && !(reg.aso || reg.epi)) (e.currentTarget as HTMLElement).style.background = '#f7f9fd' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi ? '#fff8f0' : 'transparent' }}>
                       <td style={{ padding: '11px 16px', textAlign: 'center', color: '#aab2c2', fontSize: 11 }}>{idx + 1}</td>
-                      <td style={{ padding: '11px 16px', fontWeight: 600, color: '#1a2340' }}>{reg.nome}</td>
+                      <td style={{ padding: '11px 16px', fontWeight: 600, color: reg.corrigido ? '#86a890' : '#1a2340', textDecoration: reg.corrigido ? 'line-through' : 'none' }}>{reg.nome}</td>
                       <td style={{ padding: '11px 16px', color: '#4a5568' }}>{reg.empresa}</td>
                       <ToggleCell checked={reg.aso} onClick={() => toggle(reg.id, 'aso')} />
                       <ToggleCell checked={reg.epi} onClick={() => toggle(reg.id, 'epi')} />
+                      {modoCorrecao && <ToggleCell checked={reg.corrigido} onClick={() => toggle(reg.id, 'corrigido')} color="#16a34a" />}
                       <td style={{ textAlign: 'center', padding: 8 }}>
                         <button
                           onClick={() => deleteRow(reg.id)}
@@ -386,6 +404,10 @@ export default function RevisaoNRClient() {
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 10, height: 10, borderRadius: 3, background: '#dce3ef', border: '1.5px solid #ccc', display: 'inline-block' }} />
           Sem pendência
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#16a34a', display: 'inline-block' }} />
+          Corrigido
         </span>
         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 4 }}>
           🟢 Ao vivo — alterações aparecem instantaneamente para todos os usuários
