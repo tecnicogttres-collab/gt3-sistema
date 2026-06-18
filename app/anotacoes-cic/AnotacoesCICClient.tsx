@@ -57,20 +57,37 @@ function pastaStats(empresas: Empresa[]) {
   return { total: empresas.length, pend, ok, totalConcessoes }
 }
 
+function migrateConcessao(raw: Record<string, unknown>): Concessao {
+  return {
+    id: String(raw.id ?? uid()),
+    tipo: (raw.tipo === 'empresa' || raw.tipo === 'pessoa') ? raw.tipo : 'empresa',
+    documento: String(raw.documento ?? raw.doc ?? ''),
+    pessoa: String(raw.pessoa ?? ''),
+    situacao: String(raw.situacao ?? ''),
+    concedido_por: String(raw.concedido_por ?? raw.responsavel ?? ''),
+    obs: String(raw.obs ?? ''),
+  }
+}
+
 function migrateEmpresa(raw: Record<string, unknown>): Empresa {
   if ('anotacoes' in raw && !('concessoes' in raw)) {
-    const anots = (raw.anotacoes as { id?: string; pessoa?: string; doc?: string; obs?: string; responsavel?: string }[]) ?? []
+    const anots = (raw.anotacoes as Record<string, unknown>[]) ?? []
     return {
       id: String(raw.id ?? uid()),
       nome: String(raw.nome ?? ''),
       status: STATUS_ORDER.includes(raw.status as Empresa['status']) ? raw.status as Empresa['status'] : 'sem',
       obs: String(raw.obs ?? ''),
       expanded: false,
-      concessoes: anots.map(a => ({ id: a.id ?? uid(), tipo: 'empresa' as const, documento: a.doc ?? '', pessoa: a.pessoa ?? '', situacao: '', concedido_por: a.responsavel ?? '', obs: a.obs ?? '' })),
+      concessoes: anots.map(migrateConcessao),
     }
   }
   const emp = raw as Empresa
-  return { ...emp, status: STATUS_ORDER.includes(emp.status) ? emp.status : 'sem', concessoes: Array.isArray(emp.concessoes) ? emp.concessoes : [] }
+  const rawConcessoes = Array.isArray(emp.concessoes) ? emp.concessoes : []
+  return {
+    ...emp,
+    status: STATUS_ORDER.includes(emp.status) ? emp.status : 'sem',
+    concessoes: rawConcessoes.map(c => migrateConcessao(c as Record<string, unknown>)),
+  }
 }
 
 function rowFromApi(row: { id: string; nome: string; periodo: string; dados: unknown; created_at: string }): PastaFull {
@@ -88,7 +105,7 @@ function rowFromApi(row: { id: string; nome: string; periodo: string; dados: unk
 }
 
 function cloneEmpresa(emp: Empresa): Empresa {
-  return { ...emp, id: uid(), expanded: false, concessoes: emp.concessoes.map(c => ({ ...c, id: uid() })) }
+  return { ...emp, id: uid(), expanded: false, concessoes: (emp.concessoes ?? []).map(c => ({ ...c, id: uid() })) }
 }
 
 // ─── Report / Export ─────────────────────────────────────────────────────────
