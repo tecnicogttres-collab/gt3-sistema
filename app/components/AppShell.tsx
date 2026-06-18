@@ -307,6 +307,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [showLembreteNotif, setShowLembreteNotif] = useState(false)
 
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
+  const [legislacoesPendentes, setLegislacoesPendentes] = useState(0)
   const [pdiConversaBanner, setPdiConversaBanner] = useState<PdiConversaBanner | null>(null)
   const [pdiNotifBanner, setPdiNotifBanner] = useState<PdiNotifBanner | null>(null)
   const [pdiCriadoNotif, setPdiCriadoNotif] = useState<PdiNotifBanner | null>(null)
@@ -322,6 +323,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   const isColabOrTrainee = profile?.papel === 'colaborador' || profile?.papel === 'trainee'
+
+  const loadLegislacoesPendentes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/legislacoes')
+      if (!res.ok) return
+      const data: Array<{ lida: boolean }> = await res.json()
+      setLegislacoesPendentes(data.filter(l => !l.lida).length)
+    } catch { /* noop */ }
+  }, [])
 
   const loadUnreadAtas = useCallback(async (userId: string) => {
     if (!isColabOrTrainee) return
@@ -452,6 +462,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       checkUnseenSugestoes(),
       checkUnseenEnquetes(),
       checkLembretesPendentes(),
+      loadLegislacoesPendentes(),
     ])
 
     let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -534,13 +545,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       stopPoll()
       supabase.removeChannel(channel)
     }
-  }, [profile, isColabOrTrainee])
+  }, [profile, isColabOrTrainee, loadLegislacoesPendentes])
 
-  // Reload unread banner when navigating away from atas
+  // Reload unread banner when navigating away from atas / legislacoes
   useEffect(() => {
     if (!profile || !isColabOrTrainee) return
     loadUnreadAtas(profile.id)
   }, [pathname, profile, isColabOrTrainee, loadUnreadAtas])
+
+  useEffect(() => {
+    if (!profile) return
+    loadLegislacoesPendentes()
+  }, [pathname, profile, loadLegislacoesPendentes])
 
   if (pathname === '/login') return <>{children}</>
 
@@ -740,6 +756,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 }}
               >
                 Ler agora
+              </button>
+            </div>
+          )}
+
+          {pathname !== '/legislacoes' && legislacoesPendentes > 0 && (
+            <div style={{
+              backgroundColor: '#FEF3C7', borderBottom: '2px solid #F59E0B',
+              padding: '10px 24px', display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexShrink: 0, gap: 12,
+            }}>
+              <span style={{ fontSize: 13, color: '#92400E', fontWeight: 500 }}>
+                📜 {legislacoesPendentes === 1
+                  ? '1 legislação aguarda confirmação de leitura'
+                  : `${legislacoesPendentes} legislações aguardam confirmação de leitura`}
+                <span style={{ fontWeight: 400, marginLeft: 6 }}>— confirme para dispensar este aviso</span>
+              </span>
+              <button
+                onClick={() => router.push('/legislacoes')}
+                style={{
+                  padding: '4px 14px', borderRadius: 6, border: 'none',
+                  background: '#D97706', color: '#fff', fontSize: 12,
+                  fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                Ver agora
               </button>
             </div>
           )}

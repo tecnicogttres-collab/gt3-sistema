@@ -105,6 +105,22 @@ export const MODULES: Module[] = [
     description: 'Registros de exceções, concessões e pendências de contratantes por feira',
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
+  {
+    id: 'legislacoes',
+    label: 'Legislações',
+    color: '#4A90D9',
+    path: '/legislacoes',
+    description: 'Atualizações normativas direcionadas à equipe',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
+    id: 'revisao-nr',
+    label: 'Revisão NR',
+    color: '#C0392B',
+    path: '/revisao-nr',
+    description: 'Controle de pendências SST — ASO e EPI',
+    allowedRoles: ['colaborador', 'gestor', 'admin'],
+  },
   // ── Trainee, Gestor e Admin ─────────────────────────────────
   {
     id: 'revisoes-trainee',

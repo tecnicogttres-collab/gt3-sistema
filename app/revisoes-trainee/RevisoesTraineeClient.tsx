@@ -707,18 +707,19 @@ export default function RevisoesTraineeClient() {
       <td style="padding:5px 8px;font-size:11px;color:${STATUS_TEXT[r.status]};font-weight:600;">${STATUS_LABEL[r.status]}</td>
       <td style="padding:5px 8px;font-size:11px;">${r.revisado_por_profile?.nome ?? '—'}</td>
     </tr>`).join('')
-    const totals = (reportResult ?? []).reduce((acc, r) => { acc[r.status] = (acc[r.status] ?? 0) + 1; return acc }, {} as Record<string, number>)
+    const totals = (reportResult ?? []).reduce((acc, r) => { const w = docWeight(r); acc[r.status] = (acc[r.status] ?? 0) + w; return acc }, {} as Record<string, number>)
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório GT3</title>
     <style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse}
     th{background:#f0f4fa;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
     .totals{display:flex;gap:16px;margin:12px 0;font-size:13px}
     @media print{.no-print{display:none}}</style></head><body>
     <h2 style="margin:0 0 4px;font-size:18px">Relatório de Revisões Trainee</h2>
-    <p style="margin:0 0 12px;font-size:12px;color:#6B7A99">${reportResult.length} registros · gerado em ${new Date().toLocaleString('pt-BR')}</p>
+    <p style="margin:0 0 12px;font-size:12px;color:#6B7A99">${sumWeight(reportResult)} documentos · gerado em ${new Date().toLocaleString('pt-BR')}</p>
     <div class="totals">
       <span>✅ Aprovados: <b>${totals.green ?? 0}</b></span>
       <span>❌ Erros: <b>${totals.red ?? 0}</b></span>
       <span>⚠️ A discutir: <b>${totals.yellow ?? 0}</b></span>
+      <span>🔧 Corrigidos: <b>${totals.erro_corrigido ?? 0}</b></span>
       <span>⏳ Pendentes: <b>${totals.pending ?? 0}</b></span>
     </div>
     <button class="no-print" onclick="window.print()" style="margin-bottom:12px;padding:6px 14px;background:#2A4F96;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir</button>
@@ -1221,6 +1222,7 @@ export default function RevisoesTraineeClient() {
               const hRed = sumWeight(hRecs.filter(r => r.status === 'red'))
               const hYellow = sumWeight(hRecs.filter(r => r.status === 'yellow'))
               const hPending = sumWeight(hRecs.filter(r => r.status === 'pending'))
+              const hCorrigido = sumWeight(hRecs.filter(r => r.status === 'erro_corrigido'))
 
               const traineeMap: Record<string, { nome: string; recs: Registro[] }> = {}
               hRecs.forEach(r => {
@@ -1242,6 +1244,7 @@ export default function RevisoesTraineeClient() {
                           <span style={{ color: '#16A34A' }}>● {hGreen}</span>
                           <span style={{ color: '#DC2626' }}>● {hRed}</span>
                           <span style={{ color: '#D97706' }}>● {hYellow}</span>
+                          {hCorrigido > 0 && <span style={{ color: '#C2410C' }}>🔧 {hCorrigido}</span>}
                           {hPending > 0 && <span style={{ color: '#94A3B8' }}>○ {hPending}</span>}
                         </>
                       )}
@@ -1449,6 +1452,7 @@ export default function RevisoesTraineeClient() {
                       { label: 'Aprovados', value: sumWeight(reportResult.filter(r => r.status === 'green')), color: '#16A34A' },
                       { label: 'Erros', value: sumWeight(reportResult.filter(r => r.status === 'red')), color: '#DC2626' },
                       { label: 'A discutir', value: sumWeight(reportResult.filter(r => r.status === 'yellow')), color: '#D97706' },
+                      { label: 'Corrigidos', value: sumWeight(reportResult.filter(r => r.status === 'erro_corrigido')), color: '#C2410C' },
                       { label: 'Pendentes', value: sumWeight(reportResult.filter(r => r.status === 'pending')), color: '#6B7A99' },
                     ].map(s => (
                       <div key={s.label} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 14px', minWidth: 80 }}>
