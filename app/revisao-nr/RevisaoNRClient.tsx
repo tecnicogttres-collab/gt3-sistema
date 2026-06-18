@@ -25,6 +25,8 @@ export default function RevisaoNRClient() {
   const [busca, setBusca]               = useState('')
   const [inputNome, setInputNome]       = useState('')
   const [inputEmpresa, setInputEmpresa] = useState('')
+  const [inputAso, setInputAso]         = useState(false)
+  const [inputEpi, setInputEpi]         = useState(false)
   const [adding, setAdding]             = useState(false)
   const [loadingIds, setLoadingIds]     = useState<Set<string>>(new Set())
   const [toast, setToast]               = useState('')
@@ -92,12 +94,16 @@ export default function RevisaoNRClient() {
     const res = await fetch('/api/revisao-nr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: inputNome, empresa: inputEmpresa }),
+      body: JSON.stringify({ nome: inputNome, empresa: inputEmpresa, aso: inputAso, epi: inputEpi }),
     })
     setAdding(false)
     if (res.ok) {
+      const created: Registro = await res.json()
+      setRegistros(prev => prev.some(r => r.id === created.id) ? prev : [...prev, created])
       setInputNome('')
       setInputEmpresa('')
+      setInputAso(false)
+      setInputEpi(false)
       nomeRef.current?.focus()
     } else {
       showToast('Erro ao adicionar.')
@@ -333,6 +339,34 @@ export default function RevisaoNRClient() {
                 onFocus={e => { e.target.style.borderColor = '#2A4F96' }}
                 onBlur={e => { e.target.style.borderColor = '#d6dce8' }}
               />
+              {/* ASO toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#556', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setInputAso(v => !v)}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 32, height: 32, borderRadius: 7, transition: 'all .15s',
+                  border: inputAso ? '2px solid #c0392b' : '2px solid #dce3ef',
+                  background: inputAso ? '#c0392b' : '#f9fafc',
+                  color: '#fff',
+                }}>
+                  {inputAso && CHECK_ICON}
+                </div>
+                ASO
+              </div>
+              {/* EPI toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#556', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setInputEpi(v => !v)}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 32, height: 32, borderRadius: 7, transition: 'all .15s',
+                  border: inputEpi ? '2px solid #c0392b' : '2px solid #dce3ef',
+                  background: inputEpi ? '#c0392b' : '#f9fafc',
+                  color: '#fff',
+                }}>
+                  {inputEpi && CHECK_ICON}
+                </div>
+                EPI
+              </div>
               <button
                 onClick={addRow} disabled={adding || !inputNome.trim()}
                 style={{ padding: '8px 16px', background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: adding || !inputNome.trim() ? 'not-allowed' : 'pointer', opacity: adding || !inputNome.trim() ? 0.6 : 1, whiteSpace: 'nowrap' }}>
