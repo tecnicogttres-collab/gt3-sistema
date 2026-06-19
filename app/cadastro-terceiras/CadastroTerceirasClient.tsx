@@ -44,7 +44,7 @@ const GUIAS: Guia[] = [
       { id: 'gt0100',        label: 'GT0100',           estados: ['pendente', 'ok', 'na'] },
       { id: 'cc_notif',      label: 'CC / Notificação', estados: ['pendente', 'ok', 'na'], condicional: true },
       { id: 'pasta_rede',    label: 'Pasta Rede',       estados: ['pendente', 'ok', 'na'] },
-      { id: 'gt0180',        label: 'GT0180',           estados: ['pendente', 'sob_demanda', 'mensal', 'na', 'validado'], reqGestor: true },
+      { id: 'gt0180',        label: 'GT0180',           estados: ['pendente', 'sob_demanda', 'mensal', 'na', 'validado'] },
       { id: 'cnpj_liberado', label: 'CNPJ Liberado',    estados: ['nao_liberado', 'liberado', 'na'] },
       { id: 'gt8005',        label: 'Cadastro GT8005',  estados: ['pendente', 'ok', 'na'] },
     ],
@@ -313,8 +313,6 @@ export default function CadastroTerceirasClient() {
       setModalNova(false)
       setNovaTerceira({ contratante_id: '', razao_social: '', contato: '', data: new Date().toISOString().slice(0, 10), tem_sub: false, subcontratante: '', observacao: '' })
       showToast('✓ Terceira cadastrada', 'success')
-      setSelectedId(nova.id)
-      setDrawerTab('detalhes')
     } finally {
       setSalvandoNova(false)
     }
@@ -1028,8 +1026,8 @@ function TerceiraRow({
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
     >
       {/* Contratante */}
-      <td style={tdSt}>
-        <span style={{ background: S.primaryLight, color: S.primary, padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      <td style={{ ...tdSt, maxWidth: 140 }}>
+        <span style={{ background: S.primaryLight, color: S.primary, padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 600, display: 'inline-block', wordBreak: 'break-word', lineHeight: 1.4 }}>
           {t.contratante?.nome ?? '—'}
         </span>
       </td>
