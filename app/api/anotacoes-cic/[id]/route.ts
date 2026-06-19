@@ -4,6 +4,22 @@ import { getCaller } from '../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
+export async function GET(_req: NextRequest, { params }: Params) {
+  const { id } = await params
+  const caller = await getCaller()
+  if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('anotacoes_cic')
+    .select('id, nome, periodo, dados, created_at')
+    .eq('id', id)
+    .single()
+
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+  return Response.json(data)
+}
+
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
   const caller = await getCaller()

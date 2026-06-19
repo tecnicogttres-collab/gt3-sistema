@@ -240,15 +240,19 @@ function ImportModal({ pastas, currentId, onImport, onClose }: {
   const [importarConcessoes, setImportarConcessoes] = useState(true)
   const selectedPasta = outras.find(p => p.id === selectedPastaId)
 
+  const empresasOrdenadas = selectedPasta
+    ? [...selectedPasta.empresas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    : []
+
   function toggleAll() {
     if (!selectedPasta) return
-    setSelectedIds(selectedIds.size === selectedPasta.empresas.length ? new Set() : new Set(selectedPasta.empresas.map(e => e.id)))
+    setSelectedIds(selectedIds.size === empresasOrdenadas.length ? new Set() : new Set(empresasOrdenadas.map(e => e.id)))
   }
 
   function doImport() {
     if (!selectedPasta || selectedIds.size === 0) return
     onImport(
-      selectedPasta.empresas
+      empresasOrdenadas
         .filter(e => selectedIds.has(e.id))
         .map(e => {
           const clone = cloneEmpresa(e)
@@ -262,13 +266,14 @@ function ImportModal({ pastas, currentId, onImport, onClose }: {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
+      <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 600, maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: PRIMARY }}>📥 Importar de outra pasta</div>
 
         {outras.length === 0 ? (
           <p style={{ color: MUTED, fontSize: 13 }}>Não há outras pastas disponíveis para importar.</p>
         ) : (
           <>
+            {/* Pasta de origem */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pasta de origem</label>
               <select value={selectedPastaId} onChange={e => { setSelectedPastaId(e.target.value); setSelectedIds(new Set()) }}
@@ -278,37 +283,49 @@ function ImportModal({ pastas, currentId, onImport, onClose }: {
             </div>
 
             {selectedPasta && (
-              <div style={{ flex: 1, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, maxHeight: 320 }}>
-                <div style={{ padding: '8px 12px', background: BG_SEC, borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 1 }}>
-                  <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>
-                    {selectedPasta.empresas.length} empresa(s) &nbsp;·&nbsp; {selectedIds.size} selecionada(s)
-                  </span>
-                  <button onClick={toggleAll} style={{ fontSize: 11, color: PRIMARY, background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-                    {selectedIds.size === selectedPasta.empresas.length ? 'Desmarcar todas' : 'Selecionar todas'}
-                  </button>
+              <>
+                {/* Indicador da pasta */}
+                <div style={{ fontSize: 12, color: MUTED, background: BG_SEC, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 10px' }}>
+                  Importando de: <strong style={{ color: TEXT }}>{selectedPasta.nome}{selectedPasta.periodo ? ` — ${selectedPasta.periodo}` : ''}</strong>
+                  &nbsp;·&nbsp; {empresasOrdenadas.length} empresa(s)
+                  &nbsp;·&nbsp; {empresasOrdenadas.filter(e => (e.concessoes ?? []).length > 0).length} com concessão
                 </div>
-                {selectedPasta.empresas.map(emp => {
-                  const sc = STATUS_CFG[emp.status] ?? STATUS_CFG.sem
-                  const checked = selectedIds.has(emp.id)
-                  return (
-                    <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', background: checked ? '#e8f0fc' : 'transparent' }}>
-                      <input type="checkbox" checked={checked} onChange={() => {
-                        const next = new Set(selectedIds); checked ? next.delete(emp.id) : next.add(emp.id); setSelectedIds(next)
-                      }} style={{ width: 15, height: 15, accentColor: PRIMARY, flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.nome}</div>
-                        {emp.obs && <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.obs}</div>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
-                        <span style={{ fontSize: 10.5, color: sc.color, background: sc.bg, padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{sc.label}</span>
-                        {(emp.concessoes ?? []).length > 0 && (
-                          <span style={{ fontSize: 10.5, color: PRIMARY, background: '#e8f0fc', padding: '2px 7px', borderRadius: 20, fontWeight: 600 }}>{emp.concessoes.length} conc.</span>
-                        )}
-                      </div>
-                    </label>
-                  )
-                })}
-              </div>
+
+                {/* Lista de empresas ordenada */}
+                <div style={{ flex: 1, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, maxHeight: 360 }}>
+                  <div style={{ padding: '8px 12px', background: BG_SEC, borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 1 }}>
+                    <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>
+                      {selectedIds.size} selecionada(s)
+                    </span>
+                    <button onClick={toggleAll} style={{ fontSize: 11, color: PRIMARY, background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                      {selectedIds.size === empresasOrdenadas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                    </button>
+                  </div>
+                  {empresasOrdenadas.map(emp => {
+                    const sc = STATUS_CFG[emp.status] ?? STATUS_CFG.sem
+                    const checked = selectedIds.has(emp.id)
+                    const nConc = (emp.concessoes ?? []).length
+                    return (
+                      <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', background: checked ? '#e8f0fc' : 'transparent' }}>
+                        <input type="checkbox" checked={checked} onChange={() => {
+                          const next = new Set(selectedIds); checked ? next.delete(emp.id) : next.add(emp.id); setSelectedIds(next)
+                        }} style={{ width: 15, height: 15, accentColor: PRIMARY, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.nome}</div>
+                          {emp.obs && <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.obs}</div>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 5, flexShrink: 0, alignItems: 'center' }}>
+                          <span style={{ fontSize: 10.5, color: sc.color, background: sc.bg, padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{sc.label}</span>
+                          {nConc > 0
+                            ? <span style={{ fontSize: 10.5, color: PRIMARY, background: '#e8f0fc', padding: '2px 7px', borderRadius: 20, fontWeight: 700 }}>{nConc} conc.</span>
+                            : <span style={{ fontSize: 10.5, color: MUTED, background: BG_SEC, padding: '2px 7px', borderRadius: 20 }}>sem conc.</span>
+                          }
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </>
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -389,7 +406,16 @@ export default function AnotacoesCICClient() {
     })
   }
 
-  function openPasta(p: PastaFull) { setCurrent(p); setView('detail') }
+  async function openPasta(p: PastaFull) {
+    setCurrent(p); setView('detail')
+    // Busca dados frescos do servidor para não sobrescrever com cache desatualizado
+    const r = await fetch(`/api/anotacoes-cic/${p.id}`)
+    if (r.ok) {
+      const fresh = rowFromApi(await r.json())
+      setCurrent(fresh)
+      setPastas(prev => prev.map(x => x.id === fresh.id ? fresh : x))
+    }
+  }
   function backToList() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setSaving(false); setCurrent(null); setView('list'); setQuickAdd(''); setAcSuggs([])
