@@ -185,13 +185,15 @@ export default function LembretesClient() {
     try {
       const supabase = createClient()
       const mesRef = mesReferenciaAtual()
+      const baseQuery = supabase
+        .from('lembretes_historico')
+        .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, created_at')
+        .eq('mes_referencia', mesRef)
+        .order('created_at', { ascending: false })
+      const histQuery = !isGestorOrAdmin && profile?.id ? baseQuery.eq('usuario_id', profile.id) : baseQuery
       const [lembretesRes, { data: histData }] = await Promise.all([
         fetch('/api/lembretes'),
-        supabase
-          .from('lembretes_historico')
-          .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, created_at')
-          .eq('mes_referencia', mesRef)
-          .order('created_at', { ascending: false }),
+        histQuery,
       ])
       if (lembretesRes.ok) setLembretes(await lembretesRes.json())
       const hist = histData ?? []
@@ -200,7 +202,7 @@ export default function LembretesClient() {
     } catch { /* noop */ } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isGestorOrAdmin, profile?.id])
 
   useEffect(() => { void load() }, [load])
 
@@ -213,16 +215,17 @@ export default function LembretesClient() {
     setCalHistoricoLoading(true)
     const mesRef = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`
     const supabase = createClient()
-    supabase
+    const baseQuery = supabase
       .from('lembretes_historico')
       .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, created_at')
       .eq('mes_referencia', mesRef)
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setCalHistorico(data ?? [])
-        setCalHistoricoLoading(false)
-      })
-  }, [calYear, calMonth, historico])
+    const calQuery = !isGestorOrAdmin && profile?.id ? baseQuery.eq('usuario_id', profile.id) : baseQuery
+    calQuery.then(({ data }) => {
+      setCalHistorico(data ?? [])
+      setCalHistoricoLoading(false)
+    })
+  }, [calYear, calMonth, historico, isGestorOrAdmin, profile?.id])
 
   // ── Mês atual ──────────────────────────────────────────────────────────────
 
