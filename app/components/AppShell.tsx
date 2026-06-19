@@ -676,17 +676,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 title="Voltar"
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#A0AEC0', fontSize: 16, lineHeight: 1,
-                  padding: '2px 4px', borderRadius: 4,
-                  display: 'flex', alignItems: 'center',
+                  color: '#A0AEC0', fontSize: 13, lineHeight: 1,
+                  padding: '6px 10px', borderRadius: 6,
+                  display: 'flex', alignItems: 'center', gap: 6,
                   transition: 'color 0.12s',
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#1E3A6E' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#A0AEC0' }}
               >
-                ←
+                <span style={{ fontSize: 16, lineHeight: 1 }}>←</span>
+                <span>{breadcrumb}</span>
               </button>
-              <span style={{ fontSize: 13, color: '#6B7A99' }}>{breadcrumb}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <HeaderSearch />
