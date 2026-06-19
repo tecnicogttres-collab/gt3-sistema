@@ -177,7 +177,8 @@ export default function LegislacoesClient() {
 
   // ── Computed ────────────────────────────────────────────────────────────────
 
-  const canCreate = ['gestor', 'admin'].includes(papel)
+  const canCreate     = true
+  const canManageCats = ['gestor', 'admin'].includes(papel)
 
   const stats = useMemo(() => {
     const vis   = legislacoes.filter(l => isVisivelPara(l, userId, papel))
@@ -339,17 +340,17 @@ export default function LegislacoesClient() {
           <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
             <input type="text" placeholder="Buscar por título..." value={busca} onChange={e => setBusca(e.target.value)}
               style={{ flex: 1, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 12px', fontSize: 13.5, fontFamily: 'inherit', background: BG, color: TEXT, outline: 'none' }} />
+            {canManageCats && (
+              <button onClick={() => setCatOpen(true)} title="Gerenciar categorias"
+                style={{ background: BG, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 12px', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                ⚙
+              </button>
+            )}
             {canCreate && (
-              <>
-                <button onClick={() => setCatOpen(true)} title="Gerenciar categorias"
-                  style={{ background: BG, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 12px', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  ⚙
-                </button>
-                <button onClick={() => setDrawerOpen(true)}
-                  style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
-                  + Nova legislação
-                </button>
-              </>
+              <button onClick={() => setDrawerOpen(true)}
+                style={{ background: PRIMARY, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                + Nova legislação
+              </button>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>

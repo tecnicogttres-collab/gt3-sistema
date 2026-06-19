@@ -328,8 +328,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch('/api/legislacoes')
       if (!res.ok) return
-      const data: Array<{ lida: boolean }> = await res.json()
-      setLegislacoesPendentes(data.filter(l => !l.lida).length)
+      const data: Array<{ lida: boolean; para_mim: boolean }> = await res.json()
+      setLegislacoesPendentes(data.filter(l => !l.lida && l.para_mim).length)
     } catch { /* noop */ }
   }, [])
 

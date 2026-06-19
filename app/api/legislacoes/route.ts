@@ -20,17 +20,23 @@ export async function GET() {
   ])
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  const { data: callerProfile } = await admin.from('profiles').select('papel').eq('id', caller.user.id).single()
+  const papel = (callerProfile as { papel?: string } | null)?.papel ?? 'colaborador'
+
   const lidaSet = new Set((lidas ?? []).map(l => l.legislacao_id))
-  return Response.json((legs ?? []).map(l => ({ ...l, lida: lidaSet.has(l.id) })))
+  return Response.json((legs ?? []).map(l => ({
+    ...l,
+    lida: lidaSet.has(l.id),
+    para_mim: (l.destinatarios ?? []).includes('todos')
+      || (l.destinatarios ?? []).includes(papel)
+      || (l.destinatarios ?? []).includes(caller.user.id),
+  })))
 }
 
 export async function POST(req: NextRequest) {
   const caller = await getCaller()
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
-  if (!['gestor', 'admin'].includes(caller.role)) {
-    return Response.json({ error: 'Sem permissão' }, { status: 403 })
-  }
-
   const body = await req.json()
   const { titulo, descricao, link, categoria, destinatarios } = body
 
