@@ -114,11 +114,11 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
-    id: 'revisao-nr',
-    label: 'Revisão NR',
+    id: 'revisoes-docs',
+    label: 'Revisões Documentos',
     color: '#4A90D9',
-    path: '/revisao-nr',
-    description: 'Controle de pendências SST — ASO e EPI',
+    path: '/revisoes-docs',
+    description: 'Checklists de pendências por revisão com campos configuráveis',
     allowedRoles: ['colaborador', 'gestor', 'admin'],
   },
   // ── Trainee, Gestor e Admin ─────────────────────────────────
