@@ -182,6 +182,13 @@ export default function CadastroTerceirasClient() {
   })
   const [salvandoNova, setSalvandoNova] = useState(false)
 
+  // Modal relatório
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportOpts, setReportOpts] = useState<{
+    contratante: string; status: 'todos' | 'ativos' | 'historico'
+    subcontratadas: 'todas' | 'com' | 'sem'; dataInicio: string; dataFim: string
+  }>({ contratante: '', status: 'todos', subcontratadas: 'todas', dataInicio: '', dataFim: '' })
+
   // Modal contratantes
   const [modalContratantes, setModalContratantes] = useState(false)
   const [novoContratante, setNovoContratante] = useState({ nome: '', requer_cc: false })
@@ -212,6 +219,113 @@ export default function CadastroTerceirasClient() {
     toastTimer.current = setTimeout(() => setToast(null), 3000)
   }
 
+  function gerarRelatorio(formato: 'pdf' | 'xls') {
+    const SHORT: Record<EtapaId, string> = {
+      gt0100: 'GT0100', cc_notif: 'CC/Notif.', pasta_rede: 'Pasta Rede',
+      gt0180: 'GT0180', cnpj_liberado: 'CNPJ Lib.', gt8005: 'GT8005', email: 'E-mail',
+    }
+    const allEtapas = GUIAS.flatMap(g => g.etapas)
+
+    let pool: Terceira[] = []
+    if (reportOpts.status === 'ativos') pool = [...ativos]
+    else if (reportOpts.status === 'historico') pool = [...arquivados]
+    else pool = [...terceiras]
+
+    if (reportOpts.contratante) pool = pool.filter(t => t.contratante_id === reportOpts.contratante)
+    if (reportOpts.subcontratadas === 'com') pool = pool.filter(t => t.tem_sub)
+    else if (reportOpts.subcontratadas === 'sem') pool = pool.filter(t => !t.tem_sub)
+    if (reportOpts.dataInicio) pool = pool.filter(t => (t.created_at ?? t.data).slice(0, 10) >= reportOpts.dataInicio)
+    if (reportOpts.dataFim) pool = pool.filter(t => (t.created_at ?? t.data).slice(0, 10) <= reportOpts.dataFim)
+
+    pool.sort((a, b) =>
+      (a.contratante?.nome ?? '').localeCompare(b.contratante?.nome ?? '', 'pt-BR') ||
+      a.razao_social.localeCompare(b.razao_social, 'pt-BR')
+    )
+
+    const statusLabel = { todos: 'Todos', ativos: 'Ativos', historico: 'Histórico' }[reportOpts.status]
+    const contNome = reportOpts.contratante
+      ? (contratantes.find(c => c.id === reportOpts.contratante)?.nome ?? '')
+      : 'Todas'
+    const subLabel = { todas: 'Todas', com: 'Com subcontratadas', sem: 'Sem subcontratadas' }[reportOpts.subcontratadas]
+    const filtros = [
+      `Contratante: ${contNome}`,
+      `Status: ${statusLabel}`,
+      `Subcontratadas: ${subLabel}`,
+      reportOpts.dataInicio ? `De: ${fmtData(reportOpts.dataInicio)}` : null,
+      reportOpts.dataFim ? `Até: ${fmtData(reportOpts.dataFim)}` : null,
+    ].filter(Boolean).join(' · ')
+
+    const rows = pool.map(t => {
+      const prog = calcProgresso(t)
+      const etapasRow = allEtapas.map(e => {
+        const est = t.etapas[e.id] ?? 'pendente'
+        const info = ESTADOS[est]
+        return `<td style="text-align:center;color:${info.color};background:${info.bg};font-size:11px;padding:3px">${info.ico} ${info.label}</td>`
+      }).join('')
+      const statusTxt = t.arquivado_em ? (t.status === 'nao_evoluiu' ? 'Não evoluiu' : 'Concluído') : 'Ativo'
+      return `<tr>
+        <td>${t.contratante?.nome ?? '—'}</td>
+        <td>${t.razao_social}</td>
+        <td>${t.contato ?? '—'}</td>
+        <td style="text-align:center">${t.tem_sub ? 'Sim' : 'Não'}</td>
+        <td style="text-align:center">${statusTxt}</td>
+        <td style="text-align:center;font-weight:600">${prog}%</td>
+        ${etapasRow}
+        <td>${fmtData(t.data)}</td>
+        <td style="font-size:10px;max-width:160px">${t.observacao ?? ''}</td>
+      </tr>`
+    }).join('')
+
+    const now = new Date()
+    const nowStr = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+    const etapaThs = allEtapas.map(e => `<th>${SHORT[e.id]}</th>`).join('')
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Cadastro de Terceiras — Relatório</title>
+<style>
+  body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}
+  h2{color:#2A4F96;font-size:15px;margin:0 0 4px}
+  .filtros{font-size:10px;color:#666;margin-bottom:12px}
+  table{border-collapse:collapse;width:100%}
+  th{background:#2A4F96;color:#fff;padding:5px 6px;font-size:10px;text-align:left;white-space:nowrap}
+  td{border:1px solid #ddd;padding:4px 6px;vertical-align:middle}
+  tr:nth-child(even) td{background:#f9f9f9}
+  .total{font-size:10px;color:#555;margin-top:8px}
+  @media print{@page{size:A3 landscape;margin:10mm}button{display:none}}
+</style></head><body>
+<h2>Cadastro de Terceiras — Relatório</h2>
+<div class="filtros">${filtros} · Gerado em ${nowStr}</div>
+<table>
+  <thead>
+    <tr>
+      <th>Contratante</th><th>Razão Social</th><th>Contato</th><th>Sub?</th>
+      <th>Status</th><th>Progresso</th>${etapaThs}<th>Data</th><th>Obs.</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<p class="total">Total: ${pool.length} empresa(s)</p>
+</body></html>`
+
+    if (formato === 'pdf') {
+      const w = window.open('', '_blank', 'width=1280,height=860')
+      if (!w) return
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 500)
+    } else {
+      const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `terceiras-${now.toISOString().slice(0, 10)}.xls`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+  }
+
   // ── Load ──────────────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
@@ -234,13 +348,14 @@ export default function CadastroTerceirasClient() {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
       if (modalConfirm.open) { setModalConfirm(p => ({ ...p, open: false })); return }
+      if (reportOpen) { setReportOpen(false); return }
       if (modalNova) { setModalNova(false); return }
       if (modalContratantes) { setModalContratantes(false); setModoEdicao(false); return }
       if (selectedId) setSelectedId(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [modalConfirm.open, modalNova, modalContratantes, selectedId])
+  }, [modalConfirm.open, reportOpen, modalNova, modalContratantes, selectedId])
 
   // ── Dados computados ──────────────────────────────────────────────────────────
 
@@ -470,6 +585,7 @@ export default function CadastroTerceirasClient() {
           {podeGerenciarContratantes && (
             <button style={btnSecondary} onClick={() => setModalContratantes(true)}>⚙ Contratantes</button>
           )}
+          <button style={btnSecondary} onClick={() => setReportOpen(true)}>📊 Relatório</button>
           <button style={btnPrimary} onClick={() => setModalNova(true)}>+ Nova terceira</button>
         </div>
       </div>
@@ -674,6 +790,83 @@ export default function CadastroTerceirasClient() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18, gap: 10 }}>
               <button style={btnSecondary} onClick={() => setModalConfirm(p => ({ ...p, open: false }))}>Cancelar</button>
               <button style={{ ...btnPrimary, background: S.danger }} onClick={modalConfirm.onConfirm}>Sim, arquivar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Relatório ── */}
+      {reportOpen && (
+        <div onClick={e => { if (e.target === e.currentTarget) setReportOpen(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 130, padding: 20 }}>
+          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 8px 32px rgba(0,0,0,.18)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: S.primary, marginBottom: 18 }}>📊 Gerar Relatório</h3>
+
+            {/* Contratante */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: S.textMuted, marginBottom: 5 }}>Contratante</label>
+              <select value={reportOpts.contratante}
+                onChange={e => setReportOpts(p => ({ ...p, contratante: e.target.value }))}
+                style={{ width: '100%', padding: '7px 10px', borderRadius: S.radiusSm, border: `1px solid ${S.border}`, fontSize: 13, fontFamily: 'inherit' }}>
+                <option value="">Todas</option>
+                {[...contratantes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: S.textMuted, marginBottom: 8 }}>Status</label>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {(['todos', 'ativos', 'historico'] as const).map(s => (
+                  <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
+                    <input type="radio" name="rep-status" checked={reportOpts.status === s}
+                      onChange={() => setReportOpts(p => ({ ...p, status: s }))} />
+                    {{ todos: 'Todos', ativos: 'Apenas ativos', historico: 'Apenas histórico' }[s]}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Subcontratadas */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: S.textMuted, marginBottom: 8 }}>Subcontratadas</label>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {(['todas', 'com', 'sem'] as const).map(s => (
+                  <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
+                    <input type="radio" name="rep-sub" checked={reportOpts.subcontratadas === s}
+                      onChange={() => setReportOpts(p => ({ ...p, subcontratadas: s }))} />
+                    {{ todas: 'Todas', com: 'Com subcontratadas', sem: 'Sem subcontratadas' }[s]}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Período */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: S.textMuted, marginBottom: 8 }}>Período (data de cadastro)</label>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <input type="date" value={reportOpts.dataInicio}
+                  onChange={e => setReportOpts(p => ({ ...p, dataInicio: e.target.value }))}
+                  style={{ flex: 1, padding: '7px 10px', borderRadius: S.radiusSm, border: `1px solid ${S.border}`, fontSize: 13, fontFamily: 'inherit' }} />
+                <span style={{ fontSize: 12, color: S.textMuted }}>até</span>
+                <input type="date" value={reportOpts.dataFim}
+                  onChange={e => setReportOpts(p => ({ ...p, dataFim: e.target.value }))}
+                  style={{ flex: 1, padding: '7px 10px', borderRadius: S.radiusSm, border: `1px solid ${S.border}`, fontSize: 13, fontFamily: 'inherit' }} />
+              </div>
+            </div>
+
+            {/* Botões formato */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button style={btnSecondary} onClick={() => setReportOpen(false)}>Cancelar</button>
+              <button style={{ ...btnSecondary, color: '#16a34a', borderColor: '#16a34a' }}
+                onClick={() => { gerarRelatorio('xls'); setReportOpen(false) }}>
+                📥 Baixar XLS
+              </button>
+              <button style={btnPrimary} onClick={() => { gerarRelatorio('pdf'); setReportOpen(false) }}>
+                🖨 Gerar PDF
+              </button>
             </div>
           </div>
         </div>
