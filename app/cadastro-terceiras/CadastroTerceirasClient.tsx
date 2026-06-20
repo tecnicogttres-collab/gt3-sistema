@@ -291,8 +291,6 @@ export default function CadastroTerceirasClient() {
 
   // ── KPIs ──────────────────────────────────────────────────────────────────────
 
-  const progMedio = ativos.length === 0 ? '—' : Math.round(ativos.reduce((s, t) => s + calcProgresso(t), 0) / ativos.length) + '%'
-  const kPendentes = ativos.filter(t => calcProgresso(t) < 100).length
 
   // ── Ações ─────────────────────────────────────────────────────────────────────
 
@@ -503,13 +501,6 @@ export default function CadastroTerceirasClient() {
       {/* ── Painel Ativos ── */}
       {activeTab === 'ativos' && (
         <>
-          {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
-            <Kpi label="Total ativas" value={String(ativos.length)} />
-            <Kpi label="Pendentes" value={String(kPendentes)} color={S.pendente} />
-            <Kpi label="Progresso médio" value={progMedio} />
-          </div>
-
           {/* Filtros */}
           <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: S.radius, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input style={{ ...inputStyle, flex: 1, minWidth: 140, maxWidth: 240 }} type="search" placeholder="🔎 Buscar…" value={busca} onChange={e => setBusca(e.target.value)} />
@@ -874,7 +865,7 @@ function TabelaAtivos({
 
   const [colWidths, setColWidths] = useState<number[]>(() => [
     100, 200, 118, 140,
-    ...allEtapas.map(e => e.id === 'gt0180' ? 130 : 74),
+    ...allEtapas.map(e => e.id === 'gt0180' ? 160 : e.id === 'cnpj_liberado' ? 115 : 74),
     100, 180, 130,
   ])
 
