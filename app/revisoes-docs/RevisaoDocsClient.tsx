@@ -117,6 +117,7 @@ export default function RevisaoDocsClient() {
   const [modalSelecionados, setModalSelecionados] = useState<Set<string>>(new Set())
   const [modalBusca, setModalBusca] = useState('')
   const [modalCustomLabel, setModalCustomLabel] = useState('')
+  const [modalCustomTipo, setModalCustomTipo] = useState<CampoTipo>('flag')
   const [modalCamposCustom, setModalCamposCustom] = useState<Campo[]>([])
 
   // Add row form
@@ -189,7 +190,7 @@ export default function RevisaoDocsClient() {
 
   function resetModal() {
     setModal(false); setModalNome(''); setModalSelecionados(new Set())
-    setModalBusca(''); setModalCustomLabel(''); setModalCamposCustom([])
+    setModalBusca(''); setModalCustomLabel(''); setModalCustomTipo('flag'); setModalCamposCustom([])
   }
 
   // Campos que aparecem no modal (predefinidos + custom), filtrados pela busca
@@ -283,10 +284,11 @@ export default function RevisaoDocsClient() {
     const id = 'custom_' + slugify(label)
     const all = [...CAMPOS_PREDEFINIDOS, ...modalCamposCustom]
     if (all.some(c => c.id === id || c.label.toLowerCase() === label.toLowerCase())) return
-    const novo: Campo = { id, label, tipo: 'flag' }
+    const novo: Campo = { id, label, tipo: modalCustomTipo }
     setModalCamposCustom(prev => [...prev, novo])
     setModalSelecionados(prev => new Set([...prev, id]))
     setModalCustomLabel('')
+    setModalCustomTipo('flag')
   }
 
   // ── PDF ───────────────────────────────────────────────────────────────────────
@@ -535,15 +537,29 @@ export default function RevisaoDocsClient() {
             </div>
 
             {/* Adicionar campo personalizado */}
-            <div style={{ display: 'flex', gap: 6, marginTop: 10, marginBottom: 18 }}>
-              <input value={modalCustomLabel} onChange={e => setModalCustomLabel(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addModalCampo()}
-                placeholder="Novo campo flag personalizado..."
-                style={{ flex: 1, height: 32, border: `1px dashed ${BORDER}`, borderRadius: 6, padding: '0 10px', fontSize: 12, outline: 'none', fontFamily: 'inherit', background: BG_SURF }} />
-              <button onClick={addModalCampo} disabled={!modalCustomLabel.trim()}
-                style={{ height: 32, padding: '0 14px', background: 'transparent', border: `1px solid ${PRIMARY}`, borderRadius: 6, color: PRIMARY, fontSize: 12, fontWeight: 600, cursor: modalCustomLabel.trim() ? 'pointer' : 'not-allowed', opacity: modalCustomLabel.trim() ? 1 : 0.5 }}>
-                + Campo
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, marginBottom: 18 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={modalCustomLabel} onChange={e => setModalCustomLabel(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addModalCampo()}
+                  placeholder="Nome do novo campo..."
+                  style={{ flex: 1, height: 32, border: `1px dashed ${BORDER}`, borderRadius: 6, padding: '0 10px', fontSize: 12, outline: 'none', fontFamily: 'inherit', background: BG_SURF }} />
+                {/* Toggle Flag / Texto */}
+                <div style={{ display: 'flex', background: BG_SEC, borderRadius: 6, border: `1px solid ${BORDER}`, overflow: 'hidden', flexShrink: 0 }}>
+                  {(['flag', 'texto'] as const).map(t => (
+                    <button key={t} onClick={() => setModalCustomTipo(t)}
+                      style={{ height: 32, padding: '0 11px', fontSize: 11, fontWeight: 600, cursor: 'pointer', border: 'none', transition: 'all .15s', background: modalCustomTipo === t ? (t === 'flag' ? '#92400e' : '#6b21a8') : 'transparent', color: modalCustomTipo === t ? '#fff' : MUTED }}>
+                      {t === 'flag' ? 'Flag' : 'Texto'}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={addModalCampo} disabled={!modalCustomLabel.trim()}
+                  style={{ height: 32, padding: '0 14px', background: 'transparent', border: `1px solid ${PRIMARY}`, borderRadius: 6, color: PRIMARY, fontSize: 12, fontWeight: 600, cursor: modalCustomLabel.trim() ? 'pointer' : 'not-allowed', opacity: modalCustomLabel.trim() ? 1 : 0.5, flexShrink: 0 }}>
+                  + Campo
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: MUTED, paddingLeft: 2 }}>
+                {modalCustomTipo === 'flag' ? '☑ Flag — caixa de marcação (pendência)' : '✏ Texto — campo de texto livre'}
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
