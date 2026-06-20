@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import { getAuthUser } from '../../lib/api-helpers'
 
-type RegRow = { flags: Record<string, boolean>; corrigido: boolean }
+type RegRow = { valores: Record<string, string | boolean>; corrigido: boolean }
 
 export async function GET() {
   const user = await getAuthUser()
@@ -24,7 +24,7 @@ export async function GET() {
       created_at: r.created_at, minha: r.criado_por === user.id,
       nRegistros: registros.length,
       nCampos: (r.dados?.campos ?? []).length,
-      nPendencias: registros.filter(reg => Object.values(reg.flags ?? {}).some(Boolean) && !reg.corrigido).length,
+      nPendencias: registros.filter(reg => Object.values(reg.valores ?? {}).some(v => v === true) && !reg.corrigido).length,
     }
   })
 
