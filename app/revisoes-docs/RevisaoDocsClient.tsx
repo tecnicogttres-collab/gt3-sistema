@@ -5,15 +5,27 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CampoTipo = 'texto' | 'flag'
-type Campo = { id: string; label: string; tipo: CampoTipo }
+type Campo    = { id: string; label: string; tipo: CampoTipo }
 type Registro = { id: string; valores: Record<string, string | boolean>; corrigido: boolean }
-type RevisaoDados = { campos: Campo[]; registros: Registro[] }
+
+type RevisaoDados = {
+  campos: Campo[]
+  registros: Registro[]
+  onde_parei?: string
+  onde_parei_at?: string
+  status?: 'ativa' | 'finalizada'
+  finalizada_at?: string
+}
 
 type RevisaoMeta = {
   id: string; nome: string
   criado_por: string; criado_por_nome: string | null
   created_at: string; minha: boolean
   nRegistros: number; nCampos: number; nPendencias: number
+  ondeparei: string | null
+  ondeparei_at: string | null
+  statusRevisao: 'ativa' | 'finalizada'
+  finalizada_at: string | null
 }
 
 type RevisaoFull = {
@@ -25,19 +37,20 @@ type RevisaoFull = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PRIMARY = '#2A4F96'
-const BORDER = 'rgba(42,79,150,0.12)'
-const MUTED = '#9399ae'
-const TEXT = '#1a1f2e'
-const BG_SEC = '#f4f6fb'
-const BG_SURF = '#ffffff'
+const PRIMARY  = '#2A4F96'
+const BORDER   = 'rgba(42,79,150,0.12)'
+const MUTED    = '#9399ae'
+const TEXT     = '#1a1f2e'
+const BG_SEC   = '#f4f6fb'
+const BG_SURF  = '#ffffff'
+const SESSION_KEY = 'revisao-docs-current'
 
 const CAMPOS_PREDEFINIDOS: Campo[] = [
-  { id: 'funcionario', label: 'Funcionário',                   tipo: 'texto' },
-  { id: 'empresa',     label: 'Empresa',                       tipo: 'texto' },
-  { id: 'aso',         label: 'ASO S/ Aptidão',                tipo: 'flag'  },
-  { id: 'epi_capacete',label: 'EPI p/ Altura — Capacete',      tipo: 'flag'  },
-  { id: 'epi_cinto',   label: 'EPI p/ Altura — Cinto c/ Talabarte', tipo: 'flag' },
+  { id: 'funcionario',  label: 'Funcionário',                        tipo: 'texto' },
+  { id: 'empresa',      label: 'Empresa',                            tipo: 'texto' },
+  { id: 'aso',          label: 'ASO S/ Aptidão',                     tipo: 'flag'  },
+  { id: 'epi_capacete', label: 'EPI p/ Altura — Capacete',           tipo: 'flag'  },
+  { id: 'epi_cinto',    label: 'EPI p/ Altura — Cinto c/ Talabarte', tipo: 'flag'  },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,9 +64,8 @@ function slugify(s: string): string {
     || 'campo_' + uid()
 }
 
-function fmtData(d: string): string {
-  return new Date(d).toLocaleDateString('pt-BR')
-}
+function fmtData(d: string): string { return new Date(d).toLocaleDateString('pt-BR') }
+function fmtDatetime(d: string): string { return new Date(d).toLocaleString('pt-BR') }
 
 function hasPendencia(reg: Registro): boolean {
   return Object.values(reg.valores ?? {}).some(v => v === true) && !reg.corrigido
@@ -67,6 +79,10 @@ function metaFromFull(r: RevisaoFull): RevisaoMeta {
     nRegistros: regs.length,
     nCampos: r.dados.campos.length,
     nPendencias: regs.filter(hasPendencia).length,
+    ondeparei: r.dados.onde_parei ?? null,
+    ondeparei_at: r.dados.onde_parei_at ?? null,
+    statusRevisao: r.dados.status ?? 'ativa',
+    finalizada_at: r.dados.finalizada_at ?? null,
   }
 }
 
@@ -79,15 +95,16 @@ const CHECK_ICON = (
   </svg>
 )
 
-function ToggleCell({ checked, onClick, color = '#c0392b' }: { checked: boolean; onClick: () => void; color?: string }) {
+function ToggleCell({ checked, onClick, color = '#c0392b' }: {
+  checked: boolean; onClick: () => void; color?: string
+}) {
   return (
     <td onClick={onClick} style={{ textAlign: 'center', cursor: 'pointer', padding: 6, userSelect: 'none' }}>
       <div style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 36, height: 36, borderRadius: 8, margin: 'auto', transition: 'all .15s',
         border: checked ? `2px solid ${color}` : '2px solid #dce3ef',
-        background: checked ? color : '#f9fafc',
-        color: '#fff',
+        background: checked ? color : '#f9fafc', color: '#fff',
       }}>
         {checked && CHECK_ICON}
       </div>
@@ -98,30 +115,41 @@ function ToggleCell({ checked, onClick, color = '#c0392b' }: { checked: boolean;
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function RevisaoDocsClient() {
-  const [view, setView] = useState<'list' | 'detail'>('list')
-  const [revisoes, setRevisoes] = useState<RevisaoMeta[]>([])
-  const [current, setCurrent] = useState<RevisaoFull | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [filtro, setFiltro] = useState<'minhas' | 'todas'>('minhas')
-  const [modoCorrecao, setModoCorrecao] = useState(false)
-  const [busca, setBusca] = useState('')
-  const [toast, setToast] = useState('')
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const firstInputRef = useRef<HTMLInputElement>(null)
+  const [view,          setView]          = useState<'list' | 'detail'>('list')
+  const [revisoes,      setRevisoes]      = useState<RevisaoMeta[]>([])
+  const [current,       setCurrent]       = useState<RevisaoFull | null>(null)
+  const [loading,       setLoading]       = useState(true)
+  const [saving,        setSaving]        = useState(false)
+  const [filtro,        setFiltro]        = useState<'minhas' | 'todas'>('minhas')
+  const [modoCorrecao,  setModoCorrecao]  = useState(false)
+  const [busca,         setBusca]         = useState('')
+  const [toast,         setToast]         = useState('')
+
+  // Modals
+  const [modal,            setModal]            = useState(false)
+  const [modalFinalDay,    setModalFinalDay]    = useState(false)
+  const [confirmFinalizar, setConfirmFinalizar] = useState(false)
+  const [inputOndeParei,   setInputOndeParei]   = useState('')
 
   // Modal nova revisão
-  const [modal, setModal] = useState(false)
-  const [modalNome, setModalNome] = useState('')
+  const [modalNome,        setModalNome]        = useState('')
   const [modalSelecionados, setModalSelecionados] = useState<Set<string>>(new Set())
-  const [modalBusca, setModalBusca] = useState('')
+  const [modalBusca,       setModalBusca]       = useState('')
   const [modalCustomLabel, setModalCustomLabel] = useState('')
-  const [modalCustomTipo, setModalCustomTipo] = useState<CampoTipo>('flag')
+  const [modalCustomTipo,  setModalCustomTipo]  = useState<CampoTipo>('flag')
   const [modalCamposCustom, setModalCamposCustom] = useState<Campo[]>([])
 
   // Add row form
   const [inputValores, setInputValores] = useState<Record<string, string | boolean>>({})
+
+  // Refs
+  const toastTimer   = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const saveTimer    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const firstInputRef = useRef<HTMLInputElement>(null)
+  const currentRef   = useRef<RevisaoFull | null>(null)
+
+  // Keep ref in sync with state
+  useEffect(() => { currentRef.current = current }, [current])
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -129,16 +157,45 @@ export default function RevisaoDocsClient() {
     toastTimer.current = setTimeout(() => setToast(''), 2500)
   }
 
-  // ── Load ──────────────────────────────────────────────────────────────────────
+  // ── Save on unmount (before navigating away from the module) ─────────────────
 
   useEffect(() => {
+    return () => {
+      const rev = currentRef.current
+      if (!rev) return
+      // Persist which revision was open so we can restore it
+      try { sessionStorage.setItem(SESSION_KEY, rev.id) } catch { /* safari private */ }
+      // Flush any pending save using keepalive so the request survives the unmount
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      fetch(`/api/revisoes-docs/${rev.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: rev.nome, dados: rev.dados }),
+        keepalive: true,
+      }).catch(() => {})
+    }
+  }, []) // runs only on component unmount
+
+  // ── Load list + restore last open revision ───────────────────────────────────
+
+  useEffect(() => {
+    let savedId: string | null = null
+    try { savedId = sessionStorage.getItem(SESSION_KEY) } catch { /* ignore */ }
+
     fetch('/api/revisoes-docs')
       .then(r => r.ok ? r.json() : [])
-      .then((data: RevisaoMeta[]) => setRevisoes(data))
+      .then((data: RevisaoMeta[]) => {
+        setRevisoes(data)
+        if (savedId) {
+          const meta = data.find(r => r.id === savedId)
+          if (meta) { openRevisao(meta); return }
+          try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+        }
+      })
       .finally(() => setLoading(false))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-save ─────────────────────────────────────────────────────────────────
+  // ── Auto-save ────────────────────────────────────────────────────────────────
 
   const scheduleSave = useCallback((rev: RevisaoFull) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -154,6 +211,19 @@ export default function RevisaoDocsClient() {
     }, 600)
   }, [])
 
+  async function immediateSync(rev: RevisaoFull) {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSaving(true)
+    try {
+      await fetch(`/api/revisoes-docs/${rev.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: rev.nome, dados: rev.dados }),
+      })
+      setRevisoes(prev => prev.map(r => r.id === rev.id ? metaFromFull(rev) : r))
+    } finally { setSaving(false) }
+  }
+
   function updateCurrent(fn: (r: RevisaoFull) => RevisaoFull) {
     setCurrent(prev => {
       if (!prev) return prev
@@ -166,6 +236,7 @@ export default function RevisaoDocsClient() {
   // ── Navigation ────────────────────────────────────────────────────────────────
 
   async function openRevisao(meta: RevisaoMeta) {
+    try { sessionStorage.setItem(SESSION_KEY, meta.id) } catch { /* ignore */ }
     setCurrent({ ...meta, dados: { campos: [], registros: [] } })
     setView('detail')
     setBusca('')
@@ -175,12 +246,23 @@ export default function RevisaoDocsClient() {
     if (r.ok) {
       const fresh: RevisaoFull = await r.json()
       setCurrent(fresh)
+      currentRef.current = fresh
       setRevisoes(prev => prev.map(x => x.id === fresh.id ? metaFromFull(fresh) : x))
     }
   }
 
   function backToList() {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
+    // Save immediately before going back
+    const rev = currentRef.current
+    if (rev) {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      fetch(`/api/revisoes-docs/${rev.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: rev.nome, dados: rev.dados }),
+      }).catch(() => {})
+    }
+    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     setSaving(false)
     setCurrent(null)
     setView('list')
@@ -193,7 +275,6 @@ export default function RevisaoDocsClient() {
     setModalBusca(''); setModalCustomLabel(''); setModalCustomTipo('flag'); setModalCamposCustom([])
   }
 
-  // Campos que aparecem no modal (predefinidos + custom), filtrados pela busca
   const todosCamposModal = useMemo(() => {
     const all = [...CAMPOS_PREDEFINIDOS, ...modalCamposCustom]
     const q = modalBusca.toLowerCase().trim()
@@ -225,6 +306,22 @@ export default function RevisaoDocsClient() {
     if (res.ok) setRevisoes(prev => prev.filter(r => r.id !== id))
     else showToast('Sem permissão para excluir.')
   }
+
+  async function reabrirRevisao(id: string) {
+    const res = await fetch(`/api/revisoes-docs/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patchDados: { status: 'ativa', finalizada_at: null } }),
+    })
+    if (!res.ok) { showToast('Erro ao reabrir revisão'); return }
+    setRevisoes(prev => prev.map(r => r.id === id
+      ? { ...r, statusRevisao: 'ativa', finalizada_at: null }
+      : r
+    ))
+    showToast('Revisão reaberta')
+  }
+
+  // ── Row actions ───────────────────────────────────────────────────────────────
 
   function addRegistro() {
     if (!hasAnyValor()) { firstInputRef.current?.focus(); return }
@@ -291,6 +388,59 @@ export default function RevisaoDocsClient() {
     setModalCustomTipo('flag')
   }
 
+  // ── Finalizar dia / Revisão finalizada ────────────────────────────────────────
+
+  function openFinalDay() {
+    setInputOndeParei(current?.dados.onde_parei ?? '')
+    setModalFinalDay(true)
+  }
+
+  function salvarOndeParei() {
+    if (!current) return
+    const newDados: RevisaoDados = {
+      ...current.dados,
+      onde_parei: inputOndeParei.trim(),
+      onde_parei_at: new Date().toISOString(),
+    }
+    const rev = { ...current, dados: newDados }
+    setCurrent(rev)
+    currentRef.current = rev
+    immediateSync(rev)
+    setModalFinalDay(false)
+    showToast('Progresso do dia salvo!')
+  }
+
+  function finalizarRevisao() {
+    if (!current) return
+    const newDados: RevisaoDados = {
+      ...current.dados,
+      status: 'finalizada',
+      finalizada_at: new Date().toISOString(),
+    }
+    const rev = { ...current, dados: newDados }
+    setCurrent(rev)
+    currentRef.current = rev
+    immediateSync(rev)
+    setConfirmFinalizar(false)
+    showToast('Revisão finalizada!')
+    setTimeout(() => {
+      try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+      setSaving(false)
+      setCurrent(null)
+      setView('list')
+    }, 900)
+  }
+
+  function reabrirDaDetail() {
+    if (!current) return
+    const newDados: RevisaoDados = { ...current.dados, status: 'ativa', finalizada_at: undefined }
+    const rev = { ...current, dados: newDados }
+    setCurrent(rev)
+    currentRef.current = rev
+    immediateSync(rev)
+    showToast('Revisão reaberta')
+  }
+
   // ── PDF ───────────────────────────────────────────────────────────────────────
 
   function printReport() {
@@ -301,7 +451,6 @@ export default function RevisaoDocsClient() {
     const funcCampo = campos.find(c => c.id === 'funcionario')
     const outrasColunas = campos.filter(c => c.tipo === 'texto' && c.id !== 'empresa' && c.id !== 'funcionario')
 
-    // Agrupar por empresa
     const registros = [...current.dados.registros]
     const grupos: Record<string, Registro[]> = {}
     for (const reg of registros) {
@@ -356,13 +505,8 @@ export default function RevisaoDocsClient() {
     const win = window.open('', '_blank', 'width=1100,height=800')
     if (!win) return
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Revisões GT3</title>
-    <style>
-      body{font-family:sans-serif;padding:20px;color:#1a1f2e}
-      table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}
-      td,th{border-bottom:1px solid #f0f3f8}
-      th{text-align:left;background:#e8f0fc;color:#2A4F96}
-      @media print{.no-print{display:none}@page{size:A4 landscape;margin:10mm}}
-    </style></head><body>
+    <style>body{font-family:sans-serif;padding:20px;color:#1a1f2e}table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}td,th{border-bottom:1px solid #f0f3f8}th{text-align:left;background:#e8f0fc;color:#2A4F96}@media print{.no-print{display:none}@page{size:A4 landscape;margin:10mm}}</style>
+    </head><body>
     <div style="background:#2A4F96;color:#fff;padding:16px 20px;margin:-20px -20px 16px;display:flex;align-items:flex-start;justify-content:space-between">
       <div>
         <h2 style="margin:0 0 3px;font-size:17px">Revisões GT3</h2>
@@ -382,21 +526,19 @@ export default function RevisaoDocsClient() {
     setTimeout(() => win.print(), 400)
   }
 
-  // ── Helpers de formulário ─────────────────────────────────────────────────────
-
   function hasAnyValor(): boolean {
     return Object.values(inputValores).some(v => v !== '' && v !== false)
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   const listaFiltrada = filtro === 'minhas' ? revisoes.filter(r => r.minha) : revisoes
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: MUTED }}>Carregando...</div>
 
-  // ──────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
   // LIST VIEW
-  // ──────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
 
   if (view === 'list') return (
     <div style={{ padding: '28px 32px', maxWidth: 1080, margin: '0 auto' }}>
@@ -435,36 +577,80 @@ export default function RevisaoDocsClient() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-        {listaFiltrada.map(r => (
-          <div key={r.id} style={{ background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, boxShadow: '0 1px 4px rgba(42,79,150,0.07)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <div style={{ width: 38, height: 38, borderRadius: 9, background: '#e8f0fc', color: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📋</div>
-              {r.minha && (
-                <button onClick={() => handleDelete(r.id)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', padding: 4, fontSize: 14, borderRadius: 6 }} title="Excluir revisão">
-                  🗑
-                </button>
-              )}
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, lineHeight: 1.3 }}>{r.nome || 'Sem nome'}</div>
-            {r.criado_por_nome && <div style={{ fontSize: 11, color: MUTED }}>👤 {r.criado_por_nome}</div>}
-            <div style={{ fontSize: 11, color: MUTED }}>📅 {fmtData(r.created_at)}</div>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              {[
-                { l: 'Registros', v: r.nRegistros, c: TEXT },
-                { l: 'Pendentes',  v: r.nPendencias, c: r.nPendencias > 0 ? '#c47a00' : MUTED },
-                { l: 'Campos',    v: r.nCampos,    c: PRIMARY },
-              ].map(x => (
-                <div key={x.l} style={{ fontSize: 10.5, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {x.l}<div style={{ fontSize: 17, fontWeight: 700, color: x.c, textTransform: 'none' }}>{x.v}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 14 }}>
+        {listaFiltrada.map(r => {
+          const finalizada = r.statusRevisao === 'finalizada'
+          return (
+            <div key={r.id} style={{
+              background: BG_SURF, border: finalizada ? '1px solid #10B98133' : `1px solid ${BORDER}`,
+              borderLeft: finalizada ? '3px solid #10B981' : `3px solid ${PRIMARY}`,
+              borderRadius: 12, padding: 18, boxShadow: '0 1px 4px rgba(42,79,150,0.07)',
+              display: 'flex', flexDirection: 'column', gap: 10,
+              opacity: finalizada ? 0.85 : 1,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 9, background: finalizada ? '#ECFDF5' : '#e8f0fc', color: finalizada ? '#10B981' : PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                  {finalizada ? '✓' : '📋'}
                 </div>
-              ))}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {finalizada && (
+                    <span style={{ fontSize: 10, fontWeight: 700, background: '#ECFDF5', color: '#059669', padding: '3px 8px', borderRadius: 20, border: '1px solid #6EE7B7', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Finalizada
+                    </span>
+                  )}
+                  {r.minha && (
+                    <button onClick={() => handleDelete(r.id)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', padding: 4, fontSize: 14, borderRadius: 6 }} title="Excluir revisão">
+                      🗑
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, lineHeight: 1.3 }}>{r.nome || 'Sem nome'}</div>
+              {r.criado_por_nome && <div style={{ fontSize: 11, color: MUTED }}>👤 {r.criado_por_nome}</div>}
+              <div style={{ fontSize: 11, color: MUTED }}>📅 {fmtData(r.created_at)}</div>
+
+              {/* Onde parei */}
+              {r.ondeparei && (
+                <div style={{ padding: '8px 10px', background: '#FFF8EE', border: '1px solid #D1AE6E44', borderRadius: 7, fontSize: 12, color: '#92550A', lineHeight: 1.4 }}>
+                  <span style={{ fontWeight: 700, display: 'block', marginBottom: 2, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#D1AE6E' }}>📍 Onde parei</span>
+                  {r.ondeparei.length > 80 ? r.ondeparei.slice(0, 80) + '…' : r.ondeparei}
+                </div>
+              )}
+
+              {/* Finalizada em */}
+              {finalizada && r.finalizada_at && (
+                <div style={{ fontSize: 11, color: '#10B981' }}>✓ Finalizada em {fmtDatetime(r.finalizada_at)}</div>
+              )}
+
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                {[
+                  { l: 'Registros', v: r.nRegistros,  c: TEXT },
+                  { l: 'Pendentes', v: r.nPendencias, c: r.nPendencias > 0 ? '#c47a00' : MUTED },
+                  { l: 'Campos',    v: r.nCampos,     c: PRIMARY },
+                ].map(x => (
+                  <div key={x.l} style={{ fontSize: 10.5, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {x.l}<div style={{ fontSize: 17, fontWeight: 700, color: x.c, textTransform: 'none' }}>{x.v}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                <button onClick={() => openRevisao(r)} style={{ background: 'none', border: 'none', color: PRIMARY, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>
+                  {finalizada ? 'Ver revisão →' : 'Abrir →'}
+                </button>
+                {finalizada && (
+                  <button
+                    onClick={() => reabrirRevisao(r.id)}
+                    style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: '1px solid #10B98144', background: '#ECFDF5', color: '#059669', cursor: 'pointer' }}
+                  >
+                    ↺ Reabrir
+                  </button>
+                )}
+              </div>
             </div>
-            <button onClick={() => openRevisao(r)} style={{ background: 'none', border: 'none', color: PRIMARY, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0, alignSelf: 'flex-start' }}>
-              Abrir →
-            </button>
-          </div>
-        ))}
+          )
+        })}
 
         <div onClick={() => setModal(true)}
           style={{ border: `2px dashed ${BORDER}`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: MUTED, cursor: 'pointer', minHeight: 160 }}
@@ -482,7 +668,6 @@ export default function RevisaoDocsClient() {
           <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 500, maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: 0, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: PRIMARY, marginBottom: 18 }}>📋 Nova revisão</div>
 
-            {/* Nome */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }}>Nome da revisão</label>
               <input autoFocus value={modalNome} onChange={e => setModalNome(e.target.value)}
@@ -491,19 +676,14 @@ export default function RevisaoDocsClient() {
                 style={{ width: '100%', height: 36, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '0 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
             </div>
 
-            {/* Campos */}
             <div style={{ marginBottom: 4 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>
                 Campos de verificação
                 {modalSelecionados.size > 0 && <span style={{ fontWeight: 400, color: PRIMARY, marginLeft: 6 }}>{modalSelecionados.size} selecionado(s)</span>}
               </label>
-
-              {/* Busca de campos */}
               <input value={modalBusca} onChange={e => setModalBusca(e.target.value)}
                 placeholder="🔍 Buscar campo..."
                 style={{ width: '100%', height: 32, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '0 10px', fontSize: 12, outline: 'none', fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box' }} />
-
-              {/* Lista de campos */}
               <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {todosCamposModal.length === 0 && (
                   <div style={{ fontSize: 12, color: MUTED, padding: '10px', textAlign: 'center', fontStyle: 'italic' }}>Nenhum campo encontrado.</div>
@@ -526,9 +706,7 @@ export default function RevisaoDocsClient() {
                       </span>
                       {isCustom && (
                         <button onClick={e => { e.preventDefault(); setModalCamposCustom(prev => prev.filter(mc => mc.id !== c.id)); setModalSelecionados(prev => { const n = new Set(prev); n.delete(c.id); return n }) }}
-                          style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', fontSize: 13, padding: '1px 4px', flexShrink: 0 }}>
-                          ✕
-                        </button>
+                          style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', fontSize: 13, padding: '1px 4px', flexShrink: 0 }}>✕</button>
                       )}
                     </label>
                   )
@@ -536,14 +714,12 @@ export default function RevisaoDocsClient() {
               </div>
             </div>
 
-            {/* Adicionar campo personalizado */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, marginBottom: 18 }}>
               <div style={{ display: 'flex', gap: 6 }}>
                 <input value={modalCustomLabel} onChange={e => setModalCustomLabel(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addModalCampo()}
                   placeholder="Nome do novo campo..."
                   style={{ flex: 1, height: 32, border: `1px dashed ${BORDER}`, borderRadius: 6, padding: '0 10px', fontSize: 12, outline: 'none', fontFamily: 'inherit', background: BG_SURF }} />
-                {/* Toggle Flag / Texto */}
                 <div style={{ display: 'flex', background: BG_SEC, borderRadius: 6, border: `1px solid ${BORDER}`, overflow: 'hidden', flexShrink: 0 }}>
                   {(['flag', 'texto'] as const).map(t => (
                     <button key={t} onClick={() => setModalCustomTipo(t)}
@@ -578,20 +754,20 @@ export default function RevisaoDocsClient() {
     </div>
   )
 
-  // ──────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
   // DETAIL VIEW
-  // ──────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
 
   if (!current) return null
 
-  const campos = current.dados.campos
+  const campos   = current.dados.campos
   const registros = current.dados.registros
+  const statusRev = current.dados.status ?? 'ativa'
+  const finalizada = statusRev === 'finalizada'
+
   const q = busca.toLowerCase().trim()
   const filtered = q
-    ? registros.filter(r => {
-        const vals = Object.values(r.valores ?? {}).map(v => String(v).toLowerCase())
-        return vals.some(v => v.includes(q))
-      })
+    ? registros.filter(r => Object.values(r.valores ?? {}).map(v => String(v).toLowerCase()).some(v => v.includes(q)))
     : registros
 
   const stats = {
@@ -601,12 +777,10 @@ export default function RevisaoDocsClient() {
   }
 
   const colSpanTotal = 1 + campos.length + (modoCorrecao ? 1 : 0) + 1
-
   const TH: React.CSSProperties = {
     background: PRIMARY, color: '#fff', fontWeight: 600,
     padding: '12px 14px', textAlign: 'left', fontSize: 12, letterSpacing: '0.3px',
   }
-
   const firstTextInput = campos.find(c => c.tipo === 'texto')
 
   return (
@@ -617,8 +791,21 @@ export default function RevisaoDocsClient() {
         </div>
       )}
 
+      {/* Banner finalizada */}
+      {finalizada && (
+        <div style={{ background: '#ECFDF5', border: '1px solid #10B98133', borderRadius: 10, padding: '10px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span style={{ fontSize: 13, color: '#059669', fontWeight: 600 }}>
+            ✓ Revisão finalizada{current.dados.finalizada_at ? ` em ${fmtDatetime(current.dados.finalizada_at)}` : ''} — visualização somente.
+          </span>
+          <button onClick={reabrirDaDetail}
+            style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6, border: '1px solid #10B98166', background: '#fff', color: '#059669', cursor: 'pointer' }}>
+            ↺ Reabrir revisão
+          </button>
+        </div>
+      )}
+
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 4 }}>
             <span onClick={backToList} style={{ color: PRIMARY, cursor: 'pointer', fontWeight: 600 }}>Revisões</span>
@@ -630,23 +817,67 @@ export default function RevisaoDocsClient() {
             {current.criado_por_nome && <>👤 {current.criado_por_nome} · </>}
             📅 {fmtData(current.created_at)}
           </div>
+          {/* Onde parei */}
+          {current.dados.onde_parei && (
+            <div style={{ marginTop: 6, fontSize: 12, color: '#92550A', background: '#FFF8EE', display: 'inline-flex', gap: 5, alignItems: 'flex-start', padding: '5px 10px', borderRadius: 7, border: '1px solid #D1AE6E44', maxWidth: 400 }}>
+              <span style={{ flexShrink: 0 }}>📍</span>
+              <span><strong>Onde parei:</strong> {current.dados.onde_parei}</span>
+            </div>
+          )}
         </div>
+
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {saving && <span style={{ fontSize: 12, color: MUTED }}>Salvando…</span>}
           <input type="text" placeholder="🔍 Filtrar..." value={busca} onChange={e => setBusca(e.target.value)}
-            style={{ padding: '7px 12px', border: `1.5px solid ${BORDER}`, borderRadius: 7, fontSize: 13, width: 190, outline: 'none', color: TEXT, background: '#fff', fontFamily: 'inherit' }} />
-          <button onClick={() => setModoCorrecao(v => !v)}
-            style={{ padding: '7px 13px', background: modoCorrecao ? '#16a34a' : '#fff', color: modoCorrecao ? '#fff' : '#16a34a', border: `1.5px solid ${modoCorrecao ? '#16a34a' : '#bbf7d0'}`, borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all .15s' }}>
-            {modoCorrecao ? '✓ Modo Correção ativo' : 'Marcar Correções'}
-          </button>
-          <button onClick={clearFlags}
-            style={{ padding: '7px 13px', background: '#fff', color: PRIMARY, border: `1.5px solid ${BORDER}`, borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            Limpar marcações
-          </button>
+            style={{ padding: '7px 12px', border: `1.5px solid ${BORDER}`, borderRadius: 7, fontSize: 13, width: 170, outline: 'none', color: TEXT, background: '#fff', fontFamily: 'inherit' }} />
+
+          {!finalizada && (
+            <>
+              <button onClick={() => setModoCorrecao(v => !v)}
+                style={{ padding: '7px 13px', background: modoCorrecao ? '#16a34a' : '#fff', color: modoCorrecao ? '#fff' : '#16a34a', border: `1.5px solid ${modoCorrecao ? '#16a34a' : '#bbf7d0'}`, borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all .15s' }}>
+                {modoCorrecao ? '✓ Modo Correção' : 'Marcar Correções'}
+              </button>
+              <button onClick={clearFlags}
+                style={{ padding: '7px 13px', background: '#fff', color: PRIMARY, border: `1.5px solid ${BORDER}`, borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Limpar marcações
+              </button>
+            </>
+          )}
+
           <button onClick={printReport}
             style={{ padding: '7px 13px', background: PRIMARY, color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             🖨 Gerar PDF
           </button>
+
+          {!finalizada && (
+            <>
+              {/* Finalizar dia */}
+              <button
+                onClick={openFinalDay}
+                style={{ padding: '7px 13px', background: '#FFF8EE', color: '#92550A', border: '1.5px solid #D1AE6E66', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                title="Salvar onde parou hoje"
+              >
+                📍 Finalizar dia
+              </button>
+              {/* Revisão finalizada */}
+              {!confirmFinalizar ? (
+                <button
+                  onClick={() => setConfirmFinalizar(true)}
+                  style={{ padding: '7px 13px', background: '#ECFDF5', color: '#059669', border: '1.5px solid #10B98144', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  title="Encerrar a revisão"
+                >
+                  ✓ Revisão finalizada
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '5px 10px' }}>
+                  <span style={{ fontSize: 12, color: '#DC2626', fontWeight: 600 }}>Confirmar finalização?</span>
+                  <button onClick={finalizarRevisao} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#DC2626', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Sim</button>
+                  <button onClick={() => setConfirmFinalizar(false)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #FECACA', background: '#fff', color: '#DC2626', fontSize: 12, cursor: 'pointer' }}>Não</button>
+                </div>
+              )}
+            </>
+          )}
+
           <button onClick={backToList}
             style={{ padding: '7px 13px', background: '#fff', color: MUTED, border: `1.5px solid ${BORDER}`, borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             ← Voltar
@@ -680,19 +911,12 @@ export default function RevisaoDocsClient() {
               <tr>
                 <th style={{ ...TH, width: 40, textAlign: 'center', color: 'rgba(255,255,255,.55)', fontSize: 11 }}>#</th>
                 {campos.map(c => (
-                  <th key={c.id} style={{
-                    ...TH,
-                    width: c.tipo === 'texto' ? undefined : 140,
-                    textAlign: c.tipo === 'texto' ? 'left' : 'center',
-                    fontSize: 11, lineHeight: 1.3, padding: '10px 8px',
-                  }}>
+                  <th key={c.id} style={{ ...TH, width: c.tipo === 'texto' ? undefined : 140, textAlign: c.tipo === 'texto' ? 'left' : 'center', fontSize: 11, lineHeight: 1.3, padding: '10px 8px' }}>
                     {c.label}
                   </th>
                 ))}
                 {modoCorrecao && (
-                  <th style={{ ...TH, width: 110, textAlign: 'center', fontSize: 11, background: '#15803d' }}>
-                    Corrigido
-                  </th>
+                  <th style={{ ...TH, width: 110, textAlign: 'center', fontSize: 11, background: '#15803d' }}>Corrigido</th>
                 )}
                 <th style={{ ...TH, width: 40, padding: '12px 8px' }} />
               </tr>
@@ -718,20 +942,22 @@ export default function RevisaoDocsClient() {
                       </td>
                     ) : (
                       <ToggleCell key={c.id} checked={reg.valores[c.id] === true}
-                        onClick={() => setValor(reg.id, c.id, reg.valores[c.id] !== true)} />
+                        onClick={() => !finalizada && setValor(reg.id, c.id, reg.valores[c.id] !== true)} />
                     ))}
                     {modoCorrecao && (
-                      <ToggleCell checked={reg.corrigido} onClick={() => toggleCorrigido(reg.id)} color="#16a34a" />
+                      <ToggleCell checked={reg.corrigido} onClick={() => !finalizada && toggleCorrigido(reg.id)} color="#16a34a" />
                     )}
                     <td style={{ textAlign: 'center', padding: 6 }}>
-                      <button onClick={() => deleteRegistro(reg.id)} title="Remover"
-                        style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'inline-flex', alignItems: 'center' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#c0392b'}
-                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = '#ccc'}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
+                      {!finalizada && (
+                        <button onClick={() => deleteRegistro(reg.id)} title="Remover"
+                          style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'inline-flex', alignItems: 'center' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#c0392b'}
+                          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = '#ccc'}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )
@@ -740,57 +966,88 @@ export default function RevisaoDocsClient() {
           </table>
         </div>
 
-        {/* Formulário de adição */}
-        <div style={{ display: 'flex', gap: 10, padding: '14px 16px', background: BG_SEC, borderTop: '1px solid #e8edf5', flexWrap: 'wrap', alignItems: 'center' }}>
-          {campos.map((c, i) => c.tipo === 'texto' ? (
-            <input key={c.id}
-              ref={i === 0 || c.id === firstTextInput?.id ? firstInputRef : undefined}
-              type="text" placeholder={c.label}
-              value={String(inputValores[c.id] ?? '')}
-              onChange={e => setInputValores(prev => ({ ...prev, [c.id]: e.target.value }))}
-              onKeyDown={e => e.key === 'Enter' && addRegistro()}
-              style={{ flex: 1, minWidth: 130, padding: '7px 12px', border: `1.5px solid ${BORDER}`, borderRadius: 7, fontSize: 13, color: TEXT, outline: 'none', background: '#fff', fontFamily: 'inherit' }}
-              onFocus={e => { e.target.style.borderColor = PRIMARY }}
-              onBlur={e => { e.target.style.borderColor = BORDER }} />
-          ) : (
-            <div key={c.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#556', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-              onClick={() => setInputValores(prev => ({ ...prev, [c.id]: prev[c.id] !== true }))}>
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: 30, height: 30, borderRadius: 7, transition: 'all .15s', flexShrink: 0,
-                border: inputValores[c.id] === true ? '2px solid #c0392b' : `2px solid ${BORDER}`,
-                background: inputValores[c.id] === true ? '#c0392b' : '#f9fafc',
-                color: '#fff',
-              }}>
-                {inputValores[c.id] === true && CHECK_ICON}
+        {/* Formulário de adição — oculto se finalizada */}
+        {!finalizada && (
+          <div style={{ display: 'flex', gap: 10, padding: '14px 16px', background: BG_SEC, borderTop: '1px solid #e8edf5', flexWrap: 'wrap', alignItems: 'center' }}>
+            {campos.map((c, i) => c.tipo === 'texto' ? (
+              <input key={c.id}
+                ref={i === 0 || c.id === firstTextInput?.id ? firstInputRef : undefined}
+                type="text" placeholder={c.label}
+                value={String(inputValores[c.id] ?? '')}
+                onChange={e => setInputValores(prev => ({ ...prev, [c.id]: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && addRegistro()}
+                style={{ flex: 1, minWidth: 130, padding: '7px 12px', border: `1.5px solid ${BORDER}`, borderRadius: 7, fontSize: 13, color: TEXT, outline: 'none', background: '#fff', fontFamily: 'inherit' }}
+                onFocus={e => { e.target.style.borderColor = PRIMARY }}
+                onBlur={e => { e.target.style.borderColor = BORDER }} />
+            ) : (
+              <div key={c.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#556', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setInputValores(prev => ({ ...prev, [c.id]: prev[c.id] !== true }))}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 30, height: 30, borderRadius: 7, transition: 'all .15s', flexShrink: 0,
+                  border: inputValores[c.id] === true ? '2px solid #c0392b' : `2px solid ${BORDER}`,
+                  background: inputValores[c.id] === true ? '#c0392b' : '#f9fafc',
+                  color: '#fff',
+                }}>
+                  {inputValores[c.id] === true && CHECK_ICON}
+                </div>
+                {c.label}
               </div>
-              {c.label}
-            </div>
-          ))}
-          <button onClick={addRegistro} disabled={!hasAnyValor()}
-            style={{ padding: '8px 16px', background: PRIMARY, color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: !hasAnyValor() ? 'not-allowed' : 'pointer', opacity: !hasAnyValor() ? 0.6 : 1, whiteSpace: 'nowrap' }}>
-            + Adicionar
-          </button>
-        </div>
+            ))}
+            <button onClick={addRegistro} disabled={!hasAnyValor()}
+              style={{ padding: '8px 16px', background: PRIMARY, color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: !hasAnyValor() ? 'not-allowed' : 'pointer', opacity: !hasAnyValor() ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+              + Adicionar
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Legend */}
       <div style={{ display: 'flex', gap: 16, marginTop: 14, fontSize: 12, color: '#7a8aaa', flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#c0392b', display: 'inline-block' }} />
-          Pendência marcada
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#c0392b', display: 'inline-block' }} />Pendência marcada
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#dce3ef', border: '1.5px solid #ccc', display: 'inline-block' }} />
-          Sem pendência
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#dce3ef', border: '1.5px solid #ccc', display: 'inline-block' }} />Sem pendência
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#16a34a', display: 'inline-block' }} />
-          Corrigido
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: '#16a34a', display: 'inline-block' }} />Corrigido
         </span>
         <span style={{ marginLeft: 'auto', fontSize: 11, color: MUTED }}>Alterações salvas automaticamente</span>
       </div>
+
+      {/* ── Modal: Finalizar dia ── */}
+      {modalFinalDay && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onMouseDown={e => { if (e.target === e.currentTarget) setModalFinalDay(false) }}>
+          <div style={{ background: '#fff', borderRadius: 14, width: 460, boxShadow: '0 8px 30px rgba(0,0,0,.18)', overflow: 'hidden' }}>
+            <div style={{ height: 4, background: 'linear-gradient(90deg, #D1AE6E, #F0C97F)' }} />
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#92550A', marginBottom: 6 }}>📍 Finalizar dia</div>
+              <div style={{ fontSize: 13, color: MUTED, marginBottom: 16 }}>Registre onde você parou para continuar amanhã exatamente de onde ficou.</div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>Onde parei?</label>
+              <textarea
+                autoFocus
+                value={inputOndeParei}
+                onChange={e => setInputOndeParei(e.target.value)}
+                placeholder="Ex.: Parei na empresa Volvo, funcionário Carlos Silva, faltam verificar os EPIs do turno B..."
+                rows={4}
+                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.5 }}
+              />
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #E5E9F0', display: 'flex', justifyContent: 'flex-end', gap: 8, background: '#FAFBFD' }}>
+              <button onClick={() => setModalFinalDay(false)}
+                style={{ height: 33, padding: '0 16px', borderRadius: 7, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={salvarOndeParei} disabled={!inputOndeParei.trim()}
+                style={{ height: 33, padding: '0 18px', borderRadius: 7, border: 'none', background: '#D1AE6E', color: '#4A3A1A', fontSize: 13, fontWeight: 600, cursor: inputOndeParei.trim() ? 'pointer' : 'not-allowed', opacity: inputOndeParei.trim() ? 1 : 0.6 }}>
+                Salvar e voltar depois
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

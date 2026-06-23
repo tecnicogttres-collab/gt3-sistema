@@ -19,11 +19,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params
   const body = await req.json()
+  const admin = createAdminClient()
   const updates: Record<string, unknown> = {}
+
   if (body.nome !== undefined) updates.nome = body.nome
   if (body.dados !== undefined) updates.dados = body.dados
 
-  const admin = createAdminClient()
+  // Merge parcial de dados (ex: reabrir revisão a partir do card)
+  if (body.patchDados !== undefined) {
+    const { data: cur } = await admin.from('revisoes_docs').select('dados').eq('id', id).single()
+    updates.dados = { ...(cur?.dados ?? {}), ...body.patchDados }
+  }
+
   const { data, error } = await admin
     .from('revisoes_docs')
     .update(updates)

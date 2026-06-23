@@ -24,7 +24,13 @@ export async function GET() {
       created_at: r.created_at, minha: r.criado_por === user.id,
       nRegistros: registros.length,
       nCampos: (r.dados?.campos ?? []).length,
-      nPendencias: registros.filter(reg => Object.values(reg.valores ?? {}).some(v => v === true) && !reg.corrigido).length,
+      nPendencias: registros.filter(reg =>
+        Object.values(reg.valores ?? {}).some(v => v === true) && !reg.corrigido
+      ).length,
+      ondeparei: (r.dados?.onde_parei as string) ?? null,
+      ondeparei_at: (r.dados?.onde_parei_at as string) ?? null,
+      statusRevisao: (r.dados?.status as 'ativa' | 'finalizada') ?? 'ativa',
+      finalizada_at: (r.dados?.finalizada_at as string) ?? null,
     }
   })
 
@@ -53,5 +59,6 @@ export async function POST(req: NextRequest) {
   return Response.json({
     ...data, minha: true,
     nRegistros: 0, nCampos: (dadosInicial.campos ?? []).length, nPendencias: 0,
+    ondeparei: null, ondeparei_at: null, statusRevisao: 'ativa', finalizada_at: null,
   }, { status: 201 })
 }
