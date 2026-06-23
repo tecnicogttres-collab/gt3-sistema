@@ -21,14 +21,47 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
+  const { data: ciclos, error } = await admin
     .from('pdi_ciclos')
-    .select('id, pdi_id, colaborador_id, numero_ciclo, status, avaliacao_diretiva, autoavaliacao, ambicao, autoavaliacao_salva, data_conversa, conversa_confirmada_em, rascunho_conversa, arquivado_em, criado_em, data_inicio, data_fim')
+    .select('id, pdi_id, colaborador_id, numero_ciclo, status, avaliacao_diretiva, autoavaliacao, ambicao, autoavaliacao_salva, data_conversa, conversa_confirmada_em, arquivado_em, criado_em, data_inicio, data_fim')
     .eq('pdi_id', id)
     .order('numero_ciclo', { ascending: false })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(data ?? [])
+
+  const ciclosList = ciclos ?? []
+  const isGestorAdmin = ['gestor', 'admin'].includes(papel ?? '')
+
+  if (!isGestorAdmin || ciclosList.length === 0) {
+    return Response.json(ciclosList.map(c => ({ ...c, meu_rascunho: null, outros_rascunhos: [] })))
+  }
+
+  // Fetch all rascunhos for these ciclos
+  const cicloIds = ciclosList.map(c => c.id)
+  const { data: rascunhos } = await admin
+    .from('pdi_rascunhos')
+    .select('ciclo_id, user_id, user_nome, texto, updated_at')
+    .in('ciclo_id', cicloIds)
+
+  type Rascunho = { ciclo_id: string; user_id: string; user_nome: string | null; texto: string | null; updated_at: string }
+  const rascunhosByCiclo: Record<string, Rascunho[]> = {}
+  for (const r of (rascunhos ?? []) as Rascunho[]) {
+    if (!rascunhosByCiclo[r.ciclo_id]) rascunhosByCiclo[r.ciclo_id] = []
+    rascunhosByCiclo[r.ciclo_id].push(r)
+  }
+
+  return Response.json(ciclosList.map(c => {
+    const cicloRasc = rascunhosByCiclo[c.id] ?? []
+    const meu = cicloRasc.find(r => r.user_id === user!.id)
+    const outros = cicloRasc.filter(r => r.user_id !== user!.id)
+    return {
+      ...c,
+      meu_rascunho: meu?.texto ?? null,
+      outros_rascunhos: outros
+        .filter(r => r.texto?.trim())
+        .map(r => ({ user_nome: r.user_nome, texto: r.texto, updated_at: r.updated_at })),
+    }
+  }))
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
@@ -40,6 +73,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const body = await req.json() as {
     colaborador_id: string
+    data_inicio?: string
     avaliacao_diretiva?: number[]
     autoavaliacao?: number[]
     ambicao?: number[]
@@ -60,11 +94,23 @@ export async function POST(req: NextRequest, { params }: Params) {
   const maxCiclo = existing?.[0]?.numero_ciclo ?? 0
   const isFirst = maxCiclo === 0
 
-  // Archive current active cycle
+  // Resolve data_inicio: use provided or fall back to first of current month
+  const now = new Date()
+  const dataInicio = body.data_inicio
+    ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+  // Archive current active cycle and set data_fim = day before new cycle starts
   if (!isFirst) {
+    const dInicio = new Date(dataInicio + 'T12:00:00')
+    dInicio.setDate(dInicio.getDate() - 1)
+    const dataFimAnterior = `${dInicio.getFullYear()}-${String(dInicio.getMonth() + 1).padStart(2, '0')}-${String(dInicio.getDate()).padStart(2, '0')}`
     await admin
       .from('pdi_ciclos')
-      .update({ status: 'arquivado', arquivado_em: new Date().toISOString() })
+      .update({
+        status: 'arquivado',
+        arquivado_em: new Date().toISOString(),
+        data_fim: dataFimAnterior,
+      })
       .eq('pdi_id', id)
       .eq('status', 'ativo')
   }
@@ -91,9 +137,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     ? (body.ambicao ?? [])
     : (ciclo1?.data?.ambicao ?? existing?.[0]?.ambicao ?? [])
 
-  const now = new Date()
-  const dataInicio = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-
   const { data: novo, error } = await admin
     .from('pdi_ciclos')
     .insert({
@@ -113,5 +156,5 @@ export async function POST(req: NextRequest, { params }: Params) {
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(novo, { status: 201 })
+  return Response.json({ ...novo, meu_rascunho: null, outros_rascunhos: [] }, { status: 201 })
 }

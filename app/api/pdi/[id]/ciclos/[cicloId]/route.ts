@@ -31,7 +31,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       updates.conversa_confirmada_em = null // reseta ciência ao reagendar
     }
     if (body.conversa_confirmada_em !== undefined) updates.conversa_confirmada_em = body.conversa_confirmada_em
-    if (body.rascunho_conversa !== undefined) updates.rascunho_conversa = body.rascunho_conversa ?? null
+    if (body.data_inicio !== undefined) updates.data_inicio = body.data_inicio ?? null
+    if (body.data_fim !== undefined) updates.data_fim = body.data_fim ?? null
   }
 
   if (isColab || isGestorAdmin) {
@@ -41,10 +42,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.conversa_confirmada_em !== undefined) updates.conversa_confirmada_em = body.conversa_confirmada_em
   }
 
-  if (Object.keys(updates).length === 0)
+  const admin = createAdminClient()
+
+  // Rascunho por usuário — upsert em tabela própria, não em pdi_ciclos
+  if (isGestorAdmin && body.rascunho !== undefined) {
+    const { data: prof } = await admin.from('profiles').select('nome').eq('id', user.id).single()
+    const userNome = (prof as { nome?: string } | null)?.nome ?? null
+    await admin.from('pdi_rascunhos').upsert({
+      ciclo_id: cicloId,
+      user_id: user.id,
+      user_nome: userNome,
+      texto: (body.rascunho as string | null)?.trim() || null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'ciclo_id,user_id' })
+  }
+
+  if (Object.keys(updates).length === 0 && body.rascunho === undefined)
     return Response.json({ error: 'Nenhum campo' }, { status: 400 })
 
-  const admin = createAdminClient()
+  if (Object.keys(updates).length === 0) return Response.json({ ok: true })
   const { data, error } = await admin
     .from('pdi_ciclos')
     .update(updates)

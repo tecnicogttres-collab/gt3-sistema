@@ -7,6 +7,8 @@ import type { PdiColaborador, AcaoPdi } from '../../../data/pdis/types'
 
 type Tab = 'acoes' | 'avaliacoes' | 'eneagrama' | 'mbti' | 'conclusoes'
 
+type OutroRascunho = { user_nome: string | null; texto: string | null; updated_at: string }
+
 type Ciclo = {
   id: string
   pdi_id: string
@@ -19,7 +21,8 @@ type Ciclo = {
   autoavaliacao_salva: boolean
   data_conversa: string | null
   conversa_confirmada_em: string | null
-  rascunho_conversa: string | null
+  meu_rascunho: string | null
+  outros_rascunhos: OutroRascunho[]
   criado_em: string
   arquivado_em: string | null
   data_inicio: string | null
@@ -546,8 +549,11 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
   const [ambicao, setAmbicao] = useState<number[]>(ciclo.ambicao.length ? ciclo.ambicao : competencias.map(() => 0))
   const [autoSalva, setAutoSalva] = useState(ciclo.autoavaliacao_salva)
   const [dataConversa, setDataConversa] = useState(ciclo.data_conversa ? ciclo.data_conversa.slice(0, 16) : '')
-  const [rascunho, setRascunho] = useState(ciclo.rascunho_conversa ?? '')
-  const [saving, setSaving] = useState<'diretiva' | 'auto' | 'conversa' | 'rascunho' | null>(null)
+  const [rascunho, setRascunho] = useState(ciclo.meu_rascunho ?? '')
+  const [saving, setSaving] = useState<'diretiva' | 'auto' | 'conversa' | 'rascunho' | 'datas' | null>(null)
+  const [editDatas, setEditDatas] = useState(false)
+  const [tempInicio, setTempInicio] = useState(ciclo.data_inicio ?? '')
+  const [tempFim, setTempFim] = useState(ciclo.data_fim ?? '')
   const [savedDiretiva, setSavedDiretiva] = useState(false)
   const savedDiritivaTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [savedRascunho, setSavedRascunho] = useState(false)
@@ -631,14 +637,31 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
     try {
       const res = await fetch(`/api/pdi/${ciclo.pdi_id}/ciclos/${ciclo.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rascunho_conversa: rascunho.trim() || null }),
+        body: JSON.stringify({ rascunho: rascunho.trim() || null }),
       })
       if (!res.ok) throw new Error()
-      onUpdate({ ...ciclo, rascunho_conversa: rascunho.trim() || null })
+      onUpdate({ ...ciclo, meu_rascunho: rascunho.trim() || null })
       setSavedRascunho(true)
       clearTimeout(savedRascunhoTimer.current!)
       savedRascunhoTimer.current = setTimeout(() => setSavedRascunho(false), 2500)
     } catch { setErr('Erro ao salvar rascunho.') } finally { setSaving(null) }
+  }
+
+  async function saveDatas() {
+    if (!tempInicio) { setErr('Informe a data de início.'); return }
+    setSaving('datas'); setErr('')
+    try {
+      const res = await fetch(`/api/pdi/${ciclo.pdi_id}/ciclos/${ciclo.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data_inicio: tempInicio || null,
+          data_fim: tempFim || null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      onUpdate({ ...ciclo, data_inicio: tempInicio || null, data_fim: tempFim || null })
+      setEditDatas(false)
+    } catch { setErr('Erro ao salvar datas.') } finally { setSaving(null) }
   }
 
   const statusBadge = (
@@ -680,6 +703,44 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
       {open && (
         <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           {err && <div style={{ fontSize: 13, color: '#DC2626', background: '#FEF2F2', padding: '8px 12px', borderRadius: 8 }}>{err}</div>}
+
+          {/* Editor de datas do ciclo — gestor/admin */}
+          {isGestorAdmin && (
+            <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: 14 }}>
+              {editDatas ? (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: '#6B7A99', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Início</label>
+                    <input type="date" value={tempInicio} onChange={e => setTempInicio(e.target.value)}
+                      style={{ padding: '7px 10px', border: '1px solid #CBD5E0', borderRadius: 8, fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, color: '#6B7A99', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Fim</label>
+                    <input type="date" value={tempFim} onChange={e => setTempFim(e.target.value)}
+                      style={{ padding: '7px 10px', border: '1px solid #CBD5E0', borderRadius: 8, fontSize: 13 }} />
+                  </div>
+                  <button onClick={saveDatas} disabled={saving === 'datas'}
+                    style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving === 'datas' ? 0.7 : 1 }}>
+                    {saving === 'datas' ? 'Salvando…' : 'Salvar'}
+                  </button>
+                  <button onClick={() => { setEditDatas(false); setTempInicio(ciclo.data_inicio ?? ''); setTempFim(ciclo.data_fim ?? '') }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#475569', cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 13, color: '#475569' }}>
+                    📅 <strong>{formatCicloPeriodo(ciclo.data_inicio, ciclo.data_fim)}</strong>
+                  </span>
+                  <button onClick={() => { setEditDatas(true); setTempInicio(ciclo.data_inicio ?? ''); setTempFim(ciclo.data_fim ?? '') }}
+                    style={{ padding: '3px 10px', border: '1px solid #CBD5E0', borderRadius: 6, background: '#fff', fontSize: 12, color: '#6B7A99', cursor: 'pointer' }}>
+                    ✏ Editar datas
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Competências editor — only for DB PDI ciclo 1 with no competências yet */}
           {showCompsEditor && (
@@ -832,10 +893,10 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
                 )}
               </div>
 
-              {/* Rascunho do gestor */}
+              {/* Rascunho do gestor — por usuário */}
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #E2E8F0' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                  Rascunho / Pauta da conversa
+                  Minhas anotações / Pauta da conversa
                 </div>
                 <textarea
                   value={rascunho}
@@ -854,7 +915,7 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 8 }}>
                   {savedRascunho && (
-                    <span style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>✓ Rascunho salvo</span>
+                    <span style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>✓ Salvo</span>
                   )}
                   <button
                     onClick={saveRascunho}
@@ -864,19 +925,41 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
                     {saving === 'rascunho' ? 'Salvando…' : 'Salvar rascunho'}
                   </button>
                 </div>
+
+                {/* Anotações dos demais gestores/admins */}
+                {ciclo.outros_rascunhos.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    {ciclo.outros_rascunhos.map((r, i) => (
+                      <div key={i} style={{ marginBottom: 8, padding: '10px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '3px solid #D1AE6E', borderRadius: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          {r.user_nome ?? 'Gestor'} — anotações
+                        </div>
+                        <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{r.texto}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Rascunho somente leitura em ciclos arquivados */}
-          {isGestorAdmin && !isAtivo && ciclo.rascunho_conversa && (
-            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                Rascunho / Pauta da conversa
+          {/* Rascunhos somente leitura em ciclos arquivados */}
+          {isGestorAdmin && !isAtivo && (ciclo.meu_rascunho || ciclo.outros_rascunhos.length > 0) && (
+            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                Anotações da conversa
               </div>
-              <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#F8FAFC', borderRadius: 8, padding: '10px 14px', border: '1px solid #E2E8F0' }}>
-                {ciclo.rascunho_conversa}
-              </div>
+              {ciclo.meu_rascunho && (
+                <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#F8FAFC', borderRadius: 8, padding: '10px 14px', border: '1px solid #E2E8F0' }}>
+                  {ciclo.meu_rascunho}
+                </div>
+              )}
+              {ciclo.outros_rascunhos.map((r, i) => (
+                <div key={i} style={{ padding: '10px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '3px solid #D1AE6E', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{r.user_nome ?? 'Gestor'}</div>
+                  <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{r.texto}</div>
+                </div>
+              ))}
             </div>
           )}
           {isColab && ciclo.data_conversa && (
@@ -912,6 +995,10 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
   const [showNovoCicloModal, setShowNovoCicloModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [novoDataInicio, setNovoDataInicio] = useState(() => {
+    const n = new Date()
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`
+  })
   const [localComps, setLocalComps] = useState<string[]>(pdi.matrizAvaliacao.competencias)
   const isGestorAdmin = ['gestor', 'admin'].includes(papel)
 
@@ -940,7 +1027,7 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
     try {
       const res = await fetch(`/api/pdi/${pdi.id}/ciclos`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ colaborador_id: colaboradorId }),
+        body: JSON.stringify({ colaborador_id: colaboradorId, data_inicio: novoDataInicio }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string }
@@ -1013,16 +1100,21 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
           <div style={{ background: '#fff', borderRadius: 16, padding: '32px 36px', maxWidth: 420, textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>🔄</div>
             <h3 style={{ margin: '0 0 10px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Iniciar novo ciclo?</h3>
-            <p style={{ margin: '0 0 24px', fontSize: 13, color: '#6B7A99', lineHeight: 1.6 }}>
-              O ciclo atual será arquivado. A autoavaliação ficará em branco para novo preenchimento. A ambição permanece igual ao ciclo inicial.
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6B7A99', lineHeight: 1.6 }}>
+              O ciclo atual será arquivado automaticamente com data de encerramento no dia anterior ao início do novo. A autoavaliação ficará em branco e a ambição permanece do ciclo inicial.
             </p>
+            <div style={{ marginBottom: 20, textAlign: 'left' }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>Data de início do novo ciclo</label>
+              <input type="date" value={novoDataInicio} onChange={e => setNovoDataInicio(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #CBD5E0', borderRadius: 8, fontSize: 13, width: '100%', boxSizing: 'border-box' as const }} />
+            </div>
             {createError && (
               <div style={{ margin: '-12px 0 16px', padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626' }}>
                 {createError}
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={() => { setShowNovoCicloModal(false); setCreateError('') }} style={{ padding: '9px 22px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={() => { setShowNovoCicloModal(false); setCreateError(''); const n = new Date(); setNovoDataInicio(`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-01`) }} style={{ padding: '9px 22px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
               <button onClick={criarNovoCiclo} disabled={creating} style={{ padding: '9px 22px', border: 'none', borderRadius: 8, background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: creating ? 0.7 : 1 }}>
                 {creating ? 'Criando…' : 'Confirmar'}
               </button>
