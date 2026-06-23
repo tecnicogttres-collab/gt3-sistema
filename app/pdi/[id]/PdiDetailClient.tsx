@@ -1034,7 +1034,17 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
         throw new Error(body.error ?? 'Erro ao criar ciclo')
       }
       const novo: Ciclo = await res.json()
-      setCiclos(prev => [novo, ...prev.map(c => c.status === 'ativo' ? { ...c, status: 'arquivado' as const, arquivado_em: new Date().toISOString() } : c)])
+      // Calcular data_fim do ciclo anterior = dia antes do início do novo
+      const dInicio = new Date(novoDataInicio + 'T12:00:00')
+      dInicio.setDate(dInicio.getDate() - 1)
+      const dataFimAnterior = `${dInicio.getFullYear()}-${String(dInicio.getMonth() + 1).padStart(2, '0')}-${String(dInicio.getDate()).padStart(2, '0')}`
+      setCiclos(prev => [
+        { ...novo, meu_rascunho: null, outros_rascunhos: [] },
+        ...prev.map(c => c.status === 'ativo'
+          ? { ...c, status: 'arquivado' as const, arquivado_em: new Date().toISOString(), data_fim: dataFimAnterior }
+          : c
+        ),
+      ])
       setShowNovoCicloModal(false)
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Erro ao criar ciclo')
