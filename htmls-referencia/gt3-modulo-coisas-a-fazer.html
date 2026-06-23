@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT3 Sistema — Coisas a Fazer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<style>
+  :root{
+    --primary:#2A4F96;
+    --primary-dark:#1E3A70;
+    --accent:#D1AE6E;
+    --bg:#F4F6FA;
+    --white:#FFFFFF;
+    --text-primary:#1F2937;
+    --text-secondary:#6B7280;
+    --text-tertiary:#9CA3AF;
+    --border:#E5E9F0;
+    --border-strong:#D1D7E3;
+    --success:#1D9E75;
+    --success-bg:#E1F5EE;
+    --success-dark:#085041;
+    --danger:#D85A30;
+    --danger-bg:#FAECE7;
+    --warning-bg:#FAEEDA;
+    --warning-dark:#854F0B;
+    --suggestion-bg:#FBEAF0;
+    --suggestion-border:#ED93B1;
+    --suggestion-dark:#72243E;
+    --radius-sm:6px;
+    --radius-md:10px;
+    --radius-lg:14px;
+    --shadow-sm:0 1px 2px rgba(16,24,40,0.05);
+    --shadow-md:0 4px 12px rgba(16,24,40,0.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:'Inter',sans-serif;
+    background:var(--bg);
+    color:var(--text-primary);
+    min-height:100vh;
+    padding:32px 24px 80px;
+  }
+  .app{max-width:980px;margin:0 auto;}
+
+  /* Header */
+  .header{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    margin-bottom:28px;flex-wrap:wrap;gap:16px;
+  }
+  .header h1{font-size:24px;font-weight:700;color:var(--primary-dark);display:flex;align-items:center;gap:10px;}
+  .header h1 i{font-size:26px;color:var(--accent);}
+  .header p{font-size:14px;color:var(--text-secondary);margin-top:4px;}
+  .header-actions{display:flex;gap:10px;flex-wrap:wrap;}
+
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:10px 16px;border-radius:var(--radius-md);
+    font-size:14px;font-weight:600;cursor:pointer;
+    border:1px solid var(--border-strong);background:var(--white);
+    color:var(--text-primary);transition:all .15s;
+  }
+  .btn:hover{background:#F8F9FB;border-color:var(--primary);}
+  .btn-primary{background:var(--primary);color:var(--white);border-color:var(--primary);}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-accent{background:var(--accent);color:#4A3A1A;border-color:var(--accent);}
+  .btn-accent:hover{filter:brightness(0.95);}
+  .btn-ghost{border-color:transparent;background:transparent;}
+  .btn-ghost:hover{background:#F0F2F7;}
+  .btn-sm{padding:6px 12px;font-size:13px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+
+  /* Role switcher (demo only) */
+  .role-switcher{
+    display:flex;align-items:center;gap:8px;background:var(--white);
+    border:1px solid var(--border);border-radius:var(--radius-md);
+    padding:6px 10px;font-size:13px;color:var(--text-secondary);
+    box-shadow:var(--shadow-sm);
+  }
+  .role-switcher select{
+    border:none;background:transparent;font-family:inherit;font-size:13px;
+    font-weight:600;color:var(--primary);cursor:pointer;
+  }
+  .role-switcher select:focus{outline:none;}
+
+  /* Module list */
+  .module-card{
+    background:var(--white);border:1px solid var(--border);
+    border-radius:var(--radius-lg);margin-bottom:14px;
+    box-shadow:var(--shadow-sm);overflow:hidden;
+  }
+  .module-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 20px;cursor:pointer;gap:16px;
+  }
+  .module-head:hover{background:#FAFBFD;}
+  .module-head-left{display:flex;align-items:center;gap:14px;min-width:0;}
+  .module-chevron{
+    font-size:18px;color:var(--text-tertiary);transition:transform .2s;
+    flex-shrink:0;
+  }
+  .module-card.open .module-chevron{transform:rotate(90deg);color:var(--primary);}
+  .module-icon{
+    width:38px;height:38px;border-radius:var(--radius-sm);
+    background:#EEF2FB;color:var(--primary);
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;flex-shrink:0;
+  }
+  .module-title-wrap{min-width:0;}
+  .module-title{font-size:16px;font-weight:600;color:var(--text-primary);}
+  .module-meta{font-size:12.5px;color:var(--text-tertiary);margin-top:2px;}
+  .module-head-right{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  .count-badge{
+    font-size:12.5px;font-weight:600;padding:4px 10px;
+    border-radius:20px;background:var(--bg);color:var(--text-secondary);
+    border:1px solid var(--border);
+  }
+  .count-badge.has-items{background:#EEF2FB;color:var(--primary);border-color:#D6E0F5;}
+
+  .module-body{display:none;border-top:1px solid var(--border);}
+  .module-card.open .module-body{display:block;}
+
+  .module-toolbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 20px;background:#FAFBFD;border-bottom:1px solid var(--border);
+    flex-wrap:wrap;gap:10px;
+  }
+  .view-toggle{
+    display:inline-flex;background:var(--white);border:1px solid var(--border-strong);
+    border-radius:var(--radius-md);padding:3px;
+  }
+  .view-toggle button{
+    border:none;background:transparent;padding:6px 14px;font-size:13px;
+    font-weight:600;color:var(--text-secondary);border-radius:7px;cursor:pointer;
+    font-family:inherit;display:flex;align-items:center;gap:6px;
+  }
+  .view-toggle button.active{background:var(--primary);color:var(--white);}
+
+  .item-list{padding:8px 20px 18px;}
+  .item-row{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    gap:12px;padding:12px 4px;border-bottom:1px solid #F0F2F6;
+  }
+  .item-row:last-child{border-bottom:none;}
+  .item-left{display:flex;gap:10px;min-width:0;flex:1;}
+  .item-dot{
+    width:8px;height:8px;border-radius:50%;background:var(--primary);
+    margin-top:6px;flex-shrink:0;
+  }
+  .item-row.is-suggestion .item-dot{background:#D4537E;}
+  .item-row.is-done .item-dot{background:var(--success);}
+  .item-text-wrap{min-width:0;}
+  .item-text{font-size:14.5px;color:var(--text-primary);line-height:1.5;}
+  .item-row.is-done .item-text{color:var(--text-secondary);}
+  .item-sub{font-size:12px;color:var(--text-tertiary);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .badge-suggestion{
+    font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;
+    background:var(--suggestion-bg);color:var(--suggestion-dark);
+    padding:2px 8px;border-radius:10px;border:1px solid var(--suggestion-border);
+  }
+  .item-actions{display:flex;gap:6px;flex-shrink:0;}
+  .icon-btn{
+    width:30px;height:30px;border-radius:8px;border:1px solid var(--border);
+    background:var(--white);color:var(--text-secondary);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
+  }
+  .icon-btn:hover{background:#F8F9FB;}
+  .icon-btn.finish:hover{color:var(--success);border-color:#B7E4D3;background:var(--success-bg);}
+  .icon-btn.reactivate:hover{color:var(--primary);border-color:#C9D6F0;background:#EEF2FB;}
+
+  .empty-state{
+    padding:28px 20px;text-align:center;color:var(--text-tertiary);font-size:13.5px;
+  }
+  .empty-state i{font-size:26px;display:block;margin-bottom:8px;color:var(--border-strong);}
+
+  .add-item-row{padding:14px 20px;border-top:1px solid var(--border);}
+  .add-item-form{display:flex;gap:8px;}
+  .add-item-form input{
+    flex:1;padding:9px 12px;border:1px solid var(--border-strong);
+    border-radius:var(--radius-sm);font-family:inherit;font-size:14px;
+  }
+  .add-item-form input:focus{outline:none;border-color:var(--primary);}
+
+  .history-meta{font-size:12px;color:var(--text-tertiary);margin-top:4px;}
+
+  /* No-permission notice */
+  .perm-note{
+    font-size:12.5px;color:var(--text-tertiary);padding:10px 20px;
+    background:#FAFBFD;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;
+  }
+
+  /* Modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(17,24,39,0.45);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:440px;
+    box-shadow:0 20px 50px rgba(16,24,40,0.25);overflow:hidden;
+  }
+  .modal-header{
+    padding:18px 22px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .modal-header h3{font-size:16px;font-weight:700;color:var(--primary-dark);}
+  .modal-header .icon-btn{border:none;}
+  .modal-body{padding:22px;}
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block;font-size:13px;font-weight:600;color:var(--text-secondary);
+    margin-bottom:6px;
+  }
+  .field input,.field select,.field textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--border-strong);
+    border-radius:var(--radius-sm);font-family:inherit;font-size:14px;
+    color:var(--text-primary);
+  }
+  .field textarea{resize:vertical;min-height:80px;}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--primary);}
+  .field-hint{font-size:12px;color:var(--text-tertiary);margin-top:5px;}
+  .modal-footer{
+    padding:16px 22px;border-top:1px solid var(--border);
+    display:flex;justify-content:flex-end;gap:10px;background:#FAFBFD;
+  }
+
+  .radio-group{display:flex;gap:8px;}
+  .radio-option{
+    flex:1;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+    padding:10px;text-align:center;font-size:13px;font-weight:600;
+    color:var(--text-secondary);cursor:pointer;transition:all .15s;
+  }
+  .radio-option.selected{border-color:var(--primary);background:#EEF2FB;color:var(--primary);}
+
+  /* Toast */
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--text-primary);color:var(--white);padding:12px 20px;
+    border-radius:var(--radius-md);font-size:14px;font-weight:500;
+    box-shadow:var(--shadow-md);opacity:0;transition:all .25s;z-index:200;
+    display:flex;align-items:center;gap:8px;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast i{font-size:16px;color:#7FD9B5;}
+
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="header">
+    <div>
+      <h1><i class="ti ti-list-check"></i>Coisas a fazer</h1>
+      <p>Itens de melhoria por módulo do GT3 Sistema</p>
+    </div>
+    <div class="header-actions">
+      <div class="role-switcher">
+        <i class="ti ti-user-circle" style="font-size:16px;"></i>
+        <select id="roleSwitch">
+          <option value="admin">GT3.RODRIGO — admin</option>
+          <option value="gestor">GT3.MARCIO — gestor</option>
+          <option value="colaborador">Camila — colaborador</option>
+          <option value="trainee">Giancarlo — trainee</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="btnNovoModulo">
+        <i class="ti ti-folder-plus"></i>Novo módulo
+      </button>
+      <button class="btn btn-accent" id="btnSugestao">
+        <i class="ti ti-bulb"></i>Sugestão
+      </button>
+    </div>
+  </div>
+
+  <div id="moduleList"></div>
+
+</div>
+
+<!-- Modal: Novo módulo (admin/gestor) -->
+<div class="modal-overlay" id="modalNovoModulo">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Novo módulo</h3>
+      <button class="icon-btn" data-close="modalNovoModulo"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Nome do módulo</label>
+        <input type="text" id="inputNomeModulo" placeholder="Ex.: Observações, PDI, Cadastro Contratantes...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-close="modalNovoModulo">Cancelar</button>
+      <button class="btn btn-primary" id="btnSalvarModulo">Criar módulo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Adicionar item direto (admin/gestor) -->
+<div class="modal-overlay" id="modalNovoItem">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Novo item</h3>
+      <button class="icon-btn" data-close="modalNovoItem"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Descreva o que precisa ser melhorado</label>
+        <textarea id="inputTextoItem" placeholder="Ex.: Revisar coluna de status no card de NR 35..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-close="modalNovoItem">Cancelar</button>
+      <button class="btn btn-primary" id="btnSalvarItem">Adicionar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Sugestão (colaborador/trainee) -->
+<div class="modal-overlay" id="modalSugestao">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Enviar sugestão</h3>
+      <button class="icon-btn" data-close="modalSugestao"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Tipo de sugestão</label>
+        <div class="radio-group">
+          <div class="radio-option selected" id="optExistente" data-tipo="existente">Módulo existente</div>
+          <div class="radio-option" id="optNovo" data-tipo="novo">Novo módulo</div>
+        </div>
+      </div>
+      <div class="field" id="campoModuloExistente">
+        <label>Selecione o módulo</label>
+        <select id="selectModuloExistente"></select>
+      </div>
+      <div class="field" id="campoNomeNovoModulo" class="hidden">
+        <label>Nome do módulo sugerido</label>
+        <input type="text" id="inputNomeNovoModuloSugestao" placeholder="Ex.: Módulo de Atas">
+      </div>
+      <div class="field">
+        <label>O que precisa ser melhorado ou criado?</label>
+        <textarea id="inputTextoSugestao" placeholder="Descreva livremente..."></textarea>
+        <p class="field-hint">Sua sugestão entra direto na lista, destacada com seu nome.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-close="modalSugestao">Cancelar</button>
+      <button class="btn btn-primary" id="btnEnviarSugestao">Enviar sugestão</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><i class="ti ti-circle-check"></i><span id="toastMsg"></span></div>
+
+<script>
+(function(){
+
+  var USERS = {
+    admin: {nome:'Rodrigo', login:'GT3.RODRIGO', role:'admin'},
+    gestor: {nome:'Márcio', login:'GT3.MARCIO', role:'gestor'},
+    colaborador: {nome:'Camila', login:'GT3.CAMILA', role:'colaborador'},
+    trainee: {nome:'Giancarlo', login:'GT3.GIANCARLO', role:'trainee'}
+  };
+
+  var state = {
+    currentRole: 'admin',
+    modulos: [
+      {id:'m1', nome:'Observações', criadoPor:'Rodrigo'},
+      {id:'m2', nome:'PDI', criadoPor:'Rodrigo'},
+      {id:'m3', nome:'Cadastro Contratantes', criadoPor:'Márcio'},
+      {id:'m4', nome:'E-mails Padrão', criadoPor:'Rodrigo'}
+    ],
+    itens: [
+      {id:'i1', moduloId:'m1', texto:'Revisar cor de fundo da coluna ASO no kanban — está muito clara em telas com brilho alto.', status:'ativo', origem:'interna', autor:'Rodrigo', criadoEm:'2026-06-15T10:00:00', finalizadoPor:null, finalizadoEm:null},
+      {id:'i2', moduloId:'m1', texto:'Adicionar atalho de teclado para copiar o parecer selecionado.', status:'ativo', origem:'sugestao', autor:'Camila', criadoEm:'2026-06-18T14:30:00', finalizadoPor:null, finalizadoEm:null},
+      {id:'i3', moduloId:'m1', texto:'Corrigir scroll da coluna fixa em telas menores que 1366px.', status:'finalizado', origem:'interna', autor:'Rodrigo', criadoEm:'2026-05-20T09:00:00', finalizadoPor:'Márcio', finalizadoEm:'2026-06-10T16:45:00'},
+      {id:'i4', moduloId:'m2', texto:'Padronizar escala dos radares de Eneagrama — alguns colaboradores estão com eixos diferentes.', status:'ativo', origem:'interna', autor:'Rodrigo', criadoEm:'2026-06-20T11:00:00', finalizadoPor:null, finalizadoEm:null},
+      {id:'i5', moduloId:'m3', texto:'Permitir busca por CNPJ além de nome da empresa.', status:'ativo', origem:'sugestao', autor:'Giancarlo', criadoEm:'2026-06-21T08:15:00', finalizadoPor:null, finalizadoEm:null}
+    ],
+    openModules: {}
+  };
+
+  var STORAGE_KEY = 'gt3_coisas_a_fazer_v1';
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        var saved = JSON.parse(raw);
+        state.modulos = saved.modulos || state.modulos;
+        state.itens = saved.itens || state.itens;
+      }
+    }catch(e){}
+  }
+  function saveState(){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({modulos:state.modulos, itens:state.itens}));
+    }catch(e){}
+  }
+
+  function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+
+  function currentUser(){ return USERS[state.currentRole]; }
+  function canManage(){ return state.currentRole === 'admin' || state.currentRole === 'gestor'; }
+
+  function formatDate(iso){
+    if(!iso) return '';
+    var d = new Date(iso);
+    var dd = String(d.getDate()).padStart(2,'0');
+    var mm = String(d.getMonth()+1).padStart(2,'0');
+    var yy = d.getFullYear();
+    var hh = String(d.getHours()).padStart(2,'0');
+    var mi = String(d.getMinutes()).padStart(2,'0');
+    return dd+'/'+mm+'/'+yy+' às '+hh+':'+mi;
+  }
+
+  function showToast(msg, icon){
+    var toast = document.getElementById('toast');
+    var toastMsg = document.getElementById('toastMsg');
+    toast.querySelector('i').className = 'ti ti-' + (icon || 'circle-check');
+    toastMsg.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(function(){ toast.classList.remove('show'); }, 2400);
+  }
+
+  function activeCount(moduloId){
+    return state.itens.filter(function(i){ return i.moduloId === moduloId && i.status === 'ativo'; }).length;
+  }
+  function historyCount(moduloId){
+    return state.itens.filter(function(i){ return i.moduloId === moduloId && i.status === 'finalizado'; }).length;
+  }
+
+  function render(){
+    renderModuleList();
+    renderModuleSelectInModal();
+  }
+
+  function renderModuleList(){
+    var container = document.getElementById('moduleList');
+    if(state.modulos.length === 0){
+      container.innerHTML = '<div class="empty-state" style="background:#fff;border:1px solid var(--border);border-radius:var(--radius-lg);"><i class="ti ti-folder-open"></i>Nenhum módulo cadastrado ainda.</div>';
+      return;
+    }
+
+    var html = state.modulos.map(function(mod){
+      var isOpen = !!state.openModules[mod.id];
+      var view = state.openModules[mod.id + '_view'] || 'ativos';
+      var count = activeCount(mod.id);
+      var histCount = historyCount(mod.id);
+
+      var itemsForView = state.itens.filter(function(i){
+        return i.moduloId === mod.id && i.status === (view === 'ativos' ? 'ativo' : 'finalizado');
+      }).sort(function(a,b){ return new Date(b.criadoEm) - new Date(a.criadoEm); });
+
+      var itemsHtml = '';
+      if(itemsForView.length === 0){
+        itemsHtml = '<div class="empty-state"><i class="ti ' + (view === 'ativos' ? 'ti-circle-check' : 'ti-history') + '"></i>' +
+          (view === 'ativos' ? 'Nenhum item ativo. Tudo certo por aqui.' : 'Nenhum item no histórico ainda.') + '</div>';
+      } else {
+        itemsHtml = itemsForView.map(function(item){
+          var isSuggestion = item.origem === 'sugestao';
+          var rowClass = 'item-row' + (isSuggestion ? ' is-suggestion' : '') + (item.status === 'finalizado' ? ' is-done' : '');
+          var sub = '';
+          if(isSuggestion){
+            sub += '<span class="badge-suggestion">Sugestão de ' + item.autor + '</span>';
+          }
+          sub += '<span>' + formatDate(item.criadoEm) + '</span>';
+
+          var actions = '';
+          if(canManage()){
+            if(item.status === 'ativo'){
+              actions = '<button class="icon-btn finish" title="Marcar como finalizado" data-action="finish" data-id="' + item.id + '"><i class="ti ti-check"></i></button>';
+            } else {
+              actions = '<button class="icon-btn reactivate" title="Reativar pendência" data-action="reactivate" data-id="' + item.id + '"><i class="ti ti-rotate"></i></button>';
+            }
+          }
+
+          var historyMeta = '';
+          if(item.status === 'finalizado' && item.finalizadoPor){
+            historyMeta = '<div class="history-meta"><i class="ti ti-user-check" style="font-size:12px;vertical-align:-1px;"></i> Finalizado por ' + item.finalizadoPor + ' em ' + formatDate(item.finalizadoEm) + '</div>';
+          }
+
+          return '<div class="' + rowClass + '">' +
+            '<div class="item-left">' +
+              '<div class="item-dot"></div>' +
+              '<div class="item-text-wrap">' +
+                '<div class="item-text">' + escapeHtml(item.texto) + '</div>' +
+                '<div class="item-sub">' + sub + '</div>' +
+                historyMeta +
+              '</div>' +
+            '</div>' +
+            '<div class="item-actions">' + actions + '</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      var toolbar = '<div class="module-toolbar">' +
+        '<div class="view-toggle">' +
+          '<button class="' + (view === 'ativos' ? 'active' : '') + '" data-action="view" data-view="ativos" data-mod="' + mod.id + '"><i class="ti ti-list"></i>Ativos (' + count + ')</button>' +
+          '<button class="' + (view === 'historico' ? 'active' : '') + '" data-action="view" data-view="historico" data-mod="' + mod.id + '"><i class="ti ti-history"></i>Histórico (' + histCount + ')</button>' +
+        '</div>' +
+        (canManage() ? '<button class="btn btn-sm btn-ghost" data-action="add-item" data-mod="' + mod.id + '"><i class="ti ti-plus"></i>Adicionar item</button>' : '') +
+      '</div>';
+
+      var addRow = '';
+      // add-item handled via modal, no inline form needed
+
+      var permNote = !canManage() ? '<div class="perm-note"><i class="ti ti-info-circle" style="font-size:14px;"></i>Apenas admin e gestor podem finalizar ou reativar itens.</div>' : '';
+
+      return '<div class="module-card ' + (isOpen ? 'open' : '') + '" data-mod-id="' + mod.id + '">' +
+        '<div class="module-head" data-action="toggle" data-mod="' + mod.id + '">' +
+          '<div class="module-head-left">' +
+            '<i class="ti ti-chevron-right module-chevron"></i>' +
+            '<div class="module-icon"><i class="ti ti-folder"></i></div>' +
+            '<div class="module-title-wrap">' +
+              '<div class="module-title">' + escapeHtml(mod.nome) + '</div>' +
+              '<div class="module-meta">Criado por ' + escapeHtml(mod.criadoPor) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="module-head-right">' +
+            '<span class="count-badge ' + (count > 0 ? 'has-items' : '') + '">' + count + ' ativo' + (count !== 1 ? 's' : '') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="module-body">' +
+          toolbar +
+          '<div class="item-list">' + itemsHtml + '</div>' +
+          permNote +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    container.innerHTML = html;
+  }
+
+  function escapeHtml(str){
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function renderModuleSelectInModal(){
+    var select = document.getElementById('selectModuloExistente');
+    select.innerHTML = state.modulos.map(function(m){
+      return '<option value="' + m.id + '">' + escapeHtml(m.nome) + '</option>';
+    }).join('');
+  }
+
+  // ---- Event delegation for module list ----
+  document.getElementById('moduleList').addEventListener('click', function(e){
+    var toggleEl = e.target.closest('[data-action="toggle"]');
+    if(toggleEl){
+      var modId = toggleEl.getAttribute('data-mod');
+      state.openModules[modId] = !state.openModules[modId];
+      render();
+      return;
+    }
+
+    var viewEl = e.target.closest('[data-action="view"]');
+    if(viewEl){
+      e.stopPropagation();
+      var mId = viewEl.getAttribute('data-mod');
+      var v = viewEl.getAttribute('data-view');
+      state.openModules[mId + '_view'] = v;
+      render();
+      return;
+    }
+
+    var addItemEl = e.target.closest('[data-action="add-item"]');
+    if(addItemEl){
+      e.stopPropagation();
+      pendingModuleId = addItemEl.getAttribute('data-mod');
+      document.getElementById('inputTextoItem').value = '';
+      openModal('modalNovoItem');
+      return;
+    }
+
+    var finishEl = e.target.closest('[data-action="finish"]');
+    if(finishEl){
+      e.stopPropagation();
+      var itemId = finishEl.getAttribute('data-id');
+      finishItem(itemId);
+      return;
+    }
+
+    var reactivateEl = e.target.closest('[data-action="reactivate"]');
+    if(reactivateEl){
+      e.stopPropagation();
+      var rItemId = reactivateEl.getAttribute('data-id');
+      reactivateItem(rItemId);
+      return;
+    }
+  });
+
+  function finishItem(itemId){
+    var item = state.itens.find(function(i){ return i.id === itemId; });
+    if(!item) return;
+    item.status = 'finalizado';
+    item.finalizadoPor = currentUser().nome;
+    item.finalizadoEm = new Date().toISOString();
+    saveState();
+    render();
+    showToast('Item movido para o histórico', 'circle-check');
+  }
+
+  function reactivateItem(itemId){
+    var item = state.itens.find(function(i){ return i.id === itemId; });
+    if(!item) return;
+    item.status = 'ativo';
+    item.finalizadoPor = null;
+    item.finalizadoEm = null;
+    saveState();
+    render();
+    showToast('Pendência reativada', 'rotate');
+  }
+
+  var pendingModuleId = null;
+
+  // ---- Modals ----
+  function openModal(id){ document.getElementById(id).classList.add('show'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+
+  document.querySelectorAll('[data-close]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      closeModal(btn.getAttribute('data-close'));
+    });
+  });
+  document.querySelectorAll('.modal-overlay').forEach(function(overlay){
+    overlay.addEventListener('click', function(e){
+      if(e.target === overlay) overlay.classList.remove('show');
+    });
+  });
+
+  // Novo módulo
+  document.getElementById('btnNovoModulo').addEventListener('click', function(){
+    document.getElementById('inputNomeModulo').value = '';
+    openModal('modalNovoModulo');
+  });
+  document.getElementById('btnSalvarModulo').addEventListener('click', function(){
+    var nome = document.getElementById('inputNomeModulo').value.trim();
+    if(!nome){ showToast('Digite um nome para o módulo', 'alert-circle'); return; }
+    state.modulos.push({id: uid('m'), nome: nome, criadoPor: currentUser().nome});
+    saveState();
+    closeModal('modalNovoModulo');
+    render();
+    showToast('Módulo criado', 'folder-plus');
+  });
+
+  // Novo item (admin/gestor)
+  document.getElementById('btnSalvarItem').addEventListener('click', function(){
+    var texto = document.getElementById('inputTextoItem').value.trim();
+    if(!texto){ showToast('Descreva o item', 'alert-circle'); return; }
+    state.itens.push({
+      id: uid('i'), moduloId: pendingModuleId, texto: texto,
+      status: 'ativo', origem: 'interna', autor: currentUser().nome,
+      criadoEm: new Date().toISOString(), finalizadoPor: null, finalizadoEm: null
+    });
+    saveState();
+    closeModal('modalNovoItem');
+    state.openModules[pendingModuleId] = true;
+    state.openModules[pendingModuleId + '_view'] = 'ativos';
+    render();
+    showToast('Item adicionado', 'plus');
+  });
+
+  // Sugestão (colaborador/trainee, mas liberado pra qualquer role testar)
+  var tipoSugestao = 'existente';
+  document.getElementById('btnSugestao').addEventListener('click', function(){
+    document.getElementById('inputTextoSugestao').value = '';
+    document.getElementById('inputNomeNovoModuloSugestao').value = '';
+    setTipoSugestao('existente');
+    openModal('modalSugestao');
+  });
+
+  function setTipoSugestao(tipo){
+    tipoSugestao = tipo;
+    document.getElementById('optExistente').classList.toggle('selected', tipo === 'existente');
+    document.getElementById('optNovo').classList.toggle('selected', tipo === 'novo');
+    document.getElementById('campoModuloExistente').classList.toggle('hidden', tipo !== 'existente');
+    document.getElementById('campoNomeNovoModulo').classList.toggle('hidden', tipo !== 'novo');
+  }
+  document.getElementById('optExistente').addEventListener('click', function(){ setTipoSugestao('existente'); });
+  document.getElementById('optNovo').addEventListener('click', function(){ setTipoSugestao('novo'); });
+
+  document.getElementById('btnEnviarSugestao').addEventListener('click', function(){
+    var texto = document.getElementById('inputTextoSugestao').value.trim();
+    if(!texto){ showToast('Descreva sua sugestão', 'alert-circle'); return; }
+
+    var targetModuleId;
+    if(tipoSugestao === 'novo'){
+      var nomeNovo = document.getElementById('inputNomeNovoModuloSugestao').value.trim();
+      if(!nomeNovo){ showToast('Digite o nome do módulo sugerido', 'alert-circle'); return; }
+      targetModuleId = uid('m');
+      state.modulos.push({id: targetModuleId, nome: nomeNovo, criadoPor: currentUser().nome});
+    } else {
+      targetModuleId = document.getElementById('selectModuloExistente').value;
+      if(!targetModuleId){ showToast('Selecione um módulo', 'alert-circle'); return; }
+    }
+
+    state.itens.push({
+      id: uid('i'), moduloId: targetModuleId, texto: texto,
+      status: 'ativo', origem: 'sugestao', autor: currentUser().nome,
+      criadoEm: new Date().toISOString(), finalizadoPor: null, finalizadoEm: null
+    });
+
+    saveState();
+    closeModal('modalSugestao');
+    state.openModules[targetModuleId] = true;
+    state.openModules[targetModuleId + '_view'] = 'ativos';
+    render();
+    showToast('Sugestão enviada e destacada na lista', 'bulb');
+  });
+
+  // ---- Role switcher (demo) ----
+  document.getElementById('roleSwitch').addEventListener('change', function(e){
+    state.currentRole = e.target.value;
+    updatePermissionUI();
+    render();
+  });
+
+  function updatePermissionUI(){
+    var manage = canManage();
+    document.getElementById('btnNovoModulo').style.display = manage ? '' : 'none';
+  }
+
+  // ---- Init ----
+  loadState();
+  updatePermissionUI();
+  // open first module by default for demo visibility
+  if(state.modulos.length){ state.openModules[state.modulos[0].id] = true; }
+  render();
+
+})();
+</script>
+
+</body>
+</html>

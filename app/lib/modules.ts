@@ -236,4 +236,13 @@ export const MODULES: Module[] = [
     description: 'Gestão de frases motivacionais diárias',
     allowedRoles: ['admin'],
   },
+  {
+    id: 'coisas-a-fazer',
+    label: 'Coisas a Fazer',
+    color: '#D1AE6E',
+    path: '/coisas-a-fazer',
+    description: 'Itens de melhoria por módulo do GT3 Sistema',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+    dashboardRoles: ['admin'],
+  },
 ]
