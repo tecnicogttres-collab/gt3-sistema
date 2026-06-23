@@ -78,7 +78,7 @@ export default function EmailsClient() {
     let cancelled = false
     supabase
       .from('email_templates')
-      .select('id, title, client, category, subject, tags, notes, corpo, created_at, updated_at')
+      .select('*')
       .order('title', { ascending: true })
       .then(({ data, error }) => {
         if (cancelled) return
