@@ -40,9 +40,8 @@ function getEmailFirst(c: Company) {
 function getAuthTag(c: Company): { label: string; warn: boolean } | null {
   const f = c.fields.find(x => x.type === 'text' && /AUTORIZA/i.test(x.label))
   if (!f || f.type !== 'text' || !f.value) return null
-  return /^sim/i.test(f.value.trim())
-    ? { label: 'Autorizado', warn: false }
-    : { label: 'Verificar', warn: true }
+  if (!/^sim/i.test(f.value.trim())) return null
+  return { label: 'Autorizado', warn: false }
 }
 
 function companyMatches(c: Company, term: string) {
