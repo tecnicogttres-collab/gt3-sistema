@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import AtasEditor, { type AtaEditorData } from '../atas/AtasEditor'
+import AtasEditor, { type AtaEditorData, type Participante, type Topico } from '../atas/AtasEditor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,6 +59,24 @@ function getSnippet(text: string, query: string, maxLen = 130): string {
 type YearEntry   = { year: number; months: { month: number; atas: Ata[] }[] }
 type ClientEntry = { cliente: string; years: YearEntry[] }
 type Tree        = ClientEntry[]
+
+function parseParticipantes(val: string): Participante[] {
+  if (!val?.trim()) return []
+  try { const p = JSON.parse(val); if (Array.isArray(p)) return p } catch {}
+  return val.split(/[,;]/).map(s => ({ nome: s.trim(), empresa: '' })).filter(p => p.nome)
+}
+
+function parseTopicos(val: string): Topico[] {
+  if (!val?.trim()) return []
+  try { const t = JSON.parse(val); if (Array.isArray(t)) return t } catch {}
+  return []
+}
+
+function getConteudoText(val: string): string {
+  if (!val?.trim()) return ''
+  try { const t = JSON.parse(val); if (Array.isArray(t)) return (t as Topico[]).map(x => `${x.titulo} ${x.descricao}`).join(' ') } catch {}
+  return val.replace(/<[^>]+>/g, ' ')
+}
 
 function buildTree(atas: Ata[]): Tree {
   const cMap = new Map<string, Map<number, Map<number, Ata[]>>>()
@@ -293,6 +311,9 @@ export default function AtasContratantesClient() {
 
   const tree = buildTree(atas)
   const isSearchActive = searchQuery.trim().length > 0
+  const partsList = selected ? parseParticipantes(selected.participantes ?? '') : []
+  const topicosList = selected ? parseTopicos(selected.conteudo ?? '') : []
+  const isLegacyContent = topicosList.length === 0 && !!selected?.conteudo?.trim()
 
   const rowStyle = (id: string): React.CSSProperties => ({
     width: '100%', textAlign: 'left', padding: '6px 16px 6px 40px',
@@ -381,7 +402,7 @@ export default function AtasContratantesClient() {
                   </div>
                   {a.conteudo && (
                     <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.4 }}>
-                      {getSnippet(a.conteudo, searchQuery)}
+                      {getSnippet(getConteudoText(a.conteudo), searchQuery)}
                     </div>
                   )}
                 </button>
@@ -476,11 +497,16 @@ export default function AtasContratantesClient() {
                     </span>
                     {selected.autor && <span style={{ fontSize: 12, color: '#94A3B8' }}>por {selected.autor.nome}</span>}
                   </div>
-                  {(selected.cliente || selected.local_reuniao || selected.participantes) && (
+                  {(selected.cliente || selected.local_reuniao || partsList.length > 0) && (
                     <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '6px 20px' }}>
-                      {selected.cliente && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Cliente:</span> {selected.cliente}</span>}
+                      {selected.cliente && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Contratante:</span> {selected.cliente}</span>}
                       {selected.local_reuniao && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Local:</span> {selected.local_reuniao}</span>}
-                      {selected.participantes && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Participantes:</span> {selected.participantes}</span>}
+                      {partsList.length > 0 && (
+                        <span style={{ fontSize: 12, color: '#334155' }}>
+                          <span style={{ color: '#94A3B8' }}>Participantes:</span>{' '}
+                          {partsList.map(p => p.empresa ? `${p.nome} (${p.empresa})` : p.nome).join(' · ')}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -508,32 +534,69 @@ export default function AtasContratantesClient() {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', background: '#F0F3F9' }}>
-              {selected.conteudo ? (
-                <div style={{ maxWidth: 880, margin: '0 auto', background: '#fff', borderRadius: 14, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', padding: '36px 44px', borderTop: '3px solid #2A4F96' }}>
-                  <div
-                    className="ata-view-content"
-                    dangerouslySetInnerHTML={{ __html: selected.conteudo }}
-                  />
+              <div style={{ maxWidth: 880, margin: '0 auto', background: '#fff', borderRadius: 14, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', overflow: 'hidden' }}>
+                <div style={{ height: 4, background: 'linear-gradient(90deg, #2A4F96, #5B8DEF)' }} />
+                <div style={{ padding: '32px 40px' }}>
+
+                  {/* Participantes */}
+                  {partsList.length > 0 && (
+                    <div style={{ marginBottom: 28 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(42,79,150,0.10)' }}>
+                        Participantes
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
+                        {partsList.map((p, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#F8FAFC', borderRadius: 8, border: '1px solid rgba(42,79,150,0.10)' }}>
+                            <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#EEF2FB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#2A4F96', flexShrink: 0 }}>
+                              {p.nome.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1f2e' }}>{p.nome}</div>
+                              {p.empresa && <div style={{ fontSize: 11, color: '#6B7A99' }}>{p.empresa}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tópicos */}
+                  {topicosList.length > 0 ? (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(42,79,150,0.10)' }}>
+                        Pontos discutidos
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
+                        {topicosList.map((t, idx) => (
+                          <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: '3px solid #2A4F96' }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#2A4F96', marginBottom: t.descricao ? 6 : 0 }}>
+                              {idx + 1}. {t.titulo || '(Sem título)'}
+                            </div>
+                            {t.descricao && (
+                              <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: (t.contratante || t.prazo || t.responsavel) ? 10 : 0, whiteSpace: 'pre-wrap' }}>
+                                {t.descricao}
+                              </div>
+                            )}
+                            {(t.contratante || t.prazo || t.responsavel) && (
+                              <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const }}>
+                                {t.contratante && <span><span style={{ color: '#94A3B8' }}>Contratante:</span> {t.contratante}</span>}
+                                {t.prazo && <span><span style={{ color: '#94A3B8' }}>Prazo:</span> {new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>}
+                                {t.responsavel && <span><span style={{ color: '#94A3B8' }}>Responsável:</span> {t.responsavel}</span>}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : isLegacyContent ? (
+                    <div dangerouslySetInnerHTML={{ __html: selected.conteudo }} style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} />
+                  ) : (
+                    <p style={{ color: '#94A3B8', fontSize: 14, margin: 0 }}>Sem conteúdo registrado.</p>
+                  )}
+
                 </div>
-              ) : (
-                <p style={{ color: '#94A3B8', fontSize: 14, padding: 24 }}>Sem conteúdo registrado.</p>
-              )}
+              </div>
             </div>
-            <style>{`
-              .ata-view-content { font-size:13.5px; color:#334155; line-height:1.65; }
-              .ata-view-content .ata-section { margin-bottom: 22px; }
-              .ata-view-content .ata-bh2 { font-size:11px; font-weight:700; color:#2A4F96; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid rgba(42,79,150,.12); }
-              .ata-view-content .ata-section-body { font-size:13.5px; line-height:1.75; color:#1a1f2e; white-space:pre-wrap; }
-              .ata-view-content .ata-btable-wrap { overflow-x:auto; margin:0; }
-              .ata-view-content .ata-btable { width:100%; border-collapse:collapse; font-size:13px; }
-              .ata-view-content .ata-btable th, .ata-view-content .ata-btable td { border:1px solid rgba(42,79,150,.14); padding:9px 11px; text-align:left; vertical-align:top; }
-              .ata-view-content .ata-btable th { background:#2A4F96; color:#fff; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
-              .ata-view-content .ata-btable tr:nth-child(even) td { background:#f8f9fb; }
-              .ata-view-content .ata-btable-part th { background:#4a5568; }
-              .ata-view-content .ata-assuntos .col-num { width:36px; text-align:center; font-weight:700; color:#2A4F96; }
-              .ata-view-content .ata-assuntos .col-right { width:130px; white-space:normal; }
-              .ata-view-content .ata-assuntos .col-status { font-weight:600; }
-            `}</style>
 
             {isGestorOrAdmin && selected.status === 'Validada' && (
               <div style={{ borderTop: '1px solid #F0F4FA', flexShrink: 0 }}>

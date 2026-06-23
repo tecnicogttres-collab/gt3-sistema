@@ -424,7 +424,7 @@ export default function CoisasAFazerClient() {
                     ))}
                   </div>
                   {canManage && (
-                    <Btn size="sm" variant="ghost" onClick={e => { (e as React.MouseEvent).stopPropagation(); setPendingModuloId(mod.id); setFormTextoItem(''); setModalItem(true) }}>
+                    <Btn size="sm" variant="ghost" onClick={() => { setPendingModuloId(mod.id); setFormTextoItem(''); setModalItem(true) }}>
                       + Adicionar item
                     </Btn>
                   )}
