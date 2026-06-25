@@ -323,9 +323,9 @@ export default function CadastroClient() {
           { type: 'text', label: 'TELEFONE', value: '' },
           { type: 'text', label: 'E-MAIL', value: '' },
           { type: 'text', label: 'GT0180', value: '' },
-          { type: 'text', label: 'INTEGRAÇÃO', value: '' },
           { type: 'text', label: 'INFORMAÇÕES ADICIONAIS', value: '' },
           { type: 'text', label: 'GT0120', value: '' },
+          { type: 'text', label: 'INTEGRAÇÃO', value: '' },
         ],
       }
       setCompanies(prev => [newCo, ...prev])
