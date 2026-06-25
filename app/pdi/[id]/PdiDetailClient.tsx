@@ -1375,6 +1375,7 @@ type MbtiForm = {
 const MBTI_EMPTY: MbtiForm = { tipo: '', nucleo: '', veredito: '', estiloDecisao: '', relacionamentoAutoridade: '', curvaAprendizado: '', impactoClima: '', zonaRisco: '' }
 
 function MbtiTab({ pdi, isDbPdi, canEdit }: { pdi: PdiColaborador; isDbPdi?: boolean; canEdit?: boolean }) {
+  const router = useRouter()
   const initial = pdi.perfilComportamental.mbti
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1391,10 +1392,21 @@ function MbtiTab({ pdi, isDbPdi, canEdit }: { pdi: PdiColaborador; isDbPdi?: boo
   async function save() {
     setSaving(true); setSaveErr('')
     try {
-      const res = await fetch(`/api/pdi/${pdi.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mbti: form }) })
+      let targetId = pdi.id
+      if (!isDbPdi) {
+        const migrRes = await fetch('/api/pdi/migrar-estatico', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ staticId: pdi.id, nome: pdi.nome, funcao: pdi.funcao }),
+        })
+        if (!migrRes.ok) { const b = await migrRes.json().catch(() => ({})) as { error?: string }; throw new Error(b.error ?? 'Erro ao preparar PDI') }
+        const migrated = await migrRes.json() as { id: string }
+        targetId = migrated.id
+      }
+      const res = await fetch(`/api/pdi/${targetId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mbti: form }) })
       if (!res.ok) { const b = await res.json().catch(() => ({})) as { error?: string }; throw new Error(b.error ?? 'Erro ao salvar') }
       setDisplay(form as typeof display)
       setEditing(false)
+      if (!isDbPdi) router.replace(`/pdi/${targetId}`)
     } catch (e) { setSaveErr(e instanceof Error ? e.message : 'Erro ao salvar') } finally { setSaving(false) }
   }
 
@@ -1435,11 +1447,11 @@ function MbtiTab({ pdi, isDbPdi, canEdit }: { pdi: PdiColaborador; isDbPdi?: boo
   const hasData = !!(display?.tipo || display?.nucleo || display?.veredito)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {isDbPdi && canEdit && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button style={BTN_EDIT} onClick={startEdit}>✎ Editar</button></div>}
+      {canEdit && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button style={BTN_EDIT} onClick={startEdit}>✎ Editar</button></div>}
 
       {!hasData ? (
         <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>
-          {isDbPdi && canEdit ? 'Clique em "Editar" para preencher os dados MBTI.' : 'Avaliação MBTI não disponível para este colaborador.'}
+          {canEdit ? 'Clique em "Editar" para preencher os dados MBTI.' : 'Avaliação MBTI não disponível para este colaborador.'}
         </div>
       ) : (<>
       {/* Cabeçalho: badge tipo + veredito em destaque (primeiro) */}

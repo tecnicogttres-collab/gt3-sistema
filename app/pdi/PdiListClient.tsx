@@ -166,12 +166,43 @@ function PdiCardInner({ data, href, footer }: { data: PdiCardData; href: string;
   )
 }
 
-function StaticPdiCard({ pdi }: { pdi: PdiColaborador }) {
+function StaticPdiCard({ pdi, isGestorAdmin, onArchive, onDelete }: {
+  pdi: PdiColaborador
+  isGestorAdmin?: boolean
+  onArchive?: () => Promise<void>
+  onDelete?: () => Promise<void>
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [working, setWorking] = useState(false)
+
   const totais = pdi.matrizAvaliacao.totais
   const topAnimal = [...pdi.perfilComportamental.animais].sort((a, b) => (b.percentual ?? 0) - (a.percentual ?? 0))[0] ?? null
+
+  const actions = isGestorAdmin ? (
+    <div style={{ padding: '10px 18px 14px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 6, justifyContent: confirmDelete ? 'space-between' : 'flex-end' }}>
+      {confirmDelete ? (
+        <>
+          <span style={{ fontSize: 12, color: '#DC2626', fontWeight: 600 }}>Excluir este PDI?</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setConfirmDelete(false)} style={{ fontSize: 12, padding: '4px 12px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#fff', color: '#475569', cursor: 'pointer' }}>Não</button>
+            <button onClick={async () => { setWorking(true); await onDelete?.(); setConfirmDelete(false); setWorking(false) }} style={{ fontSize: 12, padding: '4px 12px', border: 'none', borderRadius: 6, backgroundColor: '#DC2626', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Sim, excluir</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <button onClick={async () => { setWorking(true); await onArchive?.(); setWorking(false) }} disabled={working} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #E2E8F0', borderRadius: 6, backgroundColor: '#F8FAFC', color: '#475569', cursor: working ? 'not-allowed' : 'pointer', opacity: working ? 0.6 : 1 }}>
+            {working ? '…' : '📦 Arquivar'}
+          </button>
+          <button onClick={() => setConfirmDelete(true)} disabled={working} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FECACA', borderRadius: 6, backgroundColor: '#FEF2F2', color: '#DC2626', cursor: 'pointer' }}>🗑️</button>
+        </>
+      )}
+    </div>
+  ) : null
+
   return (
     <PdiCardInner
       href={`/pdi/${pdi.id}`}
+      footer={actions}
       data={{
         nome: pdi.nome,
         funcao: pdi.funcao,
@@ -445,13 +476,14 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
   const [editModal, setEditModal] = useState<EditModalState>(EDIT_INIT)
   const [colabs, setColabs] = useState<Colab[]>([])
   const [localDbPdis, setLocalDbPdis] = useState<DbPdi[]>(dbPdis)
+  const [deletedStaticIds, setDeletedStaticIds] = useState<Set<string>>(new Set())
 
   // Slugs estáticos que já foram migrados para o banco — não mostrar o card estático duplicado
   const migratedSlugs = new Set(
     localDbPdis.map(p => p.conclusoes?._original_slug).filter(Boolean) as string[]
   )
   const sorted = [...staticPdis]
-    .filter(p => !migratedSlugs.has(p.id))
+    .filter(p => !migratedSlugs.has(p.id) && !deletedStaticIds.has(p.id))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   const [agendaOpen, setAgendaOpen] = useState(false)
   const [agendaBadge, setAgendaBadge] = useState(0)
@@ -562,6 +594,40 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
     if (res.ok || res.status === 204) setLocalDbPdis(prev => prev.filter(p => p.id !== id))
   }
 
+  async function handleArchiveStatic(staticPdi: PdiColaborador) {
+    const res = await fetch('/api/pdi/migrar-estatico', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staticId: staticPdi.id, nome: staticPdi.nome, funcao: staticPdi.funcao }),
+    })
+    if (!res.ok) return
+    const { id: newId } = await res.json() as { id: string }
+    await fetch(`/api/pdi/${newId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'arquivado' }),
+    })
+    setLocalDbPdis(prev => [...prev, {
+      id: newId, nome: staticPdi.nome, funcao: staticPdi.funcao,
+      data_inicio: null, colaborador_id: null, created_at: new Date().toISOString(),
+      status: 'arquivado',
+      conclusoes: { _original_slug: staticPdi.id },
+      eneagrama: staticPdi.perfilComportamental.eneagrama.ranking.length > 0
+        ? { ranking: staticPdi.perfilComportamental.eneagrama.ranking } : null,
+      animais: staticPdi.perfilComportamental.animais.length > 0
+        ? staticPdi.perfilComportamental.animais : null,
+    }])
+  }
+
+  async function handleDeleteStatic(staticPdi: PdiColaborador) {
+    const res = await fetch('/api/pdi/migrar-estatico', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staticId: staticPdi.id, nome: staticPdi.nome, funcao: staticPdi.funcao }),
+    })
+    if (!res.ok) return
+    const { id: newId } = await res.json() as { id: string }
+    await fetch(`/api/pdi/${newId}`, { method: 'DELETE' })
+    setDeletedStaticIds(prev => new Set([...prev, staticPdi.id]))
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
@@ -625,7 +691,12 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {allActive.map(item => item.type === 'static'
-          ? <StaticPdiCard key={item.pdi.id} pdi={item.pdi} />
+          ? <StaticPdiCard
+              key={item.pdi.id} pdi={item.pdi}
+              isGestorAdmin={isGestorAdmin}
+              onArchive={() => handleArchiveStatic(item.pdi)}
+              onDelete={() => handleDeleteStatic(item.pdi)}
+            />
           : (
             <DbPdiCard
               key={item.pdi.id} pdi={item.pdi} initialScores={ciclosByPdi.get(item.pdi.id) ?? null} isGestorAdmin={isGestorAdmin}
