@@ -179,6 +179,11 @@ export default function CoisasAFazerClient() {
   const [arquivarId, setArquivarId]     = useState<string | null>(null)
   const [arquivarStep, setArquivarStep] = useState<1 | 2>(1)
 
+  // Edit item
+  const [editItem, setEditItem]         = useState<Item | null>(null)
+  const [formEditTexto, setFormEditTexto]   = useState('')
+  const [formEditVisib, setFormEditVisib]   = useState<'todos' | 'restrito'>('todos')
+
   // Form state
   const [formNomeModulo,      setFormNomeModulo]      = useState('')
   const [formTextoItem,       setFormTextoItem]        = useState('')
@@ -292,6 +297,24 @@ export default function CoisasAFazerClient() {
     finally { setSaving(false) }
   }
 
+  async function editarItem() {
+    if (!editItem || !formEditTexto.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/coisas-a-fazer/itens/${editItem.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: formEditTexto.trim(), visibilidade: formEditVisib }),
+      })
+      if (!res.ok) throw new Error()
+      const updated: Item = await res.json()
+      setItens(prev => prev.map(i => i.id === updated.id ? updated : i))
+      setEditItem(null)
+      showToast('Item atualizado')
+    } catch { showToast('Erro ao atualizar item') }
+    finally { setSaving(false) }
+  }
+
   async function finalizarItem(id: string) {
     try {
       const res = await fetch(`/api/coisas-a-fazer/itens/${id}`, {
@@ -402,23 +425,25 @@ export default function CoisasAFazerClient() {
           <p style={{ fontSize: 14, color: '#6B7280', marginTop: 4, margin: '4px 0 0' }}>Itens de melhoria por módulo do GT3 Sistema</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Filtro autor */}
-          <div style={{ display: 'inline-flex', background: '#fff', border: '1px solid #D1D7E3', borderRadius: 8, padding: 3 }}>
-            {(['todos', 'meus'] as const).map(v => (
-              <button
-                key={v}
-                onClick={() => setAutorFiltro(v)}
-                style={{
-                  border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  background: autorFiltro === v ? '#2A4F96' : 'transparent',
-                  color: autorFiltro === v ? '#fff' : '#6B7280',
-                }}
-              >
-                {v === 'todos' ? 'Todos' : 'Criados por mim'}
-              </button>
-            ))}
-          </div>
+          {/* Filtro autor — só gestor/admin veem itens de outros */}
+          {canManage && (
+            <div style={{ display: 'inline-flex', background: '#fff', border: '1px solid #D1D7E3', borderRadius: 8, padding: 3 }}>
+              {(['todos', 'meus'] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setAutorFiltro(v)}
+                  style={{
+                    border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    background: autorFiltro === v ? '#2A4F96' : 'transparent',
+                    color: autorFiltro === v ? '#fff' : '#6B7280',
+                  }}
+                >
+                  {v === 'todos' ? 'Todos' : 'Criados por mim'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {canManage && (
             <Btn variant="primary" onClick={() => { setFormNomeModulo(''); setModalModulo(true) }}>
@@ -588,6 +613,13 @@ export default function CoisasAFazerClient() {
                         </div>
                         {canManage && (
                           <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                            <button
+                              onClick={() => { setEditItem(item); setFormEditTexto(item.texto); setFormEditVisib(item.visibilidade ?? 'todos') }}
+                              title="Editar"
+                              style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #E5E9F0', background: '#fff', color: '#6B7280', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 13 }}
+                              onMouseEnter={e => { const el = e.currentTarget; el.style.color = '#2A4F96'; el.style.borderColor = '#C9D6F0'; el.style.background = '#EEF2FB' }}
+                              onMouseLeave={e => { const el = e.currentTarget; el.style.color = '#6B7280'; el.style.borderColor = '#E5E9F0'; el.style.background = '#fff' }}
+                            >✎</button>
                             {!isDone ? (
                               <button
                                 onClick={() => finalizarItem(item.id)}
@@ -758,6 +790,26 @@ export default function CoisasAFazerClient() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ── Modal: Editar item ── */}
+      <Modal open={!!editItem} title="Editar item" onClose={() => setEditItem(null)} footer={
+        <>
+          <Btn variant="ghost" onClick={() => setEditItem(null)}>Cancelar</Btn>
+          <Btn variant="primary" onClick={editarItem} disabled={saving || !formEditTexto.trim()}>Salvar</Btn>
+        </>
+      }>
+        <Field label="Texto">
+          <textarea
+            style={{ ...inpStyle, resize: 'vertical', minHeight: 80 }}
+            value={formEditTexto}
+            onChange={e => setFormEditTexto(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field label="Visibilidade">
+          <VisibilidadeToggle value={formEditVisib} onChange={setFormEditVisib} />
+        </Field>
       </Modal>
 
       {/* Toast */}

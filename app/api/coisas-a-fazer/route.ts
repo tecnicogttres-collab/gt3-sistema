@@ -8,20 +8,23 @@ export async function GET() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('papel')
+    .select('papel, nome, usuario')
     .eq('id', user.id)
     .single()
 
-  const isManager = profile?.papel === 'admin' || profile?.papel === 'gestor'
+  const papel = profile?.papel ?? 'colaborador'
+  const isManager = papel === 'admin' || papel === 'gestor'
+  const nomeUsuario = ((profile?.nome as string) ?? '').trim() || ((profile?.usuario as string) ?? '').trim()
 
   const [{ data: modulos }, { data: itens }] = await Promise.all([
     supabase.from('caf_modulos').select('*').eq('arquivado', false).order('created_at', { ascending: true }),
     supabase.from('caf_itens').select('*').order('criado_em', { ascending: false }),
   ])
 
+  // Colaborador/trainee vê apenas os próprios itens
   const filteredItens = isManager
     ? (itens ?? [])
-    : (itens ?? []).filter((i: { visibilidade?: string }) => i.visibilidade !== 'restrito')
+    : (itens ?? []).filter((i: { autor?: string }) => i.autor === nomeUsuario)
 
   return NextResponse.json({ modulos: modulos ?? [], itens: filteredItens })
 }

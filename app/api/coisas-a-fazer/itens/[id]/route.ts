@@ -21,14 +21,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json()
   const nome_autor = profile?.nome?.trim() || profile?.usuario?.trim() || 'Usuário'
 
-  const patch: Record<string, unknown> = { status: body.status }
-  if (body.status === 'finalizado') {
-    patch.finalizado_por = nome_autor
-    patch.finalizado_em = new Date().toISOString()
-  } else {
-    patch.finalizado_por = null
-    patch.finalizado_em = null
+  const patch: Record<string, unknown> = {}
+
+  if (body.status !== undefined) {
+    patch.status = body.status
+    if (body.status === 'finalizado') {
+      patch.finalizado_por = nome_autor
+      patch.finalizado_em = new Date().toISOString()
+    } else {
+      patch.finalizado_por = null
+      patch.finalizado_em = null
+    }
   }
+
+  if (body.texto !== undefined) patch.texto = String(body.texto).trim()
+  if (body.visibilidade !== undefined) patch.visibilidade = body.visibilidade
+
+  if (Object.keys(patch).length === 0)
+    return NextResponse.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })
 
   const { data, error } = await supabase
     .from('caf_itens')
