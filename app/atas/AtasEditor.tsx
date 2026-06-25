@@ -41,6 +41,12 @@ export type AtaEditorData = {
 let _cnt = 0
 function uid() { return `t${Date.now()}_${++_cnt}` }
 
+function parseClientes(val: string): string[] {
+  if (!val?.trim()) return []
+  try { const p = JSON.parse(val); if (Array.isArray(p)) return p.map(String) } catch {}
+  return val.split('/').map(s => s.trim()).filter(Boolean)
+}
+
 function parseParticipantes(val?: string): Participante[] {
   if (!val?.trim()) return []
   try {
@@ -101,7 +107,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   // Meta fields
   const [titulo,   setTitulo]   = useState(initial?.titulo          ?? '')
   const [dataVal,  setDataVal]  = useState(initial?.data            ?? new Date().toISOString().slice(0, 10))
-  const [cliente,  setCliente]  = useState(initial?.cliente         ?? '')
+  const [clientes, setClientes] = useState<string[]>(() => parseClientes(initial?.cliente ?? ''))
   const [local,    setLocal]    = useState(initial?.localReuniao    ?? '')
   const [numAta,   setNumAta]   = useState(initial?.numeroAta       ?? '')
   const [status,   setStatus]   = useState(initial?.status         ?? 'Rascunho')
@@ -110,9 +116,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   const [participantes, setParticipantes] = useState<Participante[]>(
     () => parseParticipantes(initial?.participantes)
   )
-  const [addingPart,  setAddingPart]  = useState(false)
-  const [formNome,    setFormNome]    = useState('')
-  const [formEmpresa, setFormEmpresa] = useState('')
+  const [addClienteInput, setAddClienteInput] = useState('')
+  const [addPartInputs, setAddPartInputs] = useState<Record<string, string>>({})
 
   // Tópicos
   const [topicos, setTopicos] = useState<Topico[]>(
@@ -131,32 +136,28 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   const [notifOption,    setNotifOption]    = useState<'none' | 'all' | 'select'>('none')
   const [notifSelected,  setNotifSelected]  = useState<Set<string>>(new Set())
 
-  // ── Participante actions ───────────────────────────────────────────────────
+  // ── Participante / Contratante actions ────────────────────────────────────
 
-  function openAddPart() {
-    setFormNome('')
-    setFormEmpresa('')
-    setAddingPart(true)
+  function addCliente() {
+    const v = addClienteInput.trim()
+    if (!v || clientes.includes(v)) return
+    setClientes(prev => [...prev, v])
+    setAddClienteInput('')
   }
 
-  function savePart(andAddAnother = false) {
-    if (!formNome.trim()) return
-    setParticipantes(prev => [...prev, { nome: formNome.trim(), empresa: formEmpresa.trim() }])
-    if (andAddAnother) {
-      setFormNome('')
-      setFormEmpresa('')
-    } else {
-      setAddingPart(false)
-    }
+  function removeCliente(idx: number) {
+    setClientes(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function addPartToCompany(empresa: string) {
+    const nome = (addPartInputs[empresa] ?? '').trim()
+    if (!nome) return
+    setParticipantes(prev => [...prev, { nome, empresa }])
+    setAddPartInputs(prev => ({ ...prev, [empresa]: '' }))
   }
 
   function removePart(idx: number) {
     setParticipantes(prev => prev.filter((_, i) => i !== idx))
-  }
-
-  function addQuickParticipant(nome: string, empresa: string) {
-    if (participantes.some(p => p.nome === nome)) return
-    setParticipantes(prev => [...prev, { nome, empresa }])
   }
 
   // ── Tópico actions ────────────────────────────────────────────────────────
@@ -164,7 +165,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   function addTopico() {
     setTopicos(prev => [...prev, {
       id: uid(), titulo: '', descricao: '',
-      contratante: cliente, prazo: '', responsavel: '',
+      contratante: clientes[0] ?? '', prazo: '', responsavel: '',
     }])
     setTimeout(() => {
       document.getElementById('topico-last')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -222,7 +223,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
 
   async function handleSave() {
     if (!dataVal) { setErr('Data é obrigatória'); return }
-    if (!cliente.trim()) { setErr('Contratante é obrigatória'); return }
+    if (clientes.length === 0) { setErr('Informe ao menos um contratante'); return }
 
     if (enableNotifModal && status === 'Validada') {
       setNotifOption('none')
@@ -240,7 +241,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
       await onSave({
         titulo,
         data: dataVal,
-        cliente,
+        cliente: clientes.join(' / '),
         localReuniao: local,
         numeroAta: numAta,
         participantes: JSON.stringify(participantes),
@@ -303,7 +304,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
           Atas Contratantes
         </span>
         <span style={{ fontSize: 13, color: '#6B7A99', flexShrink: 0 }}>
-          {cliente || 'Nova ata'}
+          {clientes.join(' / ') || 'Nova ata'}
         </span>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -359,14 +360,25 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
 
             {/* ── Meta fields ── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: 32, padding: '16px 18px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.08)' }}>
+              {/* Multi-contratante */}
               <div style={{ gridColumn: '1 / -1' }}>
-                <span style={lbl}>Contratante *</span>
-                <input
-                  value={cliente}
-                  onChange={e => setCliente(e.target.value)}
-                  placeholder="Ex.: Marcopolo AR / MP SC / Volare…"
-                  style={inp()}
-                />
+                <span style={lbl}>Contratante(s) *</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '6px 8px', border: '1px solid rgba(42,79,150,0.20)', borderRadius: 7, background: '#fff', minHeight: 38 }}>
+                  {clientes.map((c, i) => (
+                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px 3px 10px', background: '#EEF2FB', borderRadius: 20, fontSize: 13, fontWeight: 600, color: '#2A4F96' }}>
+                      {c}
+                      <button onClick={() => removeCliente(i)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', border: 'none', background: 'rgba(42,79,150,0.15)', color: '#2A4F96', cursor: 'pointer', fontSize: 11, padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                  <input
+                    value={addClienteInput}
+                    onChange={e => setAddClienteInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCliente() } }}
+                    onBlur={addCliente}
+                    placeholder={clientes.length === 0 ? 'Ex.: Marcopolo AR — pressione Enter para adicionar…' : '+ outro contratante…'}
+                    style={{ flex: 1, minWidth: 160, border: 'none', outline: 'none', fontSize: 13, fontFamily: 'inherit', background: 'transparent', color: '#1a1f2e', padding: '2px 4px' }}
+                  />
+                </div>
               </div>
               <div>
                 <span style={lbl}>Data da reunião</span>
@@ -380,119 +392,71 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                 <span style={lbl}>Número da ata</span>
                 <input value={numAta} onChange={e => setNumAta(e.target.value)} placeholder="Ex.: Nº 04/26" style={inp()} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                {/* spacer */}
-              </div>
             </div>
 
-            {/* ── Participantes ── */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ ...sectionTitle(), borderBottom: '1px solid rgba(42,79,150,0.10)', paddingBottom: 8 }}>
-                <span>Participantes</span>
-                <span style={{ fontWeight: 400, color: '#94A3B8', textTransform: 'none', letterSpacing: 0, fontSize: 12 }}>
-                  {participantes.length} pessoa{participantes.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-
-              {/* List */}
-              {participantes.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                  {participantes.map((p, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8FAFC', borderRadius: 8, border: '1px solid rgba(42,79,150,0.10)' }}>
-                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#EEF2FB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#2A4F96', flexShrink: 0 }}>
-                        {p.nome.charAt(0).toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1a1f2e' }}>{p.nome}</div>
-                        {p.empresa && <div style={{ fontSize: 12, color: '#6B7A99' }}>{p.empresa}</div>}
-                      </div>
-                      <button
-                        onClick={() => removePart(i)}
-                        style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', color: '#9399ae', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                        onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#fef2f2'; el.style.color = '#dc2626'; el.style.borderColor = '#fca5a5' }}
-                        onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.color = '#9399ae'; el.style.borderColor = 'rgba(42,79,150,0.15)' }}
-                      >×</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Quick-add buttons */}
-              {!addingPart && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => addQuickParticipant('GT3', 'GT3 Consultoria')}
-                    disabled={participantes.some(p => p.nome === 'GT3')}
-                    style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.25)', background: participantes.some(p => p.nome === 'GT3') ? '#F0F4FA' : '#EEF2FB', color: participantes.some(p => p.nome === 'GT3') ? '#94A3B8' : '#2A4F96', fontSize: 12, fontWeight: 600, cursor: participantes.some(p => p.nome === 'GT3') ? 'default' : 'pointer' }}
-                  >
-                    {participantes.some(p => p.nome === 'GT3') ? '✓ GT3' : '+ GT3'}
-                  </button>
-                  {cliente.trim() && (
-                    <button
-                      onClick={() => addQuickParticipant(cliente.trim(), cliente.trim())}
-                      disabled={participantes.some(p => p.nome === cliente.trim())}
-                      style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(209,174,110,0.40)', background: participantes.some(p => p.nome === cliente.trim()) ? '#F8F5EE' : '#FDF8EE', color: participantes.some(p => p.nome === cliente.trim()) ? '#94A3B8' : '#B8880A', fontSize: 12, fontWeight: 600, cursor: participantes.some(p => p.nome === cliente.trim()) ? 'default' : 'pointer' }}
-                    >
-                      {participantes.some(p => p.nome === cliente.trim()) ? `✓ ${cliente}` : `+ ${cliente}`}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Add form */}
-              {addingPart ? (
-                <div style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.15)' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', marginBottom: 12 }}>
-                    <div>
-                      <span style={lbl}>Nome *</span>
-                      <input
-                        value={formNome}
-                        onChange={e => setFormNome(e.target.value)}
-                        placeholder="Ex.: Fernando Almeida"
-                        style={inp()}
-                        autoFocus
-                        onKeyDown={e => { if (e.key === 'Enter') savePart() }}
-                      />
-                    </div>
-                    <div>
-                      <span style={lbl}>Empresa / Organização</span>
-                      <input
-                        value={formEmpresa}
-                        onChange={e => setFormEmpresa(e.target.value)}
-                        placeholder="Ex.: Marcopolo AR"
-                        style={inp()}
-                        onKeyDown={e => { if (e.key === 'Enter') savePart() }}
-                      />
-                    </div>
+            {/* ── Participantes por empresa ── */}
+            {(() => {
+              const groups: { label: string; key: string; accent: string; bg: string; chipBg: string }[] = [
+                { label: 'GT3 Consultoria', key: 'GT3', accent: '#2A4F96', bg: '#EEF2FB', chipBg: '#DDE5F8' },
+                ...clientes.map(c => ({ label: c, key: c, accent: '#92400E', bg: '#FDF8EE', chipBg: '#FDEFD0' })),
+              ]
+              const knownKeys = new Set(['GT3', 'GT3 Consultoria', ...clientes])
+              const otherParts = participantes.map((p, idx) => ({ p, idx })).filter(({ p }) => !knownKeys.has(p.empresa))
+              return (
+                <div style={{ marginBottom: 32 }}>
+                  <div style={{ ...sectionTitle(), borderBottom: '1px solid rgba(42,79,150,0.10)', paddingBottom: 8, marginBottom: 14 }}>
+                    <span>Participantes</span>
+                    <span style={{ fontWeight: 400, color: '#94A3B8', textTransform: 'none', letterSpacing: 0, fontSize: 12 }}>
+                      {participantes.length} pessoa{participantes.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={() => savePart(false)}
-                      disabled={!formNome.trim()}
-                      style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: formNome.trim() ? 'pointer' : 'not-allowed', opacity: formNome.trim() ? 1 : 0.5 }}
-                    >Salvar</button>
-                    <button
-                      onClick={() => savePart(true)}
-                      disabled={!formNome.trim()}
-                      style={{ padding: '7px 16px', borderRadius: 7, border: '1px solid #2A4F96', background: '#fff', color: '#2A4F96', fontSize: 13, fontWeight: 600, cursor: formNome.trim() ? 'pointer' : 'not-allowed', opacity: formNome.trim() ? 1 : 0.5 }}
-                    >+ Incluir outro</button>
-                    <button
-                      onClick={() => setAddingPart(false)}
-                      style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}
-                    >Cancelar</button>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {groups.map(g => {
+                      const members = participantes
+                        .map((p, idx) => ({ p, idx }))
+                        .filter(({ p }) => p.empresa === g.key || (g.key === 'GT3' && p.empresa === 'GT3 Consultoria'))
+                      const inputVal = addPartInputs[g.key] ?? ''
+                      return (
+                        <div key={g.key} style={{ border: `1px solid ${g.accent}22`, borderLeft: `3px solid ${g.accent}`, borderRadius: 8, background: g.bg, padding: '10px 14px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: g.accent, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{g.label}</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                            {members.map(({ p, idx }) => (
+                              <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px 4px 10px', background: g.chipBg, borderRadius: 20, fontSize: 13, fontWeight: 500, color: '#1a1f2e' }}>
+                                {p.nome}
+                                <button onClick={() => removePart(idx)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', border: 'none', background: `${g.accent}22`, color: g.accent, cursor: 'pointer', fontSize: 11, padding: 0 }}>×</button>
+                              </span>
+                            ))}
+                            <input
+                              value={inputVal}
+                              onChange={e => setAddPartInputs(prev => ({ ...prev, [g.key]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPartToCompany(g.key) } }}
+                              placeholder="+ nome…"
+                              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', padding: '4px 6px', minWidth: 80 }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Participantes sem empresa conhecida (legado) */}
+                    {otherParts.length > 0 && (
+                      <div style={{ border: '1px solid rgba(42,79,150,0.12)', borderRadius: 8, background: '#F8FAFC', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Outros</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {otherParts.map(({ p, idx }) => (
+                            <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px 4px 10px', background: '#E5E7EB', borderRadius: 20, fontSize: 13 }}>
+                              {p.nome}{p.empresa ? ` (${p.empresa})` : ''}
+                              <button onClick={() => removePart(idx)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', border: 'none', background: '#d1d5db', color: '#374151', cursor: 'pointer', fontSize: 11, padding: 0 }}>×</button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <button
-                  onClick={openAddPart}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px dashed rgba(42,79,150,0.30)', background: 'transparent', color: '#5B8DEF', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all .15s' }}
-                  onMouseEnter={e => { const el = e.currentTarget; el.style.borderColor = '#2A4F96'; el.style.background = '#F0F4FF' }}
-                  onMouseLeave={e => { const el = e.currentTarget; el.style.borderColor = 'rgba(42,79,150,0.30)'; el.style.background = 'transparent' }}
-                >
-                  + Adicionar participante
-                </button>
-              )}
-            </div>
+              )
+            })()}
 
             {/* ── Tópicos ── */}
             <div>
@@ -578,7 +542,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           <input
                             value={t.contratante}
                             onChange={e => updateTopico(t.id, 'contratante', e.target.value)}
-                            placeholder={cliente || 'Ex.: Marcopolo AR'}
+                            placeholder={clientes[0] || 'Ex.: Marcopolo AR'}
                             style={inp({ fontSize: 12 })}
                           />
                         </div>
@@ -699,7 +663,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
               <span style={{ fontWeight: 600, color: '#2A4F96', opacity: 0.5 }}>GT3 Consultoria</span>
               <div style={{ display: 'flex', gap: 32 }}>
                 <div style={{ fontSize: 11, color: '#9399ae', borderTop: '1px solid rgba(42,79,150,0.22)', paddingTop: 2, width: 160, textAlign: 'center' }}>Responsável GT3</div>
-                <div style={{ fontSize: 11, color: '#9399ae', borderTop: '1px solid rgba(42,79,150,0.22)', paddingTop: 2, width: 160, textAlign: 'center' }}>Responsável {cliente || 'Cliente'}</div>
+                <div style={{ fontSize: 11, color: '#9399ae', borderTop: '1px solid rgba(42,79,150,0.22)', paddingTop: 2, width: 160, textAlign: 'center' }}>Responsável {clientes[0] || 'Cliente'}</div>
               </div>
               <span>Pág. 1</span>
             </div>
@@ -713,7 +677,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
         <PrintView
           titulo={titulo}
           dataVal={dataVal}
-          cliente={cliente}
+          cliente={clientes.join(' / ')}
           local={local}
           numAta={numAta}
           status={status}
