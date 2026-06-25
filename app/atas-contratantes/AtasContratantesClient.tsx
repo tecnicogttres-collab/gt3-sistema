@@ -213,6 +213,9 @@ export default function AtasContratantesClient() {
   const [allUsers, setAllUsers] = useState<{ id: string; nome: string }[]>([])
   const [openHistorico, setOpenHistorico] = useState<Set<string>>(new Set())
   const [finalizeState, setFinalizeState] = useState<Map<string, number>>(new Map())
+  const [statusNotifModal, setStatusNotifModal] = useState(false)
+  const [statusNotifOption, setStatusNotifOption] = useState<'none' | 'all' | 'select'>('none')
+  const [statusNotifSelected, setStatusNotifSelected] = useState<Set<string>>(new Set())
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -418,7 +421,7 @@ export default function AtasContratantesClient() {
     setOpenHistorico(new Set())
   }
 
-  async function handleStatusChange(newStatus: string) {
+  async function applyStatusChange(newStatus: string, notifyUserIds?: string[]) {
     if (!selected) return
     const res = await fetch(`/api/atas-contratantes/${selected.id}`, {
       method: 'PATCH',
@@ -429,6 +432,26 @@ export default function AtasContratantesClient() {
     const updated: Ata = await res.json()
     setAtas(prev => prev.map(a => a.id === updated.id ? updated : a))
     setSelected(updated)
+    if (notifyUserIds?.length) await sendNotifications(updated.id, notifyUserIds)
+  }
+
+  async function handleStatusChange(newStatus: string) {
+    if (!selected) return
+    if (newStatus === 'Validada') {
+      setStatusNotifOption('none')
+      setStatusNotifSelected(new Set())
+      setStatusNotifModal(true)
+      return
+    }
+    await applyStatusChange(newStatus)
+  }
+
+  async function handleStatusNotifConfirm() {
+    setStatusNotifModal(false)
+    let notifyUserIds: string[] | undefined
+    if (statusNotifOption === 'all') notifyUserIds = allUsers.map(u => u.id)
+    else if (statusNotifOption === 'select') notifyUserIds = [...statusNotifSelected]
+    await applyStatusChange('Validada', notifyUserIds)
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -886,6 +909,41 @@ export default function AtasContratantesClient() {
           onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
           onClose={() => setCopyingAta(null)}
         />
+      )}
+
+      {/* ── Modal: notificação ao validar (via dropdown de status) ── */}
+      {statusNotifModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>Validar ata</div>
+            <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 20 }}>Deseja notificar usuários sobre esta ata validada?</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+              {([['none', 'Não notificar ninguém'], ['all', 'Notificar toda a equipe'], ['select', 'Escolher usuários']] as const).map(([val, label]) => (
+                <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: `1px solid ${statusNotifOption === val ? '#2A4F96' : 'rgba(42,79,150,0.18)'}`, background: statusNotifOption === val ? '#EEF2FB' : '#fff', cursor: 'pointer' }}>
+                  <input type="radio" name="statusNotif" value={val} checked={statusNotifOption === val} onChange={() => setStatusNotifOption(val)} style={{ accentColor: '#2A4F96' }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#1a1f2e' }}>{label}</span>
+                </label>
+              ))}
+            </div>
+
+            {statusNotifOption === 'select' && allUsers.length > 0 && (
+              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid rgba(42,79,150,0.15)', borderRadius: 8, marginBottom: 20 }}>
+                {allUsers.map(u => (
+                  <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(42,79,150,0.07)' }}>
+                    <input type="checkbox" checked={statusNotifSelected.has(u.id)} onChange={() => setStatusNotifSelected(prev => { const s = new Set(prev); s.has(u.id) ? s.delete(u.id) : s.add(u.id); return s })} style={{ accentColor: '#2A4F96' }} />
+                    <span style={{ fontSize: 13, color: '#1a1f2e' }}>{u.nome}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setStatusNotifModal(false)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={handleStatusNotifConfirm} style={{ padding: '8px 22px', borderRadius: 8, border: 'none', background: '#10B981', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Validar</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Print styles + hidden area for detail view PDF ── */}
