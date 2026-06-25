@@ -420,7 +420,7 @@ export default function CoisasAFazerClient() {
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: '#1E253D', display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
             <span style={{ fontSize: 26, color: '#D1AE6E' }}>✓</span>
-            Coisas a Fazer
+            Melhorias
           </h1>
           <p style={{ fontSize: 14, color: '#6B7280', marginTop: 4, margin: '4px 0 0' }}>Itens de melhoria por módulo do GT3 Sistema</p>
         </div>

@@ -238,7 +238,7 @@ export const MODULES: Module[] = [
   },
   {
     id: 'coisas-a-fazer',
-    label: 'Coisas a Fazer',
+    label: 'Melhorias',
     color: '#4A90D9',
     path: '/coisas-a-fazer',
     description: 'Itens de melhoria por módulo do GT3 Sistema',
