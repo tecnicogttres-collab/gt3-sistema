@@ -4,14 +4,19 @@ import { useState, useRef, useEffect } from 'react'
 
 // ─── Rich Text Editor ─────────────────────────────────────────────────────────
 
-function RichTextEditor({ value, onChange, placeholder, minRows = 3 }: {
+const FONT_COLORS = ['#1a1f2e', '#DC2626', '#2563EB', '#059669', '#D97706', '#7C3AED', '#DB2777', '#6B7280']
+const HILITE_COLORS = ['#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', '#E9D5FF', '#FECACA', 'transparent']
+
+function RichTextEditor({ value, onChange, placeholder, minRows = 3, resizable = false }: {
   value: string
   onChange: (html: string) => void
   placeholder?: string
   minRows?: number
+  resizable?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const focused = useRef(false)
+  const [colorPicker, setColorPicker] = useState<null | 'fore' | 'hilite'>(null)
 
   useEffect(() => {
     if (!ref.current) return
@@ -23,6 +28,7 @@ function RichTextEditor({ value, onChange, placeholder, minRows = 3 }: {
 
   const execCmd = (cmd: string, val?: string) => {
     ref.current?.focus()
+    try { document.execCommand('styleWithCSS', false, 'true') } catch {}
     document.execCommand(cmd, false, val)
     onChange(ref.current?.innerHTML ?? '')
   }
@@ -34,19 +40,47 @@ function RichTextEditor({ value, onChange, placeholder, minRows = 3 }: {
     { label: 'T', title: 'Tachado',  cmd: 'strikeThrough', style: { textDecoration: 'line-through' } },
   ]
 
+  const btnBase: React.CSSProperties = { width: 24, height: 22, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2A4F96', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+
   return (
     <div style={{ border: '1px solid rgba(42,79,150,0.18)', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '3px 6px', borderBottom: '1px solid rgba(42,79,150,0.09)', background: '#F8FAFC' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '3px 6px', borderBottom: '1px solid rgba(42,79,150,0.09)', background: '#F8FAFC', position: 'relative' }}>
         {toolbarBtns.map(btn => (
           <button
             key={btn.cmd}
             title={btn.title}
             onMouseDown={e => { e.preventDefault(); execCmd(btn.cmd) }}
-            style={{ width: 24, height: 22, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2A4F96', display: 'flex', alignItems: 'center', justifyContent: 'center', ...btn.style }}
+            style={{ ...btnBase, ...btn.style }}
           >{btn.label}</button>
         ))}
         <div style={{ width: 1, height: 14, background: 'rgba(42,79,150,0.15)', margin: '0 3px' }} />
-        <button title="Lista" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }} style={{ width: 24, height: 22, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2A4F96' }}>≡</button>
+        <button title="Lista" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }} style={btnBase}>≡</button>
+        <div style={{ width: 1, height: 14, background: 'rgba(42,79,150,0.15)', margin: '0 3px' }} />
+        {/* Cor da letra */}
+        <button title="Cor da letra" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'fore' ? null : 'fore') }} style={{ ...btnBase, flexDirection: 'column', gap: 0, lineHeight: 1 }}>
+          <span style={{ fontWeight: 700 }}>A</span>
+          <span style={{ width: 14, height: 3, background: '#DC2626', borderRadius: 1 }} />
+        </button>
+        {/* Grifar / realce */}
+        <button title="Grifar (realce)" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'hilite' ? null : 'hilite') }} style={{ ...btnBase, background: '#FEF08A55' }}>🖍</button>
+
+        {colorPicker && (
+          <div style={{ position: 'absolute', top: 28, left: colorPicker === 'fore' ? 156 : 184, zIndex: 30, background: '#fff', border: '1px solid rgba(42,79,150,0.18)', borderRadius: 8, padding: 8, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', width: 132 }}>
+            {(colorPicker === 'fore' ? FONT_COLORS : HILITE_COLORS).map(c => (
+              <button
+                key={c}
+                onMouseDown={e => {
+                  e.preventDefault()
+                  if (colorPicker === 'fore') execCmd('foreColor', c)
+                  else execCmd('hiliteColor', c === 'transparent' ? '#ffffff00' : c)
+                  setColorPicker(null)
+                }}
+                title={c === 'transparent' ? 'Remover realce' : c}
+                style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(0,0,0,0.12)', background: c === 'transparent' ? 'repeating-linear-gradient(45deg,#fff,#fff 4px,#eee 4px,#eee 8px)' : c, cursor: 'pointer' }}
+              />
+            ))}
+          </div>
+        )}
       </div>
       <div
         ref={ref}
@@ -54,9 +88,9 @@ function RichTextEditor({ value, onChange, placeholder, minRows = 3 }: {
         suppressContentEditableWarning
         data-placeholder={placeholder}
         onFocus={() => { focused.current = true }}
-        onBlur={() => { focused.current = false }}
+        onBlur={() => { focused.current = false; setColorPicker(null) }}
         onInput={() => onChange(ref.current?.innerHTML ?? '')}
-        style={{ minHeight: minRows * 26, padding: '8px 12px', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', outline: 'none', lineHeight: 1.65, overflowWrap: 'break-word' as const }}
+        style={{ minHeight: minRows * 26, maxHeight: resizable ? 600 : undefined, padding: '8px 12px', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', outline: 'none', lineHeight: 1.65, overflowWrap: 'break-word' as const, resize: resizable ? 'vertical' : 'none', overflow: resizable ? 'auto' : 'visible' }}
       />
     </div>
   )
@@ -76,7 +110,8 @@ export type TopicoStatus = '' | 'Pendente' | 'Em análise' | 'Em andamento' | 'A
 export type Topico = {
   id: string
   titulo: string
-  descricao: string
+  andamentoGeral?: string   // andamento persistente do tópico (não vira histórico)
+  descricao: string         // preenchimento do dia ("ATÉ AQUI:") — vira histórico na nova reunião
   contratante: string
   prazo: string
   responsavel: string
@@ -248,8 +283,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
 
   function addTopico() {
     setTopicos(prev => [...prev, {
-      id: uid(), titulo: '', descricao: '',
-      contratante: clientes[0] ?? '', prazo: '', responsavel: '',
+      id: uid(), titulo: '', andamentoGeral: '', descricao: '',
+      contratante: '', prazo: '', responsavel: '',
     }])
     setTimeout(() => {
       document.getElementById('topico-last')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -581,31 +616,50 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                         />
                       </div>
 
-                      {/* Andamento desta reunião */}
+                      {/* Andamento geral (persistente) */}
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Andamento</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Andamento geral</span>
+                          <span style={{ fontSize: 10, color: '#B0B8C9' }}>visão geral do tópico</span>
+                        </div>
+                        <RichTextEditor
+                          value={t.andamentoGeral ?? ''}
+                          onChange={html => updateTopico(t.id, 'andamentoGeral', html)}
+                          placeholder="Resumo geral / situação atual do tópico…"
+                          minRows={2}
+                        />
+                      </div>
+
+                      {/* ATÉ AQUI: preenchimento do dia (vira histórico na nova reunião) */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>ATÉ AQUI:</span>
                           {dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
                         </div>
                         <RichTextEditor
                           value={t.descricao}
                           onChange={html => updateTopico(t.id, 'descricao', html)}
-                          placeholder="Descreva o ponto discutido, decisão tomada ou encaminhamento…"
+                          placeholder="O que foi discutido / decidido nesta reunião…"
                           minRows={3}
+                          resizable
                         />
                       </div>
 
-                      {/* Meta: contratante, prazo, responsável, status */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px 12px' }}>
-                        <div>
-                          <span style={lbl}>Contratante</span>
-                          <input
-                            value={t.contratante}
-                            onChange={e => updateTopico(t.id, 'contratante', e.target.value)}
-                            placeholder={clientes[0] || 'Ex.: Marcopolo AR'}
-                            style={inp({ fontSize: 12 })}
-                          />
-                        </div>
+                      {/* Meta: contratante (só com 2+ contratantes), prazo, responsável, status */}
+                      <div style={{ display: 'grid', gridTemplateColumns: clientes.length > 1 ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr', gap: '8px 12px' }}>
+                        {clientes.length > 1 && (
+                          <div>
+                            <span style={lbl}>Contratante</span>
+                            <select
+                              value={t.contratante}
+                              onChange={e => updateTopico(t.id, 'contratante', e.target.value)}
+                              style={{ ...inp({ fontSize: 12 }), cursor: 'pointer' }}
+                            >
+                              <option value="">— todas —</option>
+                              {clientes.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                        )}
                         <div>
                           <span style={lbl}>Prazo</span>
                           <input
@@ -910,7 +964,13 @@ export function PrintView({ titulo, dataVal, cliente, local, numAta, status, par
                   {t.finalizado && <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: '#D1FAE5', padding: '2px 8px', borderRadius: 999 }}>✓ Finalizado</span>}
                   {t.status && <StatusBadge status={t.status} />}
                 </div>
-                {t.descricao && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{t.descricao}</div>}
+                {t.andamentoGeral && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8 }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />}
+                {t.descricao && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Até aqui ({dateDisplay}):</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155' }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
+                  </div>
+                )}
                 {(t.contratante || t.prazo || t.responsavel) && (
                   <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#5a6178', borderTop: '1px solid #eee', paddingTop: 8, marginBottom: 8 }}>
                     {t.contratante && <span><strong>Contratante:</strong> {t.contratante}</span>}
@@ -926,7 +986,7 @@ export function PrintView({ titulo, dataVal, cliente, local, numAta, status, par
                         <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 2 }}>
                           {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
                         </div>
-                        <div style={{ fontSize: 12, color: '#5a6178', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+                        <div style={{ fontSize: 12, color: '#5a6178', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: h.texto }} />
                       </div>
                     ))}
                   </div>

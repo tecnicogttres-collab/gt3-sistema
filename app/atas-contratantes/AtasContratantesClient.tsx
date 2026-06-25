@@ -117,7 +117,7 @@ function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]): s
           <div id="hist-${idx}" style="display:none;margin-top:8px">
             ${hist.map(h => `<div style="margin-bottom:8px;padding:8px 12px;background:#F0F4FF;border-radius:8px;border-left:2px solid ${cor}">
               <div style="font-size:11px;font-weight:700;color:${cor};margin-bottom:2px">${new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-              <div style="font-size:12px;color:#334155;white-space:pre-wrap;line-height:1.55">${escapeHtml(h.texto)}</div>
+              <div style="font-size:12px;color:#334155;line-height:1.55">${h.texto}</div>
             </div>`).join('')}
           </div></div>` : ''
     return `<div style="margin-bottom:18px;padding:14px 16px;border:1px solid #e0e5ef;border-left:3px solid ${cor};border-radius:6px${t.finalizado ? ';opacity:.75' : ''}">
@@ -125,7 +125,8 @@ function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]): s
         <span>${idx + 1}. ${escapeHtml(t.titulo || '(Sem título)')}</span>
         ${t.finalizado ? `<span style="font-size:10px;font-weight:700;color:#10B981;background:#D1FAE5;padding:2px 8px;border-radius:999px">✓ Finalizado</span>` : ''}
       </div>
-      ${t.descricao ? `<div style="font-size:13px;line-height:1.7;color:#334155;margin-bottom:8px;white-space:pre-wrap">${escapeHtml(t.descricao)}</div>` : ''}
+      ${t.andamentoGeral ? `<div style="font-size:13px;line-height:1.7;color:#334155;margin-bottom:8px">${t.andamentoGeral}</div>` : ''}
+      ${t.descricao ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Até aqui (${dateDisplay}):</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.descricao}</div></div>` : ''}
       ${metaHtml}${histHtml}</div>`
   }).join('')
 
@@ -755,11 +756,19 @@ export default function AtasContratantesClient() {
                           const finStep = finalizeState.get(t.id) ?? 0
                           return (
                             <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: `3px solid ${cor}` }}>
-                              <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: t.descricao ? 6 : 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: (t.andamentoGeral || t.descricao) ? 6 : 0 }}>
                                 {idx + 1}. {t.titulo || '(Sem título)'}
                               </div>
+                              {t.andamentoGeral && (
+                                <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: 8 }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />
+                              )}
                               {t.descricao && (
-                                <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
+                                <div style={{ marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0 }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: cor, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>
+                                    Até aqui{selected?.data ? ` (${new Date(selected.data + 'T12:00').toLocaleDateString('pt-BR')})` : ''}:
+                                  </div>
+                                  <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
+                                </div>
                               )}
                               {(t.contratante || t.prazo || t.responsavel || t.status) && (
                                 <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: (hist.length > 0 || isGestorOrAdmin) ? 10 : 0, alignItems: 'center' }}>
