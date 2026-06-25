@@ -36,6 +36,7 @@ export type AtaEditorData = {
   participantes: string   // JSON: Participante[]
   status: string
   conteudo: string        // JSON: Topico[]
+  resumoGeral?: string    // JSON: TopicoHistorico[]
   notifyUserIds?: string[]
 }
 
@@ -150,6 +151,17 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   const [historyOpenId,    setHistoryOpenId]    = useState<string | null>(null)
   const [addHistForm,      setAddHistForm]      = useState<{ topicId: string; data: string; texto: string } | null>(null)
 
+  // Resumo Geral
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const [resumoEntries, setResumoEntries] = useState<TopicoHistorico[]>(() => {
+    if (!initial?.resumoGeral) return [{ data: todayIso, texto: '' }]
+    try {
+      const parsed: TopicoHistorico[] = JSON.parse(initial.resumoGeral)
+      return parsed.length > 0 ? parsed : [{ data: todayIso, texto: '' }]
+    } catch { return [{ data: todayIso, texto: '' }] }
+  })
+  const [resumoHistOpen, setResumoHistOpen] = useState(false)
+
   // Save
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState('')
@@ -231,6 +243,15 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
     ))
   }
 
+  function arquivarResumo() {
+    const today = new Date().toISOString().slice(0, 10)
+    setResumoEntries(prev => {
+      if (!prev[0]?.texto?.trim()) return [{ data: today, texto: '' }]
+      return [{ data: today, texto: '' }, ...prev]
+    })
+    setResumoHistOpen(true)
+  }
+
   function moveTopico(id: string, dir: -1 | 1) {
     setTopicos(prev => {
       const idx = prev.findIndex(t => t.id === id)
@@ -270,6 +291,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
         participantes: JSON.stringify(participantes),
         status,
         conteudo: JSON.stringify(topicos),
+        resumoGeral: JSON.stringify(resumoEntries.filter(e => e.texto.trim())),
         notifyUserIds,
       })
     } catch (e: unknown) {
@@ -480,6 +502,64 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                 </div>
               )
             })()}
+
+            {/* ── Situação Geral ── */}
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ ...sectionTitle(), borderBottom: '1px solid rgba(42,79,150,0.10)', paddingBottom: 8, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Situação Geral</span>
+                <button
+                  onClick={arquivarResumo}
+                  title="Arquiva o texto atual no histórico e abre novo campo para a reunião de hoje"
+                  style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.25)', background: '#EEF2FB', color: '#2A4F96', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}
+                >
+                  + Nova entrada
+                </button>
+              </div>
+
+              {/* Entrada atual */}
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, marginBottom: 4 }}>
+                  {resumoEntries[0]?.data
+                    ? new Date(resumoEntries[0].data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+                    : '—'}
+                </div>
+                <textarea
+                  value={resumoEntries[0]?.texto ?? ''}
+                  onChange={e => setResumoEntries(prev => {
+                    const next = [...prev]
+                    next[0] = { ...next[0], texto: e.target.value }
+                    return next
+                  })}
+                  placeholder="Descreva a situação geral da ata nesta reunião…"
+                  rows={4}
+                  style={{ width: '100%', resize: 'vertical', border: '1px solid rgba(42,79,150,0.18)', borderRadius: 8, padding: '10px 12px', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', background: '#FAFBFE', outline: 'none', boxSizing: 'border-box' as const }}
+                />
+              </div>
+
+              {/* Histórico de entradas anteriores */}
+              {resumoEntries.length > 1 && (
+                <div>
+                  <button
+                    onClick={() => setResumoHistOpen(v => !v)}
+                    style={{ fontSize: 11, color: '#6B7A99', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: resumoHistOpen ? 8 : 0, display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
+                    {resumoHistOpen ? '▲' : '▼'} Histórico ({resumoEntries.length - 1} entrada{resumoEntries.length - 1 !== 1 ? 's' : ''} anterior{resumoEntries.length - 1 !== 1 ? 'es' : ''})
+                  </button>
+                  {resumoHistOpen && (
+                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
+                      {resumoEntries.slice(1).map((e, i) => (
+                        <div key={i} style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid rgba(42,79,150,0.08)' }}>
+                          <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, marginBottom: 4 }}>
+                            {e.data ? new Date(e.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                          </div>
+                          <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap' as const }}>{e.texto}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* ── Tópicos ── */}
             <div>
