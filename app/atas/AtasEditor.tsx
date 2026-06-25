@@ -616,24 +616,25 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                         />
                       </div>
 
-                      {/* Andamento geral (persistente) */}
+                      {/* ATÉ AQUI: andamento persistente do tópico */}
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Andamento geral</span>
-                          <span style={{ fontSize: 10, color: '#B0B8C9' }}>visão geral do tópico</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>ATÉ AQUI:</span>
+                          <span style={{ fontSize: 10, color: '#B0B8C9' }}>situação acumulada do tópico</span>
                         </div>
                         <RichTextEditor
                           value={t.andamentoGeral ?? ''}
                           onChange={html => updateTopico(t.id, 'andamentoGeral', html)}
-                          placeholder="Resumo geral / situação atual do tópico…"
+                          placeholder="Situação acumulada / contexto do tópico até agora…"
                           minRows={2}
+                          resizable
                         />
                       </div>
 
-                      {/* ATÉ AQUI: preenchimento do dia (vira histórico na nova reunião) */}
+                      {/* Na data desta reunião, definiu-se: (vira histórico na nova reunião) */}
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>ATÉ AQUI:</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Na data desta reunião, definiu-se:</span>
                           {dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
                         </div>
                         <RichTextEditor
@@ -964,10 +965,15 @@ export function PrintView({ titulo, dataVal, cliente, local, numAta, status, par
                   {t.finalizado && <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: '#D1FAE5', padding: '2px 8px', borderRadius: 999 }}>✓ Finalizado</span>}
                   {t.status && <StatusBadge status={t.status} />}
                 </div>
-                {t.andamentoGeral && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8 }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />}
+                {t.andamentoGeral && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Até aqui:</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155' }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />
+                  </div>
+                )}
                 {t.descricao && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Até aqui ({dateDisplay}):</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Na data desta reunião ({dateDisplay}), definiu-se:</div>
                     <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155' }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
                   </div>
                 )}

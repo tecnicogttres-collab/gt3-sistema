@@ -125,8 +125,8 @@ function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]): s
         <span>${idx + 1}. ${escapeHtml(t.titulo || '(Sem título)')}</span>
         ${t.finalizado ? `<span style="font-size:10px;font-weight:700;color:#10B981;background:#D1FAE5;padding:2px 8px;border-radius:999px">✓ Finalizado</span>` : ''}
       </div>
-      ${t.andamentoGeral ? `<div style="font-size:13px;line-height:1.7;color:#334155;margin-bottom:8px">${t.andamentoGeral}</div>` : ''}
-      ${t.descricao ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Até aqui (${dateDisplay}):</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.descricao}</div></div>` : ''}
+      ${t.andamentoGeral ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:#6B7A99;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Até aqui:</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.andamentoGeral}</div></div>` : ''}
+      ${t.descricao ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Na data desta reunião (${dateDisplay}), definiu-se:</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.descricao}</div></div>` : ''}
       ${metaHtml}${histHtml}</div>`
   }).join('')
 
@@ -760,12 +760,15 @@ export default function AtasContratantesClient() {
                                 {idx + 1}. {t.titulo || '(Sem título)'}
                               </div>
                               {t.andamentoGeral && (
-                                <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: 8 }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />
+                                <div style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>Até aqui:</div>
+                                  <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />
+                                </div>
                               )}
                               {t.descricao && (
                                 <div style={{ marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0 }}>
                                   <div style={{ fontSize: 10, fontWeight: 700, color: cor, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>
-                                    Até aqui{selected?.data ? ` (${new Date(selected.data + 'T12:00').toLocaleDateString('pt-BR')})` : ''}:
+                                    Na data desta reunião{selected?.data ? ` (${new Date(selected.data + 'T12:00').toLocaleDateString('pt-BR')})` : ''}, definiu-se:
                                   </div>
                                   <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
                                 </div>
