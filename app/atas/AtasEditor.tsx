@@ -6,6 +6,11 @@ import { useState } from 'react'
 
 export type Participante = { nome: string; empresa: string }
 
+export type TopicoHistorico = {
+  data: string   // YYYY-MM-DD
+  texto: string
+}
+
 export type Topico = {
   id: string
   titulo: string
@@ -14,6 +19,7 @@ export type Topico = {
   prazo: string
   responsavel: string
   cor?: string
+  historico?: TopicoHistorico[]
 }
 
 export type AtaEditorData = {
@@ -111,6 +117,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
     () => parseTopicos(initial?.conteudo)
   )
   const [colorPickerOpenId, setColorPickerOpenId] = useState<string | null>(null)
+  const [historyOpenId,    setHistoryOpenId]    = useState<string | null>(null)
+  const [addHistForm,      setAddHistForm]      = useState<{ topicId: string; data: string; texto: string } | null>(null)
 
   // Save
   const [saving, setSaving] = useState(false)
@@ -167,6 +175,34 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
 
   function removeTopico(id: string) {
     setTopicos(prev => prev.filter(t => t.id !== id))
+  }
+
+  function arquivarDescricao(topicId: string) {
+    const topico = topicos.find(t => t.id === topicId)
+    if (!topico?.descricao.trim()) return
+    const entry: TopicoHistorico = { data: new Date().toISOString().slice(0, 10), texto: topico.descricao }
+    setTopicos(prev => prev.map(t => t.id === topicId
+      ? { ...t, descricao: '', historico: [entry, ...(t.historico ?? [])] }
+      : t
+    ))
+    setHistoryOpenId(topicId)
+  }
+
+  function addHistoricoEntry(topicId: string, data: string, texto: string) {
+    if (!texto.trim()) return
+    const entry: TopicoHistorico = { data: data || new Date().toISOString().slice(0, 10), texto: texto.trim() }
+    setTopicos(prev => prev.map(t => t.id === topicId
+      ? { ...t, historico: [...(t.historico ?? []), entry].sort((a, b) => b.data.localeCompare(a.data)) }
+      : t
+    ))
+    setAddHistForm(null)
+  }
+
+  function removeHistoricoEntry(topicId: string, idx: number) {
+    setTopicos(prev => prev.map(t => t.id === topicId
+      ? { ...t, historico: (t.historico ?? []).filter((_, i) => i !== idx) }
+      : t
+    ))
   }
 
   function moveTopico(id: string, dir: -1 | 1) {
@@ -562,6 +598,83 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           />
                         </div>
                       </div>
+
+                      {/* ── Histórico ── */}
+                      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(42,79,150,0.10)' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => setHistoryOpenId(historyOpenId === t.id ? null : t.id)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.20)', background: historyOpenId === t.id ? '#EEF2FB' : '#fff', color: '#2A4F96', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            📋 Histórico{(t.historico?.length ?? 0) > 0 ? ` (${t.historico!.length})` : ''}
+                          </button>
+                          {t.descricao.trim() && (
+                            <button
+                              onClick={() => arquivarDescricao(t.id)}
+                              title="Arquiva a observação atual no histórico e abre campo para nova"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5B8DEF', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              ⬆ Atualizar
+                            </button>
+                          )}
+                        </div>
+
+                        {historyOpenId === t.id && (
+                          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {(t.historico ?? []).length === 0 && addHistForm?.topicId !== t.id && (
+                              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Nenhuma entrada ainda. Clique em "Atualizar" para arquivar a observação atual, ou adicione uma entrada manual.</p>
+                            )}
+                            {(t.historico ?? []).map((h, i) => (
+                              <div key={i} style={{ padding: '10px 12px', background: '#F0F4FF', borderRadius: 8, border: '1px solid rgba(42,79,150,0.12)', position: 'relative' }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 4 }}>
+                                  {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                </div>
+                                <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+                                <button
+                                  onClick={() => removeHistoricoEntry(t.id, i)}
+                                  title="Remover entrada"
+                                  style={{ position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 4, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', color: '#9399ae', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                  onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#fef2f2'; el.style.color = '#dc2626' }}
+                                  onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.color = '#9399ae' }}
+                                >×</button>
+                              </div>
+                            ))}
+
+                            {addHistForm?.topicId === t.id ? (
+                              <div style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid rgba(42,79,150,0.15)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, marginBottom: 10 }}>
+                                  <div>
+                                    <span style={lbl}>Data</span>
+                                    <input type="date" value={addHistForm.data} onChange={e => setAddHistForm(f => f ? { ...f, data: e.target.value } : f)} style={inp({ fontSize: 12 })} />
+                                  </div>
+                                  <div style={{ gridColumn: '1 / -1' }}>
+                                    <span style={lbl}>Observação</span>
+                                    <textarea
+                                      value={addHistForm.texto}
+                                      onChange={e => setAddHistForm(f => f ? { ...f, texto: e.target.value } : f)}
+                                      rows={3}
+                                      placeholder="Descreva o que foi discutido ou decidido nesta data…"
+                                      style={{ ...inp(), resize: 'vertical', lineHeight: 1.6 }}
+                                      autoFocus
+                                    />
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  <button onClick={() => addHistoricoEntry(t.id, addHistForm.data, addHistForm.texto)} disabled={!addHistForm.texto.trim()} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 12, fontWeight: 600, cursor: addHistForm.texto.trim() ? 'pointer' : 'not-allowed', opacity: addHistForm.texto.trim() ? 1 : 0.5 }}>Salvar</button>
+                                  <button onClick={() => setAddHistForm(null)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', color: '#5a6178', fontSize: 12, cursor: 'pointer' }}>Cancelar</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setAddHistForm({ topicId: t.id, data: new Date().toISOString().slice(0, 10), texto: '' })}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, border: '1px dashed rgba(42,79,150,0.25)', background: 'transparent', color: '#5B8DEF', fontSize: 12, cursor: 'pointer', alignSelf: 'flex-start' }}
+                              >
+                                + Entrada manual
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -724,10 +837,23 @@ export function PrintView({ titulo, dataVal, cliente, local, numAta, status, par
                 </div>
                 {t.descricao && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{t.descricao}</div>}
                 {(t.contratante || t.prazo || t.responsavel) && (
-                  <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#5a6178', borderTop: '1px solid #eee', paddingTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#5a6178', borderTop: '1px solid #eee', paddingTop: 8, marginBottom: 8 }}>
                     {t.contratante && <span><strong>Contratante:</strong> {t.contratante}</span>}
                     {t.prazo && <span><strong>Prazo:</strong> {prazoFmt(t.prazo)}</span>}
                     {t.responsavel && <span><strong>Responsável:</strong> {t.responsavel}</span>}
+                  </div>
+                )}
+                {(t.historico?.length ?? 0) > 0 && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #eee' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Histórico</div>
+                    {t.historico!.map((h, i) => (
+                      <div key={i} style={{ marginBottom: 8, paddingLeft: 10, borderLeft: `2px solid ${cor}44` }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 2 }}>
+                          {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#5a6178', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import AtasEditor, { PrintView, type AtaEditorData, type Participante, type Topico } from '../atas/AtasEditor'
+import AtasEditor, { PrintView, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -131,6 +131,7 @@ export default function AtasContratantesClient() {
   const [searchLoading, setSearchLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [allUsers, setAllUsers] = useState<{ id: string; nome: string }[]>([])
+  const [openHistorico, setOpenHistorico] = useState<Set<number>>(new Set())
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -205,6 +206,7 @@ export default function AtasContratantesClient() {
     setSelected(null)
     setLeituras(null)
     setLeiturasOpen(false)
+    setOpenHistorico(new Set())
     setLoadingAta(true)
     try {
       const res = await fetch(`/api/atas-contratantes/${id}`)
@@ -592,25 +594,52 @@ export default function AtasContratantesClient() {
                         Pontos discutidos
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-                        {topicosList.map((t, idx) => (
-                          <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: `3px solid ${t.cor ?? '#2A4F96'}` }}>
-                            <div style={{ fontWeight: 700, fontSize: 14, color: t.cor ?? '#2A4F96', marginBottom: t.descricao ? 6 : 0 }}>
-                              {idx + 1}. {t.titulo || '(Sem título)'}
+                        {topicosList.map((t, idx) => {
+                          const cor = t.cor ?? '#2A4F96'
+                          const hist: TopicoHistorico[] = t.historico ?? []
+                          const histOpen = openHistorico.has(idx)
+                          return (
+                            <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: `3px solid ${cor}` }}>
+                              <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: t.descricao ? 6 : 0 }}>
+                                {idx + 1}. {t.titulo || '(Sem título)'}
+                              </div>
+                              {t.descricao && (
+                                <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0, whiteSpace: 'pre-wrap' }}>
+                                  {t.descricao}
+                                </div>
+                              )}
+                              {(t.contratante || t.prazo || t.responsavel) && (
+                                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: hist.length > 0 ? 10 : 0 }}>
+                                  {t.contratante && <span><span style={{ color: '#94A3B8' }}>Contratante:</span> {t.contratante}</span>}
+                                  {t.prazo && <span><span style={{ color: '#94A3B8' }}>Prazo:</span> {new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>}
+                                  {t.responsavel && <span><span style={{ color: '#94A3B8' }}>Responsável:</span> {t.responsavel}</span>}
+                                </div>
+                              )}
+                              {hist.length > 0 && (
+                                <div style={{ borderTop: '1px solid rgba(42,79,150,0.08)', paddingTop: 8 }}>
+                                  <button
+                                    onClick={() => setOpenHistorico(prev => { const s = new Set(prev); s.has(idx) ? s.delete(idx) : s.add(idx); return s })}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, border: `1px solid ${cor}33`, background: histOpen ? `${cor}14` : '#fff', color: cor, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                  >
+                                    {histOpen ? '▼' : '▶'} Histórico ({hist.length})
+                                  </button>
+                                  {histOpen && (
+                                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                      {hist.map((h, i) => (
+                                        <div key={i} style={{ padding: '8px 12px', background: '#F0F4FF', borderRadius: 8, borderLeft: `2px solid ${cor}` }}>
+                                          <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 3 }}>
+                                            {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                          </div>
+                                          <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            {t.descricao && (
-                              <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: (t.contratante || t.prazo || t.responsavel) ? 10 : 0, whiteSpace: 'pre-wrap' }}>
-                                {t.descricao}
-                              </div>
-                            )}
-                            {(t.contratante || t.prazo || t.responsavel) && (
-                              <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const }}>
-                                {t.contratante && <span><span style={{ color: '#94A3B8' }}>Contratante:</span> {t.contratante}</span>}
-                                {t.prazo && <span><span style={{ color: '#94A3B8' }}>Prazo:</span> {new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>}
-                                {t.responsavel && <span><span style={{ color: '#94A3B8' }}>Responsável:</span> {t.responsavel}</span>}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   ) : isLegacyContent ? (
