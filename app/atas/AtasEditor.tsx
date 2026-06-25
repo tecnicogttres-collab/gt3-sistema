@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -13,6 +13,7 @@ export type Topico = {
   contratante: string
   prazo: string
   responsavel: string
+  cor?: string
 }
 
 export type AtaEditorData = {
@@ -24,6 +25,7 @@ export type AtaEditorData = {
   participantes: string   // JSON: Participante[]
   status: string
   conteudo: string        // JSON: Topico[]
+  notifyUserIds?: string[]
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -46,7 +48,6 @@ function parseTopicos(val?: string): Topico[] {
     const parsed = JSON.parse(val)
     if (Array.isArray(parsed)) return parsed
   } catch { /* legacy HTML */ }
-  // Legacy HTML → single topic with the raw content
   return [{ id: uid(), titulo: 'Pontos discutidos', descricao: val ?? '', contratante: '', prazo: '', responsavel: '' }]
 }
 
@@ -58,6 +59,8 @@ const STATUS_COLOR: Record<string, string> = {
   'Aguardando Validação': '#F59E0B',
   'Validada': '#10B981',
 }
+
+const TOPIC_COLORS = ['#2A4F96', '#5B8DEF', '#10B981', '#059669', '#F59E0B', '#EF4444', '#8B5CF6', '#64748B']
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
@@ -80,10 +83,12 @@ const sectionTitle = (extra?: React.CSSProperties): React.CSSProperties => ({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AtasEditor({ initial, onSave, onClose }: {
+export default function AtasEditor({ initial, onSave, onClose, enableNotifModal, availableUsers }: {
   initial?: Partial<AtaEditorData>
   onSave: (data: AtaEditorData) => Promise<void>
   onClose: () => void
+  enableNotifModal?: boolean
+  availableUsers?: { id: string; nome: string }[]
 }) {
   // Meta fields
   const [titulo,   setTitulo]   = useState(initial?.titulo          ?? '')
@@ -97,19 +102,24 @@ export default function AtasEditor({ initial, onSave, onClose }: {
   const [participantes, setParticipantes] = useState<Participante[]>(
     () => parseParticipantes(initial?.participantes)
   )
-  const [addingPart, setAddingPart] = useState(false)
-  const [formNome,   setFormNome]   = useState('')
+  const [addingPart,  setAddingPart]  = useState(false)
+  const [formNome,    setFormNome]    = useState('')
   const [formEmpresa, setFormEmpresa] = useState('')
 
   // Tópicos
   const [topicos, setTopicos] = useState<Topico[]>(
     () => parseTopicos(initial?.conteudo)
   )
+  const [colorPickerOpenId, setColorPickerOpenId] = useState<string | null>(null)
 
+  // Save
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState('')
 
-  const printRef = useRef<HTMLDivElement>(null)
+  // Notification modal
+  const [notifModalOpen, setNotifModalOpen] = useState(false)
+  const [notifOption,    setNotifOption]    = useState<'none' | 'all' | 'select'>('none')
+  const [notifSelected,  setNotifSelected]  = useState<Set<string>>(new Set())
 
   // ── Participante actions ───────────────────────────────────────────────────
 
@@ -132,6 +142,11 @@ export default function AtasEditor({ initial, onSave, onClose }: {
 
   function removePart(idx: number) {
     setParticipantes(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function addQuickParticipant(nome: string, empresa: string) {
+    if (participantes.some(p => p.nome === nome)) return
+    setParticipantes(prev => [...prev, { nome, empresa }])
   }
 
   // ── Tópico actions ────────────────────────────────────────────────────────
@@ -170,6 +185,18 @@ export default function AtasEditor({ initial, onSave, onClose }: {
   async function handleSave() {
     if (!dataVal) { setErr('Data é obrigatória'); return }
     if (!cliente.trim()) { setErr('Contratante é obrigatória'); return }
+
+    if (enableNotifModal && status === 'Validada') {
+      setNotifOption('none')
+      setNotifSelected(new Set())
+      setNotifModalOpen(true)
+      return
+    }
+
+    await doSave()
+  }
+
+  async function doSave(notifyUserIds?: string[]) {
     setSaving(true); setErr('')
     try {
       await onSave({
@@ -181,11 +208,23 @@ export default function AtasEditor({ initial, onSave, onClose }: {
         participantes: JSON.stringify(participantes),
         status,
         conteudo: JSON.stringify(topicos),
+        notifyUserIds,
       })
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Erro ao salvar')
       setSaving(false)
     }
+  }
+
+  async function handleNotifConfirm() {
+    setNotifModalOpen(false)
+    let notifyUserIds: string[] | undefined
+    if (notifOption === 'all') {
+      notifyUserIds = (availableUsers ?? []).map(u => u.id)
+    } else if (notifOption === 'select') {
+      notifyUserIds = [...notifSelected]
+    }
+    await doSave(notifyUserIds)
   }
 
   // ── Print ────────────────────────────────────────────────────────────────
@@ -207,11 +246,12 @@ export default function AtasEditor({ initial, onSave, onClose }: {
 
       {/* Print styles */}
       <style>{`
+        @media screen { #gt3-ata-print { display: none !important; } }
         @media print {
-          body > * { display: none !important; }
-          #gt3-ata-print { display: block !important; position: fixed; top: 0; left: 0; width: 100%; font-family: 'Segoe UI', sans-serif; }
+          body * { visibility: hidden !important; }
+          #gt3-ata-print { visibility: visible !important; display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+          #gt3-ata-print * { visibility: visible !important; }
         }
-        @media screen { #gt3-ata-print { display: none; } }
       `}</style>
 
       {/* ── Topbar ── */}
@@ -254,7 +294,6 @@ export default function AtasEditor({ initial, onSave, onClose }: {
       {/* ── Canvas ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px 80px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div
-          ref={printRef}
           style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 16, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', overflow: 'hidden' }}
         >
           {/* Blue top bar */}
@@ -340,6 +379,28 @@ export default function AtasEditor({ initial, onSave, onClose }: {
                 </div>
               )}
 
+              {/* Quick-add buttons */}
+              {!addingPart && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => addQuickParticipant('GT3', 'GT3 Consultoria')}
+                    disabled={participantes.some(p => p.nome === 'GT3')}
+                    style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.25)', background: participantes.some(p => p.nome === 'GT3') ? '#F0F4FA' : '#EEF2FB', color: participantes.some(p => p.nome === 'GT3') ? '#94A3B8' : '#2A4F96', fontSize: 12, fontWeight: 600, cursor: participantes.some(p => p.nome === 'GT3') ? 'default' : 'pointer' }}
+                  >
+                    {participantes.some(p => p.nome === 'GT3') ? '✓ GT3' : '+ GT3'}
+                  </button>
+                  {cliente.trim() && (
+                    <button
+                      onClick={() => addQuickParticipant(cliente.trim(), cliente.trim())}
+                      disabled={participantes.some(p => p.nome === cliente.trim())}
+                      style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(209,174,110,0.40)', background: participantes.some(p => p.nome === cliente.trim()) ? '#F8F5EE' : '#FDF8EE', color: participantes.some(p => p.nome === cliente.trim()) ? '#94A3B8' : '#B8880A', fontSize: 12, fontWeight: 600, cursor: participantes.some(p => p.nome === cliente.trim()) ? 'default' : 'pointer' }}
+                    >
+                      {participantes.some(p => p.nome === cliente.trim()) ? `✓ ${cliente}` : `+ ${cliente}`}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Add form */}
               {addingPart ? (
                 <div style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.15)' }}>
@@ -405,83 +466,105 @@ export default function AtasEditor({ initial, onSave, onClose }: {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
-                {topicos.map((t, idx) => (
-                  <div
-                    key={t.id}
-                    id={idx === topicos.length - 1 ? 'topico-last' : undefined}
-                    style={{ position: 'relative', background: '#F8FAFC', borderRadius: 12, border: '1px solid rgba(42,79,150,0.12)', padding: '16px 18px', paddingLeft: 52 }}
-                  >
-                    {/* Number badge */}
-                    <div style={{ position: 'absolute', left: 14, top: 16, width: 26, height: 26, borderRadius: 6, background: '#2A4F96', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {idx + 1}
-                    </div>
+                {topicos.map((t, idx) => {
+                  const cor = t.cor ?? '#2A4F96'
+                  return (
+                    <div
+                      key={t.id}
+                      id={idx === topicos.length - 1 ? 'topico-last' : undefined}
+                      style={{ position: 'relative', background: '#F8FAFC', borderRadius: 12, border: '1px solid rgba(42,79,150,0.12)', borderLeft: `4px solid ${cor}`, padding: '16px 18px', paddingLeft: 52 }}
+                    >
+                      {/* Number badge */}
+                      <div style={{ position: 'absolute', left: 14, top: 16, width: 26, height: 26, borderRadius: 6, background: cor, color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {idx + 1}
+                      </div>
 
-                    {/* Controls */}
-                    <div style={{ position: 'absolute', right: 12, top: 12, display: 'flex', gap: 4 }}>
-                      <button onClick={() => moveTopico(t.id, -1)} disabled={idx === 0} title="Mover acima" style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: idx === 0 ? 'not-allowed' : 'pointer', fontSize: 11, color: '#9399ae', opacity: idx === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↑</button>
-                      <button onClick={() => moveTopico(t.id, 1)} disabled={idx === topicos.length - 1} title="Mover abaixo" style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: idx === topicos.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, color: '#9399ae', opacity: idx === topicos.length - 1 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↓</button>
-                      <button
-                        onClick={() => removeTopico(t.id)}
-                        title="Remover tópico"
-                        style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#9399ae', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#fef2f2'; el.style.color = '#dc2626'; el.style.borderColor = '#fca5a5' }}
-                        onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.color = '#9399ae'; el.style.borderColor = 'rgba(42,79,150,0.15)' }}
-                      >×</button>
-                    </div>
+                      {/* Controls */}
+                      <div style={{ position: 'absolute', right: 12, top: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
+                        {/* Color picker */}
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            onClick={() => setColorPickerOpenId(colorPickerOpenId === t.id ? null : t.id)}
+                            title="Cor do tópico"
+                            style={{ width: 24, height: 24, borderRadius: 5, border: `2px solid ${cor}55`, background: cor, cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          {colorPickerOpenId === t.id && (
+                            <div style={{ position: 'absolute', right: 0, top: 28, zIndex: 20, background: '#fff', border: '1px solid rgba(42,79,150,0.15)', borderRadius: 10, padding: '10px', display: 'flex', gap: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', flexWrap: 'wrap', width: 156 }}>
+                              {TOPIC_COLORS.map(c => (
+                                <button
+                                  key={c}
+                                  onClick={() => { updateTopico(t.id, 'cor', c); setColorPickerOpenId(null) }}
+                                  style={{ width: 28, height: 28, borderRadius: 6, background: c, border: cor === c ? '3px solid #1E253D' : '2px solid transparent', cursor: 'pointer', flexShrink: 0, outline: 'none' }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => moveTopico(t.id, -1)} disabled={idx === 0} title="Mover acima" style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: idx === 0 ? 'not-allowed' : 'pointer', fontSize: 11, color: '#9399ae', opacity: idx === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↑</button>
+                        <button onClick={() => moveTopico(t.id, 1)} disabled={idx === topicos.length - 1} title="Mover abaixo" style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: idx === topicos.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, color: '#9399ae', opacity: idx === topicos.length - 1 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↓</button>
+                        <button
+                          onClick={() => removeTopico(t.id)}
+                          title="Remover tópico"
+                          style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#9399ae', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#fef2f2'; el.style.color = '#dc2626'; el.style.borderColor = '#fca5a5' }}
+                          onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.color = '#9399ae'; el.style.borderColor = 'rgba(42,79,150,0.15)' }}
+                        >×</button>
+                      </div>
 
-                    {/* Título */}
-                    <div style={{ marginBottom: 10 }}>
-                      <input
-                        value={t.titulo}
-                        onChange={e => updateTopico(t.id, 'titulo', e.target.value)}
-                        placeholder="Assunto / título do tópico…"
-                        style={{ ...inp(), fontWeight: 600, fontSize: 14, paddingRight: 90 }}
-                      />
-                    </div>
-
-                    {/* Descrição */}
-                    <div style={{ marginBottom: 12 }}>
-                      <textarea
-                        value={t.descricao}
-                        onChange={e => updateTopico(t.id, 'descricao', e.target.value)}
-                        placeholder="Descreva o ponto discutido, decisão tomada ou encaminhamento…"
-                        rows={3}
-                        style={{ ...inp(), resize: 'vertical', lineHeight: 1.6 }}
-                      />
-                    </div>
-
-                    {/* Meta: contratante, prazo, responsável */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 12px' }}>
-                      <div>
-                        <span style={lbl}>Contratante</span>
+                      {/* Título */}
+                      <div style={{ marginBottom: 10 }}>
                         <input
-                          value={t.contratante}
-                          onChange={e => updateTopico(t.id, 'contratante', e.target.value)}
-                          placeholder={cliente || 'Ex.: Marcopolo AR'}
-                          style={inp({ fontSize: 12 })}
+                          value={t.titulo}
+                          onChange={e => updateTopico(t.id, 'titulo', e.target.value)}
+                          placeholder="Assunto / título do tópico…"
+                          style={{ ...inp(), fontWeight: 600, fontSize: 14, paddingRight: 120 }}
                         />
                       </div>
-                      <div>
-                        <span style={lbl}>Prazo</span>
-                        <input
-                          type="date"
-                          value={t.prazo}
-                          onChange={e => updateTopico(t.id, 'prazo', e.target.value)}
-                          style={inp({ fontSize: 12 })}
+
+                      {/* Descrição */}
+                      <div style={{ marginBottom: 12 }}>
+                        <textarea
+                          value={t.descricao}
+                          onChange={e => updateTopico(t.id, 'descricao', e.target.value)}
+                          placeholder="Descreva o ponto discutido, decisão tomada ou encaminhamento…"
+                          rows={3}
+                          style={{ ...inp(), resize: 'vertical', lineHeight: 1.6 }}
                         />
                       </div>
-                      <div>
-                        <span style={lbl}>Responsável</span>
-                        <input
-                          value={t.responsavel}
-                          onChange={e => updateTopico(t.id, 'responsavel', e.target.value)}
-                          placeholder="Nome…"
-                          style={inp({ fontSize: 12 })}
-                        />
+
+                      {/* Meta: contratante, prazo, responsável */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 12px' }}>
+                        <div>
+                          <span style={lbl}>Contratante</span>
+                          <input
+                            value={t.contratante}
+                            onChange={e => updateTopico(t.id, 'contratante', e.target.value)}
+                            placeholder={cliente || 'Ex.: Marcopolo AR'}
+                            style={inp({ fontSize: 12 })}
+                          />
+                        </div>
+                        <div>
+                          <span style={lbl}>Prazo</span>
+                          <input
+                            type="date"
+                            value={t.prazo}
+                            onChange={e => updateTopico(t.id, 'prazo', e.target.value)}
+                            style={inp({ fontSize: 12 })}
+                          />
+                        </div>
+                        <div>
+                          <span style={lbl}>Responsável</span>
+                          <input
+                            value={t.responsavel}
+                            onChange={e => updateTopico(t.id, 'responsavel', e.target.value)}
+                            placeholder="Nome…"
+                            style={inp({ fontSize: 12 })}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Add topic button */}
@@ -522,13 +605,70 @@ export default function AtasEditor({ initial, onSave, onClose }: {
           topicos={topicos}
         />
       </div>
+
+      {/* ── Notification Modal ── */}
+      {notifModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 420, maxWidth: '90vw', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1E253D' }}>Notificar a equipe?</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>A ata será salva como Validada. Deseja notificar alguém?</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+              {(['none', 'all', 'select'] as const).map(opt => (
+                <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: `1px solid ${notifOption === opt ? '#2A4F96' : 'rgba(42,79,150,0.15)'}`, background: notifOption === opt ? '#EEF2FB' : '#F8FAFC', cursor: 'pointer' }}>
+                  <input type="radio" name="notif" value={opt} checked={notifOption === opt} onChange={() => setNotifOption(opt)} style={{ accentColor: '#2A4F96' }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#1E253D' }}>
+                    {opt === 'none' ? 'Não notificar' : opt === 'all' ? 'Notificar todos os usuários' : 'Selecionar usuários'}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {notifOption === 'select' && availableUsers && availableUsers.length > 0 && (
+              <div style={{ marginBottom: 20, maxHeight: 180, overflowY: 'auto', border: '1px solid rgba(42,79,150,0.12)', borderRadius: 10, padding: '8px 12px' }}>
+                {availableUsers.map(u => (
+                  <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={notifSelected.has(u.id)}
+                      onChange={() => setNotifSelected(prev => {
+                        const next = new Set(prev)
+                        next.has(u.id) ? next.delete(u.id) : next.add(u.id)
+                        return next
+                      })}
+                      style={{ accentColor: '#2A4F96' }}
+                    />
+                    <span style={{ fontSize: 13, color: '#334155' }}>{u.nome}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setNotifModalOpen(false)}
+                style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleNotifConfirm}
+                disabled={notifOption === 'select' && notifSelected.size === 0}
+                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: (notifOption === 'select' && notifSelected.size === 0) ? 'not-allowed' : 'pointer', opacity: (notifOption === 'select' && notifSelected.size === 0) ? 0.5 : 1 }}
+              >
+                Confirmar e Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── Print View ───────────────────────────────────────────────────────────────
 
-function PrintView({ titulo, dataVal, cliente, local, numAta, status, participantes, topicos }: {
+export function PrintView({ titulo, dataVal, cliente, local, numAta, status, participantes, topicos }: {
   titulo: string; dataVal: string; cliente: string; local: string; numAta: string; status: string
   participantes: Participante[]; topicos: Topico[]
 }) {
@@ -575,21 +715,24 @@ function PrintView({ titulo, dataVal, cliente, local, numAta, status, participan
       {topicos.length > 0 && (
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Pontos discutidos</div>
-          {topicos.map((t, idx) => (
-            <div key={t.id} style={{ marginBottom: 18, padding: '14px 16px', border: '1px solid #e0e5ef', borderLeft: '3px solid #2A4F96', borderRadius: 6 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: '#2A4F96', marginBottom: 6 }}>
-                {idx + 1}. {t.titulo || '(Sem título)'}
-              </div>
-              {t.descricao && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{t.descricao}</div>}
-              {(t.contratante || t.prazo || t.responsavel) && (
-                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#5a6178', borderTop: '1px solid #eee', paddingTop: 8 }}>
-                  {t.contratante && <span><strong>Contratante:</strong> {t.contratante}</span>}
-                  {t.prazo && <span><strong>Prazo:</strong> {prazoFmt(t.prazo)}</span>}
-                  {t.responsavel && <span><strong>Responsável:</strong> {t.responsavel}</span>}
+          {topicos.map((t, idx) => {
+            const cor = t.cor ?? '#2A4F96'
+            return (
+              <div key={t.id} style={{ marginBottom: 18, padding: '14px 16px', border: '1px solid #e0e5ef', borderLeft: `3px solid ${cor}`, borderRadius: 6 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: 6 }}>
+                  {idx + 1}. {t.titulo || '(Sem título)'}
                 </div>
-              )}
-            </div>
-          ))}
+                {t.descricao && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{t.descricao}</div>}
+                {(t.contratante || t.prazo || t.responsavel) && (
+                  <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#5a6178', borderTop: '1px solid #eee', paddingTop: 8 }}>
+                    {t.contratante && <span><strong>Contratante:</strong> {t.contratante}</span>}
+                    {t.prazo && <span><strong>Prazo:</strong> {prazoFmt(t.prazo)}</span>}
+                    {t.responsavel && <span><strong>Responsável:</strong> {t.responsavel}</span>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 

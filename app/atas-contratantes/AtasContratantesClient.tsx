@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import AtasEditor, { type AtaEditorData, type Participante, type Topico } from '../atas/AtasEditor'
+import AtasEditor, { PrintView, type AtaEditorData, type Participante, type Topico } from '../atas/AtasEditor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -130,6 +130,7 @@ export default function AtasContratantesClient() {
   const [searchResults, setSearchResults] = useState<Ata[] | null>(null)
   const [searchLoading, setSearchLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [allUsers, setAllUsers] = useState<{ id: string; nome: string }[]>([])
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -156,6 +157,14 @@ export default function AtasContratantesClient() {
   }, [])
 
   useEffect(() => { fetchAtas() }, [fetchAtas])
+
+  useEffect(() => {
+    if (!isGestorOrAdmin) return
+    fetch('/api/usuarios')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { id: string; nome: string }[]) => setAllUsers(data))
+      .catch(() => {})
+  }, [isGestorOrAdmin])
 
   // ── Deep-link via ?ata= ─────────────────────────────────────────────────────
 
@@ -258,6 +267,15 @@ export default function AtasContratantesClient() {
     }
   }
 
+  async function sendNotifications(ataId: string, userIds: string[]) {
+    if (!userIds.length) return
+    await fetch(`/api/atas-contratantes/${ataId}/notificar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds }),
+    }).catch(() => {})
+  }
+
   async function handleCreate(form: AtaEditorData) {
     const res = await fetch('/api/atas-contratantes', {
       method: 'POST',
@@ -266,6 +284,7 @@ export default function AtasContratantesClient() {
     })
     if (!res.ok) throw new Error((await res.json()).error ?? 'Erro')
     const nova: Ata = await res.json()
+    if (form.notifyUserIds?.length) await sendNotifications(nova.id, form.notifyUserIds)
     setAtas(prev => [nova, ...prev])
     setShowEditor(false)
     selectAta(nova.id)
@@ -280,6 +299,7 @@ export default function AtasContratantesClient() {
     })
     if (!res.ok) throw new Error((await res.json()).error ?? 'Erro')
     const updated: Ata = await res.json()
+    if (form.notifyUserIds?.length) await sendNotifications(updated.id, form.notifyUserIds)
     setAtas(prev => prev.map(a => a.id === updated.id ? updated : a))
     setSelected(updated)
     setEditingAta(null)
@@ -510,26 +530,31 @@ export default function AtasContratantesClient() {
                     </div>
                   )}
                 </div>
-                {isGestorOrAdmin && (
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <select
-                      value={selected.status}
-                      onChange={e => handleStatusChange(e.target.value)}
-                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 12, cursor: 'pointer', color: '#334155' }}
-                    >
-                      {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <button onClick={() => setCopyingAta(selected)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }} title="Criar nova ata usando esta como base">
-                      ⊕ Nova a partir desta
-                    </button>
-                    <button onClick={() => { setEditingAta(selected) }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
-                      Editar
-                    </button>
-                    <button onClick={() => handleDelete(selected.id)} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #EF4444', background: '#fff', color: '#EF4444', fontSize: 13, cursor: 'pointer' }}>
-                      Excluir
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button onClick={() => window.print()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>
+                    🖨 PDF
+                  </button>
+                  {isGestorOrAdmin && (
+                    <>
+                      <select
+                        value={selected.status}
+                        onChange={e => handleStatusChange(e.target.value)}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 12, cursor: 'pointer', color: '#334155' }}
+                      >
+                        {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <button onClick={() => setCopyingAta(selected)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }} title="Criar nova ata usando esta como base">
+                        ⊕ Nova a partir desta
+                      </button>
+                      <button onClick={() => { setEditingAta(selected) }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
+                        Editar
+                      </button>
+                      <button onClick={() => handleDelete(selected.id)} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #EF4444', background: '#fff', color: '#EF4444', fontSize: 13, cursor: 'pointer' }}>
+                        Excluir
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -568,8 +593,8 @@ export default function AtasContratantesClient() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
                         {topicosList.map((t, idx) => (
-                          <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: '3px solid #2A4F96' }}>
-                            <div style={{ fontWeight: 700, fontSize: 14, color: '#2A4F96', marginBottom: t.descricao ? 6 : 0 }}>
+                          <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: `3px solid ${t.cor ?? '#2A4F96'}` }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: t.cor ?? '#2A4F96', marginBottom: t.descricao ? 6 : 0 }}>
                               {idx + 1}. {t.titulo || '(Sem título)'}
                             </div>
                             {t.descricao && (
@@ -647,6 +672,8 @@ export default function AtasContratantesClient() {
         <AtasEditor
           onSave={handleCreate}
           onClose={() => setShowEditor(false)}
+          enableNotifModal
+          availableUsers={allUsers}
         />
       )}
       {editingAta && (
@@ -663,6 +690,8 @@ export default function AtasContratantesClient() {
           }}
           onSave={handleEdit}
           onClose={() => setEditingAta(null)}
+          enableNotifModal
+          availableUsers={allUsers}
         />
       )}
       {copyingAta && (
@@ -680,6 +709,30 @@ export default function AtasContratantesClient() {
           onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
           onClose={() => setCopyingAta(null)}
         />
+      )}
+
+      {/* ── Print styles + hidden area for detail view PDF ── */}
+      <style>{`
+        @media screen { #gt3-detail-print { display: none !important; } }
+        @media print {
+          body * { visibility: hidden !important; }
+          #gt3-detail-print { visibility: visible !important; display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+          #gt3-detail-print * { visibility: visible !important; }
+        }
+      `}</style>
+      {selected && (
+        <div id="gt3-detail-print">
+          <PrintView
+            titulo={selected.titulo ?? ''}
+            dataVal={selected.data}
+            cliente={selected.cliente ?? ''}
+            local={selected.local_reuniao ?? ''}
+            numAta={selected.numero_ata ?? ''}
+            status={selected.status}
+            participantes={partsList}
+            topicos={topicosList}
+          />
+        </div>
       )}
     </div>
   )
