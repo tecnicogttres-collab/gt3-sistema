@@ -11,7 +11,7 @@ export type TopicoHistorico = {
   texto: string
 }
 
-export type TopicoStatus = '' | 'Pendente' | 'Em andamento' | 'Concluído' | 'Cancelado'
+export type TopicoStatus = '' | 'Pendente' | 'Em análise' | 'Em andamento' | 'Acompanhamento' | 'Concluído' | 'Cancelado'
 
 export type Topico = {
   id: string
@@ -46,7 +46,9 @@ function uid() { return `t${Date.now()}_${++_cnt}` }
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; label: string }> = {
   'Pendente':      { color: '#92400E', bg: '#FEF3C7', label: '● Pendente' },
+  'Em análise':    { color: '#6D28D9', bg: '#EDE9FE', label: '◔ Em análise' },
   'Em andamento':  { color: '#1D4ED8', bg: '#DBEAFE', label: '◑ Em andamento' },
+  'Acompanhamento':{ color: '#0F766E', bg: '#CCFBF1', label: '↻ Acompanhamento' },
   'Concluído':     { color: '#065F46', bg: '#D1FAE5', label: '✓ Concluído' },
   'Cancelado':     { color: '#6B7280', bg: '#F3F4F6', label: '✕ Cancelado' },
 }
@@ -564,7 +566,9 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           >
                             <option value="">— sem status —</option>
                             <option value="Pendente">Pendente</option>
+                            <option value="Em análise">Em análise</option>
                             <option value="Em andamento">Em andamento</option>
+                            <option value="Acompanhamento">Acompanhamento</option>
                             <option value="Concluído">Concluído</option>
                             <option value="Cancelado">Cancelado</option>
                           </select>

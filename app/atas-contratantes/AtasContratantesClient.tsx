@@ -92,12 +92,15 @@ function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]): s
     const hist: TopicoHistorico[] = t.historico ?? []
     const statusColors: Record<string, string> = {
       'Pendente': 'color:#92400E;background:#FEF3C7',
+      'Em análise': 'color:#6D28D9;background:#EDE9FE',
       'Em andamento': 'color:#1D4ED8;background:#DBEAFE',
+      'Acompanhamento': 'color:#0F766E;background:#CCFBF1',
       'Concluído': 'color:#065F46;background:#D1FAE5',
       'Cancelado': 'color:#6B7280;background:#F3F4F6',
     }
     const statusLabel: Record<string, string> = {
-      'Pendente': '● Pendente', 'Em andamento': '◑ Em andamento',
+      'Pendente': '● Pendente', 'Em análise': '◔ Em análise',
+      'Em andamento': '◑ Em andamento', 'Acompanhamento': '↻ Acompanhamento',
       'Concluído': '✓ Concluído', 'Cancelado': '✕ Cancelado',
     }
     const metaHtml = (t.contratante || t.prazo || t.responsavel || t.status)
