@@ -414,28 +414,6 @@ export default function CadastroClient() {
           </div>
         </div>
 
-        {/* Copy all auth emails */}
-        {(() => {
-          const allEmails = [...new Set(matchedCompanies.flatMap(getAuthEmails))]
-          if (allEmails.length === 0) return null
-          return (
-            <div style={{ padding: '0 10px 8px' }}>
-              <button
-                onClick={() => void copyText(allEmails.join('; '))}
-                title={`Copia todos os e-mails de autorização das ${matchedCompanies.length} contratantes visíveis:\n${allEmails.join('\n')}`}
-                style={{
-                  width: '100%', padding: '5px 8px', borderRadius: 7,
-                  border: '1px solid #BEE3F8', background: '#EBF4FF',
-                  cursor: 'pointer', fontSize: 11, color: '#2A4F96', fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  fontFamily: 'inherit',
-                }}
-              >
-                📋 Copiar {allEmails.length} e-mail{allEmails.length !== 1 ? 's' : ''} de autorização
-              </button>
-            </div>
-          )
-        })()}
 
         {/* Cards list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 10px' }}>
@@ -953,7 +931,7 @@ function TextFieldLines({ label, value, onCopy }: { label: string; value: string
     }
   })
 
-  const isEmailField = /E[- ]?MAIL/i.test(label)
+  const isEmailField = /E[- ]?MAIL/i.test(label) || /AUTORIZA/i.test(label)
   const allEmails = parts.filter(p => p.isMail).map(p => p.text)
   const showCopyAll = isEmailField && allEmails.length >= 2
 
