@@ -72,6 +72,94 @@ function parseTopicos(val: string): Topico[] {
   return []
 }
 
+function escapeHtml(s: string | null | undefined): string {
+  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]): string {
+  const dateDisplay = ata.data
+    ? new Date(ata.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+    : '—'
+  const prazoFmt = (iso: string) => iso ? new Date(iso + 'T12:00').toLocaleDateString('pt-BR') : '—'
+  const titulo = ata.titulo || `Ata de Reunião — ${ata.cliente ?? ''}`
+
+  const partsHtml = partes.length > 0
+    ? `<div style="margin-bottom:24px"><div style="font-size:11px;font-weight:700;color:#2A4F96;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Participantes</div>
+        ${partes.map(p => `<div style="margin-bottom:4px;font-size:13px"><strong>${escapeHtml(p.nome)}</strong>${p.empresa ? ` — ${escapeHtml(p.empresa)}` : ''}</div>`).join('')}</div>` : ''
+
+  const topicosHtml = topicos.map((t, idx) => {
+    const cor = t.cor ?? '#2A4F96'
+    const hist: TopicoHistorico[] = t.historico ?? []
+    const metaHtml = (t.contratante || t.prazo || t.responsavel)
+      ? `<div style="display:flex;gap:16px;font-size:12px;color:#5a6178;border-top:1px solid #eee;padding-top:8px;flex-wrap:wrap;margin-bottom:${hist.length > 0 ? '8px' : '0'}">
+          ${t.contratante ? `<span><strong>Contratante:</strong> ${escapeHtml(t.contratante)}</span>` : ''}
+          ${t.prazo ? `<span><strong>Prazo:</strong> ${prazoFmt(t.prazo)}</span>` : ''}
+          ${t.responsavel ? `<span><strong>Responsável:</strong> ${escapeHtml(t.responsavel)}</span>` : ''}</div>` : ''
+    const histHtml = hist.length > 0
+      ? `<div style="border-top:1px solid #eee;padding-top:8px">
+          <button onclick="toggleHist(${idx})" style="font-family:inherit;font-size:11px;font-weight:700;color:${cor};background:#fff;border:1px solid ${cor}44;border-radius:6px;padding:3px 10px;cursor:pointer;margin-bottom:4px">
+            📋 Histórico (${hist.length})
+          </button>
+          <div id="hist-${idx}" style="display:none;margin-top:8px">
+            ${hist.map(h => `<div style="margin-bottom:8px;padding:8px 12px;background:#F0F4FF;border-radius:8px;border-left:2px solid ${cor}">
+              <div style="font-size:11px;font-weight:700;color:${cor};margin-bottom:2px">${new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+              <div style="font-size:12px;color:#334155;white-space:pre-wrap;line-height:1.55">${escapeHtml(h.texto)}</div>
+            </div>`).join('')}
+          </div></div>` : ''
+    return `<div style="margin-bottom:18px;padding:14px 16px;border:1px solid #e0e5ef;border-left:3px solid ${cor};border-radius:6px${t.finalizado ? ';opacity:.75' : ''}">
+      <div style="font-weight:700;font-size:14px;color:${cor};margin-bottom:6px;display:flex;align-items:center;gap:8px">
+        <span>${idx + 1}. ${escapeHtml(t.titulo || '(Sem título)')}</span>
+        ${t.finalizado ? `<span style="font-size:10px;font-weight:700;color:#10B981;background:#D1FAE5;padding:2px 8px;border-radius:999px">✓ Finalizado</span>` : ''}
+      </div>
+      ${t.descricao ? `<div style="font-size:13px;line-height:1.7;color:#334155;margin-bottom:8px;white-space:pre-wrap">${escapeHtml(t.descricao)}</div>` : ''}
+      ${metaHtml}${histHtml}</div>`
+  }).join('')
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(titulo)}</title>
+<style>body{font-family:'Segoe UI',Arial,sans-serif;max-width:820px;margin:0 auto;padding:40px 32px;color:#1a1f2e;font-size:13px}button{font-family:inherit}</style>
+</head><body>
+<div style="border-bottom:3px solid #2A4F96;margin-bottom:24px;padding-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start">
+  <div>
+    <div style="font-size:20px;font-weight:700;color:#2A4F96;margin-bottom:4px">${escapeHtml(titulo)}</div>
+    <div style="font-size:13px;color:#5a6178">${dateDisplay}${ata.local_reuniao ? ` — ${escapeHtml(ata.local_reuniao)}` : ''}</div>
+  </div>
+  <div style="text-align:right">
+    ${ata.numero_ata ? `<div style="display:inline-block;padding:3px 10px;background:#D1AE6E;color:#fff;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:4px">${escapeHtml(ata.numero_ata)}</div><br>` : ''}
+    <span style="font-size:11px;color:#5a6178">${ata.status}</span>
+  </div>
+</div>
+${ata.cliente ? `<div style="margin-bottom:16px;font-size:13px;color:#334155"><strong>Contratante:</strong> ${escapeHtml(ata.cliente)}</div>` : ''}
+${partsHtml}
+<div>
+  <div style="font-size:11px;font-weight:700;color:#2A4F96;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Pontos discutidos</div>
+  ${topicosHtml}
+</div>
+<div style="margin-top:48px;padding-top:16px;border-top:1px solid #e0e5ef;display:flex;justify-content:space-between;font-size:11px;color:#9399ae">
+  <span style="font-weight:700;color:#2A4F96;opacity:.6">GT3 Consultoria</span>
+  <div style="display:flex;gap:40px">
+    <div style="text-align:center"><div style="width:160px;border-top:1px solid #aab;padding-top:4px">Responsável GT3</div></div>
+    <div style="text-align:center"><div style="width:160px;border-top:1px solid #aab;padding-top:4px">Responsável ${escapeHtml(ata.cliente ?? 'Cliente')}</div></div>
+  </div>
+  <span>Pág. 1</span>
+</div>
+<script>function toggleHist(i){var e=document.getElementById('hist-'+i);e.style.display=e.style.display==='none'?'block':'none'}</script>
+</body></html>`
+}
+
+function downloadAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]) {
+  const html = generateAtaHtml(ata, topicos, partes)
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ata-${(ata.cliente ?? 'contratante').replace(/\s+/g, '-').toLowerCase()}-${ata.data}.html`
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 function getConteudoText(val: string): string {
   if (!val?.trim()) return ''
   try { const t = JSON.parse(val); if (Array.isArray(t)) return (t as Topico[]).map(x => `${x.titulo} ${x.descricao}`).join(' ') } catch {}
@@ -131,7 +219,8 @@ export default function AtasContratantesClient() {
   const [searchLoading, setSearchLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [allUsers, setAllUsers] = useState<{ id: string; nome: string }[]>([])
-  const [openHistorico, setOpenHistorico] = useState<Set<number>>(new Set())
+  const [openHistorico, setOpenHistorico] = useState<Set<string>>(new Set())
+  const [finalizeState, setFinalizeState] = useState<Map<string, number>>(new Map())
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -207,6 +296,7 @@ export default function AtasContratantesClient() {
     setLeituras(null)
     setLeiturasOpen(false)
     setOpenHistorico(new Set())
+    setFinalizeState(new Map())
     setLoadingAta(true)
     try {
       const res = await fetch(`/api/atas-contratantes/${id}`)
@@ -314,6 +404,26 @@ export default function AtasContratantesClient() {
     setAtas(prev => prev.filter(a => a.id !== id))
     if (selectedId === id) { setSelectedId(null); setSelected(null) }
     router.replace('/atas-contratantes')
+  }
+
+  async function handleFinalizarTopico(topicId: string) {
+    if (!selected) return
+    const allTopicos = parseTopicos(selected.conteudo ?? '')
+    const updated = allTopicos.map(t => t.id === topicId
+      ? { ...t, finalizado: true, finalizado_em: new Date().toISOString().slice(0, 10) }
+      : t
+    )
+    const res = await fetch(`/api/atas-contratantes/${selected.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conteudo: JSON.stringify(updated) }),
+    })
+    if (!res.ok) return
+    const updatedAta: Ata = await res.json()
+    setSelected(updatedAta)
+    setAtas(prev => prev.map(a => a.id === updatedAta.id ? updatedAta : a))
+    setFinalizeState(new Map())
+    setOpenHistorico(new Set())
   }
 
   async function handleStatusChange(newStatus: string) {
@@ -536,6 +646,13 @@ export default function AtasContratantesClient() {
                   <button onClick={() => window.print()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>
                     🖨 PDF
                   </button>
+                  <button
+                    onClick={() => downloadAtaHtml(selected, parseTopicos(selected.conteudo ?? ''), partsList)}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}
+                    title="Baixar como arquivo HTML"
+                  >
+                    ⬡ HTML
+                  </button>
                   {isGestorOrAdmin && (
                     <>
                       <select
@@ -545,7 +662,14 @@ export default function AtasContratantesClient() {
                       >
                         {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
-                      <button onClick={() => setCopyingAta(selected)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }} title="Criar nova ata usando esta como base">
+                      <button
+                        onClick={() => {
+                          downloadAtaHtml(selected, parseTopicos(selected.conteudo ?? ''), partsList)
+                          setCopyingAta(selected)
+                        }}
+                        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }}
+                        title="Baixa HTML da ata atual e abre editor para nova ata (sem tópicos finalizados)"
+                      >
                         ⊕ Nova a partir desta
                       </button>
                       <button onClick={() => { setEditingAta(selected) }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
@@ -594,10 +718,11 @@ export default function AtasContratantesClient() {
                         Pontos discutidos
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-                        {topicosList.map((t, idx) => {
+                        {topicosList.filter(t => !t.finalizado).map((t, idx) => {
                           const cor = t.cor ?? '#2A4F96'
                           const hist: TopicoHistorico[] = t.historico ?? []
-                          const histOpen = openHistorico.has(idx)
+                          const histOpen = openHistorico.has(t.id)
+                          const finStep = finalizeState.get(t.id) ?? 0
                           return (
                             <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: `3px solid ${cor}` }}>
                               <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: t.descricao ? 6 : 0 }}>
@@ -609,34 +734,68 @@ export default function AtasContratantesClient() {
                                 </div>
                               )}
                               {(t.contratante || t.prazo || t.responsavel) && (
-                                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: hist.length > 0 ? 10 : 0 }}>
+                                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: (hist.length > 0 || isGestorOrAdmin) ? 10 : 0 }}>
                                   {t.contratante && <span><span style={{ color: '#94A3B8' }}>Contratante:</span> {t.contratante}</span>}
                                   {t.prazo && <span><span style={{ color: '#94A3B8' }}>Prazo:</span> {new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>}
                                   {t.responsavel && <span><span style={{ color: '#94A3B8' }}>Responsável:</span> {t.responsavel}</span>}
                                 </div>
                               )}
-                              {hist.length > 0 && (
-                                <div style={{ borderTop: '1px solid rgba(42,79,150,0.08)', paddingTop: 8 }}>
-                                  <button
-                                    onClick={() => setOpenHistorico(prev => { const s = new Set(prev); s.has(idx) ? s.delete(idx) : s.add(idx); return s })}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, border: `1px solid ${cor}33`, background: histOpen ? `${cor}14` : '#fff', color: cor, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                                  >
-                                    {histOpen ? '▼' : '▶'} Histórico ({hist.length})
-                                  </button>
-                                  {histOpen && (
-                                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                      {hist.map((h, i) => (
-                                        <div key={i} style={{ padding: '8px 12px', background: '#F0F4FF', borderRadius: 8, borderLeft: `2px solid ${cor}` }}>
-                                          <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 3 }}>
-                                            {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                          </div>
-                                          <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+
+                              {/* Histórico + Finalizar row */}
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, borderTop: (hist.length > 0 || isGestorOrAdmin) ? '1px solid rgba(42,79,150,0.08)' : 'none', paddingTop: (hist.length > 0 || isGestorOrAdmin) ? 8 : 0 }}>
+                                <div style={{ flex: 1 }}>
+                                  {hist.length > 0 && (
+                                    <>
+                                      <button
+                                        onClick={() => setOpenHistorico(prev => { const s = new Set(prev); s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s })}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, border: `1px solid ${cor}33`, background: histOpen ? `${cor}14` : '#fff', color: cor, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                      >
+                                        {histOpen ? '▼' : '▶'} Histórico ({hist.length})
+                                      </button>
+                                      {histOpen && (
+                                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                          {hist.map((h, i) => (
+                                            <div key={i} style={{ padding: '8px 12px', background: '#F0F4FF', borderRadius: 8, borderLeft: `2px solid ${cor}` }}>
+                                              <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 3 }}>
+                                                {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                              </div>
+                                              <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+                                            </div>
+                                          ))}
                                         </div>
-                                      ))}
-                                    </div>
+                                      )}
+                                    </>
                                   )}
                                 </div>
-                              )}
+
+                                {/* Finalizar tópico (gestor/admin only) */}
+                                {isGestorOrAdmin && (
+                                  <div style={{ flexShrink: 0 }}>
+                                    {finStep === 0 && (
+                                      <button
+                                        onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.set(t.id, 1); return m })}
+                                        style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.30)', background: '#fff', color: '#10B981', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                                      >
+                                        ✓ Finalizar tópico
+                                      </button>
+                                    )}
+                                    {finStep === 1 && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FCD34D' }}>
+                                        <span style={{ fontSize: 12, color: '#92400E', fontWeight: 600 }}>Tem certeza?</span>
+                                        <button onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.set(t.id, 2); return m })} style={{ padding: '3px 10px', borderRadius: 5, border: 'none', background: '#F59E0B', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Sim</button>
+                                        <button onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.delete(t.id); return m })} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid #E5E7EB', background: '#fff', color: '#6B7280', fontSize: 11, cursor: 'pointer' }}>Não</button>
+                                      </div>
+                                    )}
+                                    {finStep === 2 && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FCA5A5' }}>
+                                        <span style={{ fontSize: 11, color: '#991B1B', fontWeight: 600 }}>Tópico some da ata ativa.</span>
+                                        <button onClick={() => handleFinalizarTopico(t.id)} style={{ padding: '3px 10px', borderRadius: 5, border: 'none', background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Confirmar</button>
+                                        <button onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.delete(t.id); return m })} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid #E5E7EB', background: '#fff', color: '#6B7280', fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -729,7 +888,7 @@ export default function AtasContratantesClient() {
             titulo: copyingAta.titulo ? `${copyingAta.titulo} (cópia)` : '',
             data: new Date().toISOString().slice(0, 10),
             status: 'Rascunho',
-            conteudo: copyingAta.conteudo,
+            conteudo: JSON.stringify(parseTopicos(copyingAta.conteudo ?? '').filter(t => !t.finalizado)),
             cliente: copyingAta.cliente ?? '',
             localReuniao: copyingAta.local_reuniao ?? '',
             numeroAta: '',

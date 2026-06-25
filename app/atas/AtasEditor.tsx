@@ -20,6 +20,8 @@ export type Topico = {
   responsavel: string
   cor?: string
   historico?: TopicoHistorico[]
+  finalizado?: boolean
+  finalizado_em?: string
 }
 
 export type AtaEditorData = {
@@ -497,12 +499,13 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
               <div style={{ ...sectionTitle(), borderBottom: '1px solid rgba(42,79,150,0.10)', paddingBottom: 8 }}>
                 <span>Tópicos / Pontos discutidos</span>
                 <span style={{ fontWeight: 400, color: '#94A3B8', textTransform: 'none', letterSpacing: 0, fontSize: 12 }}>
-                  {topicos.length} tópico{topicos.length !== 1 ? 's' : ''}
+                  {topicos.filter(t => !t.finalizado).length} ativo{topicos.filter(t => !t.finalizado).length !== 1 ? 's' : ''}
+                  {topicos.some(t => t.finalizado) && <span style={{ marginLeft: 6, color: '#10B981' }}>· {topicos.filter(t => t.finalizado).length} finalizado{topicos.filter(t => t.finalizado).length !== 1 ? 's' : ''}</span>}
                 </span>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
-                {topicos.map((t, idx) => {
+                {topicos.filter(t => !t.finalizado).map((t, idx) => {
                   const cor = t.cor ?? '#2A4F96'
                   return (
                     <div
@@ -832,8 +835,9 @@ export function PrintView({ titulo, dataVal, cliente, local, numAta, status, par
             const cor = t.cor ?? '#2A4F96'
             return (
               <div key={t.id} style={{ marginBottom: 18, padding: '14px 16px', border: '1px solid #e0e5ef', borderLeft: `3px solid ${cor}`, borderRadius: 6 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: 6 }}>
-                  {idx + 1}. {t.titulo || '(Sem título)'}
+                <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>{idx + 1}. {t.titulo || '(Sem título)'}</span>
+                  {t.finalizado && <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: '#D1FAE5', padding: '2px 8px', borderRadius: 999 }}>✓ Finalizado</span>}
                 </div>
                 {t.descricao && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{t.descricao}</div>}
                 {(t.contratante || t.prazo || t.responsavel) && (
