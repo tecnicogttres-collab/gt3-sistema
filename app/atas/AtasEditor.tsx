@@ -474,45 +474,15 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                   return (
                     <div
                       key={t.id}
-                      id={idx === topicos.length - 1 ? 'topico-last' : undefined}
-                      style={{ position: 'relative', background: '#F8FAFC', borderRadius: 12, border: '1px solid rgba(42,79,150,0.12)', borderLeft: `4px solid ${cor}`, padding: '16px 18px', paddingLeft: 52 }}
+                      id={idx === topicos.filter(x => !x.finalizado).length - 1 ? 'topico-last' : undefined}
+                      style={{ background: '#F8FAFC', borderRadius: 12, border: '1px solid rgba(42,79,150,0.12)', borderLeft: `4px solid ${cor}`, overflow: 'hidden' }}
                     >
-                      {/* Number badge */}
-                      <div style={{ position: 'absolute', left: 14, top: 16, width: 26, height: 26, borderRadius: 6, background: cor, color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {idx + 1}
-                      </div>
-
-                      {/* Controls */}
-                      <div style={{ position: 'absolute', right: 12, top: 12, display: 'flex', gap: 4, alignItems: 'center' }}>
-                        {/* Color picker */}
-                        <div style={{ position: 'relative' }}>
-                          <button
-                            onClick={() => setColorPickerOpenId(colorPickerOpenId === t.id ? null : t.id)}
-                            title="Cor do tópico"
-                            style={{ width: 24, height: 24, borderRadius: 5, border: `2px solid ${cor}55`, background: cor, cursor: 'pointer', flexShrink: 0 }}
-                          />
-                          {colorPickerOpenId === t.id && (
-                            <div style={{ position: 'absolute', right: 0, top: 28, zIndex: 20, background: '#fff', border: '1px solid rgba(42,79,150,0.15)', borderRadius: 10, padding: '10px', display: 'flex', gap: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', flexWrap: 'wrap', width: 156 }}>
-                              {TOPIC_COLORS.map(c => (
-                                <button
-                                  key={c}
-                                  onClick={() => { updateTopico(t.id, 'cor', c); setColorPickerOpenId(null) }}
-                                  style={{ width: 28, height: 28, borderRadius: 6, background: c, border: cor === c ? '3px solid #1E253D' : '2px solid transparent', cursor: 'pointer', flexShrink: 0, outline: 'none' }}
-                                />
-                              ))}
-                            </div>
-                          )}
+                      {/* Content area */}
+                      <div style={{ padding: '14px 16px 14px 50px', position: 'relative' }}>
+                        {/* Number badge */}
+                        <div style={{ position: 'absolute', left: 12, top: 14, width: 26, height: 26, borderRadius: 6, background: cor, color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {idx + 1}
                         </div>
-                        <button onClick={() => moveTopico(t.id, -1)} disabled={idx === 0} title="Mover acima" style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: idx === 0 ? 'not-allowed' : 'pointer', fontSize: 11, color: '#9399ae', opacity: idx === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↑</button>
-                        <button onClick={() => moveTopico(t.id, 1)} disabled={idx === topicos.length - 1} title="Mover abaixo" style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: idx === topicos.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, color: '#9399ae', opacity: idx === topicos.length - 1 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↓</button>
-                        <button
-                          onClick={() => removeTopico(t.id)}
-                          title="Remover tópico"
-                          style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(42,79,150,0.15)', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#9399ae', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#fef2f2'; el.style.color = '#dc2626'; el.style.borderColor = '#fca5a5' }}
-                          onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.color = '#9399ae'; el.style.borderColor = 'rgba(42,79,150,0.15)' }}
-                        >×</button>
-                      </div>
 
                       {/* Título */}
                       <div style={{ marginBottom: 10 }}>
@@ -520,7 +490,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           value={t.titulo}
                           onChange={e => updateTopico(t.id, 'titulo', e.target.value)}
                           placeholder="Assunto / título do tópico…"
-                          style={{ ...inp(), fontWeight: 600, fontSize: 14, paddingRight: 120 }}
+                          style={{ ...inp(), fontWeight: 600, fontSize: 14 }}
                         />
                       </div>
 
@@ -567,7 +537,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                       </div>
 
                       {/* ── Histórico ── */}
-                      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(42,79,150,0.10)' }}>
+                      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.10)' }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => setHistoryOpenId(historyOpenId === t.id ? null : t.id)}
@@ -641,6 +611,36 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                             )}
                           </div>
                         )}
+                      </div>
+                      </div>{/* end content area */}
+
+                      {/* ── Bottom toolbar ── */}
+                      <div style={{ borderTop: '1px solid rgba(42,79,150,0.09)', background: '#F0F3FA', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {/* Color picker */}
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            onClick={() => setColorPickerOpenId(colorPickerOpenId === t.id ? null : t.id)}
+                            title="Cor do tópico"
+                            style={{ width: 22, height: 22, borderRadius: 5, border: `2px solid ${cor}55`, background: cor, cursor: 'pointer', flexShrink: 0, display: 'block' }}
+                          />
+                          {colorPickerOpenId === t.id && (
+                            <div style={{ position: 'absolute', left: 0, bottom: 28, zIndex: 20, background: '#fff', border: '1px solid rgba(42,79,150,0.15)', borderRadius: 10, padding: '10px', display: 'flex', gap: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', flexWrap: 'wrap', width: 156 }}>
+                              {TOPIC_COLORS.map(c => (
+                                <button key={c} onClick={() => { updateTopico(t.id, 'cor', c); setColorPickerOpenId(null) }} style={{ width: 28, height: 28, borderRadius: 6, background: c, border: cor === c ? '3px solid #1E253D' : '2px solid transparent', cursor: 'pointer', flexShrink: 0, outline: 'none' }} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ width: 1, height: 14, background: 'rgba(42,79,150,0.15)', margin: '0 2px' }} />
+                        <button onClick={() => moveTopico(t.id, -1)} disabled={idx === 0} title="Mover acima" style={{ height: 26, padding: '0 10px', borderRadius: 5, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', cursor: idx === 0 ? 'not-allowed' : 'pointer', fontSize: 12, color: '#6B7A99', opacity: idx === 0 ? 0.35 : 1 }}>↑ Subir</button>
+                        <button onClick={() => moveTopico(t.id, 1)} disabled={idx === topicos.filter(x => !x.finalizado).length - 1} title="Mover abaixo" style={{ height: 26, padding: '0 10px', borderRadius: 5, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', cursor: idx === topicos.filter(x => !x.finalizado).length - 1 ? 'not-allowed' : 'pointer', fontSize: 12, color: '#6B7A99', opacity: idx === topicos.filter(x => !x.finalizado).length - 1 ? 0.35 : 1 }}>↓ Descer</button>
+                        <div style={{ flex: 1 }} />
+                        <button
+                          onClick={() => removeTopico(t.id)}
+                          style={{ height: 26, padding: '0 12px', borderRadius: 5, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', cursor: 'pointer', fontSize: 12, color: '#9399ae' }}
+                          onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#fef2f2'; el.style.color = '#dc2626'; el.style.borderColor = '#fca5a5' }}
+                          onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.color = '#9399ae'; el.style.borderColor = 'rgba(42,79,150,0.18)' }}
+                        >× Remover</button>
                       </div>
                     </div>
                   )
@@ -830,19 +830,6 @@ export function PrintView({ titulo, dataVal, cliente, local, numAta, status, par
         </div>
       )}
 
-      {/* Assinaturas */}
-      <div style={{ marginTop: 48, paddingTop: 16, borderTop: '1px solid #e0e5ef', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9399ae' }}>
-        <span style={{ fontWeight: 700, color: '#2A4F96', opacity: 0.6 }}>GT3 Consultoria</span>
-        <div style={{ display: 'flex', gap: 40 }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 160, borderTop: '1px solid #aab', paddingTop: 4 }}>Responsável GT3</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 160, borderTop: '1px solid #aab', paddingTop: 4 }}>Responsável {cliente || 'Cliente'}</div>
-          </div>
-        </div>
-        <span>Pág. 1</span>
-      </div>
     </div>
   )
 }

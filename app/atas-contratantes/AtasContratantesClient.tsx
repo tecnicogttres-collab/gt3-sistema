@@ -137,14 +137,6 @@ ${partsHtml}
   <div style="font-size:11px;font-weight:700;color:#2A4F96;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Pontos discutidos</div>
   ${topicosHtml}
 </div>
-<div style="margin-top:48px;padding-top:16px;border-top:1px solid #e0e5ef;display:flex;justify-content:space-between;font-size:11px;color:#9399ae">
-  <span style="font-weight:700;color:#2A4F96;opacity:.6">GT3 Consultoria</span>
-  <div style="display:flex;gap:40px">
-    <div style="text-align:center"><div style="width:160px;border-top:1px solid #aab;padding-top:4px">Responsável GT3</div></div>
-    <div style="text-align:center"><div style="width:160px;border-top:1px solid #aab;padding-top:4px">Responsável ${escapeHtml(ata.cliente ?? 'Cliente')}</div></div>
-  </div>
-  <span>Pág. 1</span>
-</div>
 <script>function toggleHist(i){var e=document.getElementById('hist-'+i);e.style.display=e.style.display==='none'?'block':'none'}</script>
 </body></html>`
 }
@@ -663,12 +655,9 @@ export default function AtasContratantesClient() {
                         {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <button
-                        onClick={() => {
-                          downloadAtaHtml(selected, parseTopicos(selected.conteudo ?? ''), partsList)
-                          setCopyingAta(selected)
-                        }}
+                        onClick={() => setCopyingAta(selected)}
                         style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }}
-                        title="Baixa HTML da ata atual e abre editor para nova ata (sem tópicos finalizados)"
+                        title="Criar nova ata a partir desta (sem tópicos finalizados)"
                       >
                         ⊕ Nova a partir desta
                       </button>
