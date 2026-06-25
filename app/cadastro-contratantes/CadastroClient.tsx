@@ -44,6 +44,13 @@ function getAuthTag(c: Company): { label: string; warn: boolean } | null {
   return { label: 'Autorizado', warn: false }
 }
 
+function getAuthEmails(c: Company): string[] {
+  const f = c.fields.find(x => x.type === 'text' && /AUTORIZA/i.test(x.label))
+  if (!f || f.type !== 'text' || !f.value) return []
+  const emailRe = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi
+  return Array.from(new Set(f.value.match(emailRe) ?? []))
+}
+
 function companyMatches(c: Company, term: string) {
   if (!term) return true
   const blob = [
@@ -406,6 +413,29 @@ export default function CadastroClient() {
             </span>
           </div>
         </div>
+
+        {/* Copy all auth emails */}
+        {(() => {
+          const allEmails = [...new Set(matchedCompanies.flatMap(getAuthEmails))]
+          if (allEmails.length === 0) return null
+          return (
+            <div style={{ padding: '0 10px 8px' }}>
+              <button
+                onClick={() => void copyText(allEmails.join('; '))}
+                title={`Copia todos os e-mails de autorização das ${matchedCompanies.length} contratantes visíveis:\n${allEmails.join('\n')}`}
+                style={{
+                  width: '100%', padding: '5px 8px', borderRadius: 7,
+                  border: '1px solid #BEE3F8', background: '#EBF4FF',
+                  cursor: 'pointer', fontSize: 11, color: '#2A4F96', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  fontFamily: 'inherit',
+                }}
+              >
+                📋 Copiar {allEmails.length} e-mail{allEmails.length !== 1 ? 's' : ''} de autorização
+              </button>
+            </div>
+          )
+        })()}
 
         {/* Cards list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 10px' }}>
@@ -979,7 +1009,7 @@ type TableFieldViewProps = {
 function TableFieldView({ field: f, onCopy, onUpdateCell, onUpdateHeader, onRemoveRow }: TableFieldViewProps) {
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
           <tr style={{ background: '#EDF2F7' }}>
             {f.headers.map((h, hi) => (
@@ -1002,8 +1032,8 @@ function TableFieldView({ field: f, onCopy, onUpdateCell, onUpdateHeader, onRemo
               <td
                 onClick={() => onRemoveRow(ri)}
                 style={{
-                  width: 28, textAlign: 'center', cursor: 'pointer',
-                  color: '#FC8181', border: '1px solid #E2E8F0', padding: '4px', fontSize: 11,
+                  width: 20, textAlign: 'center', cursor: 'pointer',
+                  color: '#FC8181', border: '1px solid #E2E8F0', padding: '2px 3px', fontSize: 10,
                 }}
                 title="Excluir linha"
               >✕</td>
@@ -1026,8 +1056,9 @@ function EditableHeader({ value, onSave }: { value: string; onSave: (v: string) 
       onBlur={() => onSave(ref.current?.textContent?.trim() ?? '')}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ref.current?.blur() } }}
       style={{
-        padding: '5px 8px', border: '1px solid #E2E8F0', textAlign: 'left',
+        padding: '3px 6px', border: '1px solid #E2E8F0', textAlign: 'left',
         fontWeight: 600, color: '#4A5568', cursor: 'text', outline: 'none',
+        fontSize: 10, letterSpacing: '0.04em',
       }}
     >
       {value}
@@ -1070,7 +1101,7 @@ function EditableCell({ value, onCopy: _onCopy, onSave }: { value: string; onCop
       }}
       title={editing ? undefined : 'Clique para editar · Ctrl+C para copiar após selecionar'}
       style={{
-        padding: '4px 8px', border: '1px solid #E2E8F0', cursor: editing ? 'text' : 'pointer',
+        padding: '2px 5px', border: '1px solid #E2E8F0', cursor: editing ? 'text' : 'pointer',
         outline: editing ? '2px solid #4299E1' : 'none', outlineOffset: -2,
         background: editing ? '#EBF4FF' : 'transparent',
         color: '#2D3748', verticalAlign: 'top',
