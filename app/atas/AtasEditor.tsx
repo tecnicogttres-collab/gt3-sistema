@@ -332,7 +332,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
       {/* ── Canvas ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px 80px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div
-          style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 16, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', overflow: 'hidden' }}
+          style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 16, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', overflow: 'hidden', flexShrink: 0 }}
         >
           {/* Blue top bar */}
           <div style={{ height: 5, background: 'linear-gradient(90deg, #2A4F96, #5B8DEF)' }} />
