@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import AtasEditor, { PrintView, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
+import AtasEditor, { PrintView, StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,11 +90,22 @@ function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]): s
   const topicosHtml = topicos.map((t, idx) => {
     const cor = t.cor ?? '#2A4F96'
     const hist: TopicoHistorico[] = t.historico ?? []
-    const metaHtml = (t.contratante || t.prazo || t.responsavel)
-      ? `<div style="display:flex;gap:16px;font-size:12px;color:#5a6178;border-top:1px solid #eee;padding-top:8px;flex-wrap:wrap;margin-bottom:${hist.length > 0 ? '8px' : '0'}">
+    const statusColors: Record<string, string> = {
+      'Pendente': 'color:#92400E;background:#FEF3C7',
+      'Em andamento': 'color:#1D4ED8;background:#DBEAFE',
+      'Concluído': 'color:#065F46;background:#D1FAE5',
+      'Cancelado': 'color:#6B7280;background:#F3F4F6',
+    }
+    const statusLabel: Record<string, string> = {
+      'Pendente': '● Pendente', 'Em andamento': '◑ Em andamento',
+      'Concluído': '✓ Concluído', 'Cancelado': '✕ Cancelado',
+    }
+    const metaHtml = (t.contratante || t.prazo || t.responsavel || t.status)
+      ? `<div style="display:flex;gap:16px;font-size:12px;color:#5a6178;border-top:1px solid #eee;padding-top:8px;flex-wrap:wrap;align-items:center;margin-bottom:${hist.length > 0 ? '8px' : '0'}">
           ${t.contratante ? `<span><strong>Contratante:</strong> ${escapeHtml(t.contratante)}</span>` : ''}
           ${t.prazo ? `<span><strong>Prazo:</strong> ${prazoFmt(t.prazo)}</span>` : ''}
-          ${t.responsavel ? `<span><strong>Responsável:</strong> ${escapeHtml(t.responsavel)}</span>` : ''}</div>` : ''
+          ${t.responsavel ? `<span><strong>Responsável:</strong> ${escapeHtml(t.responsavel)}</span>` : ''}
+          ${t.status && statusColors[t.status] ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;${statusColors[t.status]}">${statusLabel[t.status]}</span>` : ''}</div>` : ''
     const histHtml = hist.length > 0
       ? `<div style="border-top:1px solid #eee;padding-top:8px">
           <button onclick="toggleHist(${idx})" style="font-family:inherit;font-size:11px;font-weight:700;color:${cor};background:#fff;border:1px solid ${cor}44;border-radius:6px;padding:3px 10px;cursor:pointer;margin-bottom:4px">
@@ -745,11 +756,12 @@ export default function AtasContratantesClient() {
                                   {t.descricao}
                                 </div>
                               )}
-                              {(t.contratante || t.prazo || t.responsavel) && (
-                                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: (hist.length > 0 || isGestorOrAdmin) ? 10 : 0 }}>
+                              {(t.contratante || t.prazo || t.responsavel || t.status) && (
+                                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: (hist.length > 0 || isGestorOrAdmin) ? 10 : 0, alignItems: 'center' }}>
                                   {t.contratante && <span><span style={{ color: '#94A3B8' }}>Contratante:</span> {t.contratante}</span>}
                                   {t.prazo && <span><span style={{ color: '#94A3B8' }}>Prazo:</span> {new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>}
                                   {t.responsavel && <span><span style={{ color: '#94A3B8' }}>Responsável:</span> {t.responsavel}</span>}
+                                  {t.status && <StatusBadge status={t.status} />}
                                 </div>
                               )}
 

@@ -11,6 +11,8 @@ export type TopicoHistorico = {
   texto: string
 }
 
+export type TopicoStatus = '' | 'Pendente' | 'Em andamento' | 'Concluído' | 'Cancelado'
+
 export type Topico = {
   id: string
   titulo: string
@@ -18,6 +20,7 @@ export type Topico = {
   contratante: string
   prazo: string
   responsavel: string
+  status?: TopicoStatus
   cor?: string
   historico?: TopicoHistorico[]
   finalizado?: boolean
@@ -40,6 +43,24 @@ export type AtaEditorData = {
 
 let _cnt = 0
 function uid() { return `t${Date.now()}_${++_cnt}` }
+
+const STATUS_STYLE: Record<string, { color: string; bg: string; label: string }> = {
+  'Pendente':      { color: '#92400E', bg: '#FEF3C7', label: '● Pendente' },
+  'Em andamento':  { color: '#1D4ED8', bg: '#DBEAFE', label: '◑ Em andamento' },
+  'Concluído':     { color: '#065F46', bg: '#D1FAE5', label: '✓ Concluído' },
+  'Cancelado':     { color: '#6B7280', bg: '#F3F4F6', label: '✕ Cancelado' },
+}
+
+export function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_STYLE[status]
+  if (!s) return null
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+      color: s.color, background: s.bg,
+    }}>{s.label}</span>
+  )
+}
 
 function parseClientes(val: string): string[] {
   if (!val?.trim()) return []
@@ -505,8 +526,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                         />
                       </div>
 
-                      {/* Meta: contratante, prazo, responsável */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 12px' }}>
+                      {/* Meta: contratante, prazo, responsável, status */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px 12px' }}>
                         <div>
                           <span style={lbl}>Contratante</span>
                           <input
@@ -533,6 +554,20 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                             placeholder="Nome…"
                             style={inp({ fontSize: 12 })}
                           />
+                        </div>
+                        <div>
+                          <span style={lbl}>Status</span>
+                          <select
+                            value={t.status ?? ''}
+                            onChange={e => updateTopico(t.id, 'status', e.target.value)}
+                            style={{ ...inp({ fontSize: 12 }), cursor: 'pointer' }}
+                          >
+                            <option value="">— sem status —</option>
+                            <option value="Pendente">Pendente</option>
+                            <option value="Em andamento">Em andamento</option>
+                            <option value="Concluído">Concluído</option>
+                            <option value="Cancelado">Cancelado</option>
+                          </select>
                         </div>
                       </div>
 
@@ -802,6 +837,7 @@ export function PrintView({ titulo, dataVal, cliente, local, numAta, status, par
                 <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span>{idx + 1}. {t.titulo || '(Sem título)'}</span>
                   {t.finalizado && <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: '#D1FAE5', padding: '2px 8px', borderRadius: 999 }}>✓ Finalizado</span>}
+                  {t.status && <StatusBadge status={t.status} />}
                 </div>
                 {t.descricao && <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{t.descricao}</div>}
                 {(t.contratante || t.prazo || t.responsavel) && (
