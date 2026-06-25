@@ -40,5 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# maintenance scripts (contain env vars, not for version control)
-/scripts/
+# maintenance scripts (contain env vars, não versionar exceto backup)
+/scripts/*
+!/scripts/backup-supabase.ts
+
+# backups — dados sensíveis, nunca versionar
+/backups/
