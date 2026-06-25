@@ -19,7 +19,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.tags     !== undefined) updates.tags     = Array.isArray(body.tags) ? body.tags : []
   if (body.notes    !== undefined) updates.notes    = String(body.notes ?? '').trim()
   if (body.corpo    !== undefined) updates.corpo    = String(body.corpo ?? '').trim() || null
-  if (body.file     !== undefined) updates.file     = body.file
+  if (body.file     !== undefined) {
+    updates.file      = body.file
+    const f = body.file as { name?: string; size?: number } | null
+    updates.file_name = body.file_name ?? f?.name ?? null
+    updates.file_size = body.file_size ?? f?.size ?? null
+  }
 
   if (Object.keys(updates).length === 0)
     return Response.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })

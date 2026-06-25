@@ -23,7 +23,8 @@ type Template = {
   tags: string[]
   notes: string
   corpo: string
-  file: FileData | null
+  fileName: string | null   // metadado — não carrega file.data no load inicial
+  fileSize: number | null
   createdAt: number
   updatedAt: number
 }
@@ -44,12 +45,16 @@ function uid() { return 't_' + Date.now().toString(36) + '_' + Math.random().toS
 
 function rowToTemplate(row: {
   id: string; title: string; client: string; category: string; subject: string
-  tags: unknown; notes: string; corpo: string | null; created_at: string; updated_at: string
+  tags: unknown; notes: string; corpo: string | null
+  file_name: string | null; file_size: number | null
+  created_at: string; updated_at: string
 }): Template {
   return {
     id: row.id, title: row.title, client: row.client, category: row.category,
     subject: row.subject, tags: (row.tags as string[]) ?? [], notes: row.notes,
-    corpo: row.corpo ?? '', file: null,
+    corpo: row.corpo ?? '',
+    fileName: row.file_name ?? null,
+    fileSize: row.file_size ?? null,
     createdAt: new Date(row.created_at).getTime(),
     updatedAt: new Date(row.updated_at).getTime(),
   }
@@ -57,6 +62,28 @@ function rowToTemplate(row: {
 
 function formatDate(ts: number) {
   return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function fmtSize(bytes: number | null) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+// Converte base64 data URL → Blob e dispara download — mais confiável que a.href = dataUrl para binários
+function downloadBlob(dataUrl: string, fileName: string) {
+  const [header, b64] = dataUrl.split(',')
+  const mime = header.match(/:(.*?);/)?.[1] ?? 'application/vnd.ms-outlook'
+  const bytes = atob(b64)
+  const arr = new Uint8Array(bytes.length)
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i)
+  const blob = new Blob([arr], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = fileName
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 export default function EmailsClient() {
@@ -69,16 +96,18 @@ export default function EmailsClient() {
   const [toast, setToast] = useState({ msg: '', show: false })
   const [expandedCorpo, setExpandedCorpo] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copiedRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Carrega apenas metadados — sem a coluna file (base64 pesado)
   useEffect(() => {
     const supabase = createClient()
     let cancelled = false
     supabase
       .from('email_templates')
-      .select('*')
+      .select('id, title, client, category, subject, tags, notes, corpo, file_name, file_size, created_at, updated_at')
       .order('title', { ascending: true })
       .then(({ data, error }) => {
         if (cancelled) return
@@ -110,7 +139,7 @@ export default function EmailsClient() {
       setModal({
         open: true, editId: id, title: t.title, client: t.client, category: t.category,
         subject: t.subject, tags: t.tags.join(', '), notes: t.notes, corpo: t.corpo,
-        file: t.file, dragOver: false,
+        file: null, dragOver: false,  // nunca carregamos o file no estado — só ao baixar
       })
     } else {
       setModal({ ...MODAL_INIT, open: true })
@@ -156,11 +185,22 @@ export default function EmailsClient() {
         subject: subject.trim(), tags: parsedTags, notes: notes.trim(),
         corpo: corpo.trim(),
       }
-      if (file && file !== existing?.file) payload.file = file
+      if (file) {
+        payload.file = file
+        payload.file_name = file.name
+        payload.file_size = file.size
+      }
 
       // Optimistic update
       setTemplates(prev => prev.map(x =>
-        x.id === editId ? { ...x, ...payload, corpo: corpo.trim(), tags: parsedTags, updatedAt: now } : x
+        x.id === editId ? {
+          ...x,
+          title: title.trim(), client: client.trim(), category,
+          subject: subject.trim(), tags: parsedTags, notes: notes.trim(),
+          corpo: corpo.trim(),
+          ...(file ? { fileName: file.name, fileSize: file.size } : {}),
+          updatedAt: now,
+        } : x
       ))
       closeModal()
       showToast('Template atualizado')
@@ -171,12 +211,16 @@ export default function EmailsClient() {
         body: JSON.stringify(payload),
       })
       if (!res.ok) { console.error('Erro ao atualizar template'); showToast('Erro ao salvar') }
+      else if (existing) void 0 // silencio
     } else {
       const id = uid()
       const tpl: Template = {
         id, title: title.trim(), client: client.trim(), category,
         subject: subject.trim(), tags: parsedTags, notes: notes.trim(),
-        corpo: corpo.trim(), file, createdAt: now, updatedAt: now,
+        corpo: corpo.trim(),
+        fileName: file?.name ?? null,
+        fileSize: file?.size ?? null,
+        createdAt: now, updatedAt: now,
       }
       setTemplates(prev => [tpl, ...prev])
       closeModal()
@@ -188,7 +232,9 @@ export default function EmailsClient() {
         body: JSON.stringify({
           id: tpl.id, title: tpl.title, client: tpl.client, category: tpl.category,
           subject: tpl.subject, tags: tpl.tags, notes: tpl.notes,
-          corpo: tpl.corpo, file: tpl.file,
+          corpo: tpl.corpo, file,
+          file_name: file?.name ?? null,
+          file_size: file?.size ?? null,
         }),
       })
       if (!res.ok) { console.error('Erro ao criar template'); showToast('Erro ao salvar') }
@@ -203,7 +249,9 @@ export default function EmailsClient() {
     if (!res.ok) console.error('Erro ao excluir template')
   }
 
-  async function downloadTemplate(id: string, successMsg?: string) {
+  // Busca APENAS o campo file (base64) na hora do download — o resto já está em memória
+  async function downloadTemplate(id: string) {
+    setDownloading(id)
     showToast('Carregando arquivo…')
     const supabase = createClient()
     const { data, error } = await supabase
@@ -211,13 +259,12 @@ export default function EmailsClient() {
       .select('file')
       .eq('id', id)
       .single()
+    setDownloading(null)
     if (error || !data?.file) { showToast('Arquivo não encontrado'); return }
     const f = data.file as FileData
-    if (!f.data) { showToast('Arquivo sem dados'); return }
-    const a = document.createElement('a')
-    a.href = f.data; a.download = f.name
-    a.click()
-    showToast(successMsg ?? 'Download iniciado')
+    if (!f.data) { showToast('Arquivo sem dados binários'); return }
+    downloadBlob(f.data, f.name)
+    showToast('Arquivo baixado — clique nele para abrir no Outlook ↓')
   }
 
   const clients = useMemo(() =>
@@ -296,7 +343,6 @@ export default function EmailsClient() {
               <input style={inputStyle} value={modal.subject} onChange={e => setModal(m => ({ ...m, subject: e.target.value }))} placeholder="Ex: Informações para Novas Empresas - 2026" />
             </div>
 
-            {/* Corpo do e-mail */}
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Corpo do E-mail</label>
               <textarea
@@ -319,8 +365,17 @@ export default function EmailsClient() {
                 placeholder="Ex: Enviar quando uma nova empresa for cadastrada no portal." />
             </div>
 
+            {/* Arquivo .msg */}
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Arquivo .msg do Outlook (opcional para edições)</label>
+              <label style={labelStyle}>
+                Arquivo .msg do Outlook
+                {modal.editId && (() => {
+                  const tpl = templates.find(x => x.id === modal.editId)
+                  return tpl?.fileName
+                    ? <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: PRIMARY, marginLeft: 8 }}>atual: {tpl.fileName}</span>
+                    : <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: MUTED, marginLeft: 8 }}>(nenhum arquivo)</span>
+                })()}
+              </label>
               <input ref={fileInputRef} type="file" accept=".msg,.eml,.oft" style={{ display: 'none' }} onChange={handleFileSelect} />
               <div
                 onDragOver={e => { e.preventDefault(); setModal(m => ({ ...m, dragOver: true })) }}
@@ -338,10 +393,14 @@ export default function EmailsClient() {
                 {modal.file ? (
                   <>
                     <div style={{ fontSize: 13, fontWeight: 600, color: PRIMARY }}>📎 {modal.file.name}</div>
-                    <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>{(modal.file.size / 1024).toFixed(1)} KB · clique para trocar</div>
+                    <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>{fmtSize(modal.file.size)} · clique para trocar</div>
                   </>
                 ) : modal.editId ? (
-                  <div style={{ fontSize: 13, color: MUTED }}>Clique para trocar o arquivo .msg (deixe em branco para manter o atual)</div>
+                  <div style={{ fontSize: 13, color: MUTED }}>
+                    {templates.find(x => x.id === modal.editId)?.fileName
+                      ? 'Clique para enviar novo arquivo e substituir o atual'
+                      : 'Clique para adicionar arquivo .msg (ou arraste aqui)'}
+                  </div>
                 ) : (
                   <div style={{ fontSize: 13, color: MUTED }}>Clique para selecionar ou arraste o arquivo .msg aqui</div>
                 )}
@@ -373,7 +432,6 @@ export default function EmailsClient() {
 
       {/* Page */}
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: INK, margin: 0 }}>Biblioteca de E-mails</h1>
@@ -384,12 +442,9 @@ export default function EmailsClient() {
           </button>
         </div>
 
-        {/* Pasta switch */}
         <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: 10, padding: 4, marginBottom: 24 }}>
           {PASTAS.map(pasta => (
-            <button
-              key={pasta}
-              onClick={() => { setActiveTab(pasta); setFilterClient(''); setSearch('') }}
+            <button key={pasta} onClick={() => { setActiveTab(pasta); setFilterClient(''); setSearch('') }}
               style={{
                 flex: 1, padding: '10px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
                 fontFamily: 'inherit', fontSize: 14, fontWeight: activeTab === pasta ? 700 : 500,
@@ -398,13 +453,10 @@ export default function EmailsClient() {
                 boxShadow: activeTab === pasta ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
                 transition: 'all 0.18s',
               }}
-            >
-              {pasta}
-            </button>
+            >{pasta}</button>
           ))}
         </div>
 
-        {/* Controls */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, marginBottom: 24 }}>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: MUTED, pointerEvents: 'none' }}>🔍</span>
@@ -419,14 +471,12 @@ export default function EmailsClient() {
           </select>
         </div>
 
-        {/* Stats */}
         <div style={{ display: 'flex', gap: 32, padding: '16px 0', marginBottom: 24, borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.08em', fontVariantNumeric: 'tabular-nums' }}>
           <span><strong style={{ fontSize: 22, fontWeight: 600, color: INK, textTransform: 'none', letterSpacing: 0, marginRight: 6 }}>{stats.total}</strong>templates</span>
           <span><strong style={{ fontSize: 22, fontWeight: 600, color: INK, textTransform: 'none', letterSpacing: 0, marginRight: 6 }}>{stats.clients}</strong>clientes</span>
           <span><strong style={{ fontSize: 22, fontWeight: 600, color: INK, textTransform: 'none', letterSpacing: 0, marginRight: 6 }}>{stats.recent}</strong>esta semana</span>
         </div>
 
-        {/* Grid */}
         {templates.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px', color: MUTED }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
@@ -484,7 +534,6 @@ export default function EmailsClient() {
                     </div>
                   )}
 
-                  {/* Corpo do e-mail */}
                   {t.corpo && (
                     <div style={{ marginBottom: 10 }}>
                       <button
@@ -510,20 +559,31 @@ export default function EmailsClient() {
                     </div>
                   )}
 
-                  {t.createdAt ? (
+                  {/* Metadado do arquivo */}
+                  {t.fileName && (
                     <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 'auto', paddingTop: 6 }}>
-                      📎 .msg · {formatDate(t.createdAt)}
+                      📎 {t.fileName}{t.fileSize ? ` · ${fmtSize(t.fileSize)}` : ''} · {formatDate(t.updatedAt)}
                     </div>
-                  ) : null}
+                  )}
                 </div>
 
-                <div style={{ padding: '12px 20px', borderTop: `1px solid ${BORDER}` }}>
-                  <button
-                    onClick={() => downloadTemplate(t.id, 'Arquivo baixado — clique nele na barra do Chrome para abrir no Outlook ↓')}
-                    style={{ width: '100%', padding: '7px 12px', borderRadius: 6, border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}
-                  >
-                    📨 Abrir no Outlook
-                  </button>
+                <div style={{ padding: '12px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 8 }}>
+                  {t.fileName ? (
+                    <button
+                      onClick={() => void downloadTemplate(t.id)}
+                      disabled={downloading === t.id}
+                      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: 'none', background: downloading === t.id ? '#B0BEC5' : ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: downloading === t.id ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit', transition: 'background .15s' }}
+                    >
+                      {downloading === t.id ? '⏳ Carregando…' : '📨 Abrir no Outlook'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => openModal(t.id)}
+                      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: `1.5px dashed ${BORDER}`, background: '#FAFBFD', color: MUTED, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      + Adicionar arquivo .msg
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

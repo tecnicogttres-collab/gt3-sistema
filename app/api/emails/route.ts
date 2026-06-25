@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const body = await req.json()
-  const { title, client, category, subject, tags, notes, corpo, file } = body
+  const { title, client, category, subject, tags, notes, corpo, file, file_name, file_size } = body
 
   if (!title?.trim() || !client?.trim())
     return Response.json({ error: 'Título e cliente são obrigatórios' }, { status: 400 })
@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
       notes: (notes ?? '').trim(),
       corpo: (corpo ?? '').trim() || null,
       file: file ?? null,
+      file_name: file_name ?? (file as { name?: string } | null)?.name ?? null,
+      file_size: file_size ?? (file as { size?: number } | null)?.size ?? null,
     })
     .select('id, title, client, category, subject, tags, notes, corpo, created_at, updated_at')
     .single()
