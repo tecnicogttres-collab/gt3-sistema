@@ -12,7 +12,6 @@ type Ata = {
   id: string
   titulo: string | null
   conteudo: string
-  resumo_geral: string | null
   data: string
   status: 'Rascunho' | 'Aguardando Validação' | 'Validada'
   autor_id: string
@@ -215,6 +214,7 @@ export default function AtasContratantesClient() {
   const [showEditor, setShowEditor] = useState(false)
   const [editingAta, setEditingAta] = useState<Ata | null>(null)
   const [copyingAta, setCopyingAta] = useState<Ata | null>(null)
+  const [novaReuniaoAta, setNovaReuniaoAta] = useState<Ata | null>(null)
   const [openClientes, setOpenClientes] = useState<Set<string>>(new Set())
   const [openYears, setOpenYears] = useState<Set<string>>(new Set())
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set())
@@ -366,7 +366,6 @@ export default function AtasContratantesClient() {
       local_reuniao: form.localReuniao,
       numero_ata: form.numeroAta,
       participantes: form.participantes,
-      resumo_geral: form.resumoGeral ?? null,
     }
   }
 
@@ -700,6 +699,9 @@ export default function AtasContratantesClient() {
                       >
                         ⊕ Nova a partir desta
                       </button>
+                      <button onClick={() => setNovaReuniaoAta(selected)} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }}>
+                        Nova reunião
+                      </button>
                       <button onClick={() => { setEditingAta(selected) }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
                         Editar
                       </button>
@@ -739,47 +741,6 @@ export default function AtasContratantesClient() {
                     </div>
                   )}
 
-                  {/* Situação Geral */}
-                  {(() => {
-                    const entries: TopicoHistorico[] = (() => {
-                      if (!selected?.resumo_geral) return []
-                      try { return JSON.parse(selected.resumo_geral) } catch { return [] }
-                    })()
-                    const current = entries[0]
-                    const hist = entries.slice(1)
-                    if (!current?.texto) return null
-                    return (
-                      <div style={{ marginBottom: 24 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(42,79,150,0.10)' }}>
-                          Situação Geral
-                        </div>
-                        <div style={{ padding: '12px 16px', background: '#FAFBFE', borderRadius: 8, border: '1px solid rgba(42,79,150,0.12)' }}>
-                          <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, marginBottom: 6 }}>
-                            {current.data ? new Date(current.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                          </div>
-                          <div style={{ fontSize: 13, color: '#1a1f2e', whiteSpace: 'pre-wrap' as const, lineHeight: 1.6 }}>{current.texto}</div>
-                        </div>
-                        {hist.length > 0 && (
-                          <details style={{ marginTop: 8 }}>
-                            <summary style={{ fontSize: 11, color: '#6B7A99', cursor: 'pointer', userSelect: 'none' as const }}>
-                              Histórico ({hist.length} entrada{hist.length !== 1 ? 's' : ''} anterior{hist.length !== 1 ? 'es' : ''})
-                            </summary>
-                            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8, marginTop: 8 }}>
-                              {hist.map((e, i) => (
-                                <div key={i} style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid rgba(42,79,150,0.08)' }}>
-                                  <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, marginBottom: 4 }}>
-                                    {e.data ? new Date(e.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                                  </div>
-                                  <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap' as const }}>{e.texto}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                        )}
-                      </div>
-                    )
-                  })()}
-
                   {/* Tópicos */}
                   {topicosList.length > 0 ? (
                     <div>
@@ -798,9 +759,7 @@ export default function AtasContratantesClient() {
                                 {idx + 1}. {t.titulo || '(Sem título)'}
                               </div>
                               {t.descricao && (
-                                <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0, whiteSpace: 'pre-wrap' }}>
-                                  {t.descricao}
-                                </div>
+                                <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65, marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
                               )}
                               {(t.contratante || t.prazo || t.responsavel || t.status) && (
                                 <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: (hist.length > 0 || isGestorOrAdmin) ? 10 : 0, alignItems: 'center' }}>
@@ -829,7 +788,7 @@ export default function AtasContratantesClient() {
                                               <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 3 }}>
                                                 {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
                                               </div>
-                                              <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+                                              <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: h.texto }} />
                                             </div>
                                           ))}
                                         </div>
@@ -945,7 +904,6 @@ export default function AtasContratantesClient() {
             localReuniao: editingAta.local_reuniao ?? '',
             numeroAta: editingAta.numero_ata ?? '',
             participantes: editingAta.participantes ?? '',
-            resumoGeral: editingAta.resumo_geral ?? '',
           }}
           onSave={handleEdit}
           onClose={() => setEditingAta(null)}
@@ -967,6 +925,34 @@ export default function AtasContratantesClient() {
           }}
           onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
           onClose={() => setCopyingAta(null)}
+        />
+      )}
+      {novaReuniaoAta && (
+        <AtasEditor
+          initial={{
+            titulo: novaReuniaoAta.titulo ?? '',
+            data: new Date().toISOString().slice(0, 10),
+            status: 'Rascunho',
+            conteudo: JSON.stringify(
+              parseTopicos(novaReuniaoAta.conteudo ?? '')
+                .filter(t => !t.finalizado)
+                .map(t => ({
+                  ...t,
+                  historico: t.descricao?.trim()
+                    ? [{ data: novaReuniaoAta.data, texto: t.descricao }, ...(t.historico ?? [])]
+                    : (t.historico ?? []),
+                  descricao: '',
+                }))
+            ),
+            cliente: novaReuniaoAta.cliente ?? '',
+            localReuniao: novaReuniaoAta.local_reuniao ?? '',
+            numeroAta: '',
+            participantes: novaReuniaoAta.participantes ?? '',
+          }}
+          onSave={async (form) => { await handleCreate(form); setNovaReuniaoAta(null) }}
+          onClose={() => setNovaReuniaoAta(null)}
+          enableNotifModal
+          availableUsers={allUsers}
         />
       )}
 

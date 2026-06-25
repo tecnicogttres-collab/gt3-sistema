@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
   const body = await request.json() as {
     titulo?: string; conteudo?: string; data: string; status?: string
     cliente?: string; local_reuniao?: string; numero_ata?: string; participantes?: string
-    resumo_geral?: string
   }
 
   const VALID_STATUS = ['Rascunho', 'Aguardando Validação', 'Validada']
@@ -76,7 +75,6 @@ export async function POST(request: NextRequest) {
       local_reuniao: body.local_reuniao?.trim() || null,
       numero_ata: body.numero_ata?.trim() || null,
       participantes: body.participantes?.trim() || null,
-      resumo_geral: body.resumo_geral || null,
     })
     .select('*, autor:profiles!autor_id(nome)')
     .single()

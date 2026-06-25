@@ -1,6 +1,66 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+
+// ─── Rich Text Editor ─────────────────────────────────────────────────────────
+
+function RichTextEditor({ value, onChange, placeholder, minRows = 3 }: {
+  value: string
+  onChange: (html: string) => void
+  placeholder?: string
+  minRows?: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const focused = useRef(false)
+
+  useEffect(() => {
+    if (!ref.current) return
+    // Sync only on mount or when externally cleared
+    if (!focused.current && ref.current.innerHTML !== value) {
+      ref.current.innerHTML = value
+    }
+  }, [value])
+
+  const execCmd = (cmd: string, val?: string) => {
+    ref.current?.focus()
+    document.execCommand(cmd, false, val)
+    onChange(ref.current?.innerHTML ?? '')
+  }
+
+  const toolbarBtns = [
+    { label: 'N', title: 'Negrito', cmd: 'bold',          style: { fontWeight: 800 } },
+    { label: 'I', title: 'Itálico', cmd: 'italic',         style: { fontStyle: 'italic' } },
+    { label: 'S', title: 'Sublinhado', cmd: 'underline',   style: { textDecoration: 'underline' } },
+    { label: 'T', title: 'Tachado',  cmd: 'strikeThrough', style: { textDecoration: 'line-through' } },
+  ]
+
+  return (
+    <div style={{ border: '1px solid rgba(42,79,150,0.18)', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '3px 6px', borderBottom: '1px solid rgba(42,79,150,0.09)', background: '#F8FAFC' }}>
+        {toolbarBtns.map(btn => (
+          <button
+            key={btn.cmd}
+            title={btn.title}
+            onMouseDown={e => { e.preventDefault(); execCmd(btn.cmd) }}
+            style={{ width: 24, height: 22, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2A4F96', display: 'flex', alignItems: 'center', justifyContent: 'center', ...btn.style }}
+          >{btn.label}</button>
+        ))}
+        <div style={{ width: 1, height: 14, background: 'rgba(42,79,150,0.15)', margin: '0 3px' }} />
+        <button title="Lista" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }} style={{ width: 24, height: 22, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2A4F96' }}>≡</button>
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder={placeholder}
+        onFocus={() => { focused.current = true }}
+        onBlur={() => { focused.current = false }}
+        onInput={() => onChange(ref.current?.innerHTML ?? '')}
+        style={{ minHeight: minRows * 26, padding: '8px 12px', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', outline: 'none', lineHeight: 1.65, overflowWrap: 'break-word' as const }}
+      />
+    </div>
+  )
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +96,6 @@ export type AtaEditorData = {
   participantes: string   // JSON: Participante[]
   status: string
   conteudo: string        // JSON: Topico[]
-  resumoGeral?: string    // JSON: TopicoHistorico[]
   notifyUserIds?: string[]
 }
 
@@ -151,16 +210,6 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   const [historyOpenId,    setHistoryOpenId]    = useState<string | null>(null)
   const [addHistForm,      setAddHistForm]      = useState<{ topicId: string; data: string; texto: string } | null>(null)
 
-  // Resumo Geral
-  const todayIso = new Date().toISOString().slice(0, 10)
-  const [resumoEntries, setResumoEntries] = useState<TopicoHistorico[]>(() => {
-    if (!initial?.resumoGeral) return [{ data: todayIso, texto: '' }]
-    try {
-      const parsed: TopicoHistorico[] = JSON.parse(initial.resumoGeral)
-      return parsed.length > 0 ? parsed : [{ data: todayIso, texto: '' }]
-    } catch { return [{ data: todayIso, texto: '' }] }
-  })
-  const [resumoHistOpen, setResumoHistOpen] = useState(false)
 
   // Save
   const [saving, setSaving] = useState(false)
@@ -218,7 +267,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   function arquivarDescricao(topicId: string) {
     const topico = topicos.find(t => t.id === topicId)
     if (!topico?.descricao.trim()) return
-    const entry: TopicoHistorico = { data: new Date().toISOString().slice(0, 10), texto: topico.descricao }
+    const entry: TopicoHistorico = { data: dataVal || new Date().toISOString().slice(0, 10), texto: topico.descricao }
     setTopicos(prev => prev.map(t => t.id === topicId
       ? { ...t, descricao: '', historico: [entry, ...(t.historico ?? [])] }
       : t
@@ -241,15 +290,6 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
       ? { ...t, historico: (t.historico ?? []).filter((_, i) => i !== idx) }
       : t
     ))
-  }
-
-  function arquivarResumo() {
-    const today = new Date().toISOString().slice(0, 10)
-    setResumoEntries(prev => {
-      if (!prev[0]?.texto?.trim()) return [{ data: today, texto: '' }]
-      return [{ data: today, texto: '' }, ...prev]
-    })
-    setResumoHistOpen(true)
   }
 
   function moveTopico(id: string, dir: -1 | 1) {
@@ -291,7 +331,6 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
         participantes: JSON.stringify(participantes),
         status,
         conteudo: JSON.stringify(topicos),
-        resumoGeral: JSON.stringify(resumoEntries.filter(e => e.texto.trim())),
         notifyUserIds,
       })
     } catch (e: unknown) {
@@ -328,7 +367,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#F0F3F9', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* Print styles */}
+      {/* Print + richtext styles */}
       <style>{`
         @media screen { #gt3-ata-print { display: none !important; } }
         @media print {
@@ -336,6 +375,9 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
           #gt3-ata-print { visibility: visible !important; display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
           #gt3-ata-print * { visibility: visible !important; }
         }
+        [contenteditable]:empty:before { content: attr(data-placeholder); color: #adb5bd; pointer-events: none; display: block; }
+        [contenteditable] ul { margin: 4px 0; padding-left: 20px; }
+        [contenteditable] li { margin: 2px 0; }
       `}</style>
 
       {/* ── Topbar ── */}
@@ -503,64 +545,6 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
               )
             })()}
 
-            {/* ── Situação Geral ── */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ ...sectionTitle(), borderBottom: '1px solid rgba(42,79,150,0.10)', paddingBottom: 8, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>Situação Geral</span>
-                <button
-                  onClick={arquivarResumo}
-                  title="Arquiva o texto atual no histórico e abre novo campo para a reunião de hoje"
-                  style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.25)', background: '#EEF2FB', color: '#2A4F96', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}
-                >
-                  + Nova entrada
-                </button>
-              </div>
-
-              {/* Entrada atual */}
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, marginBottom: 4 }}>
-                  {resumoEntries[0]?.data
-                    ? new Date(resumoEntries[0].data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-                    : '—'}
-                </div>
-                <textarea
-                  value={resumoEntries[0]?.texto ?? ''}
-                  onChange={e => setResumoEntries(prev => {
-                    const next = [...prev]
-                    next[0] = { ...next[0], texto: e.target.value }
-                    return next
-                  })}
-                  placeholder="Descreva a situação geral da ata nesta reunião…"
-                  rows={4}
-                  style={{ width: '100%', resize: 'vertical', border: '1px solid rgba(42,79,150,0.18)', borderRadius: 8, padding: '10px 12px', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', background: '#FAFBFE', outline: 'none', boxSizing: 'border-box' as const }}
-                />
-              </div>
-
-              {/* Histórico de entradas anteriores */}
-              {resumoEntries.length > 1 && (
-                <div>
-                  <button
-                    onClick={() => setResumoHistOpen(v => !v)}
-                    style={{ fontSize: 11, color: '#6B7A99', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: resumoHistOpen ? 8 : 0, display: 'flex', alignItems: 'center', gap: 4 }}
-                  >
-                    {resumoHistOpen ? '▲' : '▼'} Histórico ({resumoEntries.length - 1} entrada{resumoEntries.length - 1 !== 1 ? 's' : ''} anterior{resumoEntries.length - 1 !== 1 ? 'es' : ''})
-                  </button>
-                  {resumoHistOpen && (
-                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
-                      {resumoEntries.slice(1).map((e, i) => (
-                        <div key={i} style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid rgba(42,79,150,0.08)' }}>
-                          <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, marginBottom: 4 }}>
-                            {e.data ? new Date(e.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                          </div>
-                          <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap' as const }}>{e.texto}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
             {/* ── Tópicos ── */}
             <div>
               <div style={{ ...sectionTitle(), borderBottom: '1px solid rgba(42,79,150,0.10)', paddingBottom: 8 }}>
@@ -597,14 +581,17 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                         />
                       </div>
 
-                      {/* Descrição */}
+                      {/* Andamento desta reunião */}
                       <div style={{ marginBottom: 12 }}>
-                        <textarea
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Andamento</span>
+                          {dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
+                        </div>
+                        <RichTextEditor
                           value={t.descricao}
-                          onChange={e => updateTopico(t.id, 'descricao', e.target.value)}
+                          onChange={html => updateTopico(t.id, 'descricao', html)}
                           placeholder="Descreva o ponto discutido, decisão tomada ou encaminhamento…"
-                          rows={3}
-                          style={{ ...inp(), resize: 'vertical', lineHeight: 1.6 }}
+                          minRows={3}
                         />
                       </div>
 
@@ -685,7 +672,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                                 <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 4 }}>
                                   {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
                                 </div>
-                                <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{h.texto}</div>
+                                <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: h.texto }} />
                                 <button
                                   onClick={() => removeHistoricoEntry(t.id, i)}
                                   title="Remover entrada"
