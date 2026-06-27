@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import AtasEditor, { PrintView, StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
+import AtasEditor, { StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
+import { renderAtaHtml } from '../lib/ata-html'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ type Ata = {
   local_reuniao: string | null
   numero_ata: string | null
   participantes: string | null
+  share_token: string | null
+  share_enabled: boolean | null
 }
 
 type Leitura = { user_id: string; nome: string; lido_em?: string }
@@ -72,99 +75,34 @@ function parseTopicos(val: string): Topico[] {
   return []
 }
 
-function escapeHtml(s: string | null | undefined): string {
-  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[], forPrint = false): string {
+  return renderAtaHtml(ata, topicos, partes, forPrint)
 }
 
-function generateAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]): string {
-  const dateDisplay = ata.data
-    ? new Date(ata.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-    : '—'
-  const prazoFmt = (iso: string) => iso ? new Date(iso + 'T12:00').toLocaleDateString('pt-BR') : '—'
-  const titulo = ata.titulo || `Ata de Reunião — ${ata.cliente ?? ''}`
+function printAtaPdf(ata: Ata, topicos: Topico[], partes: Participante[]) {
+  const html = generateAtaHtml(ata, topicos, partes, true)
+  // Imprime em um iframe isolado: o documento sai limpo (sem a interface do app),
+  // sem páginas em branco e sem depender de bloqueador de pop-up.
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+  document.body.appendChild(iframe)
 
-  const partsHtml = partes.length > 0
-    ? `<div style="margin-bottom:24px"><div style="font-size:11px;font-weight:700;color:#2A4F96;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Participantes</div>
-        ${partes.map(p => `<div style="margin-bottom:4px;font-size:13px"><strong>${escapeHtml(p.nome)}</strong>${p.empresa ? ` — ${escapeHtml(p.empresa)}` : ''}</div>`).join('')}</div>` : ''
+  const doc = iframe.contentWindow?.document
+  if (!doc) { document.body.removeChild(iframe); return }
+  doc.open()
+  doc.write(html)
+  doc.close()
 
-  const topicosHtml = topicos.map((t, idx) => {
-    const cor = t.cor ?? '#2A4F96'
-    const hist: TopicoHistorico[] = t.historico ?? []
-    const statusColors: Record<string, string> = {
-      'Pendente': 'color:#92400E;background:#FEF3C7',
-      'Em análise': 'color:#6D28D9;background:#EDE9FE',
-      'Em andamento': 'color:#1D4ED8;background:#DBEAFE',
-      'Acompanhamento': 'color:#0F766E;background:#CCFBF1',
-      'Concluído': 'color:#065F46;background:#D1FAE5',
-      'Cancelado': 'color:#6B7280;background:#F3F4F6',
-    }
-    const statusLabel: Record<string, string> = {
-      'Pendente': '● Pendente', 'Em análise': '◔ Em análise',
-      'Em andamento': '◑ Em andamento', 'Acompanhamento': '↻ Acompanhamento',
-      'Concluído': '✓ Concluído', 'Cancelado': '✕ Cancelado',
-    }
-    const metaHtml = (t.contratante || t.prazo || t.responsavel || t.status)
-      ? `<div style="display:flex;gap:16px;font-size:12px;color:#5a6178;border-top:1px solid #eee;padding-top:8px;flex-wrap:wrap;align-items:center;margin-bottom:${hist.length > 0 ? '8px' : '0'}">
-          ${t.contratante ? `<span><strong>Contratante:</strong> ${escapeHtml(t.contratante)}</span>` : ''}
-          ${t.prazo ? `<span><strong>Prazo:</strong> ${prazoFmt(t.prazo)}</span>` : ''}
-          ${t.responsavel ? `<span><strong>Responsável:</strong> ${escapeHtml(t.responsavel)}</span>` : ''}
-          ${t.status && statusColors[t.status] ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;${statusColors[t.status]}">${statusLabel[t.status]}</span>` : ''}</div>` : ''
-    const histHtml = hist.length > 0
-      ? `<div style="border-top:1px solid #eee;padding-top:8px">
-          <button onclick="toggleHist(${idx})" style="font-family:inherit;font-size:11px;font-weight:700;color:${cor};background:#fff;border:1px solid ${cor}44;border-radius:6px;padding:3px 10px;cursor:pointer;margin-bottom:4px">
-            📋 Histórico (${hist.length})
-          </button>
-          <div id="hist-${idx}" style="display:none;margin-top:8px">
-            ${hist.map(h => `<div style="margin-bottom:8px;padding:8px 12px;background:#F0F4FF;border-radius:8px;border-left:2px solid ${cor}">
-              <div style="font-size:11px;font-weight:700;color:${cor};margin-bottom:2px">${new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-              <div style="font-size:12px;color:#334155;line-height:1.55">${h.texto}</div>
-            </div>`).join('')}
-          </div></div>` : ''
-    return `<div style="margin-bottom:18px;padding:14px 16px;border:1px solid #e0e5ef;border-left:3px solid ${cor};border-radius:6px${t.finalizado ? ';opacity:.75' : ''}">
-      <div style="font-weight:700;font-size:14px;color:${cor};margin-bottom:6px;display:flex;align-items:center;gap:8px">
-        <span>${idx + 1}. ${escapeHtml(t.titulo || '(Sem título)')}</span>
-        ${t.finalizado ? `<span style="font-size:10px;font-weight:700;color:#10B981;background:#D1FAE5;padding:2px 8px;border-radius:999px">✓ Finalizado</span>` : ''}
-      </div>
-      ${t.andamentoGeral ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:#6B7A99;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Até aqui:</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.andamentoGeral}</div></div>` : ''}
-      ${t.descricao ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Na data desta reunião (${dateDisplay}), definiu-se:</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.descricao}</div></div>` : ''}
-      ${metaHtml}${histHtml}</div>`
-  }).join('')
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(titulo)}</title>
-<style>body{font-family:'Segoe UI',Arial,sans-serif;max-width:820px;margin:0 auto;padding:40px 32px;color:#1a1f2e;font-size:13px}button{font-family:inherit}</style>
-</head><body>
-<div style="border-bottom:3px solid #2A4F96;margin-bottom:24px;padding-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div>
-    <div style="font-size:20px;font-weight:700;color:#2A4F96;margin-bottom:4px">${escapeHtml(titulo)}</div>
-    <div style="font-size:13px;color:#5a6178">${dateDisplay}${ata.local_reuniao ? ` — ${escapeHtml(ata.local_reuniao)}` : ''}</div>
-  </div>
-  <div style="text-align:right">
-    ${ata.numero_ata ? `<div style="display:inline-block;padding:3px 10px;background:#D1AE6E;color:#fff;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:4px">${escapeHtml(ata.numero_ata)}</div><br>` : ''}
-    <span style="font-size:11px;color:#5a6178">${ata.status}</span>
-  </div>
-</div>
-${ata.cliente ? `<div style="margin-bottom:16px;font-size:13px;color:#334155"><strong>Contratante:</strong> ${escapeHtml(ata.cliente)}</div>` : ''}
-${partsHtml}
-<div>
-  <div style="font-size:11px;font-weight:700;color:#2A4F96;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Pontos discutidos</div>
-  ${topicosHtml}
-</div>
-<script>function toggleHist(i){var e=document.getElementById('hist-'+i);e.style.display=e.style.display==='none'?'block':'none'}</script>
-</body></html>`
-}
-
-function downloadAtaHtml(ata: Ata, topicos: Topico[], partes: Participante[]) {
-  const html = generateAtaHtml(ata, topicos, partes)
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `ata-${(ata.cliente ?? 'contratante').replace(/\s+/g, '-').toLowerCase()}-${ata.data}.html`
-  document.body.appendChild(a); a.click(); document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  const trigger = () => {
+    const win = iframe.contentWindow
+    if (!win) return
+    win.focus()
+    win.print()
+    setTimeout(() => { if (iframe.parentNode) document.body.removeChild(iframe) }, 1500)
+  }
+  if (doc.readyState === 'complete') setTimeout(trigger, 150)
+  else iframe.onload = () => setTimeout(trigger, 150)
 }
 
 function getConteudoText(val: string): string {
@@ -232,6 +170,9 @@ export default function AtasContratantesClient() {
   const [statusNotifModal, setStatusNotifModal] = useState(false)
   const [statusNotifOption, setStatusNotifOption] = useState<'none' | 'all' | 'select'>('none')
   const [statusNotifSelected, setStatusNotifSelected] = useState<Set<string>>(new Set())
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -470,6 +411,39 @@ export default function AtasContratantesClient() {
     await applyStatusChange('Validada', notifyUserIds)
   }
 
+  // ── Compartilhamento via link público ────────────────────────────────────────
+  async function enableShare(rotate = false) {
+    if (!selected) return
+    setShareBusy(true)
+    try {
+      const res = await fetch(`/api/atas-contratantes/${selected.id}/compartilhar${rotate ? '?rotate=1' : ''}`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) { alert(json.error || 'Erro ao gerar o link'); return }
+      setSelected({ ...selected, share_token: json.token, share_enabled: true })
+      setShareCopied(false)
+    } finally { setShareBusy(false) }
+  }
+
+  async function disableShare() {
+    if (!selected) return
+    setShareBusy(true)
+    try {
+      const res = await fetch(`/api/atas-contratantes/${selected.id}/compartilhar`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok) { alert(json.error || 'Erro ao desativar'); return }
+      setSelected({ ...selected, share_enabled: false })
+      setShareCopied(false)
+    } finally { setShareBusy(false) }
+  }
+
+  async function copyShareLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url)
+      setShareCopied(true)
+      setTimeout(() => setShareCopied(false), 2000)
+    } catch { /* navegador sem clipboard: o usuário copia manualmente */ }
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const tree = buildTree(atas)
@@ -674,18 +648,18 @@ export default function AtasContratantesClient() {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <button onClick={() => window.print()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>
+                  <button onClick={() => printAtaPdf(selected, parseTopicos(selected.conteudo ?? ''), partsList)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }} title="Gerar PDF (use 'Salvar como PDF' na impressão)">
                     🖨 PDF
-                  </button>
-                  <button
-                    onClick={() => downloadAtaHtml(selected, parseTopicos(selected.conteudo ?? ''), partsList)}
-                    style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}
-                    title="Baixar como arquivo HTML"
-                  >
-                    ⬡ HTML
                   </button>
                   {isGestorOrAdmin && (
                     <>
+                      <button
+                        onClick={() => { setShareCopied(false); setShareOpen(true) }}
+                        style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${selected.share_enabled ? '#10B981' : '#CBD5E0'}`, background: selected.share_enabled ? '#ECFDF5' : '#fff', color: selected.share_enabled ? '#047857' : '#5a6178', fontSize: 13, cursor: 'pointer' }}
+                        title="Gerar link para enviar ao cliente"
+                      >
+                        🔗 Link{selected.share_enabled ? ' ativo' : ''}
+                      </button>
                       <select
                         value={selected.status}
                         onChange={e => handleStatusChange(e.target.value)}
@@ -1003,29 +977,71 @@ export default function AtasContratantesClient() {
         </div>
       )}
 
-      {/* ── Print styles + hidden area for detail view PDF ── */}
-      <style>{`
-        @media screen { #gt3-detail-print { display: none !important; } }
-        @media print {
-          body * { visibility: hidden !important; }
-          #gt3-detail-print { visibility: visible !important; display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
-          #gt3-detail-print * { visibility: visible !important; }
-        }
-      `}</style>
-      {selected && (
-        <div id="gt3-detail-print">
-          <PrintView
-            titulo={selected.titulo ?? ''}
-            dataVal={selected.data}
-            cliente={selected.cliente ?? ''}
-            local={selected.local_reuniao ?? ''}
-            numAta={selected.numero_ata ?? ''}
-            status={selected.status}
-            participantes={partsList}
-            topicos={topicosList}
-          />
-        </div>
-      )}
+      {shareOpen && selected && (() => {
+        const origin = typeof window !== 'undefined' ? window.location.origin : ''
+        const url = selected.share_enabled && selected.share_token ? `${origin}/ata/${selected.share_token}` : ''
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShareOpen(false)}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 520, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>🔗 Compartilhar ata por link</div>
+              <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 20, lineHeight: 1.55 }}>
+                O cliente abre o link no navegador e vê a ata formatada (somente leitura), sem precisar de login.
+                <strong> Qualquer pessoa com o link consegue ver esta ata</strong> — envie apenas a quem deve ter acesso.
+              </p>
+
+              {url ? (
+                <>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    <input
+                      readOnly
+                      value={url}
+                      onFocus={e => e.target.select()}
+                      style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 13, color: '#334155', background: '#F8FAFC' }}
+                    />
+                    <button onClick={() => copyShareLink(url)} style={{ padding: '9px 16px', borderRadius: 8, border: 'none', background: shareCopied ? '#10B981' : '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {shareCopied ? '✓ Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginBottom: 22 }}>
+                    <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#2A4F96', textDecoration: 'none' }}>↗ Abrir para conferir</a>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #F0F4FA', paddingTop: 18 }}>
+                    <button
+                      disabled={shareBusy}
+                      onClick={() => { if (confirm('Gerar um link novo invalida o link atual. O que você já enviou deixará de funcionar. Continuar?')) enableShare(true) }}
+                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 12.5, cursor: shareBusy ? 'default' : 'pointer' }}
+                    >
+                      ↻ Gerar link novo
+                    </button>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button
+                        disabled={shareBusy}
+                        onClick={disableShare}
+                        style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #EF4444', background: '#fff', color: '#EF4444', fontSize: 13, cursor: shareBusy ? 'default' : 'pointer' }}
+                      >
+                        Desativar link
+                      </button>
+                      <button onClick={() => setShareOpen(false)} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Fechar</button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setShareOpen(false)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                  <button
+                    disabled={shareBusy}
+                    onClick={() => enableShare(false)}
+                    style={{ padding: '8px 22px', borderRadius: 8, border: 'none', background: '#10B981', color: '#fff', fontSize: 13, fontWeight: 600, cursor: shareBusy ? 'default' : 'pointer' }}
+                  >
+                    {shareBusy ? 'Gerando…' : 'Gerar link'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }
