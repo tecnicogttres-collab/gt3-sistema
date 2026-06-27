@@ -106,6 +106,26 @@ function fmtDataHora(d: string | null): string {
   return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+// "Sem avanço": ativa há 5+ dias desde a data de cadastro sem chegar a 100%
+const DIAS_SEM_AVANCO = 5
+
+function diasDesde(dateStr: string | null): number {
+  if (!dateStr) return 0
+  const base = new Date(dateStr.slice(0, 10) + 'T00:00:00')
+  if (isNaN(base.getTime())) return 0
+  return Math.floor((Date.now() - base.getTime()) / 86400000)
+}
+
+function semAvanco(t: Terceira): boolean {
+  return t.status === 'ativo' && calcProgresso(t) < 100 && diasDesde(t.data) >= DIAS_SEM_AVANCO
+}
+
+// Ordem padrão das colunas de etapas + lookup por id (para reordenação)
+const ETAPA_ORDER_DEFAULT: EtapaId[] = GUIAS.flatMap(g => g.etapas.map(e => e.id))
+const ETAPA_BY_ID: Record<string, GuiaEtapa> = Object.fromEntries(
+  GUIAS.flatMap(g => g.etapas).map(e => [e.id, e])
+)
+
 // ─── CSS-in-JS helpers ─────────────────────────────────────────────────────────
 
 const S = {
@@ -146,7 +166,7 @@ export default function CadastroTerceirasClient() {
   const [loading, setLoading] = useState(true)
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'ativos' | 'historico'>('ativos')
+  const [activeTab, setActiveTab] = useState<'ativos' | 'liberados' | 'descartados'>('ativos')
 
   // Filtros ativos
   const [busca, setBusca] = useState('')
@@ -154,13 +174,13 @@ export default function CadastroTerceirasClient() {
   const [fSubcontratante, setFSubcontratante] = useState('')
   const [fGt0180, setFGt0180] = useState('')
   const [fSoSub, setFSoSub] = useState(false)
+  const [fParado, setFParado] = useState(false)
 
   // Filtros histórico
   const [hBusca, setHBusca] = useState('')
   const [hContratante, setHContratante] = useState('')
   const [hSubcontratante, setHSubcontratante] = useState('')
   const [hGt0180, setHGt0180] = useState('')
-  const [hTipo, setHtipo] = useState('todas')
   const [hDe, setHDe] = useState('')
   const [hAte, setHAte] = useState('')
   const [hSoSub, setHSoSub] = useState(false)
@@ -209,6 +229,37 @@ export default function CadastroTerceirasClient() {
     })
   }
 
+  // Ordem das colunas de etapas (por usuário/navegador). Só gestor/adm ajusta.
+  const [etapaOrder, setEtapaOrder] = useState<EtapaId[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gt3_etapa_ordem') ?? 'null')
+      if (Array.isArray(saved)) {
+        const valid = saved.filter((id: string) => ETAPA_BY_ID[id]) as EtapaId[]
+        const missing = ETAPA_ORDER_DEFAULT.filter(id => !valid.includes(id))
+        return [...valid, ...missing]
+      }
+    } catch { /* noop */ }
+    return ETAPA_ORDER_DEFAULT
+  })
+  const orderedEtapas: GuiaEtapa[] = etapaOrder.map(id => ETAPA_BY_ID[id]).filter(Boolean)
+
+  function moveEtapa(id: EtapaId, dir: -1 | 1) {
+    setEtapaOrder(prev => {
+      const idx = prev.indexOf(id)
+      const j = idx + dir
+      if (idx < 0 || j < 0 || j >= prev.length) return prev
+      const next = [...prev]
+      ;[next[idx], next[j]] = [next[j], next[idx]]
+      localStorage.setItem('gt3_etapa_ordem', JSON.stringify(next))
+      return next
+    })
+  }
+
+  function resetEtapaOrder() {
+    setEtapaOrder(ETAPA_ORDER_DEFAULT)
+    localStorage.setItem('gt3_etapa_ordem', JSON.stringify(ETAPA_ORDER_DEFAULT))
+  }
+
   // Toast
   const [toast, setToast] = useState<{ msg: string; tipo: string } | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -224,7 +275,7 @@ export default function CadastroTerceirasClient() {
       gt0100: 'GT0100', cc_notif: 'CC/Notif.', pasta_rede: 'Pasta Rede',
       gt0180: 'GT0180', cnpj_liberado: 'CNPJ Lib.', gt8005: 'GT8005', email: 'E-mail',
     }
-    const allEtapas = GUIAS.flatMap(g => g.etapas)
+    const allEtapas = orderedEtapas
 
     let pool: Terceira[] = []
     if (reportOpts.status === 'ativos') pool = [...ativos]
@@ -361,6 +412,8 @@ export default function CadastroTerceirasClient() {
 
   const ativos = terceiras.filter(t => t.status === 'ativo')
   const arquivados = terceiras.filter(t => t.status !== 'ativo')
+  const liberados = arquivados.filter(t => t.status === 'concluido')
+  const descartados = arquivados.filter(t => t.status === 'nao_evoluiu')
 
   function matchesFiltro(t: Terceira, q: string, fC: string, fS: string, fG: string, onlySub: boolean) {
     if (q) {
@@ -376,18 +429,16 @@ export default function CadastroTerceirasClient() {
 
   const ativosFiltrados = ativos
     .filter(t => matchesFiltro(t, busca, fContratante, fSubcontratante, fGt0180, fSoSub))
+    .filter(t => !fParado || semAvanco(t))
     .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? '') || b.created_at.localeCompare(a.created_at))
+
+  const ativosParados = ativos.filter(semAvanco).length
 
   function dataRefHist(t: Terceira) {
     return t.status === 'ativo' ? t.data : (t.arquivado_em?.slice(0, 10) ?? '')
   }
 
-  let baseHist: Terceira[] = []
-  if (hTipo === 'todas') baseHist = [...arquivados, ...ativos]
-  else if (hTipo === 'arquivadas') baseHist = arquivados
-  else if (hTipo === 'concluido') baseHist = arquivados.filter(t => t.status === 'concluido')
-  else if (hTipo === 'nao_evoluiu') baseHist = arquivados.filter(t => t.status === 'nao_evoluiu')
-  else if (hTipo === 'ativo') baseHist = ativos
+  const baseHist: Terceira[] = activeTab === 'liberados' ? liberados : activeTab === 'descartados' ? descartados : []
 
   const histFiltrados = baseHist
     .filter(t => {
@@ -592,26 +643,33 @@ export default function CadastroTerceirasClient() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: `2px solid ${S.border}`, marginBottom: 14 }}>
-        {(['ativos', 'historico'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{
-            padding: '10px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-            color: activeTab === tab ? S.primary : S.textMuted,
-            borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-            borderBottomWidth: 2, borderBottomStyle: 'solid',
-            borderBottomColor: activeTab === tab ? S.primary : 'transparent',
-            background: 'none',
-            marginBottom: -2, transition: 'all 0.15s', fontFamily: 'inherit',
-          }}>
-            {tab === 'ativos' ? 'Ativos' : 'Histórico'}
-            <span style={{
-              display: 'inline-block', marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 11,
-              background: activeTab === tab ? S.primaryLight : S.bg,
-              color: activeTab === tab ? S.primary : S.textMuted,
+        {([
+          { id: 'ativos', label: 'Ativos', count: ativos.length, cor: S.primary },
+          { id: 'liberados', label: 'CNPJ Liberados', count: liberados.length, cor: S.ok },
+          { id: 'descartados', label: 'CNPJ Descartados', count: descartados.length, cor: S.danger },
+        ] as const).map(tab => {
+          const ativa = activeTab === tab.id
+          return (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+              padding: '10px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              color: ativa ? tab.cor : S.textMuted,
+              borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+              borderBottomWidth: 2, borderBottomStyle: 'solid',
+              borderBottomColor: ativa ? tab.cor : 'transparent',
+              background: 'none',
+              marginBottom: -2, transition: 'all 0.15s', fontFamily: 'inherit',
             }}>
-              {tab === 'ativos' ? ativos.length : arquivados.length}
-            </span>
-          </button>
-        ))}
+              {tab.label}
+              <span style={{
+                display: 'inline-block', marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 11,
+                background: ativa ? `${tab.cor}1a` : S.bg,
+                color: ativa ? tab.cor : S.textMuted,
+              }}>
+                {tab.count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Painel Ativos ── */}
@@ -636,27 +694,53 @@ export default function CadastroTerceirasClient() {
             <label style={{ fontSize: 11, color: S.textMuted, display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="checkbox" checked={fSoSub} onChange={e => setFSoSub(e.target.checked)} /> Só subcontratadas
             </label>
+            <label title={`Empresas ativas há ${DIAS_SEM_AVANCO}+ dias desde o cadastro sem chegar a 100%`}
+              style={{ fontSize: 11, fontWeight: 600, color: fParado ? S.danger : S.textMuted, display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, border: `1px solid ${fParado ? S.danger : S.border}`, background: fParado ? S.dangerBg : 'transparent', cursor: 'pointer' }}>
+              <input type="checkbox" checked={fParado} onChange={e => setFParado(e.target.checked)} /> ⏱ Paradas 5+ dias
+              {ativosParados > 0 && <span style={{ background: S.danger, color: '#fff', borderRadius: 9, padding: '0 6px', fontSize: 10 }}>{ativosParados}</span>}
+            </label>
             <button onClick={() => setShowEditor(v => !v)}
               style={{ marginLeft: 'auto', height: 30, padding: '0 12px', borderRadius: 6, border: `1px solid ${showEditor ? S.primary : S.border}`, background: showEditor ? S.primaryLight : 'transparent', color: showEditor ? S.primary : S.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
               ⚙ Estados
             </button>
           </div>
 
-          {/* Editor de estados por coluna */}
+          {/* Editor de estados + ordem das colunas */}
           {showEditor && (() => {
-            const allEtapas = GUIAS.flatMap(g => g.etapas)
             const disponiveis: EtapaEstado[] = ['pendente', 'ok', 'na', 'sob_demanda', 'mensal', 'validar', 'validado', 'nao_liberado', 'liberado']
             return (
               <div style={{ background: S.surface, border: `1px solid ${S.primary}33`, borderRadius: S.radius, padding: '14px 16px', marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: S.primary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
-                  Configurar ciclo de estados por coluna
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: S.primary, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Configurar colunas de etapas
+                  </div>
+                  {podeGerenciarContratantes && (
+                    <div style={{ fontSize: 10, color: S.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      Use ◀ ▶ para reordenar as colunas da tabela
+                      {JSON.stringify(etapaOrder) !== JSON.stringify(ETAPA_ORDER_DEFAULT) && (
+                        <button onClick={resetEtapaOrder}
+                          style={{ fontSize: 10, color: S.primary, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                          Restaurar ordem padrão
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {allEtapas.map(etapa => {
+                  {orderedEtapas.map((etapa, idx) => {
                     const estados = customEstados[etapa.id] ?? etapa.estados
                     const naoUsados = disponiveis.filter(s => !estados.includes(s))
+                    const moveBtn: React.CSSProperties = { width: 20, height: 20, lineHeight: 1, padding: 0, borderRadius: 4, border: `1px solid ${S.border}`, background: S.surface, color: S.primary, fontSize: 10, cursor: 'pointer' }
                     return (
                       <div key={etapa.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        {podeGerenciarContratantes && (
+                          <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
+                            <button title="Mover para a esquerda" disabled={idx === 0} onClick={() => moveEtapa(etapa.id, -1)}
+                              style={{ ...moveBtn, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'default' : 'pointer' }}>◀</button>
+                            <button title="Mover para a direita" disabled={idx === orderedEtapas.length - 1} onClick={() => moveEtapa(etapa.id, 1)}
+                              style={{ ...moveBtn, opacity: idx === orderedEtapas.length - 1 ? 0.3 : 1, cursor: idx === orderedEtapas.length - 1 ? 'default' : 'pointer' }}>▶</button>
+                          </span>
+                        )}
                         <span style={{ fontSize: 11, fontWeight: 700, color: S.text, minWidth: 100, flexShrink: 0 }}>{etapa.label}</span>
                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                           {estados.map(s => {
@@ -696,6 +780,7 @@ export default function CadastroTerceirasClient() {
           {/* Tabela ativos */}
           <TabelaAtivos
             terceiras={ativosFiltrados}
+            etapas={orderedEtapas}
             podeValidarGestor={podeValidarGestor}
             onCycleEtapa={handleCycleEtapa}
             onDescartar={handleDescartarCnpj}
@@ -705,14 +790,16 @@ export default function CadastroTerceirasClient() {
         </>
       )}
 
-      {/* ── Painel Histórico ── */}
-      {activeTab === 'historico' && (
+      {/* ── Painel CNPJ Liberados / Descartados ── */}
+      {activeTab !== 'ativos' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
-            <Kpi label="No período" value={String(histFiltrados.length)} />
-            <Kpi label="Evoluíram" value={String(histFiltrados.filter(t => t.status === 'concluido').length)} color={S.ok} />
-            <Kpi label="Não evoluíram" value={String(histFiltrados.filter(t => t.status === 'nao_evoluiu').length)} color={S.danger} />
-            <Kpi label="Pendentes" value={String(histFiltrados.filter(t => t.status === 'ativo').length)} color={S.pendente} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, marginBottom: 16, maxWidth: 420 }}>
+            <Kpi
+              label={activeTab === 'liberados' ? 'CNPJ liberados (total)' : 'CNPJ descartados (total)'}
+              value={String((activeTab === 'liberados' ? liberados : descartados).length)}
+              color={activeTab === 'liberados' ? S.ok : S.danger}
+            />
+            <Kpi label="No período filtrado" value={String(histFiltrados.length)} />
           </div>
 
           <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: S.radius, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -730,13 +817,6 @@ export default function CadastroTerceirasClient() {
               <option value="sob_demanda">Sob demanda</option>
               <option value="mensal">Mensal</option>
             </select>
-            <select style={selectStyle} value={hTipo} onChange={e => setHtipo(e.target.value)}>
-              <option value="todas">Todas</option>
-              <option value="arquivadas">Evoluíram + Não evoluíram</option>
-              <option value="concluido">Só Evoluíram</option>
-              <option value="nao_evoluiu">Só Não evoluíram</option>
-              <option value="ativo">Só Pendentes (ativas)</option>
-            </select>
             <label style={{ fontSize: 11, color: S.textMuted }}>De <input type="date" style={{ ...inputStyle, marginLeft: 4 }} value={hDe} onChange={e => setHDe(e.target.value)} /></label>
             <label style={{ fontSize: 11, color: S.textMuted }}>Até <input type="date" style={{ ...inputStyle, marginLeft: 4 }} value={hAte} onChange={e => setHAte(e.target.value)} /></label>
             <label style={{ fontSize: 11, color: S.textMuted, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -746,7 +826,7 @@ export default function CadastroTerceirasClient() {
           </div>
 
           <div style={{ fontSize: 12, color: S.textMuted, marginBottom: 10, fontWeight: 500 }}>
-            📅 {(hDe || hAte) ? `Período: ${hDe ? fmtData(hDe) : 'início'} até ${hAte ? fmtData(hAte) : 'hoje'}` : 'Todo o histórico disponível'}
+            📅 {(hDe || hAte) ? `Período: ${hDe ? fmtData(hDe) : 'início'} até ${hAte ? fmtData(hAte) : 'hoje'}` : (activeTab === 'liberados' ? 'Todas as terceiras com CNPJ liberado' : 'Todas as terceiras com CNPJ descartado')}
           </div>
 
           <TabelaHistorico terceiras={histFiltrados} selectedId={selectedId} onSelect={id => { setSelectedId(id); setDrawerTab('detalhes') }} onReativar={handleReativar} />
@@ -1037,6 +1117,7 @@ function ProgBar({ pct, danger }: { pct: number; danger?: boolean }) {
 
 function TabelaAtivos({
   terceiras,
+  etapas,
   podeValidarGestor,
   onCycleEtapa,
   onDescartar,
@@ -1044,37 +1125,34 @@ function TabelaAtivos({
   onOpenDrawer,
 }: {
   terceiras: Terceira[]
+  etapas: GuiaEtapa[]
   podeValidarGestor: boolean
   onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
   onDescartar: (t: Terceira) => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
   onOpenDrawer: (id: string) => void
 }) {
-  const allEtapas = GUIAS.flatMap(g => g.etapas)
+  const allEtapas = etapas
   const SHORT: Record<EtapaId, string> = {
     gt0100: 'GT0100', cc_notif: 'CC/Notif', pasta_rede: 'Pasta',
     gt0180: 'GT0180', cnpj_liberado: 'CNPJ Lib.', gt8005: 'GT8005', email: 'E-mail',
   }
 
-  const [colWidths, setColWidths] = useState<number[]>(() => [
-    100, 200, 118, 140,
-    ...allEtapas.map(e => e.id === 'gt0180' ? 160 : e.id === 'cnpj_liberado' ? 115 : 74),
-    100, 180, 130,
-  ])
+  // Larguras por chave de coluna (preserva resize mesmo quando a ordem muda)
+  const DEFAULT_W: Record<string, number> = { contratante: 100, empresa: 200, contato: 118, sub: 140, data: 100, obs: 180, descartado: 130 }
+  const defW = (key: string) => DEFAULT_W[key] ?? (key === 'gt0180' ? 160 : key === 'cnpj_liberado' ? 115 : 74)
+  const [colW, setColW] = useState<Record<string, number>>({})
+  const widthOf = (key: string) => colW[key] ?? defW(key)
 
-  const dragging = useRef<{ colIdx: number; startX: number; startW: number } | null>(null)
-
-  function startResize(e: React.MouseEvent, colIdx: number) {
+  function startResize(e: React.MouseEvent, key: string) {
     e.preventDefault()
-    dragging.current = { colIdx, startX: e.clientX, startW: colWidths[colIdx] }
+    const startX = e.clientX
+    const startW = widthOf(key)
     function onMove(ev: MouseEvent) {
-      if (!dragging.current) return
-      const delta = ev.clientX - dragging.current.startX
-      const newW = Math.max(40, dragging.current.startW + delta)
-      setColWidths(prev => prev.map((w, i) => i === dragging.current!.colIdx ? newW : w))
+      const newW = Math.max(40, startW + ev.clientX - startX)
+      setColW(prev => ({ ...prev, [key]: newW }))
     }
     function onUp() {
-      dragging.current = null
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
@@ -1082,19 +1160,20 @@ function TabelaAtivos({
     document.addEventListener('mouseup', onUp)
   }
 
-  type ColDef = { label: string; align: 'left' | 'center' }
+  type ColDef = { key: string; label: string; align: 'left' | 'center' }
   const cols: ColDef[] = [
-    { label: 'Contratante', align: 'left' },
-    { label: 'Empresa', align: 'left' },
-    { label: 'Contato', align: 'left' },
-    { label: 'Sub', align: 'left' },
+    { key: 'contratante', label: 'Contratante', align: 'left' },
+    { key: 'empresa', label: 'Empresa', align: 'left' },
+    { key: 'contato', label: 'Contato', align: 'left' },
+    { key: 'sub', label: 'Sub', align: 'left' },
     ...allEtapas.map(e => ({
+      key: e.id,
       label: SHORT[e.id] + (e.reqGestor ? ' 🔒' : ''),
       align: 'center' as const,
     })),
-    { label: 'Data', align: 'left' },
-    { label: 'Observação', align: 'left' },
-    { label: 'CNPJ Descartado', align: 'center' },
+    { key: 'data', label: 'Data', align: 'left' },
+    { key: 'obs', label: 'Observação', align: 'left' },
+    { key: 'descartado', label: 'CNPJ Descartado', align: 'center' },
   ]
 
   const thBase: React.CSSProperties = {
@@ -1103,26 +1182,26 @@ function TabelaAtivos({
     borderBottom: `2px solid ${S.border}`, background: '#f8f9fc', userSelect: 'none',
   }
 
-  const totalWidth = colWidths.reduce((a, b) => a + b, 0)
+  const totalWidth = cols.reduce((a, c) => a + widthOf(c.key), 0)
 
   return (
     <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: S.radius, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed', width: totalWidth }}>
           <colgroup>
-            {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+            {cols.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}
           </colgroup>
           <thead>
             <tr>
-              {cols.map((col, i) => (
-                <th key={i} style={{ ...thBase, textAlign: col.align }}>
+              {cols.map(col => (
+                <th key={col.key} style={{ ...thBase, textAlign: col.align }}>
                   {/* position:relative em <th> com border-collapse falha no browser; usa div interno */}
                   <div style={{ position: 'relative', padding: '8px 18px 8px 10px', overflow: 'hidden' }}>
                     <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {col.label}
                     </span>
                     <div
-                      onMouseDown={e => startResize(e, i)}
+                      onMouseDown={e => startResize(e, col.key)}
                       title="Arraste para redimensionar coluna"
                       style={{
                         position: 'absolute', right: 0, top: 0, bottom: 0, width: 12,
@@ -1197,6 +1276,10 @@ function TerceiraRow({
 
   const requerCC = !!t.contratante?.requer_cc
   const prog = calcProgresso(t)
+  const parado = semAvanco(t)
+  const diasParado = diasDesde(t.data)
+  const baseBg = parado ? '#fff5f5' : ''
+  const hoverBg = parado ? '#ffecec' : '#fafbfd'
   const tdSt: React.CSSProperties = { padding: '6px 10px', borderBottom: `1px solid ${S.border}`, verticalAlign: 'middle' }
   const inp: React.CSSProperties = {
     width: '100%', padding: '4px 7px', border: `1px solid ${S.border}`, borderRadius: 4,
@@ -1206,8 +1289,9 @@ function TerceiraRow({
 
   return (
     <tr
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fafbfd' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+      style={{ background: baseBg, boxShadow: parado ? `inset 3px 0 0 ${S.danger}` : undefined }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = hoverBg }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = baseBg }}
     >
       {/* Contratante */}
       <td style={{ ...tdSt, maxWidth: 140 }}>
@@ -1218,9 +1302,14 @@ function TerceiraRow({
 
       {/* Empresa */}
       <td style={{ ...tdSt, maxWidth: 220 }}>
-        <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 12 }} title={t.razao_social}>
+        <div style={{ fontWeight: parado ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 12, color: parado ? S.danger : undefined }} title={parado ? `${t.razao_social} — parada há ${diasParado} dias sem avanço` : t.razao_social}>
           {t.razao_social}
         </div>
+        {parado && (
+          <div style={{ fontSize: 10, color: S.danger, fontWeight: 700, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+            ⏱ {diasParado} dias sem avanço
+          </div>
+        )}
       </td>
 
       {/* Contato */}
