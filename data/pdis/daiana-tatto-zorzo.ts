@@ -2,7 +2,7 @@ import type { PdiColaborador } from './types'
 
 const daianaTattoZorzo: PdiColaborador = {
   id: "daiana-tatto-zorzo",
-  nome: "DAIANA TATTO ZORZO",
+  nome: "Daiana Tatto Zorzo",
   funcao: "Analista de Serviços",
   periodo: "08/11/2021 - 10/03/26",
   matrizAvaliacao: {
@@ -108,17 +108,17 @@ const daianaTattoZorzo: PdiColaborador = {
       ranking: [
         {
           rank: 1,
-          tipo: "Tipo 2 — Ajudante",
+          tipo: "Tipo 2 - O Ajudante (Prestativo)",
           pontuacao: "19/25"
         },
         {
           rank: 2,
-          tipo: "Tipo 6 — Precavido",
+          tipo: "Tipo 6 - O Lealista (Questionador)",
           pontuacao: "18/25"
         },
         {
           rank: 3,
-          tipo: "Tipo 3 — Vencedor",
+          tipo: "Tipo 3 - O Realizador (Bem-Sucedido)",
           pontuacao: "16/25"
         }
       ],

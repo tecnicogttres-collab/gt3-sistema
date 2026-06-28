@@ -145,7 +145,7 @@ export default function EmailsClient() {
     }
     loadContratantes()
     const channel = supabase
-      .channel('rt-contratantes-emails')
+      .channel(`rt-contratantes-emails-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'terceiras_contratantes' }, loadContratantes)
       .subscribe()
     return () => { cancelled = true; supabase.removeChannel(channel) }

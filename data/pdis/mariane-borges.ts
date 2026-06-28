@@ -108,17 +108,17 @@ const marianeBorges: PdiColaborador = {
       ranking: [
         {
           rank: 1,
-          tipo: "Tipo 1 — Perfeccionista",
+          tipo: "Tipo 1 - O Reformador (Perfeccionista)",
           pontuacao: "17/25"
         },
         {
           rank: 2,
-          tipo: "Tipo 3 — Vencedor",
+          tipo: "Tipo 3 - O Realizador (Bem-Sucedido)",
           pontuacao: "17/25"
         },
         {
           rank: 3,
-          tipo: "Tipo 6 — Precavido",
+          tipo: "Tipo 6 - O Lealista (Questionador)",
           pontuacao: "16/25"
         }
       ],

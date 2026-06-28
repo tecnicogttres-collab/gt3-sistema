@@ -2,16 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useUser } from '../components/UserContext'
+import { useModules } from '../components/ModulesContext'
 import * as allPdis from '../../data/pdis/index'
 import type { PdiColaborador } from '../../data/pdis/types'
-import { MODULES } from '../lib/modules'
+import ModulosNomenclaturaModal from './ModulosNomenclaturaModal'
 
 const PDI_OPTIONS = (Object.values(allPdis) as PdiColaborador[])
   .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   .map(p => ({ value: p.id, label: p.nome }))
-
-// All modules are configurable per user (admin can grant any module to any user)
-const CONFIGURABLE_MODULES = MODULES
 
 type UserRow = {
   id: string
@@ -64,9 +62,11 @@ const EMPTY_FORM = { nome: '', usuario: '', senha: '', papel: 'colaborador', pdi
 
 export default function LoginsClient() {
   const { user, profile, loading: profileLoading, reloadProfile } = useUser()
+  const { modules: CONFIGURABLE_MODULES } = useModules()
   const isAdmin = profile?.papel === 'admin'
   const canManage = profile?.papel === 'admin' || profile?.papel === 'gestor'
 
+  const [nomenclaturaOpen, setNomenclaturaOpen] = useState(false)
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
@@ -316,15 +316,28 @@ export default function LoginsClient() {
             {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
           </p>
         </div>
-        {canManage && (
-          <button
-            onClick={() => { setCreateOpen(true); setCreateSuccess(''); setCreateError('') }}
-            style={{ padding: '9px 20px', backgroundColor: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
-          >
-            + Novo usuário
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {canManage && (
+            <button
+              onClick={() => setNomenclaturaOpen(true)}
+              title="Editar nome e cor dos módulos"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', backgroundColor: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              <span style={{ fontSize: 15, lineHeight: 1 }}>⚙️</span> Nomenclatura módulos
+            </button>
+          )}
+          {canManage && (
+            <button
+              onClick={() => { setCreateOpen(true); setCreateSuccess(''); setCreateError('') }}
+              style={{ padding: '9px 20px', backgroundColor: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            >
+              + Novo usuário
+            </button>
+          )}
+        </div>
       </div>
+
+      {nomenclaturaOpen && <ModulosNomenclaturaModal onClose={() => setNomenclaturaOpen(false)} />}
 
       {/* Search */}
       <div style={{ marginBottom: 16 }}>

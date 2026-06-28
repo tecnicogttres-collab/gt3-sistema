@@ -144,17 +144,17 @@ const lucianePastore: PdiColaborador = {
       ranking: [
         {
           rank: 1,
-          tipo: "Tipo 2 — Ajudante",
+          tipo: "Tipo 2 - O Ajudante (Prestativo)",
           pontuacao: "18/25"
         },
         {
           rank: 2,
-          tipo: "Tipo 7 — Otimista",
+          tipo: "Tipo 7 - O Entusiasta (Sonhador)",
           pontuacao: "16/25"
         },
         {
           rank: 3,
-          tipo: "Tipo 9 — Mediadora",
+          tipo: "Tipo 9 - O Pacifista (Preservador)",
           pontuacao: "16/25"
         }
       ],

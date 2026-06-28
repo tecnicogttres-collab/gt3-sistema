@@ -3,6 +3,7 @@ import { Geist } from 'next/font/google'
 import './globals.css'
 import AppShell from './components/AppShell'
 import { UserProvider } from './components/UserContext'
+import { ModulesProvider } from './components/ModulesContext'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR" className={geist.variable}>
       <body>
         <UserProvider>
-          <AppShell>{children}</AppShell>
+          <ModulesProvider>
+            <AppShell>{children}</AppShell>
+          </ModulesProvider>
         </UserProvider>
       </body>
     </html>

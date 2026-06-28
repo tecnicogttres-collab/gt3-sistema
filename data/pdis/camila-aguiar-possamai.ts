@@ -108,17 +108,17 @@ const camilaAguiarPossamai: PdiColaborador = {
       ranking: [
         {
           rank: 1,
-          tipo: "Tipo 2 — Ajudante",
+          tipo: "Tipo 2 - O Ajudante (Prestativo)",
           pontuacao: "17/25"
         },
         {
           rank: 2,
-          tipo: "Tipo 6 — Precavido",
+          tipo: "Tipo 6 - O Lealista (Questionador)",
           pontuacao: "16/25"
         },
         {
           rank: 3,
-          tipo: "Tipo 1 — Perfeccionista",
+          tipo: "Tipo 1 - O Reformador (Perfeccionista)",
           pontuacao: "14/25"
         }
       ],

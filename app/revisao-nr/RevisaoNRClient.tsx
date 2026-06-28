@@ -57,7 +57,7 @@ export default function RevisaoNRClient() {
   useEffect(() => {
     const supabase = createClient()
     const ch = supabase
-      .channel('revisao-nr-changes')
+      .channel(`revisao-nr-changes-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'revisao_nr_registros' }, payload => {
         const row = payload.new as Registro
         setRegistros(prev => prev.some(r => r.id === row.id) ? prev : [...prev, row])

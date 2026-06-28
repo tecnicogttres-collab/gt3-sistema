@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { MODULES } from '../lib/modules'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
+import { useModules } from './ModulesContext'
 
 type Props = {
   collapsed: boolean
@@ -22,6 +22,7 @@ const ACCENT = '#D1AE6E'
 export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeave, mode = 'classic', onModeToggle }: Props) {
   const pathname = usePathname()
   const { profile, loading } = useUser()
+  const { modules: MODULES } = useModules()
   const [pdiNotifCount, setPdiNotifCount] = useState(0)
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
 
@@ -38,7 +39,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       ? []
       : MODULES.filter((m) => m.allowedRoles.includes('colaborador'))
     return [...filtered].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
-  }, [papel, profile?.modulos_permitidos, loading])
+  }, [papel, profile?.modulos_permitidos, loading, MODULES])
 
   // PDI notifications (tabela pdi_notificacoes — sistema existente para colaboradores)
   useEffect(() => {

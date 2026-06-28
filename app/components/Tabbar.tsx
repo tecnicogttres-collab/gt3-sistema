@@ -1,39 +1,45 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { MODULES } from '../lib/modules'
+import { useModules } from './ModulesContext'
 
+// Guardamos apenas id/path; nome e cor são resolvidos ao vivo a partir do
+// contexto de módulos, para que renomear um módulo atualize as abas abertas.
 type Tab = {
   id: string
-  label: string
   path: string
-  color: string
 }
 
 const HOME_TAB: Tab = {
   id: 'home',
-  label: 'Dashboard',
   path: '/',
-  color: '#2A4F96',
 }
 
 export default function Tabbar() {
   const pathname = usePathname()
   const router = useRouter()
+  const { modules: MODULES } = useModules()
   const [tabs, setTabs] = useState<Tab[]>([HOME_TAB])
+
+  const meta = useMemo(() => {
+    const map: Record<string, { label: string; color: string }> = {
+      home: { label: 'Dashboard', color: '#2A4F96' },
+    }
+    for (const m of MODULES) map[m.id] = { label: m.label, color: m.color }
+    return map
+  }, [MODULES])
 
   useEffect(() => {
     if (pathname === '/') return
     const mod = MODULES.find((m) => m.path === pathname)
     if (!mod) return
-    const tab: Tab = { id: mod.id, label: mod.label, path: mod.path, color: mod.color }
     setTabs((prev) => {
       if (prev.some((t) => t.path === pathname)) return prev
-      return [...prev, tab]
+      return [...prev, { id: mod.id, path: mod.path }]
     })
-  }, [pathname])
+  }, [pathname, MODULES])
 
   function isUnderTab(tabPath: string) {
     return pathname === tabPath || pathname.startsWith(tabPath + '/')
@@ -60,6 +66,7 @@ export default function Tabbar() {
     >
       {tabs.map((tab) => {
         const isActive = isUnderTab(tab.path)
+        const { label, color } = meta[tab.id] ?? { label: tab.id, color: '#2A4F96' }
         return (
           <Link
             key={tab.id}
@@ -71,7 +78,7 @@ export default function Tabbar() {
               padding: '8px 14px',
               fontSize: 13,
               whiteSpace: 'nowrap',
-              borderBottom: `2px solid ${isActive ? tab.color : 'transparent'}`,
+              borderBottom: `2px solid ${isActive ? color : 'transparent'}`,
               color: isActive ? '#1E253D' : '#6B7A99',
               fontWeight: isActive ? 500 : 400,
               transition: 'all 0.15s',
@@ -85,16 +92,16 @@ export default function Tabbar() {
                   width: 7,
                   height: 7,
                   borderRadius: '50%',
-                  backgroundColor: tab.color,
+                  backgroundColor: color,
                   flexShrink: 0,
                 }}
               />
             )}
-            {tab.label}
+            {label}
             {tab.id !== 'home' && (
               <button
                 onClick={(e) => closeTab(tab.id, tab.path, e)}
-                aria-label={`Fechar ${tab.label}`}
+                aria-label={`Fechar ${label}`}
                 style={{
                   background: 'none',
                   border: 'none',

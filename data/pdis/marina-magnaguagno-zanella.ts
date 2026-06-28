@@ -2,8 +2,8 @@
 
 const marinaMagnaguagnoZanella: PdiColaborador = {
   id: "marina-magnaguagno-zanella",
-  nome: "MARINA MAGNAGUAGNO ZANELLA",
-  funcao: "ANALISTA DE SERVIÇOS",
+  nome: "Marina Magnaguagno Zanella",
+  funcao: "Analista de Serviços",
   periodo: "05/09/22 - 04/03/26",
   matrizAvaliacao: {
     competencias: [
@@ -126,17 +126,17 @@ const marinaMagnaguagnoZanella: PdiColaborador = {
       ranking: [
         {
           rank: 1,
-          tipo: "Tipo 1 — Perfeccionista",
+          tipo: "Tipo 1 - O Reformador (Perfeccionista)",
           pontuacao: "17/25"
         },
         {
           rank: 2,
-          tipo: "Tipo 8 — Poderoso",
+          tipo: "Tipo 8 - O Confrontador (Desafiador)",
           pontuacao: "17/25"
         },
         {
           rank: 3,
-          tipo: "Tipo 6 — Precavido",
+          tipo: "Tipo 6 - O Lealista (Questionador)",
           pontuacao: "15/25"
         }
       ],

@@ -2,9 +2,9 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { MODULES } from './lib/modules'
 import PdiCard from './components/PdiCard'
 import { useUser } from './components/UserContext'
+import { useModules } from './components/ModulesContext'
 import type { Role } from './lib/modules'
 import DashboardSidebar from './dashboard/DashboardSidebar'
 
@@ -26,6 +26,7 @@ function greeting(profile: ReturnType<typeof useUser>['profile']): string {
 
 export default function DashboardPage() {
   const { profile, loading } = useUser()
+  const { modules: MODULES } = useModules()
   const role = (profile?.papel ?? 'colaborador') as Role
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
   const [, setTick] = useState(0)
@@ -52,7 +53,7 @@ export default function DashboardPage() {
     if (modulos_dashboard !== null) return modulos_dashboard.includes(m.id)
     if (modulos_permitidos !== null) return modulos_permitidos.includes(m.id)
     return (m.dashboardRoles ?? m.allowedRoles).includes(role)
-  }), [role, modulos_dashboard, modulos_permitidos])
+  }), [role, modulos_dashboard, modulos_permitidos, MODULES])
 
   if (loading) {
     return (

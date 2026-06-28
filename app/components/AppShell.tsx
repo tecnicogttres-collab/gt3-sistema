@@ -6,9 +6,9 @@ import Sidebar from './Sidebar'
 import { TabContentCache } from './TabContentCache'
 import { MODULE_COMPONENT_MAP } from './moduleComponentMap'
 import Tabbar from './Tabbar'
-import { MODULES } from '../lib/modules'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
+import { useModules } from './ModulesContext'
 import { createClient } from '../lib/supabase'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
@@ -21,8 +21,9 @@ import IntroScreen, { shouldShowIntro } from './IntroScreen'
 import { displayName } from './UserContext'
 
 function useBreadcrumb(pathname: string): string {
+  const { modules } = useModules()
   if (pathname === '/') return ''
-  const mod = MODULES.find((m) => m.path === pathname)
+  const mod = modules.find((m) => m.path === pathname)
   return mod ? `Sistema Interno GT3 › ${mod.label}` : 'Sistema Interno GT3'
 }
 
@@ -47,6 +48,7 @@ function HeaderSearch() {
   const [focused, setFocused] = useState(false)
   const router = useRouter()
   const { profile, roleOverride, setRoleOverride } = useUser()
+  const { modules: MODULES } = useModules()
   const papel = profile?.papel as Role | null
 
   const results = query.trim() && !ROLE_COMMANDS[query.trim().toLowerCase()]

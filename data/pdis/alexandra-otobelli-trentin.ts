@@ -2,7 +2,7 @@ import type { PdiColaborador } from './types'
 
 const alexandraOtobelliTrentin: PdiColaborador = {
   id: "alexandra-otobelli-trentin",
-  nome: "ALEXANDRA OTOBELLI TRENTIN",
+  nome: "Alexandra Otobelli Trentin",
   funcao: "Analista de Serviços",
   periodo: "06/01/2020 - 25/03/26",
   matrizAvaliacao: {
@@ -135,17 +135,17 @@ const alexandraOtobelliTrentin: PdiColaborador = {
       ranking: [
         {
           rank: 1,
-          tipo: "Tipo 1 — Perfeccionista",
+          tipo: "Tipo 1 - O Reformador (Perfeccionista)",
           pontuacao: "20/25"
         },
         {
           rank: 2,
-          tipo: "Tipo 2 — Ajudante",
+          tipo: "Tipo 2 - O Ajudante (Prestativo)",
           pontuacao: "17/25"
         },
         {
           rank: 3,
-          tipo: "Tipo 8 — Poderoso",
+          tipo: "Tipo 8 - O Confrontador (Desafiador)",
           pontuacao: "17/25"
         }
       ],

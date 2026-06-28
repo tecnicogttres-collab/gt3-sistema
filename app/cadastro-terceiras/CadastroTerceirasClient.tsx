@@ -423,7 +423,7 @@ export default function CadastroTerceirasClient() {
     const supabase = createClient()
     let cancelled = false
     const channel = supabase
-      .channel('rt-contratantes-terceiras')
+      .channel(`rt-contratantes-terceiras-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'terceiras_contratantes' }, () => {
         fetch('/api/terceiras/contratantes')
           .then(r => r.ok ? r.json() : [])

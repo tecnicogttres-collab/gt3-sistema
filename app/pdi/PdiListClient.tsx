@@ -81,6 +81,13 @@ function ScoreBar({ label, value, max, color }: { label: string; value: number; 
 
 // ── Card unificado ────────────────────────────────────────────────────────────
 
+// Badge compacto: "Tipo 1 - O Reformador (Perfeccionista)" -> "T1 Reformador"
+function shortEneagrama(tipo: string): string {
+  const m = tipo.match(/Tipo\s*(\d)\s*[-—]\s*(?:O\s+)?([^(]+?)(?:\s*\(|$)/i)
+  if (m) return `T${m[1]} ${m[2].trim()}`
+  return tipo.replace('Tipo ', 'T')
+}
+
 type PdiCardData = {
   nome: string
   funcao: string
@@ -139,7 +146,7 @@ function PdiCardInner({ data, href, footer }: { data: PdiCardData; href: string;
           <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
             {eneagramaRanking.slice(0, 3).map((e, i) => (
               <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, backgroundColor: i === 0 ? '#FEF3C7' : i === 1 ? '#EBF4FF' : '#F0FFF4', color: i === 0 ? '#92400E' : i === 1 ? '#1E40AF' : '#166534' }}>
-                {e.tipo.replace('Tipo ', 'T')}
+                {shortEneagrama(e.tipo)}
               </span>
             ))}
           </div>
@@ -309,6 +316,7 @@ function DbPdiCard({ pdi, initialScores, isGestorAdmin, onEdit, onArchive, onDel
 // ── Avaliações agregadas — data-driven ───────────────────────────────────────
 
 type CicloAgregado = {
+  key?: string
   numero: number
   data_inicio: string | null
   data_fim: string | null
@@ -455,7 +463,7 @@ function AvaliacoesAgregadasView() {
 
   return (
     <div style={{ marginBottom: 20 }}>
-      {ciclos.map(c => <CicloAgregadoCard key={c.numero} ciclo={c} />)}
+      {ciclos.map(c => <CicloAgregadoCard key={c.key ?? c.numero} ciclo={c} />)}
     </div>
   )
 }

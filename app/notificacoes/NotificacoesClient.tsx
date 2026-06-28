@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { MODULES } from '../lib/modules'
+import { useModules } from '../components/ModulesContext'
 import { SQL_SCHEMA, SQL_TRIGGER } from './sql-schema'
 
 const PRIMARY = '#2A4F96'
@@ -28,6 +28,7 @@ type Config = {
 const MODULOS_SKIP = new Set(['notificacoes'])
 
 export default function NotificacoesClient() {
+  const { modules: MODULES } = useModules()
   const [configs, setConfigs] = useState<Record<string, Config>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<Record<string, boolean>>({})

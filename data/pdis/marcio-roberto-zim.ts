@@ -117,17 +117,17 @@ const marcioRobertoZim: PdiColaborador = {
       ranking: [
         {
           rank: 1,
-          tipo: "Tipo 1 — Perfeccionista",
+          tipo: "Tipo 1 - O Reformador (Perfeccionista)",
           pontuacao: "20/25"
         },
         {
           rank: 2,
-          tipo: "Tipo 6 — Precavido",
+          tipo: "Tipo 6 - O Lealista (Questionador)",
           pontuacao: "19/25"
         },
         {
           rank: 3,
-          tipo: "Tipo 5 — Analítico",
+          tipo: "Tipo 5 - O Observador (Investigador)",
           pontuacao: "18/25"
         }
       ],

@@ -163,7 +163,7 @@ export default function LegislacoesClient() {
     if (!userId) return
     const supabase = createClient()
     const ch = supabase
-      .channel('legislacoes-inserts')
+      .channel(`legislacoes-inserts-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'legislacoes' }, (payload) => {
         const nova = { ...(payload.new as Omit<Legislacao, 'lida'>), lida: false }
         if (checkVisibility(nova)) {
