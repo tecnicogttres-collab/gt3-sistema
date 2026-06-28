@@ -68,6 +68,11 @@ function formatDate(ts: number) {
   return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// Normaliza nome para comparar cliente do e-mail × contratante (ignora acento/maiúscula/espaços)
+function normNome(s: string) {
+  return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+}
+
 function fmtSize(bytes: number | null) {
   if (!bytes) return ''
   if (bytes < 1024) return `${bytes} B`
@@ -94,6 +99,10 @@ export default function EmailsClient() {
   const [loading, setLoading] = useState(true)
   const [templates, setTemplates] = useState<Template[]>([])
   const [contratantes, setContratantes] = useState<Contratante[]>([])
+  const [addingCt, setAddingCt] = useState(false)
+  const [novoCtNome, setNovoCtNome] = useState('')
+  const [novoCtCC, setNovoCtCC] = useState(false)
+  const [salvandoCt, setSalvandoCt] = useState(false)
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [activeTab, setActiveTab] = useState('Orientação Inicial')
   const [search, setSearch] = useState('')
@@ -123,14 +132,23 @@ export default function EmailsClient() {
     return () => { cancelled = true }
   }, [])
 
-  // Lista de contratantes (módulo Terceiras) para o vínculo manual
+  // Lista de contratantes (módulo Terceiras) — fonte única, em tempo real.
+  // Recarrega na hora se alguém cadastrar/renomear uma contratante nas Terceiras.
   useEffect(() => {
+    const supabase = createClient()
     let cancelled = false
-    fetch('/api/terceiras/contratantes')
-      .then(r => r.ok ? r.json() : [])
-      .then((data: Contratante[]) => { if (!cancelled) setContratantes(Array.isArray(data) ? data : []) })
-      .catch(() => { /* noop */ })
-    return () => { cancelled = true }
+    const loadContratantes = () => {
+      fetch('/api/terceiras/contratantes')
+        .then(r => r.ok ? r.json() : [])
+        .then((data: Contratante[]) => { if (!cancelled) setContratantes(Array.isArray(data) ? data : []) })
+        .catch(() => { /* noop */ })
+    }
+    loadContratantes()
+    const channel = supabase
+      .channel('rt-contratantes-emails')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'terceiras_contratantes' }, loadContratantes)
+      .subscribe()
+    return () => { cancelled = true; supabase.removeChannel(channel) }
   }, [])
 
   function showToast(msg: string) {
@@ -162,7 +180,34 @@ export default function EmailsClient() {
     }
   }
 
-  function closeModal() { setModal(MODAL_INIT) }
+  function closeModal() { setModal(MODAL_INIT); setAddingCt(false); setNovoCtNome(''); setNovoCtCC(false) }
+
+  // Cria a contratante no MESMO repositório das Terceiras (terceiras_contratantes).
+  // Aparece aqui e lá; o realtime atualiza os dois módulos.
+  async function criarContratanteInline() {
+    const nome = novoCtNome.trim()
+    if (!nome) { showToast('Informe o nome da contratante'); return }
+    setSalvandoCt(true)
+    try {
+      const res = await fetch('/api/terceiras/contratantes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, requer_cc: novoCtCC }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        showToast(j.error === 'Sem permissão' ? 'Só gestor/admin pode criar contratante' : 'Erro ao criar contratante')
+        return
+      }
+      const novo: Contratante = await res.json()
+      setContratantes(prev => [...prev.filter(c => c.id !== novo.id), novo].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
+      setModal(m => ({ ...m, contratanteId: novo.id }))
+      setAddingCt(false); setNovoCtNome(''); setNovoCtCC(false)
+      showToast('Contratante criada (também no Cadastro de Terceiras)')
+    } finally {
+      setSalvandoCt(false)
+    }
+  }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -357,14 +402,72 @@ export default function EmailsClient() {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Contratante vinculada (Terceiras)</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>Contratante vinculada (Terceiras)</label>
+                <button type="button" onClick={() => setAddingCt(v => !v)}
+                  style={{ fontSize: 12, fontWeight: 600, color: PRIMARY, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  {addingCt ? '× Cancelar' : '+ Nova contratante'}
+                </button>
+              </div>
+
+              {addingCt && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '8px 0 10px', padding: '10px 12px', background: PRIMARY_LIGHT, borderRadius: 8, border: `1px solid ${BORDER}` }}>
+                  <input
+                    autoFocus
+                    style={{ ...inputStyle, flex: 1, minWidth: 160, marginBottom: 0 }}
+                    value={novoCtNome}
+                    onChange={e => setNovoCtNome(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void criarContratanteInline() } }}
+                    placeholder="Nome da nova contratante"
+                  />
+                  <label style={{ fontSize: 12, color: MUTED, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                    <input type="checkbox" checked={novoCtCC} onChange={e => setNovoCtCC(e.target.checked)} /> Requer CC
+                  </label>
+                  <button type="button" disabled={salvandoCt} onClick={() => void criarContratanteInline()}
+                    style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: PRIMARY, border: 'none', borderRadius: 6, padding: '7px 14px', cursor: salvandoCt ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                    {salvandoCt ? 'Criando…' : 'Criar'}
+                  </button>
+                  <span style={{ flexBasis: '100%', fontSize: 11, color: MUTED }}>
+                    Cria também no Cadastro de Terceiras (mesmo repositório).
+                  </span>
+                </div>
+              )}
+
               <select style={{ ...inputStyle, cursor: 'pointer' }} value={modal.contratanteId} onChange={e => setModal(m => ({ ...m, contratanteId: e.target.value }))}>
                 <option value="">— Nenhuma (casa pelo nome do cliente) —</option>
                 {contratantes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
-              <p style={{ fontSize: 11, color: MUTED, margin: '6px 0 0' }}>
-                Vincule à contratante do módulo de Terceiras. Ao cadastrar uma terceira dessa contratante, este e-mail será oferecido para envio.
-              </p>
+              {(() => {
+                if (modal.contratanteId) {
+                  const c = contratantes.find(x => x.id === modal.contratanteId)
+                  return (
+                    <p style={{ fontSize: 11, color: '#047857', margin: '6px 0 0', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      ✓ Vinculado a <strong>{c?.nome ?? 'contratante'}</strong>. Será oferecido ao cadastrar terceiras dessa contratante.
+                    </p>
+                  )
+                }
+                const match = contratantes.find(c => normNome(c.nome) === normNome(modal.client))
+                if (match) {
+                  return (
+                    <p style={{ fontSize: 11, color: MUTED, margin: '6px 0 0', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      Sem vínculo explícito, mas o nome bate com <strong style={{ color: INK }}>{match.nome}</strong> — vai funcionar por nome.
+                    </p>
+                  )
+                }
+                if (modal.client.trim()) {
+                  return (
+                    <p style={{ fontSize: 11.5, color: DANGER, fontWeight: 600, margin: '8px 0 0', padding: '8px 10px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, lineHeight: 1.5 }}>
+                      ⚠ Nenhuma contratante vinculada e o nome <strong>&ldquo;{modal.client.trim()}&rdquo;</strong> não bate com nenhuma contratante das Terceiras.
+                      Este e-mail <strong>não</strong> será oferecido no cadastro de terceiras. Selecione a contratante acima.
+                    </p>
+                  )
+                }
+                return (
+                  <p style={{ fontSize: 11, color: MUTED, margin: '6px 0 0' }}>
+                    Vincule à contratante do módulo de Terceiras. Ao cadastrar uma terceira dessa contratante, este e-mail será oferecido para envio.
+                  </p>
+                )
+              })()}
             </div>
 
             <div style={{ marginBottom: 16 }}>

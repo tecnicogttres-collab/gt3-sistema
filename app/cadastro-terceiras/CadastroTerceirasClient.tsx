@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUser } from '../components/UserContext'
+import { createClient } from '../lib/supabase'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -398,6 +399,23 @@ export default function CadastroTerceirasClient() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  // Realtime das contratantes — reflete na hora se forem criadas/renomeadas
+  // aqui ou pelo módulo de E-mails (mesmo repositório terceiras_contratantes).
+  useEffect(() => {
+    const supabase = createClient()
+    let cancelled = false
+    const channel = supabase
+      .channel('rt-contratantes-terceiras')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'terceiras_contratantes' }, () => {
+        fetch('/api/terceiras/contratantes')
+          .then(r => r.ok ? r.json() : [])
+          .then((d: Contratante[]) => { if (!cancelled) setContratantes(Array.isArray(d) ? d : []) })
+          .catch(() => { /* noop */ })
+      })
+      .subscribe()
+    return () => { cancelled = true; supabase.removeChannel(channel) }
+  }, [])
 
   // ESC fecha
   useEffect(() => {
