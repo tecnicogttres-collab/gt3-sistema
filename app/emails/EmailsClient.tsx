@@ -23,29 +23,32 @@ type Template = {
   tags: string[]
   notes: string
   corpo: string
+  contratanteId: string | null   // vínculo explícito com contratante das Terceiras
   fileName: string | null   // metadado — não carrega file.data no load inicial
   fileSize: number | null
   createdAt: number
   updatedAt: number
 }
 
+type Contratante = { id: string; nome: string }
+
 type ModalState = {
   open: boolean; editId: string | null
   title: string; client: string; category: string; subject: string
-  tags: string; notes: string; corpo: string
+  tags: string; notes: string; corpo: string; contratanteId: string
   file: FileData | null; dragOver: boolean
 }
 
 const MODAL_INIT: ModalState = {
   open: false, editId: null, title: '', client: '', category: 'Orientação Inicial',
-  subject: '', tags: '', notes: '', corpo: '', file: null, dragOver: false,
+  subject: '', tags: '', notes: '', corpo: '', contratanteId: '', file: null, dragOver: false,
 }
 
 function uid() { return 't_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7) }
 
 function rowToTemplate(row: {
   id: string; title: string; client: string; category: string; subject: string
-  tags: unknown; notes: string; corpo: string | null
+  tags: unknown; notes: string; corpo: string | null; contratante_id?: string | null
   file_name: string | null; file_size: number | null
   created_at: string; updated_at: string
 }): Template {
@@ -53,6 +56,7 @@ function rowToTemplate(row: {
     id: row.id, title: row.title, client: row.client, category: row.category,
     subject: row.subject, tags: (row.tags as string[]) ?? [], notes: row.notes,
     corpo: row.corpo ?? '',
+    contratanteId: row.contratante_id ?? null,
     fileName: row.file_name ?? null,
     fileSize: row.file_size ?? null,
     createdAt: new Date(row.created_at).getTime(),
@@ -89,6 +93,7 @@ function downloadBlob(dataUrl: string, fileName: string) {
 export default function EmailsClient() {
   const [loading, setLoading] = useState(true)
   const [templates, setTemplates] = useState<Template[]>([])
+  const [contratantes, setContratantes] = useState<Contratante[]>([])
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [activeTab, setActiveTab] = useState('Orientação Inicial')
   const [search, setSearch] = useState('')
@@ -107,7 +112,7 @@ export default function EmailsClient() {
     let cancelled = false
     supabase
       .from('email_templates')
-      .select('id, title, client, category, subject, tags, notes, corpo, file_name, file_size, created_at, updated_at')
+      .select('id, title, client, category, subject, tags, notes, corpo, contratante_id, file_name, file_size, created_at, updated_at')
       .order('title', { ascending: true })
       .then(({ data, error }) => {
         if (cancelled) return
@@ -115,6 +120,16 @@ export default function EmailsClient() {
         setTemplates((data ?? []).map(rowToTemplate))
         setLoading(false)
       })
+    return () => { cancelled = true }
+  }, [])
+
+  // Lista de contratantes (módulo Terceiras) para o vínculo manual
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/terceiras/contratantes')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Contratante[]) => { if (!cancelled) setContratantes(Array.isArray(data) ? data : []) })
+      .catch(() => { /* noop */ })
     return () => { cancelled = true }
   }, [])
 
@@ -139,6 +154,7 @@ export default function EmailsClient() {
       setModal({
         open: true, editId: id, title: t.title, client: t.client, category: t.category,
         subject: t.subject, tags: t.tags.join(', '), notes: t.notes, corpo: t.corpo,
+        contratanteId: t.contratanteId ?? '',
         file: null, dragOver: false,  // nunca carregamos o file no estado — só ao baixar
       })
     } else {
@@ -171,7 +187,7 @@ export default function EmailsClient() {
   }
 
   async function saveTemplate() {
-    const { title, client, category, subject, tags, notes, corpo, file, editId } = modal
+    const { title, client, category, subject, tags, notes, corpo, contratanteId, file, editId } = modal
     if (!title.trim() || !client.trim()) { showToast('Preencha título e cliente'); return }
     if (!file && !editId) { showToast('Anexe o arquivo .msg'); return }
 
@@ -183,7 +199,7 @@ export default function EmailsClient() {
       const payload: Record<string, unknown> = {
         title: title.trim(), client: client.trim(), category,
         subject: subject.trim(), tags: parsedTags, notes: notes.trim(),
-        corpo: corpo.trim(),
+        corpo: corpo.trim(), contratante_id: contratanteId || null,
       }
       if (file) {
         payload.file = file
@@ -197,7 +213,7 @@ export default function EmailsClient() {
           ...x,
           title: title.trim(), client: client.trim(), category,
           subject: subject.trim(), tags: parsedTags, notes: notes.trim(),
-          corpo: corpo.trim(),
+          corpo: corpo.trim(), contratanteId: contratanteId || null,
           ...(file ? { fileName: file.name, fileSize: file.size } : {}),
           updatedAt: now,
         } : x
@@ -218,6 +234,7 @@ export default function EmailsClient() {
         id, title: title.trim(), client: client.trim(), category,
         subject: subject.trim(), tags: parsedTags, notes: notes.trim(),
         corpo: corpo.trim(),
+        contratanteId: contratanteId || null,
         fileName: file?.name ?? null,
         fileSize: file?.size ?? null,
         createdAt: now, updatedAt: now,
@@ -235,6 +252,7 @@ export default function EmailsClient() {
           corpo: tpl.corpo, file,
           file_name: file?.name ?? null,
           file_size: file?.size ?? null,
+          contratante_id: contratanteId || null,
         }),
       })
       if (!res.ok) { console.error('Erro ao criar template'); showToast('Erro ao salvar') }
@@ -336,6 +354,17 @@ export default function EmailsClient() {
                   {PASTAS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Contratante vinculada (Terceiras)</label>
+              <select style={{ ...inputStyle, cursor: 'pointer' }} value={modal.contratanteId} onChange={e => setModal(m => ({ ...m, contratanteId: e.target.value }))}>
+                <option value="">— Nenhuma (casa pelo nome do cliente) —</option>
+                {contratantes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              <p style={{ fontSize: 11, color: MUTED, margin: '6px 0 0' }}>
+                Vincule à contratante do módulo de Terceiras. Ao cadastrar uma terceira dessa contratante, este e-mail será oferecido para envio.
+              </p>
             </div>
 
             <div style={{ marginBottom: 16 }}>

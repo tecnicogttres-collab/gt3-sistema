@@ -19,6 +19,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.tags     !== undefined) updates.tags     = Array.isArray(body.tags) ? body.tags : []
   if (body.notes    !== undefined) updates.notes    = String(body.notes ?? '').trim()
   if (body.corpo    !== undefined) updates.corpo    = String(body.corpo ?? '').trim() || null
+  if (body.contratante_id !== undefined) updates.contratante_id = body.contratante_id || null
   if (body.file     !== undefined) {
     updates.file      = body.file
     const f = body.file as { name?: string; size?: number } | null
@@ -36,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .from('email_templates')
     .update(updates)
     .eq('id', id)
-    .select('id, title, client, category, subject, tags, notes, corpo, created_at, updated_at')
+    .select('id, title, client, category, subject, tags, notes, corpo, contratante_id, created_at, updated_at')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

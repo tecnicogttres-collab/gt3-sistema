@@ -7,6 +7,8 @@ import { useUser } from '../components/UserContext'
 
 type Contratante = { id: string; nome: string; requer_cc: boolean }
 
+type EmailLink = { id: string; title: string; category: string; subject: string; file_name: string | null }
+
 type EtapaId = 'gt0100' | 'cc_notif' | 'pasta_rede' | 'gt0180' | 'cnpj_liberado' | 'gt8005' | 'email'
 type EtapaEstado =
   | 'pendente' | 'ok' | 'na' | 'sob_demanda' | 'mensal'
@@ -201,6 +203,9 @@ export default function CadastroTerceirasClient() {
     tem_sub: false, subcontratante: '', observacao: '',
   })
   const [salvandoNova, setSalvandoNova] = useState(false)
+
+  // Aviso pós-cadastro: enviar e-mail padrão da contratante (link com módulo E-mails)
+  const [emailPrompt, setEmailPrompt] = useState<{ contratante: string; templates: EmailLink[] } | null>(null)
 
   // Modal relatório
   const [reportOpen, setReportOpen] = useState(false)
@@ -398,6 +403,7 @@ export default function CadastroTerceirasClient() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
+      if (emailPrompt) { setEmailPrompt(null); return }
       if (modalConfirm.open) { setModalConfirm(p => ({ ...p, open: false })); return }
       if (reportOpen) { setReportOpen(false); return }
       if (modalNova) { setModalNova(false); return }
@@ -406,7 +412,7 @@ export default function CadastroTerceirasClient() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [modalConfirm.open, reportOpen, modalNova, modalContratantes, selectedId])
+  }, [emailPrompt, modalConfirm.open, reportOpen, modalNova, modalContratantes, selectedId])
 
   // ── Dados computados ──────────────────────────────────────────────────────────
 
@@ -477,6 +483,18 @@ export default function CadastroTerceirasClient() {
       setModalNova(false)
       setNovaTerceira({ contratante_id: '', razao_social: '', contato: '', data: new Date().toISOString().slice(0, 10), tem_sub: false, subcontratante: '', observacao: '' })
       showToast('✓ Terceira cadastrada', 'success')
+
+      // Link com o módulo de E-mails: oferece o e-mail padrão da contratante
+      try {
+        const er = await fetch(`/api/terceiras/contratantes/${nova.contratante_id}/emails`)
+        if (er.ok) {
+          const { templates } = await er.json() as { templates: EmailLink[] }
+          if (Array.isArray(templates) && templates.length > 0) {
+            const nome = contratantes.find(c => c.id === nova.contratante_id)?.nome ?? nova.contratante?.nome ?? ''
+            setEmailPrompt({ contratante: nome, templates })
+          }
+        }
+      } catch { /* noop — o aviso de e-mail é opcional */ }
     } finally {
       setSalvandoNova(false)
     }
@@ -1064,6 +1082,48 @@ export default function CadastroTerceirasClient() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Aviso: enviar e-mail padrão da contratante ── */}
+      {emailPrompt && (
+        <div onClick={e => { if (e.target === e.currentTarget) setEmailPrompt(null) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 140, padding: 20 }}>
+          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 8px 32px rgba(0,0,0,.18)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: S.primary, marginBottom: 4 }}>📧 Enviar e-mail padrão?</h3>
+            <p style={{ fontSize: 13, color: S.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+              Terceira cadastrada. Quer enviar o e-mail padrão de <strong style={{ color: S.text }}>{emailPrompt.contratante}</strong> agora?
+              {emailPrompt.templates.length > 1 && ' Escolha qual abrir:'}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+              {emailPrompt.templates.map(tpl => (
+                <div key={tpl.id} style={{ border: `1px solid ${S.border}`, borderRadius: S.radiusSm, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: S.primary, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{tpl.category}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: S.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tpl.title}>{tpl.title}</div>
+                    {tpl.subject && <div style={{ fontSize: 11, color: S.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>📧 {tpl.subject}</div>}
+                  </div>
+                  {tpl.file_name ? (
+                    <button
+                      onClick={() => window.open(`/api/emails/${tpl.id}/open`, '_blank')}
+                      style={{ ...btnPrimary, whiteSpace: 'nowrap' }}
+                    >
+                      Abrir .msg
+                    </button>
+                  ) : (
+                    <a href="/emails" target="_blank" rel="noreferrer" style={{ ...btnSecondary, whiteSpace: 'nowrap', textDecoration: 'none', display: 'inline-block' }}>
+                      Ver no módulo
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button style={btnSecondary} onClick={() => setEmailPrompt(null)}>Agora não</button>
             </div>
           </div>
         </div>
