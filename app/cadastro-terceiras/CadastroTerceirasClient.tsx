@@ -270,6 +270,23 @@ export default function CadastroTerceirasClient() {
   const [toast, setToast] = useState<{ msg: string; tipo: string } | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Cache de e-mails por contratante — pré-carregado ao escolher a contratante no modal
+  type EmailsResp = { contratante: { nome: string } | null; templates: EmailLink[] }
+  const emailsCache = useRef<Map<string, Promise<EmailsResp | null>>>(new Map())
+
+  async function fetchEmailsContratante(id: string): Promise<EmailsResp | null> {
+    try {
+      const r = await fetch(`/api/terceiras/contratantes/${id}/emails`)
+      if (!r.ok) return null
+      return await r.json() as EmailsResp
+    } catch { return null }
+  }
+
+  function prefetchEmails(id: string) {
+    if (!id || emailsCache.current.has(id)) return
+    emailsCache.current.set(id, fetchEmailsContratante(id))
+  }
+
   function showToast(msg: string, tipo = '') {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast({ msg, tipo })
@@ -488,7 +505,10 @@ export default function CadastroTerceirasClient() {
     if (!novaTerceira.contratante_id) { showToast('Selecione um contratante', 'danger'); return }
     if (!novaTerceira.razao_social.trim()) { showToast('Razão social obrigatória', 'danger'); return }
     if (novaTerceira.tem_sub && !novaTerceira.subcontratante.trim()) { showToast('Informe o nome da empresa subcontratante', 'danger'); return }
+    const contratanteId = novaTerceira.contratante_id
     setSalvandoNova(true)
+    // Busca dos e-mails em paralelo com o POST (reaproveita o prefetch feito ao escolher a contratante)
+    const emailsP = emailsCache.current.get(contratanteId) ?? fetchEmailsContratante(contratanteId)
     try {
       const res = await fetch('/api/terceiras', {
         method: 'POST',
@@ -503,16 +523,12 @@ export default function CadastroTerceirasClient() {
       showToast('✓ Terceira cadastrada', 'success')
 
       // Link com o módulo de E-mails: oferece o e-mail padrão da contratante
-      try {
-        const er = await fetch(`/api/terceiras/contratantes/${nova.contratante_id}/emails`)
-        if (er.ok) {
-          const { templates } = await er.json() as { templates: EmailLink[] }
-          if (Array.isArray(templates) && templates.length > 0) {
-            const nome = contratantes.find(c => c.id === nova.contratante_id)?.nome ?? nova.contratante?.nome ?? ''
-            setEmailPrompt({ contratante: nome, templates })
-          }
-        }
-      } catch { /* noop — o aviso de e-mail é opcional */ }
+      const emails = await emailsP
+      emailsCache.current.delete(contratanteId)
+      if (emails && Array.isArray(emails.templates) && emails.templates.length > 0) {
+        const nome = emails.contratante?.nome ?? contratantes.find(c => c.id === contratanteId)?.nome ?? nova.contratante?.nome ?? ''
+        setEmailPrompt({ contratante: nome, templates: emails.templates })
+      }
     } finally {
       setSalvandoNova(false)
     }
@@ -998,7 +1014,7 @@ export default function CadastroTerceirasClient() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
               <ModalField label="Contratante *">
                 <select style={{ ...inputStyle, width: '100%' }} value={novaTerceira.contratante_id}
-                  onChange={e => setNovaTerceira(p => ({ ...p, contratante_id: e.target.value }))}>
+                  onChange={e => { const v = e.target.value; setNovaTerceira(p => ({ ...p, contratante_id: v })); prefetchEmails(v) }}>
                   <option value="">Selecione…</option>
                   {contratantes.map(c => <option key={c.id} value={c.id}>{c.nome}{c.requer_cc ? ' (requer CC)' : ''}</option>)}
                 </select>
