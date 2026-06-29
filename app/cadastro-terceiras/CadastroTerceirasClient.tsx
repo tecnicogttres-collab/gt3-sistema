@@ -560,6 +560,20 @@ export default function CadastroTerceirasClient() {
     }
   }
 
+  // Abre o fluxo de envio do e-mail padrão da contratante a qualquer momento
+  async function handleEnviarEmail(t: Terceira) {
+    const cid = t.contratante_id
+    const nome = t.contratante?.nome ?? contratantes.find(c => c.id === cid)?.nome ?? ''
+    const cached = emailsCache.current.get(cid) ?? fetchEmailsContratante(cid)
+    emailsCache.current.set(cid, cached)
+    const emails = await cached
+    if (emails && Array.isArray(emails.templates) && emails.templates.length > 0) {
+      setEmailPrompt({ contratante: nome, templates: emails.templates })
+    } else {
+      showToast('Nenhum e-mail padrão para esta contratante', 'danger')
+    }
+  }
+
   async function handleUpdateInfo(id: string, campo: string, valor: unknown) {
     const res = await fetch(`/api/terceiras/${id}`, {
       method: 'PATCH',
@@ -862,6 +876,7 @@ export default function CadastroTerceirasClient() {
             podeValidarGestor={podeValidarGestor}
             onCycleEtapa={handleCycleEtapa}
             onDescartar={handleDescartarCnpj}
+            onEnviarEmail={handleEnviarEmail}
             onUpdateInfo={handleUpdateInfo}
             onOpenDrawer={id => { setSelectedId(id); setDrawerTab('detalhes') }}
           />
@@ -1164,7 +1179,7 @@ export default function CadastroTerceirasClient() {
           <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 8px 32px rgba(0,0,0,.18)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: S.primary, marginBottom: 4 }}>📧 Enviar e-mail padrão?</h3>
             <p style={{ fontSize: 13, color: S.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
-              Terceira cadastrada. Quer enviar o e-mail padrão de <strong style={{ color: S.text }}>{emailPrompt.contratante}</strong> agora?
+              Enviar o e-mail padrão de <strong style={{ color: S.text }}>{emailPrompt.contratante}</strong>?
               {emailPrompt.templates.length > 1 && ' Escolha qual abrir:'}
             </p>
 
@@ -1251,6 +1266,7 @@ function TabelaAtivos({
   podeValidarGestor,
   onCycleEtapa,
   onDescartar,
+  onEnviarEmail,
   onUpdateInfo,
   onOpenDrawer,
 }: {
@@ -1259,6 +1275,7 @@ function TabelaAtivos({
   podeValidarGestor: boolean
   onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
   onDescartar: (t: Terceira) => void
+  onEnviarEmail: (t: Terceira) => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
   onOpenDrawer: (id: string) => void
 }) {
@@ -1269,7 +1286,7 @@ function TabelaAtivos({
   }
 
   // Larguras por chave de coluna (preserva resize mesmo quando a ordem muda)
-  const DEFAULT_W: Record<string, number> = { contratante: 100, empresa: 200, contato: 118, sub: 140, data: 100, obs: 180, descartado: 130 }
+  const DEFAULT_W: Record<string, number> = { contratante: 100, empresa: 200, contato: 118, sub: 140, data: 100, obs: 180, enviar_email: 120, descartado: 130 }
   const defW = (key: string) => DEFAULT_W[key] ?? (key === 'gt0180' ? 160 : key === 'cnpj_liberado' ? 115 : 74)
   const [colW, setColW] = useState<Record<string, number>>({})
   const widthOf = (key: string) => colW[key] ?? defW(key)
@@ -1303,6 +1320,7 @@ function TabelaAtivos({
     })),
     { key: 'data', label: 'Data', align: 'left' },
     { key: 'obs', label: 'Observação', align: 'left' },
+    { key: 'enviar_email', label: 'Enviar e-mail', align: 'center' },
     { key: 'descartado', label: 'CNPJ Descartado', align: 'center' },
   ]
 
@@ -1368,6 +1386,7 @@ function TabelaAtivos({
                 allEtapas={allEtapas}
                 onCycleEtapa={onCycleEtapa}
                 onDescartar={onDescartar}
+                onEnviarEmail={onEnviarEmail}
                 onUpdateInfo={onUpdateInfo}
                 onOpenDrawer={onOpenDrawer}
               />
@@ -1385,6 +1404,7 @@ function TerceiraRow({
   allEtapas,
   onCycleEtapa,
   onDescartar,
+  onEnviarEmail,
   onUpdateInfo,
   onOpenDrawer,
 }: {
@@ -1393,6 +1413,7 @@ function TerceiraRow({
   allEtapas: GuiaEtapa[]
   onCycleEtapa: (t: Terceira, e: GuiaEtapa) => void
   onDescartar: (t: Terceira) => void
+  onEnviarEmail: (t: Terceira) => void
   onUpdateInfo: (id: string, campo: string, valor: unknown) => void
   onOpenDrawer: (id: string) => void
 }) {
@@ -1524,6 +1545,22 @@ function TerceiraRow({
         }}>
           {t.observacao || '—'}
         </span>
+      </td>
+
+      {/* Enviar e-mail */}
+      <td style={{ ...tdSt, textAlign: 'center' }}>
+        <button
+          onClick={() => onEnviarEmail(t)}
+          title={`Enviar o e-mail padrão de ${t.contratante?.nome ?? 'contratante'}`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
+            border: `1.5px solid ${S.primary}`, background: S.primaryLight, color: S.primary,
+            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+          }}
+        >
+          📧 Enviar
+        </button>
       </td>
 
       {/* CNPJ Descartado */}
