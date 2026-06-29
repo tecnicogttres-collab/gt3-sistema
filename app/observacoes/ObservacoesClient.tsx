@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { CATEGORIES, type Category, type Card } from './data'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
@@ -215,8 +216,15 @@ export default function ObservacoesClient() {
   const { profile } = useUser()
   const papel = profile?.papel ?? 'colaborador'
 
-  const [activeCatKey, setActiveCatKey] = useState<string>(CATEGORIES[0]?.key ?? '')
-  const [activeSubtabKey, setActiveSubtabKey] = useState<string>(CATEGORIES[0]?.subtabs[0]?.key ?? '')
+  const searchParams = useSearchParams()
+  const initialCat = (() => {
+    const c = searchParams.get('cat')
+    return c && CATEGORIES.some(x => x.key === c) ? c : (CATEGORIES[0]?.key ?? '')
+  })()
+  const [activeCatKey, setActiveCatKey] = useState<string>(initialCat)
+  const [activeSubtabKey, setActiveSubtabKey] = useState<string>(
+    CATEGORIES.find(c => c.key === initialCat)?.subtabs[0]?.key ?? ''
+  )
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)

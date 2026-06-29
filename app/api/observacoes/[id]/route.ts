@@ -68,9 +68,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!['gestor', 'admin'].includes(papel ?? '')) {
       return Response.json({ error: 'Sem permissão' }, { status: 403 })
     }
+    // Validar = aprovar por completo e voltar ao padrão: limpa os rastros de edição.
+    // A observação só volta a aparecer como pendente se for editada novamente.
     const { data, error } = await admin
       .from('observacoes')
-      .update({ status_edicao: 'validado' })
+      .update({
+        status_edicao: 'original',
+        parecer_anterior: null,
+        atualizado_por: null,
+        atualizado_em: null,
+      })
       .eq('id', id)
       .select()
       .single()

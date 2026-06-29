@@ -47,6 +47,15 @@ type PdiConversaColaborador = {
   numeroCiclo: number
 }
 
+type ObsPendente = {
+  id: string
+  categoria: string
+  coluna: string
+  motivo: string
+  autor: string | null
+  quando: string | null
+}
+
 function fmtDateShort(iso: string) {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -121,6 +130,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const [modalPrio, setModalPrio] = useState<Prioridade | null>(null)
   const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
   const [pdiConversaColaborador, setPdiConversaColaborador] = useState<PdiConversaColaborador | null>(null)
+  const [obsPendentes, setObsPendentes] = useState<ObsPendente[]>([])
 
   async function loadPrioridades() {
     const supabase = createClient()
@@ -338,6 +348,25 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     void loadPdiAgenda()
   }, [role])
 
+  // Observações aguardando validação (gestor/admin) — aparece ao criar/editar, some ao validar.
+  useEffect(() => {
+    if (!role || !['gestor', 'admin'].includes(role)) { setObsPendentes([]); return }
+    let cancelled = false
+    const load = () => {
+      fetch('/api/observacoes/pendentes')
+        .then(r => r.ok ? r.json() : [])
+        .then((d: ObsPendente[]) => { if (!cancelled) setObsPendentes(Array.isArray(d) ? d : []) })
+        .catch(() => {})
+    }
+    load()
+    const supabase = createClient()
+    const ch = supabase
+      .channel(`dashboard-obs-rt-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'observacoes' }, () => load())
+      .subscribe()
+    return () => { cancelled = true; void supabase.removeChannel(ch) }
+  }, [role])
+
   const sidebarWidth = Math.max(
     priorities.length <= 4 ? 380 : priorities.length <= 8 ? 440 : priorities.length <= 14 ? 500 : 560,
     pdiAgenda.length <= 5 ? 380 : pdiAgenda.length <= 10 ? 440 : 500
@@ -431,6 +460,42 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             )
           })()}
         </div>
+
+        {/* ── Block 1b: Observações a validar (gestor/admin) ────────────── */}
+        {role && ['gestor', 'admin'].includes(role) && obsPendentes.length > 0 && (
+          <div style={{
+            background: '#fff',
+            borderRadius: 8,
+            borderLeft: '4px solid #7C3AED',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#6D28D9', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>📝 Observações a validar</span>
+              <span style={{ background: '#7C3AED', color: '#fff', borderRadius: 9, padding: '0 7px', fontSize: 11 }}>{obsPendentes.length}</span>
+            </div>
+            {obsPendentes.map((o, i) => (
+              <Link
+                key={o.id}
+                href={`/observacoes?cat=${encodeURIComponent(o.categoria)}`}
+                title={`${o.categoria} · ${o.coluna}${o.autor ? ` · ${o.autor}` : ''}`}
+                style={{
+                  display: 'block', textDecoration: 'none',
+                  padding: '5px 0',
+                  borderBottom: i < obsPendentes.length - 1 ? '1px solid #EDE9FE' : 'none',
+                  lineHeight: 1.5,
+                }}
+              >
+                <span style={{ fontSize: 13, color: '#1E293B', fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {o.motivo?.trim() || o.coluna}
+                </span>
+                <span style={{ fontSize: 11, color: '#6B7280' }}>
+                  {o.categoria}{o.autor ? ` · ${o.autor}` : ''}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* ── Block 2: Home Office + BSA ────────────────────────────────── */}
         <div style={{
