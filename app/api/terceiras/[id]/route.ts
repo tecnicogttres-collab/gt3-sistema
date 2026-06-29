@@ -22,6 +22,7 @@ const CAMPO_LABELS: Record<string, string> = {
   tem_sub: 'É subcontratada',
   subcontratante: 'Empresa subcontratante',
   observacao: 'Observação',
+  sem_prazo: 'Controle de prazo',
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
@@ -33,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const update: Record<string, unknown> = {}
   const camposAlterados: string[] = []
 
-  const CAMPOS = ['contratante_id', 'razao_social', 'contato', 'data', 'tem_sub', 'subcontratante', 'observacao']
+  const CAMPOS = ['contratante_id', 'razao_social', 'contato', 'data', 'tem_sub', 'subcontratante', 'observacao', 'sem_prazo']
   for (const campo of CAMPOS) {
     if (body[campo] !== undefined) {
       if (campo === 'razao_social' && typeof body[campo] === 'string') {
@@ -78,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .from('terceiras')
     .select(`
       id, contratante_id, razao_social, contato, data, tem_sub, subcontratante,
-      observacao, status, arquivado_em, etapas, created_at,
+      observacao, sem_prazo, status, arquivado_em, etapas, created_at,
       contratante:terceiras_contratantes(id, nome, requer_cc),
       historico:terceiras_historico(id, ts, who, what)
     `)

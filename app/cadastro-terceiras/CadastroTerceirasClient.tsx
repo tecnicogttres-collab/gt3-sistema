@@ -29,6 +29,7 @@ type Terceira = {
   tem_sub: boolean
   subcontratante: string | null
   observacao: string | null
+  sem_prazo: boolean
   status: 'ativo' | 'concluido' | 'nao_evoluiu'
   arquivado_em: string | null
   etapas: Etapas
@@ -109,8 +110,12 @@ function fmtDataHora(d: string | null): string {
   return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-// "Sem avanço": ativa há 5+ dias desde a data de cadastro sem chegar a 100%
-const DIAS_SEM_AVANCO = 5
+// Cor por tempo sem avanço (dias desde o cadastro, ativa e < 100%):
+//   5+ amarelo · 10+ laranja · 15+ vermelho
+// Empresas marcadas como "sem controle de prazo" ficam em lilás e fora dessa regra.
+const DIAS_SEM_AVANCO = 5  // limiar para entrar na contagem (amarelo)
+const DIAS_LARANJA = 10
+const DIAS_VERMELHO = 15
 
 function diasDesde(dateStr: string | null): number {
   if (!dateStr) return 0
@@ -119,8 +124,29 @@ function diasDesde(dateStr: string | null): number {
   return Math.floor((Date.now() - base.getTime()) / 86400000)
 }
 
+type NivelPrazo = 'normal' | 'amarelo' | 'laranja' | 'vermelho' | 'sem_prazo'
+
+function nivelPrazo(t: Terceira): NivelPrazo {
+  if (t.sem_prazo) return 'sem_prazo'
+  if (t.status !== 'ativo' || calcProgresso(t) >= 100) return 'normal'
+  const d = diasDesde(t.data)
+  if (d >= DIAS_VERMELHO) return 'vermelho'
+  if (d >= DIAS_LARANJA) return 'laranja'
+  if (d >= DIAS_SEM_AVANCO) return 'amarelo'
+  return 'normal'
+}
+
+const NIVEL_INFO: Record<Exclude<NivelPrazo, 'normal'>, { border: string; bg: string; bgHover: string; text: string }> = {
+  amarelo:   { border: '#CA8A04', bg: '#FEFCE8', bgHover: '#FEF9C3', text: '#A16207' },
+  laranja:   { border: '#EA580C', bg: '#FFF7ED', bgHover: '#FFEDD5', text: '#C2410C' },
+  vermelho:  { border: '#DC2626', bg: '#FFF5F5', bgHover: '#FFECEC', text: '#DC2626' },
+  sem_prazo: { border: '#9333EA', bg: '#FAF5FF', bgHover: '#F3E8FF', text: '#7E22CE' },
+}
+
+// "Parada": tem cor de atraso por dias (amarelo/laranja/vermelho). Exclui as sem prazo.
 function semAvanco(t: Terceira): boolean {
-  return t.status === 'ativo' && calcProgresso(t) < 100 && diasDesde(t.data) >= DIAS_SEM_AVANCO
+  const n = nivelPrazo(t)
+  return n === 'amarelo' || n === 'laranja' || n === 'vermelho'
 }
 
 // Ordem padrão das colunas de etapas + lookup por id (para reordenação)
@@ -201,7 +227,7 @@ export default function CadastroTerceirasClient() {
   const [modalNova, setModalNova] = useState(false)
   const [novaTerceira, setNovaTerceira] = useState({
     contratante_id: '', razao_social: '', contato: '', data: new Date().toISOString().slice(0, 10),
-    tem_sub: false, subcontratante: '', observacao: '',
+    tem_sub: false, subcontratante: '', observacao: '', sem_prazo: false,
   })
   const [salvandoNova, setSalvandoNova] = useState(false)
 
@@ -519,7 +545,7 @@ export default function CadastroTerceirasClient() {
       const nova: Terceira = await res.json()
       setTerceiras(prev => [nova, ...prev])
       setModalNova(false)
-      setNovaTerceira({ contratante_id: '', razao_social: '', contato: '', data: new Date().toISOString().slice(0, 10), tem_sub: false, subcontratante: '', observacao: '' })
+      setNovaTerceira({ contratante_id: '', razao_social: '', contato: '', data: new Date().toISOString().slice(0, 10), tem_sub: false, subcontratante: '', observacao: '', sem_prazo: false })
       showToast('✓ Terceira cadastrada', 'success')
 
       // Link com o módulo de E-mails: oferece o e-mail padrão da contratante
@@ -746,7 +772,7 @@ export default function CadastroTerceirasClient() {
             <label style={{ fontSize: 11, color: S.textMuted, display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="checkbox" checked={fSoSub} onChange={e => setFSoSub(e.target.checked)} /> Só subcontratadas
             </label>
-            <label title={`Empresas ativas há ${DIAS_SEM_AVANCO}+ dias desde o cadastro sem chegar a 100%`}
+            <label title={`Empresas ativas sem chegar a 100%. Cor por dias desde o cadastro: ${DIAS_SEM_AVANCO}+ amarelo · ${DIAS_LARANJA}+ laranja · ${DIAS_VERMELHO}+ vermelho. Empresas "sem controle de prazo" ficam em lilás e fora desta contagem.`}
               style={{ fontSize: 11, fontWeight: 600, color: fParado ? S.danger : S.textMuted, display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, border: `1px solid ${fParado ? S.danger : S.border}`, background: fParado ? S.dangerBg : 'transparent', cursor: 'pointer' }}>
               <input type="checkbox" checked={fParado} onChange={e => setFParado(e.target.checked)} /> ⏱ Paradas 5+ dias
               {ativosParados > 0 && <span style={{ background: S.danger, color: '#fff', borderRadius: 9, padding: '0 6px', fontSize: 10 }}>{ativosParados}</span>}
@@ -1035,6 +1061,16 @@ export default function CadastroTerceirasClient() {
                 <input type="checkbox" id="nTemSub" checked={novaTerceira.tem_sub}
                   onChange={e => setNovaTerceira(p => ({ ...p, tem_sub: e.target.checked, subcontratante: '' }))} />
                 <label htmlFor="nTemSub" style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>É uma empresa subcontratada</label>
+              </div>
+              <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, border: `1px solid ${novaTerceira.sem_prazo ? '#9333EA' : S.border}`, background: novaTerceira.sem_prazo ? '#FAF5FF' : 'transparent' }}>
+                <input type="checkbox" id="nSemPrazo" checked={novaTerceira.sem_prazo}
+                  onChange={e => setNovaTerceira(p => ({ ...p, sem_prazo: e.target.checked }))} />
+                <label htmlFor="nSemPrazo" style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer', color: novaTerceira.sem_prazo ? '#7E22CE' : undefined }}>
+                  🟣 Não controla prazo
+                  <span style={{ fontSize: 11, fontWeight: 400, color: S.textMuted, marginLeft: 6 }}>
+                    fica em lilás, sem alerta de dias (5/10/15)
+                  </span>
+                </label>
               </div>
               {novaTerceira.tem_sub && (
                 <div style={{ gridColumn: '1/-1' }}>
@@ -1370,10 +1406,11 @@ function TerceiraRow({
 
   const requerCC = !!t.contratante?.requer_cc
   const prog = calcProgresso(t)
-  const parado = semAvanco(t)
+  const nivel = nivelPrazo(t)
+  const ni = nivel !== 'normal' ? NIVEL_INFO[nivel] : null
   const diasParado = diasDesde(t.data)
-  const baseBg = parado ? '#fff5f5' : ''
-  const hoverBg = parado ? '#ffecec' : '#fafbfd'
+  const baseBg = ni?.bg ?? ''
+  const hoverBg = ni?.bgHover ?? '#fafbfd'
   const tdSt: React.CSSProperties = { padding: '6px 10px', borderBottom: `1px solid ${S.border}`, verticalAlign: 'middle' }
   const inp: React.CSSProperties = {
     width: '100%', padding: '4px 7px', border: `1px solid ${S.border}`, borderRadius: 4,
@@ -1383,7 +1420,7 @@ function TerceiraRow({
 
   return (
     <tr
-      style={{ background: baseBg, boxShadow: parado ? `inset 3px 0 0 ${S.danger}` : undefined }}
+      style={{ background: baseBg, boxShadow: ni ? `inset 3px 0 0 ${ni.border}` : undefined }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = hoverBg }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = baseBg }}
     >
@@ -1396,11 +1433,15 @@ function TerceiraRow({
 
       {/* Empresa */}
       <td style={{ ...tdSt, maxWidth: 220 }}>
-        <div style={{ fontWeight: parado ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 12, color: parado ? S.danger : undefined }} title={parado ? `${t.razao_social} — parada há ${diasParado} dias sem avanço` : t.razao_social}>
+        <div style={{ fontWeight: ni ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 12, color: ni?.text }} title={nivel === 'sem_prazo' ? `${t.razao_social} — sem controle de prazo` : ni ? `${t.razao_social} — parada há ${diasParado} dias sem avanço` : t.razao_social}>
           {t.razao_social}
         </div>
-        {parado && (
-          <div style={{ fontSize: 10, color: S.danger, fontWeight: 700, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+        {nivel === 'sem_prazo' ? (
+          <div style={{ fontSize: 10, color: ni!.text, fontWeight: 700, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+            🟣 Sem controle de prazo
+          </div>
+        ) : ni && (
+          <div style={{ fontSize: 10, color: ni.text, fontWeight: 700, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
             ⏱ {diasParado} dias sem avanço
           </div>
         )}
@@ -1693,6 +1734,14 @@ function DrawerContent({ terceira, drawerTab, setDrawerTab, podeValidarGestor, c
                     </DrawerField>
                   </div>
                 )}
+                <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, border: `1px solid ${terceira.sem_prazo ? '#9333EA' : S.border}`, background: terceira.sem_prazo ? '#FAF5FF' : 'transparent' }}>
+                  <input type="checkbox" id="eSemPrazo" disabled={isArchived} checked={terceira.sem_prazo}
+                    onChange={e => onUpdateInfo(terceira.id, 'sem_prazo', e.target.checked)} />
+                  <label htmlFor="eSemPrazo" style={{ fontSize: 13, fontWeight: 500, color: terceira.sem_prazo ? '#7E22CE' : undefined }}>
+                    🟣 Não controla prazo
+                    <span style={{ fontSize: 11, fontWeight: 400, color: S.textMuted, marginLeft: 6 }}>fica em lilás, sem alerta de dias</span>
+                  </label>
+                </div>
               </div>
             </DrawerSection>
 

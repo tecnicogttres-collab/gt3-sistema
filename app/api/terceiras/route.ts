@@ -44,7 +44,7 @@ export async function GET() {
     .from('terceiras')
     .select(`
       id, contratante_id, razao_social, contato, data, tem_sub, subcontratante,
-      observacao, status, arquivado_em, etapas, created_at,
+      observacao, sem_prazo, status, arquivado_em, etapas, created_at,
       contratante:terceiras_contratantes(id, nome, requer_cc),
       historico:terceiras_historico(id, ts, who, what)
     `)
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const body = await req.json()
-  const { contratante_id, razao_social, contato, data, tem_sub, subcontratante, observacao } = body
+  const { contratante_id, razao_social, contato, data, tem_sub, subcontratante, observacao, sem_prazo } = body
 
   if (!contratante_id) return Response.json({ error: 'Contratante obrigatório' }, { status: 400 })
   if (!razao_social?.trim()) return Response.json({ error: 'Razão social obrigatória' }, { status: 400 })
@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
       tem_sub: !!tem_sub,
       subcontratante: tem_sub ? (subcontratante?.trim() || null) : null,
       observacao: observacao?.trim() || null,
+      sem_prazo: !!sem_prazo,
       status: 'ativo',
       etapas,
       created_by: caller.user.id,
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
     .from('terceiras')
     .select(`
       id, contratante_id, razao_social, contato, data, tem_sub, subcontratante,
-      observacao, status, arquivado_em, etapas, created_at,
+      observacao, sem_prazo, status, arquivado_em, etapas, created_at,
       contratante:terceiras_contratantes(id, nome, requer_cc),
       historico:terceiras_historico(id, ts, who, what)
     `)
