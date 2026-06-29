@@ -729,6 +729,62 @@ export default function RevisoesTraineeClient() {
     win.document.close()
   }
 
+  // Relatório agregado: documentos mais avaliados (ranking por frequência)
+  function printDocsRanking() {
+    if (!reportResult) return
+    const win = window.open('', '_blank')
+    if (!win) return
+    type Agg = { total: number; green: number; red: number; yellow: number; erro_corrigido: number; pending: number }
+    const map = new Map<string, Agg>()
+    for (const r of reportResult) {
+      const doc = r.documento?.trim() || '—'
+      const a = map.get(doc) ?? { total: 0, green: 0, red: 0, yellow: 0, erro_corrigido: 0, pending: 0 }
+      const w = docWeight(r)
+      a.total += w
+      a[r.status] += w
+      map.set(doc, a)
+    }
+    const ranked = [...map.entries()].sort((x, y) => y[1].total - x[1].total)
+    const totalDocs = sumWeight(reportResult)
+    const maxTotal = ranked[0]?.[1].total ?? 1
+    const rows = ranked.map(([doc, a], i) => {
+      const pct = totalDocs > 0 ? Math.round((a.total / totalDocs) * 100) : 0
+      const barPct = Math.round((a.total / maxTotal) * 100)
+      return `<tr style="border-bottom:1px solid #eee">
+        <td style="padding:5px 8px;font-size:11px;text-align:center;color:#6B7A99">${i + 1}</td>
+        <td style="padding:5px 8px;font-size:11px;font-weight:600">${doc}</td>
+        <td style="padding:5px 8px;min-width:120px"><div style="background:#2A4F96;height:11px;border-radius:3px;width:${barPct}%"></div></td>
+        <td style="padding:5px 8px;font-size:12px;text-align:center;font-weight:700">${a.total}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;color:#6B7A99">${pct}%</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;color:#065F46">${a.green || ''}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;color:#991B1B">${a.red || ''}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;color:#92400E">${a.yellow || ''}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;color:#C2410C">${a.erro_corrigido || ''}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:center;color:#6B7A99">${a.pending || ''}</td>
+      </tr>`
+    }).join('')
+    const periodo = (reportFilters.startDate || reportFilters.endDate)
+      ? `${reportFilters.startDate ? formatDate(reportFilters.startDate) : 'início'} a ${reportFilters.endDate ? formatDate(reportFilters.endDate) : 'hoje'}`
+      : 'todo o período'
+    const traineeNome = reportFilters.traineeId
+      ? (data?.trainees.find(t => t.id === reportFilters.traineeId)?.nome ?? '')
+      : ''
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Docs mais avaliados — GT3</title>
+    <style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse}
+    th{background:#f0f4fa;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#475569}
+    @media print{.no-print{display:none}}</style></head><body>
+    <h2 style="margin:0 0 4px;font-size:18px">Documentos mais avaliados — Revisões Trainee</h2>
+    <p style="margin:0 0 12px;font-size:12px;color:#6B7A99">
+      ${ranked.length} documento(s) distintos · ${totalDocs} avaliações · período: ${periodo}${traineeNome ? ` · trainee: ${traineeNome}` : ''} · gerado em ${new Date().toLocaleString('pt-BR')}
+    </p>
+    <button class="no-print" onclick="window.print()" style="margin-bottom:12px;padding:6px 14px;background:#2A4F96;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir</button>
+    <table><thead><tr>
+      <th style="text-align:center">#</th><th>Documento</th><th>Frequência</th><th style="text-align:center">Total</th><th style="text-align:center">%</th>
+      <th style="text-align:center">✅</th><th style="text-align:center">❌</th><th style="text-align:center">⚠️</th><th style="text-align:center">🔧</th><th style="text-align:center">⏳</th>
+    </tr></thead><tbody>${rows}</tbody></table></body></html>`)
+    win.document.close()
+  }
+
   // ── Cell renderer ──────────────────────────────────────────────
   function renderCell(rec: Registro, field: 'empresa' | 'colaborador' | 'documento') {
     // documento nunca abre edição inline — é sempre copy-on-click
@@ -1466,6 +1522,9 @@ export default function RevisoesTraineeClient() {
                       </button>
                       <button onClick={printReport} style={{ padding: '7px 14px', background: '#fff', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', color: '#374151' }}>
                         🖨 Imprimir
+                      </button>
+                      <button onClick={printDocsRanking} disabled={reportResult.length === 0} title="Ranking dos documentos mais avaliados no período" style={{ padding: '7px 14px', background: reportResult.length === 0 ? '#EEF2F7' : '#EBF0FB', border: '1px solid #C7D7F0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: reportResult.length === 0 ? 'not-allowed' : 'pointer', color: '#2A4F96' }}>
+                        📊 Docs mais avaliados
                       </button>
                     </div>
                   </div>
