@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { markAtaNotifVista } from '../components/AppShell'
-import AtasEditor, { type AtaEditorData } from './AtasEditor'
+import AtaTextoEditor, { type AtaEditorData } from './AtaTextoEditor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,11 @@ function fmtDate(iso: string) {
 
 function ataLabel(a: { titulo: string | null; data: string }) {
   return a.titulo?.trim() || `Ata de ${fmtDate(a.data)}`
+}
+
+// Atas antigas guardam HTML estruturado; as novas são texto livre.
+function isHtml(s: string): boolean {
+  return /<(div|p|table|br|span|h[1-6]|ul|ol|li)[\s>]/i.test(s)
 }
 
 function getSnippet(text: string, query: string, maxLen = 130): string {
@@ -240,9 +245,6 @@ export default function AtasClient() {
       data: form.data,
       status: form.status,
       conteudo: form.conteudo,
-      local_reuniao: form.localReuniao,
-      numero_ata: form.numeroAta,
-      participantes: form.participantes,
     }
   }
 
@@ -471,18 +473,11 @@ export default function AtasClient() {
                   <h2 style={{ margin: 0, fontSize: 20, color: '#1A2340', fontWeight: 700 }}>{ataLabel(selected)}</h2>
                   <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, color: '#6B7A99' }}>{fmtDate(selected.data)}</span>
-                    {selected.numero_ata && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 999, background: '#D1AE6E', color: '#fff' }}>{selected.numero_ata}</span>}
                     <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 999, backgroundColor: `${STATUS_COLORS[selected.status]}22`, color: STATUS_COLORS[selected.status] }}>
                       {selected.status}
                     </span>
                     {selected.autor && <span style={{ fontSize: 12, color: '#94A3B8' }}>por {selected.autor.nome}</span>}
                   </div>
-                  {(selected.local_reuniao || selected.participantes) && (
-                    <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '6px 20px' }}>
-                      {selected.local_reuniao && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Local:</span> {selected.local_reuniao}</span>}
-                      {selected.participantes && <span style={{ fontSize: 12, color: '#334155' }}><span style={{ color: '#94A3B8' }}>Participantes:</span> {selected.participantes}</span>}
-                    </div>
-                  )}
                 </div>
                 {isGestorOrAdmin && (
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -510,10 +505,16 @@ export default function AtasClient() {
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', background: '#F0F3F9' }}>
               {selected.conteudo ? (
                 <div style={{ maxWidth: 880, margin: '0 auto', background: '#fff', borderRadius: 14, border: '1px solid rgba(42,79,150,0.10)', boxShadow: '0 4px 20px rgba(42,79,150,0.08)', padding: '36px 44px', borderTop: '3px solid #2A4F96' }}>
-                  <div
-                    className="ata-view-content"
-                    dangerouslySetInnerHTML={{ __html: selected.conteudo }}
-                  />
+                  {isHtml(selected.conteudo) ? (
+                    <div
+                      className="ata-view-content"
+                      dangerouslySetInnerHTML={{ __html: selected.conteudo }}
+                    />
+                  ) : (
+                    <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, color: '#1a1f2e', lineHeight: 1.75, wordBreak: 'break-word' }}>
+                      {selected.conteudo}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p style={{ color: '#94A3B8', fontSize: 14, padding: 24 }}>Sem conteúdo registrado.</p>
@@ -582,36 +583,30 @@ export default function AtasClient() {
       </div>
 
       {showEditor && (
-        <AtasEditor
+        <AtaTextoEditor
           onSave={handleCreate}
           onClose={() => setShowEditor(false)}
         />
       )}
       {editingAta && (
-        <AtasEditor
+        <AtaTextoEditor
           initial={{
             titulo: editingAta.titulo ?? '',
             data: editingAta.data,
             status: editingAta.status,
             conteudo: editingAta.conteudo,
-            localReuniao: editingAta.local_reuniao ?? '',
-            numeroAta: editingAta.numero_ata ?? '',
-            participantes: editingAta.participantes ?? '',
           }}
           onSave={handleEdit}
           onClose={() => setEditingAta(null)}
         />
       )}
       {copyingAta && (
-        <AtasEditor
+        <AtaTextoEditor
           initial={{
             titulo: copyingAta.titulo ? `${copyingAta.titulo} (cópia)` : '',
             data: new Date().toISOString().slice(0, 10),
             status: 'Rascunho',
             conteudo: copyingAta.conteudo,
-            localReuniao: copyingAta.local_reuniao ?? '',
-            numeroAta: '',
-            participantes: copyingAta.participantes ?? '',
           }}
           onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
           onClose={() => setCopyingAta(null)}

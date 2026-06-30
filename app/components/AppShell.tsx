@@ -507,6 +507,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         }
       )
       .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'atas', filter: 'status=eq.Validada' },
+        (payload) => {
+          const record = payload.new as { id: string; data: string; titulo: string | null; status: string }
+          if (record?.status !== 'Validada' || !record?.id) return
+          setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
+          setUnreadAtas(prev =>
+            prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
+          )
+        }
+      )
+      .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sugestoes' },
         (payload) => {
           if (isColabOrTrainee) return
