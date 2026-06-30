@@ -151,10 +151,7 @@ export default function RevisoesTraineeClient() {
   const [novaDataError, setNovaDataError] = useState('')
 
   // History
-  const [historyExpanded, setHistoryExpanded] = useState(true)
   const [historyRecords, setHistoryRecords] = useState<Record<string, Registro[]>>({})
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
-  const [docStatsOpen, setDocStatsOpen] = useState(false)
 
   const [toast, setToast] = useState('')
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -349,16 +346,6 @@ export default function RevisoesTraineeClient() {
     ? docBanco.filter(d => d.nome.toLowerCase().includes(newDocumento.toLowerCase()))
     : docBanco
 
-  const docHistoryStats = useMemo(() => {
-    const allRecs = Object.values(historyRecords).flat()
-    if (allRecs.length === 0) return []
-    const countMap: Record<string, number> = {}
-    allRecs.forEach(r => { const k = r.documento?.trim(); if (k) countMap[k] = (countMap[k] ?? 0) + docWeight(r) })
-    const total = sumWeight(allRecs)
-    return Object.entries(countMap)
-      .map(([nome, count]) => ({ nome, count, pct: Math.round((count / total) * 100) }))
-      .sort((a, b) => b.count - a.count)
-  }, [historyRecords])
 
   const pendingByTrainee = useMemo(() => {
     const map: Record<string, { nome: string; count: number }> = {}
@@ -620,20 +607,6 @@ export default function RevisoesTraineeClient() {
     setNovaDataLoading(false)
   }
 
-  // ── History ────────────────────────────────────────────────────
-  async function toggleDay(dataDia: string) {
-    const next = new Set(expandedDays)
-    if (next.has(dataDia)) { next.delete(dataDia); setExpandedDays(next); return }
-    next.add(dataDia); setExpandedDays(next)
-    if (!historyRecords[dataDia]) {
-      const res = await fetch(`/api/revisoes?date=${dataDia}`)
-      if (res.ok) {
-        const recs: Registro[] = await res.json()
-        setHistoryRecords(prev => ({ ...prev, [dataDia]: recs }))
-      }
-    }
-  }
-
   // ── CSV export ─────────────────────────────────────────────────
   function exportCSV() {
     const rows = [['Data', 'Trainee', 'Empresa', 'Colaborador', 'Documento', 'Observações', 'Auto-aval', 'Status', 'Nota revisor', 'Revisor', 'Hora revisão']]
@@ -654,8 +627,8 @@ export default function RevisoesTraineeClient() {
   }
 
   // ── Relatório ──────────────────────────────────────────────────
-  async function generateReport() {
-    setReportLoading(true)
+  // Busca + filtra os registros do histórico conforme os filtros do relatório
+  async function computeReportRecs(): Promise<Registro[]> {
     const allDates = data?.historyDates ?? []
     const filteredDates = allDates.filter(hd => {
       if (reportFilters.startDate && hd.data < reportFilters.startDate) return false
@@ -672,8 +645,23 @@ export default function RevisoesTraineeClient() {
     let recs = filteredDates.flatMap(hd => combined[hd.data] ?? [])
     if (reportFilters.traineeId) recs = recs.filter(r => r.criado_por === reportFilters.traineeId)
     if (reportFilters.status) recs = recs.filter(r => r.status === reportFilters.status)
+    return recs
+  }
+
+  async function generateReport() {
+    setReportLoading(true)
+    const recs = await computeReportRecs()
     setReportResult(recs)
     setReportLoading(false)
+  }
+
+  // Gera direto o ranking de documentos mais avaliados (sem precisar montar a tabela antes)
+  async function generateDocsRanking() {
+    setReportLoading(true)
+    const recs = await computeReportRecs()
+    setReportResult(recs)
+    setReportLoading(false)
+    printDocsRanking(recs)
   }
 
   function exportReportCSV() {
@@ -730,13 +718,14 @@ export default function RevisoesTraineeClient() {
   }
 
   // Relatório agregado: documentos mais avaliados (ranking por frequência)
-  function printDocsRanking() {
-    if (!reportResult) return
+  function printDocsRanking(recsArg?: Registro[]) {
+    const recs = recsArg ?? reportResult
+    if (!recs) return
     const win = window.open('', '_blank')
     if (!win) return
     type Agg = { total: number; green: number; red: number; yellow: number; erro_corrigido: number; pending: number }
     const map = new Map<string, Agg>()
-    for (const r of reportResult) {
+    for (const r of recs) {
       const doc = r.documento?.trim() || '—'
       const a = map.get(doc) ?? { total: 0, green: 0, red: 0, yellow: 0, erro_corrigido: 0, pending: 0 }
       const w = docWeight(r)
@@ -745,7 +734,7 @@ export default function RevisoesTraineeClient() {
       map.set(doc, a)
     }
     const ranked = [...map.entries()].sort((x, y) => y[1].total - x[1].total)
-    const totalDocs = sumWeight(reportResult)
+    const totalDocs = sumWeight(recs)
     const maxTotal = ranked[0]?.[1].total ?? 1
     const rows = ranked.map(([doc, a], i) => {
       const pct = totalDocs > 0 ? Math.round((a.total / totalDocs) * 100) : 0
@@ -882,6 +871,11 @@ export default function RevisoesTraineeClient() {
               {activeDate && (
                 <button onClick={exportCSV} style={{ padding: '8px 16px', backgroundColor: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                   Exportar CSV
+                </button>
+              )}
+              {data.historyDates.length > 0 && (
+                <button onClick={() => { setReportOpen(true); setReportResult(null) }} title="Histórico e relatórios dos dias finalizados" style={{ padding: '8px 16px', backgroundColor: '#fff', color: '#2A4F96', border: '1px solid #2A4F96', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  📊 Histórico / Relatório
                 </button>
               )}
             </div>
@@ -1212,157 +1206,7 @@ export default function RevisoesTraineeClient() {
         </div>
       )}
 
-      {/* History */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Histórico</h2>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {!isTrainee && data.historyDates.length > 0 && (
-              <button
-                onClick={() => { setReportOpen(true); setReportResult(null) }}
-                style={{ padding: '6px 12px', background: '#fff', color: '#2A4F96', border: '1px solid #2A4F96', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              >
-                📊 Gerar Relatório
-              </button>
-            )}
-            <button onClick={() => setHistoryExpanded(p => !p)} style={{ background: 'none', border: 'none', color: '#6B7A99', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
-              {historyExpanded ? 'ocultar' : 'mostrar'}
-            </button>
-          </div>
-        </div>
-
-        {historyExpanded && docHistoryStats.length > 0 && (
-          <div style={{ marginBottom: 14, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
-            <button
-              onClick={() => setDocStatsOpen(v => !v)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-            >
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#2A4F96' }}>📊 Documentos mais avaliados</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 11, color: '#94A3B8' }}>
-                  {Object.values(historyRecords).flat().length} registros · {docHistoryStats.length} tipos
-                </span>
-                <span style={{ fontSize: 11, color: '#94A3B8' }}>{docStatsOpen ? '▲' : '▼'}</span>
-              </div>
-            </button>
-            {docStatsOpen && (
-              <div style={{ padding: '0 16px 14px', borderTop: '1px solid #F1F5F9' }}>
-                <p style={{ margin: '10px 0 12px', fontSize: 11, color: '#94A3B8' }}>
-                  Baseado nos dias abertos abaixo — expande mais dias para ampliar a análise.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {docHistoryStats.map(({ nome, count, pct }, i) => (
-                    <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 11, color: '#94A3B8', width: 18, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                      <span style={{ fontSize: 12, color: '#1E293B', width: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }} title={nome}>{nome}</span>
-                      <div style={{ flex: 1, height: 8, background: '#F1F5F9', borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: i === 0 ? '#2A4F96' : i === 1 ? '#5B8DEF' : '#93B8F5', borderRadius: 99, transition: 'width 0.4s' }} />
-                      </div>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', width: 34, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
-                      <span style={{ fontSize: 11, color: '#94A3B8', width: 36, flexShrink: 0 }}>({count})</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {historyExpanded && (
-          data.historyDates.length === 0
-            ? <div style={{ padding: '16px 0', color: '#94A3B8', fontSize: 14, fontStyle: 'italic' }}>Nenhum dia finalizado ainda.</div>
-            : data.historyDates.map(hd => {
-              const isOpen = expandedDays.has(hd.data)
-              const hRecs = historyRecords[hd.data] ?? []
-              const hGreen = sumWeight(hRecs.filter(r => r.status === 'green'))
-              const hRed = sumWeight(hRecs.filter(r => r.status === 'red'))
-              const hYellow = sumWeight(hRecs.filter(r => r.status === 'yellow'))
-              const hPending = sumWeight(hRecs.filter(r => r.status === 'pending'))
-              const hCorrigido = sumWeight(hRecs.filter(r => r.status === 'erro_corrigido'))
-
-              const traineeMap: Record<string, { nome: string; recs: Registro[] }> = {}
-              hRecs.forEach(r => {
-                const key = r.criado_por
-                if (!traineeMap[key]) traineeMap[key] = { nome: r.criado_por_profile?.nome ?? key, recs: [] }
-                traineeMap[key].recs.push(r)
-              })
-
-              return (
-                <div key={hd.data} style={{ backgroundColor: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
-                  <div onClick={() => toggleDay(hd.data)} style={{ padding: '11px 18px', backgroundColor: '#FAFAFA', borderBottom: isOpen ? '1px solid #E2E8F0' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F1F5F9')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#FAFAFA')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{formatDate(hd.data)}</span>
-                      {hd.finalizador && <span style={{ fontSize: 11, color: '#94A3B8' }}>finalizado por {hd.finalizador.nome}</span>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11 }}>
-                      {isOpen && hRecs.length > 0 && (
-                        <>
-                          <span style={{ color: '#16A34A' }}>● {hGreen}</span>
-                          <span style={{ color: '#DC2626' }}>● {hRed}</span>
-                          <span style={{ color: '#D97706' }}>● {hYellow}</span>
-                          {hCorrigido > 0 && <span style={{ color: '#C2410C' }}>🔧 {hCorrigido}</span>}
-                          {hPending > 0 && <span style={{ color: '#94A3B8' }}>○ {hPending}</span>}
-                        </>
-                      )}
-                      <span style={{ color: '#94A3B8', fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
-                    </div>
-                  </div>
-
-                  {isOpen && (
-                    <div>
-                      {hRecs.length === 0 ? (
-                        <div style={{ padding: '20px', color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>Carregando...</div>
-                      ) : Object.values(traineeMap).map(({ nome, recs }) => (
-                        <div key={nome} style={{ borderTop: '1px solid #F1F5F9' }}>
-                          <div style={{ padding: '7px 18px', backgroundColor: '#F8FAFC', fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                            {nome} · {recs.length} registro{recs.length > 1 ? 's' : ''}
-                          </div>
-                          <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                              <thead>
-                                <tr style={{ backgroundColor: '#FAFAFA' }}>
-                                  {['Hora', 'Empresa', 'Colaborador', 'Documento', 'Status', 'Revisor'].map((col, i) => (
-                                    <th key={i} style={{ padding: '7px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #F1F5F9' }}>{col}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {recs.map(r => (
-                                  <tr key={r.id} style={{ borderBottom: '1px solid #F8FAFC', backgroundColor: rowBg(r.status) }}>
-                                    <td style={{ padding: '8px 14px', color: '#6B7A99', fontSize: 11, whiteSpace: 'nowrap' }}>{formatTime(r.created_at)}</td>
-                                    <td style={{ padding: '8px 14px' }}>{r.empresa}</td>
-                                    <td style={{ padding: '8px 14px' }}>
-                                      {r.colaborador && /^\d+$/.test(r.colaborador.trim()) && parseInt(r.colaborador) > 1 ? (
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                          <span style={{ fontWeight: 700, color: '#D97706' }}>×{r.colaborador}</span>
-                                          <span style={{ fontSize: 10, color: '#94A3B8', background: '#FEF3C7', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>docs</span>
-                                        </span>
-                                      ) : (r.colaborador ?? '—')}
-                                    </td>
-                                    <td style={{ padding: '8px 14px' }}>
-                                      {r.documento}
-                                      {r.nota_revisor && <div style={{ fontSize: 10, color: '#6B7A99', fontStyle: 'italic', marginTop: 2 }}>"{r.nota_revisor}"</div>}
-                                    </td>
-                                    <td style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
-                                      <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 6px', borderRadius: 4, backgroundColor: r.status === 'green' ? '#D1FAE5' : r.status === 'red' ? '#FEE2E2' : r.status === 'yellow' ? '#FEF3C7' : r.status === 'erro_corrigido' ? '#FFF7ED' : '#F1F5F9', color: r.status === 'green' ? '#065F46' : r.status === 'red' ? '#991B1B' : r.status === 'yellow' ? '#92400E' : r.status === 'erro_corrigido' ? '#C2410C' : '#6B7A99' }}>
-                                        {r.status === 'erro_corrigido' ? '⚠️ Erro corrigido' : STATUS_LABEL[r.status]}
-                                      </span>
-                                    </td>
-                                    <td style={{ padding: '8px 14px', fontSize: 11, color: '#6B7A99' }}>{r.revisado_por_profile?.nome ?? '—'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })
-        )}
-      </div>
+      {/* Histórico removido da página — agora acessível apenas via "📊 Histórico / Relatório" (botão no topo) */}
 
       {/* ── Modal: Flag ───────────────────────────────────────────── */}
       {flagModal && (
@@ -1489,6 +1333,11 @@ export default function RevisoesTraineeClient() {
                 style={{ padding: '8px 18px', background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: reportLoading ? 'wait' : 'pointer', opacity: reportLoading ? 0.7 : 1 }}>
                 {reportLoading ? 'Carregando…' : 'Gerar'}
               </button>
+              <button onClick={generateDocsRanking} disabled={reportLoading}
+                title="Lista/ranking de quais documentos foram feitos no período e filtros"
+                style={{ padding: '8px 16px', background: '#EBF0FB', color: '#2A4F96', border: '1px solid #C7D7F0', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: reportLoading ? 'wait' : 'pointer', opacity: reportLoading ? 0.7 : 1 }}>
+                📊 Docs mais avaliados
+              </button>
             </div>
 
             {/* Resultado */}
@@ -1523,7 +1372,7 @@ export default function RevisoesTraineeClient() {
                       <button onClick={printReport} style={{ padding: '7px 14px', background: '#fff', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', color: '#374151' }}>
                         🖨 Imprimir
                       </button>
-                      <button onClick={printDocsRanking} disabled={reportResult.length === 0} title="Ranking dos documentos mais avaliados no período" style={{ padding: '7px 14px', background: reportResult.length === 0 ? '#EEF2F7' : '#EBF0FB', border: '1px solid #C7D7F0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: reportResult.length === 0 ? 'not-allowed' : 'pointer', color: '#2A4F96' }}>
+                      <button onClick={() => printDocsRanking()} disabled={reportResult.length === 0} title="Ranking dos documentos mais avaliados no período" style={{ padding: '7px 14px', background: reportResult.length === 0 ? '#EEF2F7' : '#EBF0FB', border: '1px solid #C7D7F0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: reportResult.length === 0 ? 'not-allowed' : 'pointer', color: '#2A4F96' }}>
                         📊 Docs mais avaliados
                       </button>
                     </div>
