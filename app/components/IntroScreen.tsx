@@ -49,8 +49,8 @@ export default function IntroScreen({ name, onDone }: { name: string; onDone?: (
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('text'), 180)
-    const t2 = setTimeout(() => setPhase('exit'), 650)
-    const t3 = setTimeout(() => { setPhase('done'); markIntroShown(); onDone?.() }, 900)
+    const t2 = setTimeout(() => setPhase('exit'), 1650)
+    const t3 = setTimeout(() => { setPhase('done'); markIntroShown(); onDone?.() }, 1900)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [onDone])
 
