@@ -557,7 +557,7 @@ export default function RevisoesTraineeClient() {
   function openFinalizar() {
     const pending = records.filter(r => r.status === 'pending')
     const initial: Record<string, 'transfer' | 'history'> = {}
-    pending.forEach(r => { if (!initial[r.criado_por]) initial[r.criado_por] = 'history' })
+    pending.forEach(r => { if (!initial[r.criado_por]) initial[r.criado_por] = 'transfer' })
     setGroupActions(initial)
     setFinalizarOpen(true)
   }
@@ -1248,7 +1248,7 @@ export default function RevisoesTraineeClient() {
                 </div>
 
                 {Object.entries(pendingByTrainee).map(([traineeId, group]) => {
-                  const action = groupActions[traineeId] ?? 'history'
+                  const action = groupActions[traineeId] ?? 'transfer'
                   return (
                     <div key={traineeId} style={{ padding: 12, border: '1px solid #E2E8F0', borderRadius: 8, marginBottom: 8, backgroundColor: '#FAFAFA' }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#1E293B', marginBottom: 8 }}>
@@ -1265,8 +1265,13 @@ export default function RevisoesTraineeClient() {
                           onClick={() => setGroupActions(prev => ({ ...prev, [traineeId]: 'history' }))}
                           style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: `1px solid ${action === 'history' ? '#6B7A99' : '#D1D5DB'}`, backgroundColor: action === 'history' ? '#F1F5F9' : '#fff', color: action === 'history' ? '#1E293B' : '#6B7A99', fontSize: 12, fontWeight: action === 'history' ? 600 : 500, cursor: 'pointer', textAlign: 'left' }}
                         >
-                          {action === 'history' ? '◉' : '○'} Enviar p/ histórico sem avaliação
+                          {action === 'history' ? '◉' : '○'} Não alterar nada
                         </button>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>
+                        {action === 'transfer'
+                          ? 'Os pendentes voltam a aparecer hoje, para o trainee continuar de onde parou.'
+                          : 'Os pendentes ficam como estão e vão para o histórico deste dia sem avaliação.'}
                       </div>
                     </div>
                   )
