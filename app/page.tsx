@@ -26,7 +26,7 @@ function greeting(profile: ReturnType<typeof useUser>['profile']): string {
 
 export default function DashboardPage() {
   const { profile, loading } = useUser()
-  const { modules: MODULES } = useModules()
+  const { modules: MODULES, loading: modulesLoading } = useModules()
   const role = (profile?.papel ?? 'colaborador') as Role
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
   const [, setTick] = useState(0)
@@ -55,7 +55,7 @@ export default function DashboardPage() {
     return (m.dashboardRoles ?? m.allowedRoles).includes(role)
   }), [role, modulos_dashboard, modulos_permitidos, MODULES])
 
-  if (loading) {
+  if (loading || modulesLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#6B7A99', fontSize: 14 }}>
         Carregando...
