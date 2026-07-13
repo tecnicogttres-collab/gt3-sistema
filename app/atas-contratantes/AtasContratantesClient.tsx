@@ -173,6 +173,9 @@ export default function AtasContratantesClient() {
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [arquivados, setArquivados] = useState<Set<string>>(new Set())
+  const [showArquivados, setShowArquivados] = useState(false)
+  const [clienteMenuOpen, setClienteMenuOpen] = useState<string | null>(null)
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -205,6 +208,14 @@ export default function AtasContratantesClient() {
     fetch('/api/usuarios')
       .then(r => r.ok ? r.json() : [])
       .then((data: { id: string; nome: string }[]) => setAllUsers(data))
+      .catch(() => {})
+  }, [isGestorOrAdmin])
+
+  useEffect(() => {
+    if (!isGestorOrAdmin) return
+    fetch('/api/atas-contratantes/clientes')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: string[]) => setArquivados(new Set(data)))
       .catch(() => {})
   }, [isGestorOrAdmin])
 
@@ -358,6 +369,36 @@ export default function AtasContratantesClient() {
     router.replace('/atas-contratantes')
   }
 
+  // ── Contratante: arquivar / excluir ────────────────────────────────────────
+
+  async function toggleArquivarCliente(cliente: string, arquivar: boolean) {
+    setClienteMenuOpen(null)
+    const res = await fetch('/api/atas-contratantes/clientes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cliente, arquivado: arquivar }),
+    })
+    if (!res.ok) return
+    setArquivados(prev => {
+      const s = new Set(prev)
+      arquivar ? s.add(cliente) : s.delete(cliente)
+      return s
+    })
+  }
+
+  async function handleDeleteCliente(cliente: string, count: number) {
+    setClienteMenuOpen(null)
+    if (!confirm(`Excluir a contratante "${cliente}" e ${count === 1 ? 'a única ata dela' : `todas as ${count} atas dela`}? Esta ação não pode ser desfeita.`)) return
+    const res = await fetch(`/api/atas-contratantes/clientes/${encodeURIComponent(cliente)}`, { method: 'DELETE' })
+    if (!res.ok) return
+    setAtas(prev => prev.filter(a => (a.cliente?.trim() || '(Sem cliente)') !== cliente))
+    setArquivados(prev => { const s = new Set(prev); s.delete(cliente); return s })
+    if (selected && (selected.cliente?.trim() || '(Sem cliente)') === cliente) {
+      setSelectedId(null); setSelected(null)
+      router.replace('/atas-contratantes')
+    }
+  }
+
   async function handleFinalizarTopico(topicId: string) {
     if (!selected) return
     const allTopicos = parseTopicos(selected.conteudo ?? '')
@@ -447,6 +488,8 @@ export default function AtasContratantesClient() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const tree = buildTree(atas)
+  const arquivadasCount = tree.filter(c => arquivados.has(c.cliente)).length
+  const visibleTree = showArquivados ? tree : tree.filter(c => !arquivados.has(c.cliente))
   const isSearchActive = searchQuery.trim().length > 0
   const partsList = selected ? parseParticipantes(selected.participantes ?? '') : []
   const topicosList = selected ? parseTopicos(selected.conteudo ?? '') : []
@@ -507,6 +550,14 @@ export default function AtasContratantesClient() {
               </button>
             )}
           </div>
+          {isGestorOrAdmin && arquivadasCount > 0 && (
+            <button
+              onClick={() => setShowArquivados(v => !v)}
+              style={{ marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#6B7A99', padding: 0, fontWeight: 600 }}
+            >
+              {showArquivados ? '▼' : '▶'} 🗄 Contratantes arquivadas ({arquivadasCount})
+            </button>
+          )}
         </div>
 
         {/* List body */}
@@ -552,20 +603,56 @@ export default function AtasContratantesClient() {
             <>
               {loading && <p style={{ padding: 16, fontSize: 13, color: '#94A3B8' }}>Carregando…</p>}
               {!loading && atas.length === 0 && <p style={{ padding: 16, fontSize: 13, color: '#94A3B8' }}>Nenhuma ata.</p>}
-              {tree.map(({ cliente, years }) => (
+              {visibleTree.map(({ cliente, years }) => {
+                const totalAtasCliente = years.reduce((acc, y) => acc + y.months.reduce((a2, m) => a2 + m.atas.length, 0), 0)
+                const isArquivada = arquivados.has(cliente)
+                const canManageCliente = isGestorOrAdmin && cliente !== '(Sem cliente)'
+                return (
                 <div key={cliente}>
                   {/* ── Cliente folder ── */}
-                  <button
-                    onClick={() => setOpenClientes(prev => { const s = new Set(prev); s.has(cliente) ? s.delete(cliente) : s.add(cliente); return s })}
-                    style={{ width: '100%', textAlign: 'left', padding: '7px 16px', border: 'none', background: openClientes.has(cliente) ? '#F0F4FA' : 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#1A2340', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid #F0F4FA' }}
-                  >
-                    <span style={{ fontSize: 9 }}>{openClientes.has(cliente) ? '▼' : '▶'}</span>
-                    <span style={{ fontSize: 14, marginRight: 4 }}>📁</span>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cliente}</span>
-                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 400, flexShrink: 0 }}>
-                      {years.reduce((acc, y) => acc + y.months.reduce((a2, m) => a2 + m.atas.length, 0), 0)}
-                    </span>
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', background: openClientes.has(cliente) ? '#F0F4FA' : 'none', borderBottom: '1px solid #F0F4FA', opacity: isArquivada ? 0.65 : 1 }}>
+                    <button
+                      onClick={() => setOpenClientes(prev => { const s = new Set(prev); s.has(cliente) ? s.delete(cliente) : s.add(cliente); return s })}
+                      style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: '7px 8px 7px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#1A2340', display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <span style={{ fontSize: 9 }}>{openClientes.has(cliente) ? '▼' : '▶'}</span>
+                      <span style={{ fontSize: 14, marginRight: 4 }}>{isArquivada ? '🗄' : '📁'}</span>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cliente}</span>
+                      <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 400, flexShrink: 0 }}>
+                        {totalAtasCliente}
+                      </span>
+                    </button>
+                    {canManageCliente && (
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <button
+                          onClick={() => setClienteMenuOpen(prev => prev === cliente ? null : cliente)}
+                          title="Opções da contratante"
+                          style={{ width: 26, height: 26, marginRight: 8, border: 'none', background: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: 14, borderRadius: 6 }}
+                        >
+                          ⋮
+                        </button>
+                        {clienteMenuOpen === cliente && (
+                          <>
+                            <div onClick={() => setClienteMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                            <div style={{ position: 'absolute', right: 8, top: '100%', zIndex: 31, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 8px 20px rgba(15,23,42,0.14)', minWidth: 190, overflow: 'hidden' }}>
+                              <button
+                                onClick={() => toggleArquivarCliente(cliente, !isArquivada)}
+                                style={{ width: '100%', textAlign: 'left', padding: '9px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 12.5, color: '#334155' }}
+                              >
+                                {isArquivada ? '↩ Desarquivar' : '🗄 Arquivar'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCliente(cliente, totalAtasCliente)}
+                                style={{ width: '100%', textAlign: 'left', padding: '9px 14px', border: 'none', borderTop: '1px solid #F0F4FA', background: '#fff', cursor: 'pointer', fontSize: 12.5, color: '#EF4444' }}
+                              >
+                                🗑 Excluir contratante
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   {openClientes.has(cliente) && years.map(({ year, months }) => (
                     <div key={year}>
                       {/* ── Ano ── */}
@@ -602,7 +689,7 @@ export default function AtasContratantesClient() {
                     </div>
                   ))}
                 </div>
-              ))}
+              )})}
             </>
           )}
         </div>
