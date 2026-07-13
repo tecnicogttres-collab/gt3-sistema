@@ -560,6 +560,7 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
   const savedRascunhoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [open, setOpen] = useState(isAtivo)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmDeleteRascunho, setConfirmDeleteRascunho] = useState(false)
   const [err, setErr] = useState('')
 
   useEffect(() => { return () => { clearTimeout(savedDiritivaTimer.current); clearTimeout(savedRascunhoTimer.current) } }, [])
@@ -979,11 +980,44 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>Todos os dados deste ciclo serão removidos permanentemente.</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button onClick={() => setConfirmDelete(false)} style={{ padding: '8px 20px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={() => { setConfirmDelete(false); onDelete(ciclo.id) }} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Excluir</button>
+              <button
+                onClick={() => {
+                  setConfirmDelete(false)
+                  const temRascunho = !!ciclo.meu_rascunho?.trim() || ciclo.outros_rascunhos.length > 0
+                  if (temRascunho) setConfirmDeleteRascunho(true)
+                  else onDelete(ciclo.id)
+                }}
+                style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Excluir
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {confirmDeleteRascunho && (() => {
+        const nomes = [
+          ...(ciclo.meu_rascunho?.trim() ? ['você'] : []),
+          ...ciclo.outros_rascunhos.map(r => r.user_nome || 'outro gestor'),
+        ]
+        const quem = nomes.length === 1 ? nomes[0] : nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1]
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', borderRadius: 14, padding: '28px 30px', maxWidth: 380, textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+              <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Este ciclo tem rascunho salvo</h3>
+              <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>
+                O rascunho de {quem} será perdido permanentemente junto com o ciclo. Tem certeza que deseja excluir?
+              </p>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button onClick={() => setConfirmDeleteRascunho(false)} style={{ padding: '8px 20px', border: '1px solid #E2E8F0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={() => { setConfirmDeleteRascunho(false); onDelete(ciclo.id) }} style={{ padding: '8px 20px', border: 'none', borderRadius: 8, background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Excluir mesmo assim</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

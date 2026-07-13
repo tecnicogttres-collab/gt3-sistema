@@ -109,6 +109,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { error } = await admin.from('pdi_ciclos').delete().eq('id', cicloId)
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
+  await admin.from('pdi_rascunhos').delete().eq('ciclo_id', cicloId)
+
   // If we deleted the active cycle, activate the most recent remaining one
   if (ciclo?.status === 'ativo') {
     const { data: prev } = await admin
