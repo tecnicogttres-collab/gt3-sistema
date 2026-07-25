@@ -15,6 +15,7 @@ const DynTerceiras        = dynamic(() => import('../cadastro-terceiras/Cadastro
 const DynEmails           = dynamic(() => import('../emails/EmailsClient'),                             { ssr: false })
 const DynManuais          = dynamic(() => import('../manuais/ManuaisClient'),                          { ssr: false })
 const DynHomeOffice       = dynamic(() => import('../home-office/HomeOfficeClient'),                    { ssr: false })
+const DynCafe             = dynamic(() => import('../cafe/CafeClient'),                                  { ssr: false })
 const DynControleRevisao  = dynamic(() => import('../controle-revisao/ControleRevisaoClient'),          { ssr: false })
 const DynRevisoesTrainee  = dynamic(() => import('../revisoes-trainee/RevisoesTraineeClient'),          { ssr: false })
 const DynPgrPcmso         = dynamic(() => import('../pgr-pcmso-ltcat/PgrPcmsoClient'),                   { ssr: false })
@@ -51,6 +52,7 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/emails':             DynEmails,
   '/manuais':            DynManuais,
   '/home-office':        DynHomeOffice,
+  '/cafe':               DynCafe,
   '/controle-revisao':   DynControleRevisao,
   '/revisoes-trainee':   DynRevisoesTrainee,
   '/sugestoes':          DynSugestoes,

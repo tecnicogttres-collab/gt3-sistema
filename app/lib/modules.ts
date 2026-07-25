@@ -98,6 +98,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'cafe',
+    label: 'Café',
+    color: '#4A90D9',
+    path: '/cafe',
+    description: 'Escala semanal de café por turno (manhã/tarde)',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'anotacoes-cic',
     label: 'Anotações CIC',
     color: '#4A90D9',
