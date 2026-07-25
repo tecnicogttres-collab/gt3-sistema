@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import { TabContentCache } from './TabContentCache'
@@ -9,6 +9,11 @@ import Tabbar from './Tabbar'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
 import { useModules } from './ModulesContext'
+import {
+  DEFAULT_SPLIT, loadSplitState, saveSplitState, pinnableModules,
+  SplitDivider, PinnedPane, SplitViewButton, useSplitDrag,
+  type SplitState,
+} from './SplitView'
 import { createClient } from '../lib/supabase'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
@@ -301,6 +306,26 @@ function dismissLembreteNotifStorage(userId: string) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [hoverVisible, setHoverVisible] = useState(false)
 
+  // ── Tela dividida ──────────────────────────────────────────────────────
+  const [split, setSplit] = useState<SplitState>(DEFAULT_SPLIT)
+  const [splitHydrated, setSplitHydrated] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setSplit(loadSplitState())
+    setSplitHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (!splitHydrated) return
+    saveSplitState(split)
+  }, [split, splitHydrated])
+
+  const setSplitRatio = useCallback((ratio: number) => {
+    setSplit(prev => ({ ...prev, ratio }))
+  }, [])
+  const startDrag = useSplitDrag(containerRef, split.side, setSplitRatio)
+
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
   const [sugestaoQueue, setSugestaoQueue] = useState<Array<{ id: string }>>([])
@@ -316,7 +341,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const breadcrumb = useBreadcrumb(pathname)
   const { profile, loading, signOut } = useUser()
+  const { modules } = useModules()
   const router = useRouter()
+
+  const splitModules = pinnableModules(
+    modules,
+    (profile?.papel as Role | null) ?? null,
+    profile?.modulos_permitidos ?? null,
+  )
+  const splitActive = split.open && !!split.path && !!MODULE_COMPONENT_MAP[split.path]
 
   const [introVisible, setIntroVisible] = useState(false)
 
@@ -676,8 +709,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      <div ref={containerRef} style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+        {splitActive && split.side === 'left' && (
+          <PinnedPane
+            path={split.path!}
+            label={splitModules.find(m => m.path === split.path)?.label ?? split.path!}
+            color={splitModules.find(m => m.path === split.path)?.color ?? '#1E3A6E'}
+            width={`${split.ratio * 100}%`}
+            onClose={() => setSplit(prev => ({ ...prev, open: false }))}
+            onSwapSide={() => setSplit(prev => ({ ...prev, side: 'right' }))}
+          />
+        )}
+        {splitActive && <SplitDivider onMouseDown={startDrag} />}
+        <div style={{
+          position: 'relative', display: 'flex', flexDirection: 'column',
+          flex: splitActive ? undefined : 1,
+          width: splitActive ? `${(1 - split.ratio) * 100}%` : undefined,
+          minWidth: 0, overflow: 'hidden',
+        }}>
           <header style={{
             backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0',
             padding: '10px 24px', display: 'flex', alignItems: 'center',
@@ -702,6 +751,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {splitModules.length > 0 && (
+                <SplitViewButton split={split} modules={splitModules} onChange={setSplit} />
+              )}
               <HeaderSearch />
               <UserMenu name={fullName} onSignOut={signOut} onAlterarSenha={() => router.push('/perfil')} />
             </div>
@@ -806,7 +858,90 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             mainStyle={{ flex: 1, overflow: 'auto', backgroundColor: '#F4F6FA', padding: 24, paddingBottom: 80 }}
             componentMap={MODULE_COMPONENT_MAP}
           />
+
+          {pathname === '/' && (
+            <div style={{
+              position: 'absolute', bottom: 0,
+              left: 0, right: 0, zIndex: 100,
+            }}>
+              <QuoteBanner />
+            </div>
+          )}
+
+          {/* Hover-mode sidebar overlay — ancorado a esta coluna (não à viewport),
+              para acompanhar o app principal quando ele fica do lado direito na tela dividida. */}
+          <div style={{
+            position: 'absolute',
+            left: 0, top: 0,
+            height: '100%',
+            width: 220,
+            zIndex: 200,
+            pointerEvents: 'none',
+          }}>
+            {/* Trigger pill — visible when sidebar is hidden */}
+            <div
+              onMouseEnter={() => setHoverVisible(true)}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: pathname === '/' ? '50%' : 'auto',
+                bottom: pathname === '/' ? 'auto' : '24px',
+                transform: pathname === '/' ? 'translateY(-50%)' : 'none',
+                transition: 'opacity 0.2s, top 0.25s ease, transform 0.25s ease',
+                pointerEvents: hoverVisible ? 'none' : 'auto',
+                opacity: hoverVisible ? 0 : 1,
+                cursor: 'pointer',
+                backgroundColor: '#1E3A6E',
+                borderRadius: '0 20px 20px 0',
+                padding: '10px 12px 10px 8px',
+                boxShadow: '2px 0 10px rgba(0,0,0,0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <span style={{
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 14,
+                letterSpacing: 1,
+                lineHeight: 1,
+              }}>GT3</span>
+            </div>
+
+            {/* Sidebar overlay — slides in on hover */}
+            <div
+              onMouseLeave={() => setHoverVisible(false)}
+              style={{
+                position: 'absolute',
+                left: 0, top: 0,
+                height: '100%',
+                width: '100%',
+                transform: hoverVisible ? 'translateX(0)' : 'translateX(-100%)',
+                transition: 'transform 0.25s ease',
+                pointerEvents: hoverVisible ? 'auto' : 'none',
+                boxShadow: hoverVisible ? '4px 0 20px rgba(0,0,0,0.3)' : 'none',
+              }}
+            >
+              <Sidebar
+                collapsed={false}
+                onToggle={() => {}}
+                mode="hover"
+              />
+            </div>
+          </div>
         </div>
+        {splitActive && split.side === 'right' && <SplitDivider onMouseDown={startDrag} />}
+        {splitActive && split.side === 'right' && (
+          <PinnedPane
+            path={split.path!}
+            label={splitModules.find(m => m.path === split.path)?.label ?? split.path!}
+            color={splitModules.find(m => m.path === split.path)?.color ?? '#1E3A6E'}
+            width={`${split.ratio * 100}%`}
+            onClose={() => setSplit(prev => ({ ...prev, open: false }))}
+            onSwapSide={() => setSplit(prev => ({ ...prev, side: 'left' }))}
+          />
+        )}
       </div>
 
       {showPrioNotif && (
@@ -844,81 +979,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {pdiCriadoNotif && (
         <PdiCriadoNotificacao onVerAgora={handleVerPdiCriado} />
-      )}
-
-      {pathname === '/' && (
-        <div style={{
-          position: 'fixed', bottom: 0,
-          left: 0,
-          right: 0, zIndex: 100,
-          transition: 'left 0.25s ease',
-        }}>
-          <QuoteBanner />
-        </div>
-      )}
-
-      {/* Hover-mode sidebar overlay */}
-      {(
-        <div style={{
-          position: 'fixed',
-          left: 0, top: 0,
-          height: '100vh',
-          width: 220,
-          zIndex: 200,
-          pointerEvents: 'none',
-        }}>
-          {/* Trigger pill — visible when sidebar is hidden */}
-          <div
-            onMouseEnter={() => setHoverVisible(true)}
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: pathname === '/' ? '50%' : 'auto',
-              bottom: pathname === '/' ? 'auto' : '24px',
-              transform: pathname === '/' ? 'translateY(-50%)' : 'none',
-              transition: 'opacity 0.2s, top 0.25s ease, transform 0.25s ease',
-              pointerEvents: hoverVisible ? 'none' : 'auto',
-              opacity: hoverVisible ? 0 : 1,
-              cursor: 'pointer',
-              backgroundColor: '#1E3A6E',
-              borderRadius: '0 20px 20px 0',
-              padding: '10px 12px 10px 8px',
-              boxShadow: '2px 0 10px rgba(0,0,0,0.25)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <span style={{
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 14,
-              letterSpacing: 1,
-              lineHeight: 1,
-            }}>GT3</span>
-          </div>
-
-          {/* Sidebar overlay — slides in on hover */}
-          <div
-            onMouseLeave={() => setHoverVisible(false)}
-            style={{
-              position: 'absolute',
-              left: 0, top: 0,
-              height: '100%',
-              width: '100%',
-              transform: hoverVisible ? 'translateX(0)' : 'translateX(-100%)',
-              transition: 'transform 0.25s ease',
-              pointerEvents: hoverVisible ? 'auto' : 'none',
-              boxShadow: hoverVisible ? '4px 0 20px rgba(0,0,0,0.3)' : 'none',
-            }}
-          >
-            <Sidebar
-              collapsed={false}
-              onToggle={() => {}}
-              mode="hover"
-            />
-          </div>
-        </div>
       )}
     </>
   )
