@@ -9,13 +9,33 @@ function toEmail(usuario: string): string {
   return `gt3.${nome}@gt3.internal`
 }
 
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7A99" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.7 19.7 0 0 1 4.22-5.64M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a19.7 19.7 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <path d="M1 1l22 22" />
+    </svg>
+  )
+}
+
 export default function LoginClient() {
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [capsOn, setCapsOn] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  function checkCaps(e: React.KeyboardEvent<HTMLInputElement>) {
+    setCapsOn(e.getModifierState && e.getModifierState('CapsLock'))
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -106,21 +126,40 @@ export default function LoginClient() {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
               Senha
             </label>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 8,
-                border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B',
-                outline: 'none', boxSizing: 'border-box',
-              }}
-              onFocus={(e) => { e.target.style.borderColor = '#2A4F96' }}
-              onBlur={(e) => { e.target.style.borderColor = '#D1D5DB' }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={checkCaps}
+                onKeyUp={checkCaps}
+                placeholder="••••••••"
+                style={{
+                  width: '100%', padding: '10px 40px 10px 12px', borderRadius: 8,
+                  border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B',
+                  outline: 'none', boxSizing: 'border-box',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = '#2A4F96' }}
+                onBlur={(e) => { e.target.style.borderColor = '#D1D5DB' }}
+              />
+              <span
+                onMouseEnter={() => setShowPassword(true)}
+                onMouseLeave={() => setShowPassword(false)}
+                style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                }}
+              >
+                <EyeIcon open={showPassword} />
+              </span>
+            </div>
+            {capsOn && (
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: '#B45309' }}>
+                ⚠ Caps Lock está ativado
+              </p>
+            )}
           </div>
 
           {error && (
