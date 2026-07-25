@@ -48,7 +48,7 @@ export async function PATCH(
   if (!auth.ok) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json() as Record<string, unknown>
-  const allowed = ['nome', 'funcao', 'status', 'eneagrama', 'animais', 'conclusoes', 'data_inicio', 'competencias']
+  const allowed = ['nome', 'funcao', 'status', 'eneagrama', 'animais', 'data_inicio', 'competencias']
   const updates: Record<string, unknown> = {}
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
@@ -56,16 +56,24 @@ export async function PATCH(
 
   const admin = createAdminClient()
 
-  // mbti é armazenado dentro de conclusoes para não precisar de nova coluna
-  if ('mbti' in body) {
-    const mbtiData = body.mbti as Record<string, unknown>
+  // conclusoes e mbti compartilham a mesma coluna JSONB — merge sempre,
+  // senão o PATCH de uma aba apaga os dados salvos pela outra
+  if ('conclusoes' in body || 'mbti' in body) {
     const { data: current } = await admin.from('pdis').select('conclusoes').eq('id', id).single()
     const existing = (current?.conclusoes as Record<string, unknown>) ?? {}
-    updates.conclusoes = {
-      ...existing,
-      _mbti: mbtiData,
-      _mbti_tipo: (mbtiData.tipo as string) || existing._mbti_tipo || null,
+    let merged = { ...existing }
+    if ('conclusoes' in body) {
+      merged = { ...merged, ...(body.conclusoes as Record<string, unknown>) }
     }
+    if ('mbti' in body) {
+      const mbtiData = body.mbti as Record<string, unknown>
+      merged = {
+        ...merged,
+        _mbti: mbtiData,
+        _mbti_tipo: (mbtiData.tipo as string) || existing._mbti_tipo || null,
+      }
+    }
+    updates.conclusoes = merged
   }
 
   if (Object.keys(updates).length === 0) {
