@@ -62,17 +62,21 @@ function buildWeeks(year: number, monthIdx: number): CafeWeek[] {
   while (monday <= monthEnd) {
     const friday = new Date(monday)
     friday.setDate(monday.getDate() + 4)
-    const dispStart = monday < monthStart ? monthStart : monday
-    const dispEnd = friday > monthEnd ? monthEnd : friday
-    weeks.push({
-      weekKey: isoDate(monday),
-      diaInicio: dispStart.getDate(),
-      diaFim: dispEnd.getDate(),
-      brokenStart: monday < monthStart,
-      brokenEnd: friday > monthEnd,
-      manha: '',
-      tarde: '',
-    })
+    // Se sexta-feira ainda é antes do início do mês, a semana toda (seg–sex) pertence
+    // ao mês anterior (acontece quando o dia 1º cai em sáb/dom) — não é semana deste mês.
+    if (friday >= monthStart) {
+      const dispStart = monday < monthStart ? monthStart : monday
+      const dispEnd = friday > monthEnd ? monthEnd : friday
+      weeks.push({
+        weekKey: isoDate(monday),
+        diaInicio: dispStart.getDate(),
+        diaFim: dispEnd.getDate(),
+        brokenStart: monday < monthStart,
+        brokenEnd: friday > monthEnd,
+        manha: '',
+        tarde: '',
+      })
+    }
     monday.setDate(monday.getDate() + 7)
   }
   return weeks
