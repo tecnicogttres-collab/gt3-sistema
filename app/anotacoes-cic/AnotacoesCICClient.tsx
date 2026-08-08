@@ -506,16 +506,16 @@ export default function AnotacoesCICClient() {
         {pastas.map(p => {
           const s = pastaStats(p.empresas)
           return (
-            <div key={p.id} style={{ background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, boxShadow: '0 1px 4px rgba(42,79,150,0.07)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+            <div key={p.id} style={{ background: BG_SURF, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 18, boxShadow: '0 1px 4px rgba(42,79,150,0.07)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <div style={{ width: 38, height: 38, borderRadius: 9, background: '#e8f0fc', color: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📁</div>
                 <button onClick={() => handleDeletePasta(p.id)} style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', padding: 4, fontSize: 14, borderRadius: 6, flexShrink: 0 }}>🗑</button>
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{p.nome || 'Sem nome'}</div>
               {p.periodo && <div style={{ fontSize: 12, color: MUTED, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>📅 {p.periodo}</div>}
-              <div style={{ display: 'flex', gap: 14 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 14px' }}>
                 {[{ l: 'Empresas', v: s.total, c: TEXT }, { l: 'Concessões', v: s.totalConcessoes, c: PRIMARY }, { l: 'Pendências', v: s.pend, c: '#b45309' }].map(x => (
-                  <div key={x.l} style={{ fontSize: 10.5, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <div key={x.l} style={{ fontSize: 10.5, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
                     {x.l}<div style={{ fontSize: 17, fontWeight: 700, color: x.c, textTransform: 'none' }}>{x.v}</div>
                   </div>
                 ))}
