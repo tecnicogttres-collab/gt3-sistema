@@ -1,12 +1,12 @@
 ﻿'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import PdiCard from './components/PdiCard'
 import { useUser } from './components/UserContext'
 import { useModules } from './components/ModulesContext'
 import type { Role } from './lib/modules'
 import DashboardSidebar from './dashboard/DashboardSidebar'
+import DashboardModuleGrid from './components/DashboardModuleGrid'
 
 function greeting(profile: ReturnType<typeof useUser>['profile']): string {
   const first = profile?.nome?.trim().split(' ')[0] || ''
@@ -88,37 +88,7 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="module-grid">
-          {dashboardModules.map((mod) => {
-            const hasNotif = (moduleNotifs[mod.id] ?? 0) > 0
-            return (
-              <div key={mod.id} style={{ position: 'relative' }}>
-                {hasNotif && (
-                  <span style={{
-                    position: 'absolute', top: 10, right: 10, zIndex: 1,
-                    width: 10, height: 10, borderRadius: '50%',
-                    backgroundColor: '#EF4444', border: '2px solid #F4F6FA',
-                    pointerEvents: 'none',
-                  }} />
-                )}
-                <Link href={mod.path} className="module-card-link">
-                  <div className="module-card">
-                    <div style={{ height: 4, backgroundColor: mod.color }} />
-                    <div style={{ padding: 16 }}>
-                      <div
-                        className="module-card-icon"
-                        style={{ backgroundColor: `${mod.color}1A` }}
-                      >
-                        <div style={{ width: 14, height: 14, borderRadius: '50%', backgroundColor: mod.color }} />
-                      </div>
-                      <h2 className="module-card-title">{mod.label}</h2>
-                    </div>
-                  </div>
-                </Link>
-              </div>
-            )
-          })}
-        </div>
+        <DashboardModuleGrid modules={dashboardModules} moduleNotifs={moduleNotifs} />
 
         {showPdi && <PdiCard path={pdi!.path} />}
       </div>
