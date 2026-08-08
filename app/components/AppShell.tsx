@@ -15,6 +15,7 @@ import {
   type SplitState,
 } from './SplitView'
 import { createClient } from '../lib/supabase'
+import { isLembreteOverdue } from '../lib/lembretes'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
 import SugestaoNotificacao from './SugestaoNotificacao'
@@ -480,11 +481,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!mounted || !res.ok) return
-        const data: Array<{ data_inicio: string; periodo: string; concluido: boolean; confirmado?: boolean }> = await res.json()
+        const data: Array<{ data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual'; hora_inicio: string | null; concluido: boolean; confirmado?: boolean }> = await res.json()
         const today = new Date().toISOString().split('T')[0]
         const dismissedDate = getLembreteDismissDate(userId)
         if (dismissedDate === today) return
-        const count = data.filter(r => !r.confirmado && r.data_inicio <= today).length
+        // Só conta como atrasado quem tem ocorrência real neste mês (não apenas
+        // uma data_inicio antiga) — senão um lembrete "único" já confirmado no
+        // passado volta a acusar atraso todo mês, sem nenhuma forma de resolver.
+        const count = data.filter(r => isLembreteOverdue(r, !!r.confirmado)).length
         if (count > 0) { setLembreteCount(count); setShowLembreteNotif(true) }
       } catch { /* noop */ }
     }

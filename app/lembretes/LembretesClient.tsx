@@ -3,11 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
+import { PERIODS, type Period, findMonthOccurrence, currentMonthOccurrence, isLembreteOverdue } from '../lib/lembretes'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-const PERIODS = ['unico', 'diario', 'semanal', 'mensal', 'trimestral', 'semestral', 'anual'] as const
-type Period = typeof PERIODS[number]
 
 const PERIOD_LABEL: Record<Period, string> = {
   unico: 'Único', diario: 'Diário', semanal: 'Semanal', mensal: 'Mensal',
@@ -84,41 +82,9 @@ function formatDatetime(iso: string): string {
   return `${date} às ${time}`
 }
 
-function findMonthOccurrence(r: Lembrete, year: number, month: number): string | null {
-  const mStart = new Date(year, month, 1)
-  const mEnd = new Date(year, month + 1, 0)
-  const start = parseDate(r.data_inicio)
-
-  if (r.periodo === 'unico') {
-    if (start.getFullYear() === year && start.getMonth() === month) return fmtDateStr(start)
-    return null
-  }
-  if (r.periodo === 'diario') {
-    const day = start > mStart ? start : new Date(mStart)
-    return day <= mEnd ? fmtDateStr(day) : null
-  }
-
-  let cur = new Date(start)
-  while (cur < mStart) {
-    if (r.periodo === 'semanal')      cur.setDate(cur.getDate() + 7)
-    else if (r.periodo === 'mensal')       cur.setMonth(cur.getMonth() + 1)
-    else if (r.periodo === 'trimestral')   cur.setMonth(cur.getMonth() + 3)
-    else if (r.periodo === 'semestral')    cur.setMonth(cur.getMonth() + 6)
-    else if (r.periodo === 'anual')        cur.setFullYear(cur.getFullYear() + 1)
-    else break
-  }
-  return cur <= mEnd ? fmtDateStr(cur) : null
-}
-
-function currentMonthOccurrence(r: Lembrete): Date | null {
-  const now = new Date()
-  const ds = findMonthOccurrence(r, now.getFullYear(), now.getMonth())
-  return ds ? parseDate(ds) : null
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()), hora_inicio: '', visibilidade: 'todos' as Visibilidade, destinatarios: [] as string[] }
+const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()), hora_inicio: '', visibilidade: 'proprio' as Visibilidade, destinatarios: [] as string[] }
 
 export default function LembretesClient() {
   const { profile } = useUser()
@@ -160,16 +126,7 @@ export default function LembretesClient() {
   function isDone(r: Lembrete) { return confirmedIds.has(r.id) }
 
   function isOverdue(r: Lembrete) {
-    if (isDone(r)) return false
-    const occ = currentMonthOccurrence(r)
-    if (!occ) return false
-    if (r.hora_inicio) {
-      const [h, m] = r.hora_inicio.split(':').map(Number)
-      const deadline = new Date(occ)
-      deadline.setHours(h, m, 0, 0)
-      return deadline < new Date()
-    }
-    return occ < todayLocal()
+    return isLembreteOverdue(r, isDone(r))
   }
 
   function isToday(r: Lembrete) {
@@ -827,12 +784,15 @@ export default function LembretesClient() {
                   const confirmed = confirmedIds.has(r.id)
                   const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
-                    <div key={idx} style={{
+                    <div key={idx} title="Clique para editar" onClick={() => openEdit(r)} style={{
                       fontSize: 10, borderRadius: 3, padding: '1px 4px', marginBottom: 2,
                       background: confirmed ? '#DCFCE7' : over ? '#FBF0E8' : '#EBF0FA',
                       color: confirmed ? '#166534' : over ? '#7A3A0E' : '#1A3266',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.filter = 'brightness(0.93)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.filter = 'none' }}>
                       {confirmed ? '✓ ' : ''}{r.titulo}
                     </div>
                   )
