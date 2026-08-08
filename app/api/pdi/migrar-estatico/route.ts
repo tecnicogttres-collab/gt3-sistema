@@ -26,14 +26,22 @@ export async function POST(req: NextRequest) {
   // Idempotente: se já foi migrado, só garante que pdi_slug aponta pro UUID e retorna
   const { data: existing } = await admin
     .from('pdis')
-    .select('id')
+    .select('id, conclusoes')
     .contains('conclusoes', { _original_slug: staticId })
     .maybeSingle()
 
   if (existing) {
     // Já migrado — aplica as edições de nome/funcao e garante pdi_slug correto
+    const updates: Record<string, unknown> = { nome: nome.trim(), funcao: (funcao ?? '').trim() }
+    // Backfill: migrações antigas só salvavam _mbti_tipo (o selo), perdendo o
+    // restante do perfil MBTI do arquivo estático — repõe se ainda faltar.
+    const existingConclusoes = (existing.conclusoes as Record<string, unknown>) ?? {}
+    const staticMbti = pdisMap[staticId]?.perfilComportamental.mbti
+    if (!existingConclusoes._mbti && staticMbti) {
+      updates.conclusoes = { ...existingConclusoes, _mbti: staticMbti, _mbti_tipo: staticMbti.tipo || null }
+    }
     await Promise.all([
-      admin.from('pdis').update({ nome: nome.trim(), funcao: (funcao ?? '').trim() }).eq('id', existing.id),
+      admin.from('pdis').update(updates).eq('id', existing.id),
       admin.from('profiles').update({ pdi_slug: existing.id }).eq('pdi_slug', staticId),
     ])
     return Response.json({ id: existing.id })
@@ -53,8 +61,8 @@ export async function POST(req: NextRequest) {
       conclusoes: {
         ...(staticPdi?.conclusoes ?? {}),
         _original_slug: staticId,
-        ...(staticPdi?.perfilComportamental.mbti?.tipo
-          ? { _mbti_tipo: staticPdi.perfilComportamental.mbti.tipo }
+        ...(staticPdi?.perfilComportamental.mbti
+          ? { _mbti: staticPdi.perfilComportamental.mbti, _mbti_tipo: staticPdi.perfilComportamental.mbti.tipo || null }
           : {}),
       },
     })
