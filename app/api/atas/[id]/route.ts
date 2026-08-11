@@ -69,6 +69,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
   updates.updated_at = new Date().toISOString()
 
+  // Detecta a transição para "Validada" para notificar os demais gestores
+  let justValidated = false
+  if (updates.status === 'Validada') {
+    const { data: before } = await admin.from('atas').select('status').eq('id', id).single()
+    justValidated = before?.status !== 'Validada'
+  }
+
   const { data, error } = await admin
     .from('atas')
     .update(updates)
@@ -77,6 +84,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  if (justValidated) {
+    // Fire-and-forget — não bloqueia a resposta. Exclui quem validou (o caller).
+    fetch(`${request.nextUrl.origin}/api/notificacoes/disparar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: request.headers.get('cookie') ?? '' },
+      body: JSON.stringify({ modulo: 'atas' }),
+    }).catch(() => {})
+  }
+
   return Response.json(data)
 }
 

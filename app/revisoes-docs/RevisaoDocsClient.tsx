@@ -937,8 +937,23 @@ export default function RevisaoDocsClient() {
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = reg.corrigido ? '#f0fdf4' : temPendencia ? '#fff8f0' : 'transparent' }}>
                     <td style={{ padding: '10px 14px', textAlign: 'center', color: '#aab2c2', fontSize: 11 }}>{idx + 1}</td>
                     {campos.map(c => c.tipo === 'texto' ? (
-                      <td key={c.id} style={{ padding: '10px 14px', fontWeight: c.id === 'funcionario' ? 600 : 400, textDecoration: reg.corrigido && c.id === 'funcionario' ? 'line-through' : 'none', color: reg.corrigido && c.id === 'funcionario' ? '#86a890' : TEXT }}>
-                        {String(reg.valores[c.id] ?? '')}
+                      <td key={c.id} style={{ padding: '2px 6px' }}>
+                        <input
+                          type="text"
+                          value={String(reg.valores[c.id] ?? '')}
+                          onChange={e => setValor(reg.id, c.id, e.target.value)}
+                          disabled={finalizada}
+                          style={{
+                            width: '100%', boxSizing: 'border-box', border: '1.5px solid transparent', borderRadius: 6,
+                            padding: '8px 8px', fontSize: 13, fontFamily: 'inherit', background: 'transparent', outline: 'none',
+                            fontWeight: c.id === 'funcionario' ? 600 : 400,
+                            textDecoration: reg.corrigido && c.id === 'funcionario' ? 'line-through' : 'none',
+                            color: reg.corrigido && c.id === 'funcionario' ? '#86a890' : TEXT,
+                            cursor: finalizada ? 'default' : 'text',
+                          }}
+                          onFocus={e => { e.currentTarget.style.borderColor = PRIMARY; e.currentTarget.style.background = '#fff' }}
+                          onBlur={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent' }}
+                        />
                       </td>
                     ) : (
                       <ToggleCell key={c.id} checked={reg.valores[c.id] === true}
