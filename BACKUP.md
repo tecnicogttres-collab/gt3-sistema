@@ -79,37 +79,72 @@ await supabase.from('frases').upsert(data)
 
 ## Tabelas incluídas no backup
 
+Lista atualizada em 2026-08-11 (61 tabelas). Ao criar uma tabela nova em qualquer
+módulo, adicione o nome também em `TABLES` no `scripts/backup-supabase.ts`.
+
 | # | Tabela | Descrição |
 |---|--------|-----------|
 | 1 | `aniversarios` | Aniversários dos colaboradores |
-| 2 | `atas` | Atas internas GT3 |
-| 3 | `atas_leituras` | Confirmações de leitura de atas |
-| 4 | `caf_itens` | Itens do módulo Coisas a Fazer |
-| 5 | `caf_modulos` | Módulos/pastas do Coisas a Fazer |
-| 6 | `contratantes` | Fichas das empresas contratantes |
-| 7 | `contratantes_favs` | Favoritos do módulo contratantes |
-| 8 | `controle_revisao_sheets` | Controle de revisão de documentos |
-| 9 | `email_templates` | Templates de e-mail padrão |
-| 10 | `ferias` | Controle de férias |
-| 11 | `ferias_pessoas` | Pessoas no controle de férias |
-| 12 | `frases` | Frases diárias motivacionais |
-| 13 | `frases_rotacao` | Rotação de frases exibidas |
-| 14 | `home_office_sheets` | Controle de home office |
-| 15 | `lembretes` | Lembretes do sistema |
-| 16 | `lembretes_confirmacoes` | Confirmações de lembretes |
-| 17 | `lembretes_historico` | Histórico de lembretes enviados |
-| 18 | `manuais_categorias` | Categorias dos manuais |
-| 19 | `manuais_documentos` | Documentos de manuais |
-| 20 | `observacoes` | Observações de funcionários |
-| 21 | `observacoes_layout` | Configurações de layout de observações |
-| 22 | `pdi_acoes` | Ações dos PDIs |
-| 23 | `pdi_ciclos` | Ciclos de PDI |
-| 24 | `pdi_conversa_avisos` | Avisos de conversa PDI |
-| 25 | `pdi_notificacoes` | Notificações de PDI |
-| 26 | `pdis` | PDIs (Planos de Desenvolvimento Individual) |
-| 27 | `prioridades` | Prioridades do sistema |
-| 28 | `prioridades_avisos` | Avisos de prioridades |
-| 29 | `prioridades_vistas` | Prioridades visualizadas |
-| 30 | `ramais` | Lista de ramais telefônicos |
-| 31 | `revisoes_datas` | Datas de revisão de documentos |
-| 32 | `revisoes_trainee` | Revisões de trainees |
+| 2 | `anotacoes_cic` | Concessões/exceções de contratantes por feira |
+| 3 | `atas` | Atas internas GT3 |
+| 4 | `atas_contratantes` | Atas de reunião com contratantes |
+| 5 | `atas_contratantes_clientes_arquivados` | Clientes arquivados em Atas Contratantes |
+| 6 | `atas_contratantes_leituras` | Confirmações de leitura de atas de contratantes |
+| 7 | `atas_contratantes_notificacoes` | Notificações enviadas sobre atas de contratantes |
+| 8 | `atas_leituras` | Confirmações de leitura de atas GT3 |
+| 9 | `banco_empresas_cic` | Nomes de empresas para autocomplete em Anotações CIC |
+| 10 | `caf_itens` | Itens do módulo Coisas a Fazer |
+| 11 | `caf_modulos` | Módulos/pastas do Coisas a Fazer |
+| 12 | `cafe_sheets` | Escala semanal do módulo Café |
+| 13 | `contratantes` | Fichas das empresas contratantes |
+| 14 | `contratantes_favs` | Favoritos do módulo contratantes |
+| 15 | `controle_revisao_sheets` | Controle de revisão de documentos (BSA) |
+| 16 | `dashboard_prefs` | Ordenação dos cards do Dashboard, por usuário |
+| 17 | `email_templates` | Templates de e-mail padrão |
+| 18 | `enquete_opcoes` | Opções das enquetes |
+| 19 | `enquete_perguntas` | Perguntas das enquetes |
+| 20 | `enquete_respostas` | Respostas às enquetes |
+| 21 | `enquetes` | Enquetes internas |
+| 22 | `ferias` | Controle de férias |
+| 23 | `ferias_pessoas` | Pessoas no controle de férias |
+| 24 | `frases` | Frases diárias motivacionais |
+| 25 | `frases_rotacao` | Rotação de frases exibidas |
+| 26 | `home_office_sheets` | Controle de home office |
+| 27 | `legislacoes` | Atualizações normativas |
+| 28 | `legislacoes_categorias` | Categorias de legislações |
+| 29 | `legislacoes_lidas` | Confirmações de leitura de legislações |
+| 30 | `lembretes` | Lembretes do sistema |
+| 31 | `lembretes_historico` | Histórico de confirmações de lembretes |
+| 32 | `manuais_categorias` | Categorias dos manuais |
+| 33 | `manuais_documentos` | Documentos de manuais |
+| 34 | `modulos_config` | Nome/cor personalizados por módulo |
+| 35 | `notificacoes_config` | Configuração de notificações por módulo |
+| 36 | `notificacoes_usuario` | Notificações pendentes por usuário |
+| 37 | `observacoes` | Observações de funcionários |
+| 38 | `observacoes_layout` | Configurações de layout de observações |
+| 39 | `observacoes_subtabs` | Sub-abas do módulo observações |
+| 40 | `pdi_acoes` | Ações dos PDIs |
+| 41 | `pdi_ciclos` | Ciclos de PDI |
+| 42 | `pdi_notificacoes` | Notificações de PDI |
+| 43 | `pdi_rascunhos` | Rascunhos de conversa de PDI |
+| 44 | `pdis` | PDIs (Planos de Desenvolvimento Individual) |
+| 45 | `pgr_arquivos` | Arquivos do módulo PGR/PCMSO/LTCAT |
+| 46 | `prioridades` | Prioridades do sistema |
+| 47 | `prioridades_avisos` | Avisos de prioridades |
+| 48 | `prioridades_vistas` | Prioridades visualizadas |
+| 49 | `profiles` | Usuários, papéis e permissões |
+| 50 | `ramais` | Lista de ramais telefônicos |
+| 51 | `repositorio_modelos` | Arquivos modelo por contratante |
+| 52 | `revisao_nr_registros` | Registros do controle de revisão (NR) |
+| 53 | `revisoes_datas` | Datas de revisão de documentos |
+| 54 | `revisoes_docs` | Checklists de revisão de documentos |
+| 55 | `revisoes_documentos` | Registros de revisão de documentos |
+| 56 | `revisoes_trainee` | Revisões de trainees |
+| 57 | `sugestoes` | Caixa de sugestões anônimas |
+| 58 | `terceiras` | Cadastro de empresas terceiras |
+| 59 | `terceiras_contratantes` | Vínculo terceiras × contratantes |
+| 60 | `terceiras_historico` | Histórico de etapas do cadastro de terceiras |
+
+**Nota:** `dashboard_prefs` só será incluída de fato no backup depois que o SQL
+`supabase-dashboard-prefs.sql` for executado no Supabase — até lá o backup
+registra um erro esperado para essa tabela e segue normalmente com as demais.
