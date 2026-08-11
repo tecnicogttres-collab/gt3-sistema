@@ -191,7 +191,7 @@ export const MODULES: Module[] = [
     color: '#4A90D9',
     path: '/atas-contratantes',
     description: 'Atas de reunião com contratantes',
-    allowedRoles: ['gestor', 'admin'],
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
     dashboardRoles: ['admin'],
   },
   {

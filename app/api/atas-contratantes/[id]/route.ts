@@ -11,13 +11,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data: profile } = await admin
-    .from('profiles').select('papel').eq('id', user.id).single()
-  if (!profile) return Response.json({ error: 'Perfil não encontrado' }, { status: 403 })
-
-  if (profile.papel !== 'gestor' && profile.papel !== 'admin') {
-    return Response.json({ error: 'Sem permissão' }, { status: 403 })
-  }
 
   const { data: ata, error } = await admin
     .from('atas_contratantes')

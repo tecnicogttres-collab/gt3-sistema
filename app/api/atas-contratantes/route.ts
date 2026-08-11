@@ -9,14 +9,6 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient()
 
-  const { data: profile } = await admin
-    .from('profiles').select('papel').eq('id', user.id).single()
-  if (!profile) return Response.json({ error: 'Perfil não encontrado' }, { status: 403 })
-
-  if (profile.papel !== 'gestor' && profile.papel !== 'admin') {
-    return Response.json({ error: 'Sem permissão' }, { status: 403 })
-  }
-
   const q = new URL(request.url).searchParams.get('q')?.trim() ?? ''
   const escaped = q.replace(/%/g, '\\%').replace(/_/g, '\\_')
 
