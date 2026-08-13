@@ -227,7 +227,7 @@ function buildReportHtml(pasta: PastaFull, wordMode = false): string {
         <td style="white-space:nowrap;font-weight:600;color:${TIPO_CFG[c.tipo].color}">${esc(TIPO_CFG[c.tipo].label)}</td>
         <td style="word-break:break-word">${esc(c.documento)}</td>
         <td style="word-break:break-word">${c.tipo === 'pessoa' ? esc(c.pessoa) : '—'}</td>
-        <td style="word-break:break-word">${c.tipo === 'pessoa' ? esc((c as {situacao?: string}).situacao ?? '') : '—'}</td>
+        <td style="word-break:break-word">${esc(c.situacao ?? '')}</td>
         <td style="font-weight:600">${esc(c.concedido_por)}</td>
         <td style="color:#555;word-break:break-word">${esc(c.obs)}</td>
       </tr>`).join('')
@@ -267,13 +267,13 @@ function buildExcelHtml(pasta: PastaFull): string {
   const sorted = [...pasta.empresas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   const rows = sorted.flatMap(emp => {
     return (emp.concessoes ?? []).map((c, i) => {
-      const sep = i === 0 ? 'border-top:3px solid #2A4F96;' : ''
+      const sep = i === 0 ? 'border-top:6px solid #2A4F96;' : ''
       return `<tr>
       <td style="${sep}">${esc(emp.nome)}</td><td style="${sep}">${esc(emp.obs)}</td>
       <td style="${sep}">${esc(TIPO_CFG[c.tipo].label)}</td>
       <td style="${sep}">${esc(c.documento)}</td>
       <td style="${sep}">${c.tipo === 'pessoa' ? esc(c.pessoa) : ''}</td>
-      <td style="${sep}">${c.tipo === 'pessoa' ? esc((c as {situacao?: string}).situacao ?? '') : ''}</td>
+      <td style="${sep}">${esc(c.situacao ?? '')}</td>
       <td style="${sep}">${esc(c.concedido_por)}</td><td style="${sep}">${esc(c.obs)}</td>
     </tr>`
     })
@@ -285,7 +285,7 @@ function buildExcelHtml(pasta: PastaFull): string {
   th{background:#2A4F96;color:#fff;font-weight:700}
   tr:nth-child(even) td{background:#f5f7fa}
 </style></head><body><table border="1" cellspacing="0" cellpadding="4">
-    <thead><tr><th>Empresa</th><th>Obs. Empresa</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa</th><th>Situação Pessoa</th><th>Autorizado por</th><th>Observações</th></tr></thead>
+    <thead><tr><th>Empresa</th><th>Obs. Empresa</th><th>Tipo</th><th>Documento / Concessão</th><th>Pessoa</th><th>Situação</th><th>Autorizado por</th><th>Observações</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></body></html>`
 }
@@ -924,6 +924,9 @@ export default function AnotacoesCICClient() {
                                   <div><b>Situação:</b> {c.situacao || '—'}</div>
                                 </>
                               )}
+                              {(c.tipo === 'empresa' || c.tipo === 'cadastro') && (
+                                <div><b>Situação Empresa:</b> {c.situacao || '—'}</div>
+                              )}
                               <div><b>Autorizado por:</b> {c.concedido_por || '—'}</div>
                               {c.obs && <div><b>Observações:</b> {c.obs}</div>}
                             </div>
@@ -968,6 +971,11 @@ export default function AnotacoesCICClient() {
                                   <AutoArea value={c.situacao ?? ''} onChange={v => updateConcessao(emp.id, c.id, { situacao: v })} placeholder="Situação / contexto..." style={{ color: TEXT, fontSize: 12.5 }} />
                                 </FieldBox>
                               </>
+                            )}
+                            {(c.tipo === 'empresa' || c.tipo === 'cadastro') && (
+                              <FieldBox label="Situação Empresa">
+                                <AutoArea value={c.situacao ?? ''} onChange={v => updateConcessao(emp.id, c.id, { situacao: v })} placeholder="Situação da empresa..." style={{ color: TEXT, fontSize: 12.5 }} />
+                              </FieldBox>
                             )}
                             <FieldBox label="Autorizado por">
                               <AutoArea value={c.concedido_por} onChange={v => updateConcessao(emp.id, c.id, { concedido_por: v })} placeholder="Ex.: Renato" style={{ color: TEXT, fontSize: 12.5 }} />
