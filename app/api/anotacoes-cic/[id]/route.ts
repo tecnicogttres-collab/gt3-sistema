@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
-import { getCaller } from '../../../lib/api-helpers'
+import { getCaller, getCallerWithNome } from '../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
+
+const SELECT_FIELDS = 'id, nome, periodo, dados, created_at, updated_at, atualizado_por_nome'
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params
@@ -12,7 +14,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('anotacoes_cic')
-    .select('id, nome, periodo, dados, created_at')
+    .select(SELECT_FIELDS)
     .eq('id', id)
     .single()
 
@@ -22,11 +24,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
-  const caller = await getCaller()
+  const caller = await getCallerWithNome()
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const body = await req.json()
-  const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  const update: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    atualizado_por: caller.user.id,
+    atualizado_por_nome: caller.nome || caller.user.email || 'Usuário',
+  }
   if (body.nome !== undefined) update.nome = String(body.nome).trim()
   if (body.periodo !== undefined) update.periodo = String(body.periodo).trim()
   if (body.dados !== undefined) update.dados = body.dados
@@ -36,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .from('anotacoes_cic')
     .update(update)
     .eq('id', id)
-    .select('id, nome, periodo, dados, created_at')
+    .select(SELECT_FIELDS)
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

@@ -9,7 +9,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('anotacoes_cic')
-    .select('id, nome, periodo, dados, created_at')
+    .select('id, nome, periodo, dados, created_at, updated_at, atualizado_por_nome')
     .order('created_at', { ascending: false })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
