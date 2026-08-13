@@ -266,14 +266,17 @@ function buildReportHtml(pasta: PastaFull, wordMode = false): string {
 function buildExcelHtml(pasta: PastaFull): string {
   const sorted = [...pasta.empresas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   const rows = sorted.flatMap(emp => {
-    return (emp.concessoes ?? []).map(c => `<tr>
-      <td>${esc(emp.nome)}</td><td>${esc(emp.obs)}</td>
-      <td>${esc(TIPO_CFG[c.tipo].label)}</td>
-      <td>${esc(c.documento)}</td>
-      <td>${c.tipo === 'pessoa' ? esc(c.pessoa) : ''}</td>
-      <td>${c.tipo === 'pessoa' ? esc((c as {situacao?: string}).situacao ?? '') : ''}</td>
-      <td>${esc(c.concedido_por)}</td><td>${esc(c.obs)}</td>
-    </tr>`)
+    return (emp.concessoes ?? []).map((c, i) => {
+      const sep = i === 0 ? 'border-top:3px solid #2A4F96;' : ''
+      return `<tr>
+      <td style="${sep}">${esc(emp.nome)}</td><td style="${sep}">${esc(emp.obs)}</td>
+      <td style="${sep}">${esc(TIPO_CFG[c.tipo].label)}</td>
+      <td style="${sep}">${esc(c.documento)}</td>
+      <td style="${sep}">${c.tipo === 'pessoa' ? esc(c.pessoa) : ''}</td>
+      <td style="${sep}">${c.tipo === 'pessoa' ? esc((c as {situacao?: string}).situacao ?? '') : ''}</td>
+      <td style="${sep}">${esc(c.concedido_por)}</td><td style="${sep}">${esc(c.obs)}</td>
+    </tr>`
+    })
   }).join('')
   return `<html><head><meta charset='utf-8'>
 <style>
