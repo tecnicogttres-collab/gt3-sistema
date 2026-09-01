@@ -58,6 +58,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'workflow-programas',
+    label: 'Workflow Programas',
+    color: '#4A90D9',
+    path: '/workflow-programas',
+    description: 'Checklist de análise documental (PGR/PCMSO/LTCAT) com contratantes, itens e e-mails automáticos',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'manuais',
     label: 'Manuais',
     color: '#4A90D9',
