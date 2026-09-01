@@ -18,3 +18,8 @@ export function formatDateShort(iso: string | null | undefined): string {
   const months = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
   return `${pad(d.getDate())}/${months[d.getMonth()]}`
 }
+
+/** Normaliza nome para comparação tolerante a acentos/maiúsculas (ex.: bater profile.nome com aniversarios.nome) */
+export function normalizeName(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}

@@ -6,12 +6,13 @@ import { useModules } from '../components/ModulesContext'
 import * as allPdis from '../../data/pdis/index'
 import type { PdiColaborador } from '../../data/pdis/types'
 import ModulosNomenclaturaModal from './ModulosNomenclaturaModal'
+import AccessMatrixModal from './AccessMatrixModal'
 
 const PDI_OPTIONS = (Object.values(allPdis) as PdiColaborador[])
   .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   .map(p => ({ value: p.id, label: p.nome }))
 
-type UserRow = {
+export type UserRow = {
   id: string
   email: string
   nome: string | null
@@ -67,6 +68,7 @@ export default function LoginsClient() {
   const canManage = profile?.papel === 'admin' || profile?.papel === 'gestor'
 
   const [nomenclaturaOpen, setNomenclaturaOpen] = useState(false)
+  const [matrixOpen, setMatrixOpen] = useState(false)
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
@@ -297,6 +299,26 @@ export default function LoginsClient() {
     setUsers((prev) => prev.map((r) => (r.id === u.id ? { ...r, banned: !r.banned } : r)))
   }
 
+  // ── Mapa de acessos (matriz usuário × módulo) ──────────────────
+  async function toggleUserModulo(u: UserRow, modId: string) {
+    const currentList = u.modulos_permitidos ?? CONFIGURABLE_MODULES.map(m => m.id)
+    const isRemoving = currentList.includes(modId)
+    const nextList = isRemoving ? currentList.filter(id => id !== modId) : [...currentList, modId]
+    const next = nextList.length === CONFIGURABLE_MODULES.length ? null : nextList
+
+    setUsers(prev => prev.map(row => (row.id === u.id ? { ...row, modulos_permitidos: next } : row)))
+
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modulos_permitidos: next }),
+    })
+    if (!res.ok) {
+      setUsers(prev => prev.map(row => (row.id === u.id ? { ...row, modulos_permitidos: u.modulos_permitidos } : row)))
+      alert('Erro ao atualizar acesso — verifique sua conexão e permissões.')
+    }
+  }
+
   // ── Loading / seeding state ───────────────────────────────────
   if (seeding || profileLoading) {
     return (
@@ -317,6 +339,13 @@ export default function LoginsClient() {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => setMatrixOpen(true)}
+            title="Ver e editar quem tem acesso a cada módulo"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', backgroundColor: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 15, lineHeight: 1 }}>🗂️</span> Mapa de acessos
+          </button>
           {canManage && (
             <button
               onClick={() => setNomenclaturaOpen(true)}
@@ -338,6 +367,18 @@ export default function LoginsClient() {
       </div>
 
       {nomenclaturaOpen && <ModulosNomenclaturaModal onClose={() => setNomenclaturaOpen(false)} />}
+
+      {matrixOpen && (
+        <AccessMatrixModal
+          users={users.filter(u => !u.banned && (isAdmin || u.papel !== 'admin'))}
+          modules={CONFIGURABLE_MODULES}
+          currentUserId={user?.id ?? null}
+          isAdmin={isAdmin}
+          canManage={canManage}
+          onToggle={toggleUserModulo}
+          onClose={() => setMatrixOpen(false)}
+        />
+      )}
 
       {/* Search */}
       <div style={{ marginBottom: 16 }}>

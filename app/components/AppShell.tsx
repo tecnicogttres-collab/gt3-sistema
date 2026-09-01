@@ -25,6 +25,7 @@ import PdiCriadoNotificacao from './PdiCriadoNotificacao'
 import QuoteBanner from './QuoteBanner'
 import IntroScreen, { shouldShowIntro } from './IntroScreen'
 import { displayName } from './UserContext'
+import { normalizeName } from '../lib/format'
 
 function useBreadcrumb(pathname: string): string {
   const { modules } = useModules()
@@ -358,6 +359,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (shouldShowIntro()) setIntroVisible(true)
   }, [])
 
+  // Aniversário do usuário logado — checa a tabela "aniversarios" (nome livre, sem
+  // vínculo com profiles) comparando com o nome do perfil de forma tolerante a acentos.
+  const [isBirthdayToday, setIsBirthdayToday] = useState(false)
+  useEffect(() => {
+    if (!profile) return
+    let alive = true
+    const today = new Date()
+    const supabase = createClient()
+    supabase
+      .from('aniversarios')
+      .select('nome')
+      .eq('dia', today.getDate())
+      .eq('mes', today.getMonth() + 1)
+      .then(({ data }) => {
+        if (!alive || !data) return
+        const meu = normalizeName(displayName(profile))
+        setIsBirthdayToday(data.some(r => normalizeName(r.nome as string) === meu))
+      })
+    return () => { alive = false }
+  }, [profile])
+
   const isColabOrTrainee = profile?.papel === 'colaborador' || profile?.papel === 'trainee'
 
   const loadLegislacoesPendentes = useCallback(async () => {
@@ -613,7 +635,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const fullName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
 
   if (introVisible) {
-    return <IntroScreen name={profile ? displayName(profile).split(' ')[0] : ''} onDone={() => setIntroVisible(false)} />
+    return <IntroScreen name={profile ? displayName(profile).split(' ')[0] : ''} isBirthday={isBirthdayToday} onDone={() => setIntroVisible(false)} />
   }
 
   function dismissTopPrio() {
@@ -713,6 +735,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {isBirthdayToday && (
+        <style>{`@keyframes gt3-bday-shimmer { 0% { background-position: 0% 0; } 100% { background-position: 300% 0; } }`}</style>
+      )}
       <div ref={containerRef} style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
         {splitActive && split.side === 'left' && (
           <PinnedPane
@@ -732,7 +757,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           minWidth: 0, overflow: 'hidden',
         }}>
           <header style={{
-            backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0',
+            backgroundColor: '#fff', borderBottom: isBirthdayToday ? 'none' : '1px solid #E2E8F0',
             padding: '10px 24px', display: 'flex', alignItems: 'center',
             justifyContent: 'space-between', flexShrink: 0, gap: 12,
           }}>
@@ -759,9 +784,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <SplitViewButton split={split} modules={splitModules} onChange={setSplit} />
               )}
               <HeaderSearch />
-              <UserMenu name={fullName} onSignOut={signOut} onAlterarSenha={() => router.push('/perfil')} />
+              <UserMenu name={isBirthdayToday ? `${fullName} 🎂` : fullName} onSignOut={signOut} onAlterarSenha={() => router.push('/perfil')} />
             </div>
           </header>
+
+          {isBirthdayToday && (
+            <div style={{
+              height: 3, flexShrink: 0,
+              background: 'linear-gradient(90deg, #D1AE6E, #E8A9C0, #2A4F96, #D1AE6E)',
+              backgroundSize: '300% 100%',
+              animation: 'gt3-bday-shimmer 6s linear infinite',
+            }} />
+          )}
 
           {bannerPdiNotif && (
             <div style={{
@@ -895,13 +929,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 pointerEvents: hoverVisible ? 'none' : 'auto',
                 opacity: hoverVisible ? 0 : 1,
                 cursor: 'pointer',
-                backgroundColor: '#1E3A6E',
+                background: isBirthdayToday
+                  ? 'linear-gradient(135deg, #1E3A6E, #6A3B6E)'
+                  : '#1E3A6E',
                 borderRadius: '0 20px 20px 0',
                 padding: '10px 12px 10px 8px',
-                boxShadow: '2px 0 10px rgba(0,0,0,0.25)',
+                boxShadow: isBirthdayToday ? '2px 0 10px rgba(209,174,110,0.45)' : '2px 0 10px rgba(0,0,0,0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: 4,
               }}
             >
               <span style={{
@@ -911,6 +948,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 letterSpacing: 1,
                 lineHeight: 1,
               }}>GT3</span>
+              {isBirthdayToday && <span style={{ fontSize: 13, lineHeight: 1 }}>🎂</span>}
             </div>
 
             {/* Sidebar overlay — slides in on hover */}
