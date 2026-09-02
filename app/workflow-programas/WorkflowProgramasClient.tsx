@@ -37,12 +37,19 @@ type CatalogConfig = {
 }
 type Catalog = { contratantes: Contratante[]; itens: ChecklistItem[]; textos: TextoEmail[]; textosReprovacao: TextoReprovacao[]; config: CatalogConfig }
 
+type ValidadeTipo = 'bienal' | 'anual' | 'personalizada'
+type ValidadeInfo = { tipo: ValidadeTipo; meses: number }
+type DocValidavel = 'PGR' | 'PCMSO' | 'LTCAT'
+
 type AnaliseDados = {
   contratanteId: string; documentos: DocKey[]
   empresa: string; cnpj: string; emailDestino: string
   data: string; prazo: string; responsavel: string
   respostas: Record<string, Resposta>
+  validades: Partial<Record<DocValidavel, ValidadeInfo>>
 }
+type Anexo = { id: string; texto_id: string; name: string; filename: string; mime_type: string; size_bytes: number; created_at: string }
+
 type AnaliseRow = {
   id: string; empresa: string; cnpj: string
   finalizada: boolean; data_final: string | null
@@ -56,6 +63,14 @@ type View = 'analises' | 'nova' | 'banco' | 'contratantes' | 'itens' | 'textos' 
 
 const DOC_TYPES: DocKey[] = ['PGR', 'PCMSO', 'LTCAT']
 const DOC_ORDER: DocKey[] = ['PGR', 'PCMSO', 'LTCAT', 'GERAL']
+
+/** Item do catálogo padrão que representa o "Aditivo de indicação de frente de trabalho" —
+ *  a validade do documento (bienal/anual/personalizada) só é perguntada se este item não
+ *  estiver marcado como não conforme. */
+const FRENTE_TRABALHO_ITEM_ID = 'i_ger_frente'
+const VALIDADE_TIPOS: { val: ValidadeTipo; label: string }[] = [
+  { val: 'bienal', label: 'Bienal' }, { val: 'anual', label: 'Anual' }, { val: 'personalizada', label: 'Personalizada' },
+]
 
 const DEFAULT_STATUS_OPTIONS: StatusResp[] = ['ok', 'nao', 'na']
 const STATUS_LABELS: Record<Exclude<StatusResp, ''>, string> = {
@@ -88,6 +103,36 @@ function addDias(n: number) { const d = new Date(); d.setDate(d.getDate() + n); 
 function fmtD(s?: string | null) { return s ? s.split('-').reverse().join('/') : '' }
 function aplicaVars(txt: string, ctx: Record<string, string>) {
   return (txt || '').replace(/\{\{(\w+)\}\}/g, (m, k) => (ctx[k] !== undefined ? ctx[k] : m))
+}
+
+/** Junta uma lista em português: "A", "A e B", "A, B e C" */
+function joinDocs(itens: string[]): string {
+  if (itens.length === 0) return ''
+  if (itens.length === 1) return itens[0]
+  if (itens.length === 2) return itens[0] + ' e ' + itens[1]
+  return itens.slice(0, -1).join(', ') + ' e ' + itens[itens.length - 1]
+}
+
+/** Observação automática sobre validade anual/personalizada (≤23 meses) — sugere avaliar bienal. */
+function buildValidadeObservacao(a: AnaliseDados): string {
+  const alvo = (a.documentos || []).filter((d): d is DocValidavel => {
+    const v = a.validades?.[d as DocValidavel]
+    if (!v) return false
+    return v.tipo === 'anual' || (v.tipo === 'personalizada' && v.meses <= 23)
+  })
+  if (!alvo.length) return ''
+  const todasAnual = alvo.every(d => a.validades[d]?.tipo === 'anual')
+  if (todasAnual) {
+    const docsTxt = joinDocs(alvo.map(d => 'o ' + d))
+    const plural = alvo.length > 1
+    return `Identificado que ${docsTxt} ${plural ? 'estão' : 'está'} como ${plural ? 'anuais' : 'anual'}. A sugestão é rever com o elaborador, pois poderia ser bienal, conforme a Norma permite.`
+  }
+  const clausulas = alvo.map(d => {
+    const v = a.validades[d]!
+    const desc = v.tipo === 'anual' ? 'validade anual' : `validade personalizada de ${v.meses} meses`
+    return `o ${d} está com ${desc}`
+  })
+  return `Identificado que ${joinDocs(clausulas)}. A sugestão é rever com o elaborador, pois poderia ser bienal, conforme a Norma permite.`
 }
 
 // ─── Seed (base padrão GT3) ────────────────────────────────────────────────────
@@ -288,6 +333,7 @@ export default function WorkflowProgramasClient() {
   const [loading, setLoading] = useState(true)
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [analises, setAnalises] = useState<AnaliseRow[]>([])
+  const [anexos, setAnexos] = useState<Anexo[]>([])
   const [view, setView] = useState<View>('analises')
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -328,9 +374,10 @@ export default function WorkflowProgramasClient() {
   useEffect(() => {
     let alive = true
     async function load() {
-      const [cfgRes, listRes] = await Promise.all([
+      const [cfgRes, listRes, anexosRes] = await Promise.all([
         fetch('/api/workflow-programas/config').then(r => r.json()).catch(() => ({ dados: null })),
         fetch('/api/workflow-programas').then(r => r.json()).catch(() => []),
+        fetch('/api/workflow-programas/anexos').then(r => r.json()).catch(() => []),
       ])
       if (!alive) return
       let cat: Catalog | null = cfgRes?.dados ?? null
@@ -350,6 +397,7 @@ export default function WorkflowProgramasClient() {
       }
       setCatalog(cat)
       setAnalises(Array.isArray(listRes) ? listRes : [])
+      setAnexos(Array.isArray(anexosRes) ? anexosRes : [])
       setLoading(false)
     }
     load()
@@ -392,6 +440,7 @@ export default function WorkflowProgramasClient() {
       contratante: nomeC(c) || '[CONTRATANTE]', prazo: fmtD(a.prazo) || '[PRAZO]',
       data: fmtD(a.data), responsavel: a.responsavel || catalog?.config.responsavel || '',
       unidade: c?.unidade || '',
+      documentos: joinDocs(a.documentos || []),
     }
   }
 
@@ -406,6 +455,8 @@ export default function WorkflowProgramasClient() {
     const partes: string[] = []
     if (apontar.length === 0 && marcados.length > 0) {
       partes.push(aplicaVars(getT(c?.aprovadoId || catalog?.config.aprovadoId)?.corpo || '', ctx))
+      const obsValidade = buildValidadeObservacao(a)
+      if (obsValidade) partes.push(obsValidade)
     } else {
       partes.push(aplicaVars(getT(c?.aberturaId || catalog?.config.aberturaId)?.corpo || '', ctx))
       apontar.forEach((i, n) => {
@@ -473,6 +524,7 @@ export default function WorkflowProgramasClient() {
       data: hoje(), prazo: addDias(catalog.config.prazoDias || 7),
       responsavel: displayName(profile, catalog.config.responsavel || ''),
       respostas: {},
+      validades: {},
     })
     setEmailEditado(false)
   }
@@ -589,6 +641,15 @@ export default function WorkflowProgramasClient() {
 
   function setDraftField<K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) {
     setDraft(prev => (prev ? { ...prev, [k]: v } : prev))
+    setEmailEditado(false)
+  }
+
+  function setValidade(doc: DocValidavel, patch: Partial<ValidadeInfo>) {
+    setDraft(prev => {
+      if (!prev) return prev
+      const atual = prev.validades?.[doc] ?? { tipo: 'bienal' as ValidadeTipo, meses: 24 }
+      return { ...prev, validades: { ...prev.validades, [doc]: { ...atual, ...patch } } }
+    })
     setEmailEditado(false)
   }
 
@@ -800,6 +861,33 @@ export default function WorkflowProgramasClient() {
   function delTexto(id: string) {
     if (!catalog || !confirm('Excluir texto?')) return
     persistCatalog({ ...catalog, textos: catalog.textos.filter(t => t.id !== id) })
+    const orfaos = anexos.filter(a => a.texto_id === id)
+    orfaos.forEach(a => { fetch(`/api/workflow-programas/anexos/${a.id}`, { method: 'DELETE' }).catch(() => {}) })
+    if (orfaos.length) setAnexos(prev => prev.filter(a => a.texto_id !== id))
+  }
+
+  // ── anexos dos pareceres (textos) ──
+  async function uploadAnexo(textoId: string, file: File) {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('texto_id', textoId)
+    const res = await fetch('/api/workflow-programas/anexos', { method: 'POST', body: form })
+    if (!res.ok) { showToast('Erro ao enviar anexo'); return }
+    const created: Anexo = await res.json()
+    setAnexos(prev => [...prev, created])
+    showToast('Anexo adicionado')
+  }
+  async function delAnexo(id: string) {
+    if (!confirm('Excluir este anexo?')) return
+    const res = await fetch(`/api/workflow-programas/anexos/${id}`, { method: 'DELETE' })
+    if (!res.ok) { showToast('Erro ao excluir anexo'); return }
+    setAnexos(prev => prev.filter(a => a.id !== id))
+  }
+  async function baixarAnexo(id: string) {
+    const res = await fetch(`/api/workflow-programas/anexos/${id}/url`)
+    if (!res.ok) { showToast('Erro ao baixar anexo'); return }
+    const { url } = await res.json()
+    window.open(url, '_blank')
   }
 
   // ── catálogo: textos de reprovação ──
@@ -887,13 +975,14 @@ export default function WorkflowProgramasClient() {
       {view === 'nova' && draft && (
         <VAnalise
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao}
-          itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC}
-          onField={setDraftField} onToggleDoc={toggleDoc} onDot={toggleDot} onObs={setObs}
+          itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} anexos={anexos}
+          onField={setDraftField} onToggleDoc={toggleDoc} onDot={toggleDot} onObs={setObs} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
           onEml={baixarEml} onMailto={abrirMailto}
           onRegerar={() => { setEmailEditado(false); showToast('E-mail regerado') }}
+          onBaixarAnexo={baixarAnexo}
         />
       )}
 
@@ -946,7 +1035,10 @@ export default function WorkflowProgramasClient() {
 
       {/* ── Modal: Texto ── */}
       {modalTextoEdit && (
-        <TextoModal draft={modalTextoEdit} CATS={CATS} onChange={setModalTextoEdit} onSave={salvarTextoModal} onClose={() => setModalTextoEdit(null)} />
+        <TextoModal
+          draft={modalTextoEdit} novo={modalTextoNovo} CATS={CATS} onChange={setModalTextoEdit} onSave={salvarTextoModal} onClose={() => setModalTextoEdit(null)}
+          anexos={anexos.filter(a => a.texto_id === modalTextoEdit.id)} onUpload={uploadAnexo} onDelAnexo={delAnexo} onBaixarAnexo={baixarAnexo}
+        />
       )}
 
       {modalReprovacaoEdit && (
@@ -1040,21 +1132,31 @@ function VAnalises({ lista, getC, nomeC, statusAnalise, onNova, onAbrir, onDel }
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, itensDaAnalise, getT, getR, nomeC, onField, onToggleDoc, onDot, onObs, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, itensDaAnalise, getT, getR, nomeC, anexos, onField, onToggleDoc, onDot, onObs, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; pend: number; restricoes: number; total: number; marcados: number } | null; modoReprovacao: boolean
   itensDaAnalise: (a: AnaliseDados) => (ChecklistItem & { textoLink: string })[]
   getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined; nomeC: (c?: Contratante) => string
+  anexos: Anexo[]
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
   onToggleDoc: (d: DocKey) => void; onDot: (itemId: string, val: StatusResp) => void; onObs: (itemId: string, obs: string) => void
+  onValidade: (doc: DocValidavel, patch: Partial<ValidadeInfo>) => void
   onLimpar: () => void; onSalvar: () => void; onFinalizar: () => void
   onEmailChange: (v: string) => void; onCopiar: () => void; onEml: () => void; onMailto: () => void; onRegerar: () => void
+  onBaixarAnexo: (id: string) => void
 }) {
   const itens = itensDaAnalise(draft)
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
   const ok = itens.filter(i => draft.respostas[i.id]?.status === 'ok').length
   const restr = itens.filter(i => draft.respostas[i.id]?.status === 'restricao').length
   const na = itens.filter(i => draft.respostas[i.id]?.status === 'na').length
+  const textoIdsRelevantes = new Set<string>()
+  itens.forEach(i => {
+    const s = draft.respostas[i.id]?.status
+    if (s === 'nao' && i.textoLink) textoIdsRelevantes.add(i.textoLink)
+    else if (s === 'restricao' && i.textoRestricaoId) textoIdsRelevantes.add(i.textoRestricaoId)
+  })
+  const anexosSugeridos = anexos.filter(a => textoIdsRelevantes.has(a.texto_id))
   const apl = itens.length - na
   const pct = apl ? Math.round((ok + restr) / apl * 100) : 0
 
@@ -1169,6 +1271,32 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
                     </div>
                   )
                 })}
+                {(d === 'PGR' || d === 'PCMSO' || d === 'LTCAT') && draft.respostas[FRENTE_TRABALHO_ITEM_ID]?.status !== 'nao' && (
+                  <div style={{ padding: '10px 14px', background: '#F7F9FD', borderTop: `1px solid ${LINE}` }}>
+                    <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: MU, fontWeight: 600 }}>Validade do {d}</span>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {VALIDADE_TIPOS.map(vt => {
+                        const on = draft.validades?.[d]?.tipo === vt.val
+                        return (
+                          <button key={vt.val} onClick={() => onValidade(d, vt.val === 'anual' ? { tipo: 'anual', meses: 12 } : vt.val === 'bienal' ? { tipo: 'bienal', meses: 24 } : { tipo: 'personalizada', meses: draft.validades?.[d]?.meses ?? 12 })}
+                            style={{
+                              border: `1px solid ${on ? P : LINE}`, background: on ? P : '#fff', color: on ? '#fff' : TX,
+                              borderRadius: 7, padding: '5px 12px', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
+                            }}>
+                            {vt.label}
+                          </button>
+                        )
+                      })}
+                      {draft.validades?.[d]?.tipo === 'personalizada' && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: MU }}>
+                          <input type="number" min={1} max={36} value={draft.validades[d]!.meses}
+                            onChange={e => onValidade(d, { meses: Math.min(36, Math.max(1, parseInt(e.target.value) || 1)) })}
+                            style={{ ...inputStyle, width: 64, padding: '5px 8px' }} /> meses
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -1209,6 +1337,21 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
               <Btn small onClick={onMailto}>↗ Abrir no e-mail</Btn>
               <Btn variant="gho" small onClick={onRegerar}>↻ Regerar</Btn>
             </div>
+            {anexosSugeridos.length > 0 && (
+              <div style={{ padding: 12, borderTop: `1px solid ${LINE}`, background: '#F7F9FD' }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: MU, fontWeight: 600, marginBottom: 6 }}>
+                  📎 Anexos sugeridos — lembre de anexar ao enviar
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {anexosSugeridos.map(a => (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                      <Btn small onClick={() => onBaixarAnexo(a.id)}>Baixar</Btn>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1765,12 +1908,26 @@ function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
 
 const VARS = ['empresa', 'cnpj', 'contratante', 'unidade', 'prazo', 'data', 'responsavel']
 
-function TextoModal({ draft, CATS, onChange, onSave, onClose }: {
-  draft: TextoEmail; CATS: Record<CategoriaTexto, string>; onChange: (t: TextoEmail) => void; onSave: () => void; onClose: () => void
+function fmtBytes(n: number): string {
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB'
+  return (n / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function TextoModal({ draft, novo, CATS, onChange, onSave, onClose, anexos, onUpload, onDelAnexo, onBaixarAnexo }: {
+  draft: TextoEmail; novo: boolean; CATS: Record<CategoriaTexto, string>; onChange: (t: TextoEmail) => void; onSave: () => void; onClose: () => void
+  anexos: Anexo[]; onUpload: (textoId: string, file: File) => void; onDelAnexo: (id: string) => void; onBaixarAnexo: (id: string) => void
 }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [enviando, setEnviando] = useState(false)
   function set<K extends keyof TextoEmail>(k: K, v: TextoEmail[K]) { onChange({ ...draft, [k]: v }) }
+  async function handleFile(f: File | null) {
+    if (!f) return
+    setEnviando(true)
+    try { await onUpload(draft.id, f) } finally { setEnviando(false); if (fileRef.current) fileRef.current.value = '' }
+  }
   return (
-    <ModalShell title={draft.titulo ? 'Editar texto' : 'Novo texto'} onClose={onClose} onSave={onSave}>
+    <ModalShell title={novo ? 'Novo texto' : 'Editar texto'} onClose={onClose} onSave={onSave}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="Título interno"><input style={inputStyle} value={draft.titulo} onChange={e => set('titulo', e.target.value)} /></Field>
         <Field label="Categoria">
@@ -1791,6 +1948,32 @@ function TextoModal({ draft, CATS, onChange, onSave, onClose }: {
           </code>
         ))}
       </div>
+
+      <div style={{ height: 1, background: LINE, margin: '16px 0' }} />
+      <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, marginBottom: 8 }}>
+        Anexos <span style={{ fontWeight: 400, textTransform: 'none' }}>— sugeridos automaticamente quando este texto entrar num e-mail</span>
+      </label>
+      {novo ? (
+        <div style={{ fontSize: 12.5, color: MU }}>Salve o texto para poder anexar arquivos.</div>
+      ) : (
+        <>
+          {anexos.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              {anexos.map(a => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: `1px solid ${LINE}`, borderRadius: 7, fontSize: 12.5 }}>
+                  <span>📎</span>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                  <span style={{ color: MU, fontSize: 11 }}>{fmtBytes(a.size_bytes)}</span>
+                  <Btn small onClick={() => onBaixarAnexo(a.id)}>Baixar</Btn>
+                  <Btn small variant="gho" onClick={() => onDelAnexo(a.id)}>Excluir</Btn>
+                </div>
+              ))}
+            </div>
+          )}
+          <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={e => handleFile(e.target.files?.[0] ?? null)} />
+          <Btn small disabled={enviando} onClick={() => fileRef.current?.click()}>{enviando ? 'Enviando…' : '📎 Adicionar anexo'}</Btn>
+        </>
+      )}
     </ModalShell>
   )
 }

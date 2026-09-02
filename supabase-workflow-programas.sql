@@ -9,3 +9,9 @@ alter table workflow_programas_analises enable row level security;
 create index workflow_programas_analises_finalizada_idx on workflow_programas_analises (finalizada);
 
 create index workflow_programas_analises_criado_por_idx on workflow_programas_analises (criado_por);
+
+create table workflow_programas_anexos ( id uuid primary key default gen_random_uuid(), texto_id text not null, name text not null, filename text not null, mime_type text not null, size_bytes bigint not null, storage_path text not null, criado_por uuid references auth.users(id), created_at timestamptz not null default now() );
+
+alter table workflow_programas_anexos enable row level security;
+
+create index workflow_programas_anexos_texto_id_idx on workflow_programas_anexos (texto_id);
