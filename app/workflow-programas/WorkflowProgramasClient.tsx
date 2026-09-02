@@ -6,21 +6,31 @@ import { useUser, displayName } from '../components/UserContext'
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type StatusResp = 'ok' | 'nao' | 'na' | 'restricao' | ''
-type Resposta = { status: StatusResp; obs: string }
+type Resposta = { status: StatusResp; obs: string; opcoesSelecionadas?: string[]; textosLivres?: Record<string, string> }
 type DocKey = 'PGR' | 'PCMSO' | 'LTCAT' | 'GERAL'
 type Escopo = 'base' | 'especifico'
-type CategoriaTexto = 'abertura' | 'apontamento' | 'fechamento' | 'assinatura' | 'restricao'
+type CategoriaTexto = 'abertura' | 'apontamento' | 'fechamento' | 'assinatura' | 'aprovacao' | 'restricao' | 'validade'
+type ChecklistItemTipo = 'status' | 'opcoes'
+/** pedirTexto: pede um detalhe livre ao marcar (ex.: "qual página?") — usável como {{detalhe}} dentro de corpo */
+type ChecklistOpcao = { id: string; label: string; corpo: string; pedirTexto: boolean; placeholder: string }
 
 type ChecklistItem = {
   id: string; titulo: string; documento: DocKey; descricao: string
   escopo: Escopo; textoId: string; critico: boolean; textoReprovacaoId: string
-  /** Quais "bolinhas" de status este item aceita — padrão: ok/nao/na */
+  /** Quais "bolinhas" de status este item aceita — padrão: ok/nao/na (só vale para tipo "status") */
   statusOptions: StatusResp[]
   /** Texto de e-mail usado quando marcado "Aprovado com restrição" */
   textoRestricaoId: string
-  /** Só aparece no checklist se o item com este id estiver com o status abaixo */
+  /** Só aparece no checklist se o item com este id estiver com o valor abaixo
+   *  (status do item, ou id da opção marcada, se o item referenciado for tipo "opcoes") */
   condicaoItemId: string
-  condicaoStatus: StatusResp
+  condicaoValor: string
+  /** "status" = as bolinhas de sempre; "opcoes" = lista de opções de texto (única ou múltipla escolha) */
+  tipo: ChecklistItemTipo
+  multiplaEscolha: boolean
+  opcoes: ChecklistOpcao[]
+  /** Nome da variável {{...}} preenchida com o texto das opções marcadas (só tipo "opcoes") */
+  variavel: string
 }
 type TextoEmail = { id: string; titulo: string; categoria: CategoriaTexto; corpo: string }
 type TextoReprovacao = { id: string; titulo: string; documento: DocKey; escopo: Escopo; corpo: string }
@@ -33,6 +43,8 @@ type Contratante = {
 type CatalogConfig = {
   responsavel: string; assunto: string
   aberturaId: string; fechamentoId: string; assinaturaId: string; aprovadoId: string
+  /** Textos usados na observação automática de validade (categoria "validade") — vazio = nenhuma observação */
+  validadeAnualId: string; validadePersonalizadaId: string
   prazoDias: number
 }
 type Catalog = { contratantes: Contratante[]; itens: ChecklistItem[]; textos: TextoEmail[]; textosReprovacao: TextoReprovacao[]; config: CatalogConfig }
@@ -59,10 +71,16 @@ type AnaliseRow = {
   minha?: boolean
 }
 
-type View = 'analises' | 'nova' | 'banco' | 'contratantes' | 'itens' | 'textos' | 'reprovacao' | 'config'
+type View = 'analises' | 'nova' | 'banco' | 'contratantes' | 'itens' | 'textos' | 'config'
 
 const DOC_TYPES: DocKey[] = ['PGR', 'PCMSO', 'LTCAT']
 const DOC_ORDER: DocKey[] = ['PGR', 'PCMSO', 'LTCAT', 'GERAL']
+
+/** Ordena itens do catálogo por documento (PGR → PCMSO → LTCAT → GERAL) — usado em toda
+ *  listagem de itens fora do checklist da análise (que já ordena assim por padrão). */
+function ordenarPorDocumento<T extends { documento: DocKey }>(itens: T[]): T[] {
+  return [...itens].sort((a, b) => DOC_ORDER.indexOf(a.documento) - DOC_ORDER.indexOf(b.documento))
+}
 
 /** Item do catálogo padrão que representa o "Aditivo de indicação de frente de trabalho" —
  *  a validade do documento (bienal/anual/personalizada) só é perguntada se este item não
@@ -113,27 +131,6 @@ function joinDocs(itens: string[]): string {
   return itens.slice(0, -1).join(', ') + ' e ' + itens[itens.length - 1]
 }
 
-/** Observação automática sobre validade anual/personalizada (≤23 meses) — sugere avaliar bienal. */
-function buildValidadeObservacao(a: AnaliseDados): string {
-  const alvo = (a.documentos || []).filter((d): d is DocValidavel => {
-    const v = a.validades?.[d as DocValidavel]
-    if (!v) return false
-    return v.tipo === 'anual' || (v.tipo === 'personalizada' && v.meses <= 23)
-  })
-  if (!alvo.length) return ''
-  const todasAnual = alvo.every(d => a.validades[d]?.tipo === 'anual')
-  if (todasAnual) {
-    const docsTxt = joinDocs(alvo.map(d => 'o ' + d))
-    const plural = alvo.length > 1
-    return `Identificado que ${docsTxt} ${plural ? 'estão' : 'está'} como ${plural ? 'anuais' : 'anual'}. A sugestão é rever com o elaborador, pois poderia ser bienal, conforme a Norma permite.`
-  }
-  const clausulas = alvo.map(d => {
-    const v = a.validades[d]!
-    const desc = v.tipo === 'anual' ? 'validade anual' : `validade personalizada de ${v.meses} meses`
-    return `o ${d} está com ${desc}`
-  })
-  return `Identificado que ${joinDocs(clausulas)}. A sugestão é rever com o elaborador, pois poderia ser bienal, conforme a Norma permite.`
-}
 
 // ─── Seed (base padrão GT3) ────────────────────────────────────────────────────
 
@@ -142,7 +139,7 @@ function seedCatalog(): Catalog {
   const textos: TextoEmail[] = [
     T('t_abertura', 'Abertura padrão', 'abertura', 'Prezados, bom dia.\n\nRealizamos a análise da documentação de Saúde e Segurança do Trabalho da empresa {{empresa}} (CNPJ {{cnpj}}), referente à prestação de serviços para {{contratante}}.\n\nPara liberação do cadastro, seguem os apontamentos que precisam de ajuste ou complementação:'),
     T('t_fechamento', 'Fechamento padrão', 'fechamento', 'Solicitamos o reenvio dos documentos corrigidos até {{prazo}}, respondendo a este mesmo e-mail.\n\nEnquanto os apontamentos acima não forem sanados, a documentação permanece pendente e a liberação da frente de trabalho fica condicionada à regularização.'),
-    T('t_aprovado', 'Documentação aprovada', 'fechamento', 'Prezados, bom dia.\n\nInformamos que a documentação de SST da empresa {{empresa}} (CNPJ {{cnpj}}), referente à prestação de serviços para {{contratante}}, foi analisada em {{data}} e encontra-se APROVADA, sem apontamentos.\n\nLembramos que qualquer alteração de escopo, função ou frente de trabalho exige nova análise documental.'),
+    T('t_aprovado', 'Documentação aprovada', 'aprovacao', 'Prezados, bom dia.\n\nInformamos que a documentação de SST da empresa {{empresa}} (CNPJ {{cnpj}}), referente à prestação de serviços para {{contratante}}, foi analisada em {{data}} e encontra-se APROVADA, sem apontamentos.\n\nLembramos que qualquer alteração de escopo, função ou frente de trabalho exige nova análise documental.'),
     T('t_assinatura', 'Assinatura GT3', 'assinatura', 'Atenciosamente,\n\n{{responsavel}}\nGT3 Consultoria — Gestão de Terceiros\nCaxias do Sul/RS'),
     T('t_pgr_val', 'PGR — validade vencida', 'apontamento', 'O PGR apresentado está com data de elaboração/revisão vencida. Conforme a NR-01, o inventário de riscos e o plano de ação devem ser revisados no prazo máximo de 2 anos (ou 3 anos, quando adotado sistema de gestão de SST certificado), e sempre que houver alteração nos riscos. Favor encaminhar o documento revisado e vigente.'),
     T('t_pgr_rt', 'PGR — responsável técnico', 'apontamento', 'O documento não apresenta identificação e assinatura legível do responsável técnico habilitado (nome, formação e registro no conselho de classe). Favor reenviar o PGR assinado pelo profissional legalmente habilitado.'),
@@ -164,10 +161,14 @@ function seedCatalog(): Catalog {
     T('t_mpo_495', 'Inventário no modelo MOD 495/11', 'apontamento', 'O inventário de riscos deve seguir o modelo MOD 495/11 exigido pela contratante, contemplando as categorias de risco por função e a classificação conforme a matriz adotada. Favor adequar e reenviar.'),
     T('t_mpo_trein', 'Treinamentos obrigatórios', 'apontamento', 'Não foram apresentados os certificados de treinamento exigidos para as atividades a serem executadas na unidade (ex.: NR-06, NR-11, NR-35, NR-33, integração), com carga horária, data e assinatura do instrutor responsável. Favor encaminhar os comprovantes dos colaboradores indicados.'),
     T('t_vol_croqui', 'Escopo e local de execução', 'apontamento', 'A documentação não deixa claro o local de execução dos serviços e o escopo das atividades dentro da unidade. Favor descrever no PGR as atividades efetivamente executadas na contratante e a área de atuação.'),
+    T('t_validade_anual', 'Validade — Anual', 'validade', 'Identificado que {{documentosValidade}} {{verbo}} como {{adjetivo}}. A sugestão é rever com o elaborador, pois poderia ser bienal, conforme a Norma permite.'),
+    T('t_validade_personalizada', 'Validade — Personalizada (até 23 meses)', 'validade', 'Identificado que {{documentosValidade}} {{verbo}} com validade personalizada de {{meses}} meses. A sugestão é rever com o elaborador, pois poderia ser bienal, conforme a Norma permite.'),
   ]
 
-  const I = (id: string, titulo: string, documento: DocKey, descricao: string, escopo: Escopo, textoId: string, critico: boolean, textoReprovacaoId = ''): ChecklistItem =>
-    ({ id, titulo, documento, descricao, escopo, textoId, critico, textoReprovacaoId, statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', condicaoItemId: '', condicaoStatus: '' })
+  const I = (id: string, titulo: string, documento: DocKey, descricao: string, escopo: Escopo, textoId: string, critico: boolean, textoReprovacaoId = ''): ChecklistItem => ({
+    id, titulo, documento, descricao, escopo, textoId, critico, textoReprovacaoId, statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '',
+    condicaoItemId: '', condicaoValor: '', tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
+  })
   const itens: ChecklistItem[] = [
     I('i_pgr_val', 'PGR dentro da validade', 'PGR', 'Revisão em até 2 anos (ou 3 com sistema de gestão certificado).', 'base', 't_pgr_val', true, 'r_pgr_validade'),
     I('i_pgr_rt', 'Assinatura do responsável técnico', 'PGR', 'Nome, formação e registro no conselho de classe.', 'base', 't_pgr_rt', true),
@@ -241,6 +242,7 @@ function seedCatalog(): Catalog {
       responsavel: 'Rodrigo Balem',
       assunto: 'GT3 · Análise de documentação SST — {{empresa}} — {{contratante}}',
       aberturaId: 't_abertura', fechamentoId: 't_fechamento', assinaturaId: 't_assinatura', aprovadoId: 't_aprovado',
+      validadeAnualId: 't_validade_anual', validadePersonalizadaId: 't_validade_personalizada',
       prazoDias: 7,
     },
   }
@@ -248,21 +250,46 @@ function seedCatalog(): Catalog {
 
 /** Preenche catálogos salvos antes da existência de "Textos de reprovação" (upgrade in-place). */
 function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
+  const idsAprovado = new Set([raw.config?.aprovadoId, ...raw.contratantes.map(c => c.aprovadoId)].filter(Boolean))
   const precisaUpgrade = !Array.isArray(raw.textosReprovacao)
-    || raw.itens.some(i => typeof i.textoReprovacaoId !== 'string' || !Array.isArray(i.statusOptions) || typeof i.condicaoItemId !== 'string')
+    || raw.itens.some(i => typeof i.textoReprovacaoId !== 'string' || !Array.isArray(i.statusOptions) || typeof i.condicaoItemId !== 'string'
+      || typeof i.tipo !== 'string' || !Array.isArray(i.opcoes) || i.opcoes.some(o => typeof o.pedirTexto !== 'boolean'))
+    || raw.textos.some(t => idsAprovado.has(t.id) && t.categoria !== 'aprovacao')
+    || typeof raw.config.validadeAnualId !== 'string' || typeof raw.config.validadePersonalizadaId !== 'string'
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
+  let textos = raw.textos.map(t => (idsAprovado.has(t.id) && t.categoria !== 'aprovacao' ? { ...t, categoria: 'aprovacao' as const } : t))
+  const config = { ...raw.config }
+  if (typeof config.validadeAnualId !== 'string') {
+    const seedTexto = seed.textos.find(t => t.id === 't_validade_anual')!
+    if (!textos.some(t => t.id === seedTexto.id)) textos = [...textos, seedTexto]
+    config.validadeAnualId = seedTexto.id
+  }
+  if (typeof config.validadePersonalizadaId !== 'string') {
+    const seedTexto = seed.textos.find(t => t.id === 't_validade_personalizada')!
+    if (!textos.some(t => t.id === seedTexto.id)) textos = [...textos, seedTexto]
+    config.validadePersonalizadaId = seedTexto.id
+  }
   const defaultLink: Record<string, string> = { i_pgr_val: 'r_pgr_validade', i_pcm_val: 'r_pcm_validade' }
-  const itens = raw.itens.map(i => ({
-    ...i,
-    textoReprovacaoId: typeof i.textoReprovacaoId === 'string' ? i.textoReprovacaoId : (defaultLink[i.id] || ''),
-    statusOptions: Array.isArray(i.statusOptions) && i.statusOptions.length ? i.statusOptions : [...DEFAULT_STATUS_OPTIONS],
-    textoRestricaoId: typeof i.textoRestricaoId === 'string' ? i.textoRestricaoId : '',
-    condicaoItemId: typeof i.condicaoItemId === 'string' ? i.condicaoItemId : '',
-    condicaoStatus: typeof i.condicaoStatus === 'string' ? i.condicaoStatus : '',
-  }))
+  const itens = raw.itens.map(i => {
+    const legado = i as ChecklistItem & { condicaoStatus?: string }
+    return {
+      ...i,
+      textoReprovacaoId: typeof i.textoReprovacaoId === 'string' ? i.textoReprovacaoId : (defaultLink[i.id] || ''),
+      statusOptions: Array.isArray(i.statusOptions) && i.statusOptions.length ? i.statusOptions : [...DEFAULT_STATUS_OPTIONS],
+      textoRestricaoId: typeof i.textoRestricaoId === 'string' ? i.textoRestricaoId : '',
+      condicaoItemId: typeof i.condicaoItemId === 'string' ? i.condicaoItemId : '',
+      condicaoValor: typeof i.condicaoValor === 'string' ? i.condicaoValor : (typeof legado.condicaoStatus === 'string' ? legado.condicaoStatus : ''),
+      tipo: i.tipo === 'opcoes' ? 'opcoes' as const : 'status' as const,
+      multiplaEscolha: !!i.multiplaEscolha,
+      opcoes: (Array.isArray(i.opcoes) ? i.opcoes : []).map(o => ({
+        ...o, pedirTexto: !!o.pedirTexto, placeholder: typeof o.placeholder === 'string' ? o.placeholder : '',
+      })),
+      variavel: typeof i.variavel === 'string' ? i.variavel : '',
+    }
+  })
   const textosReprovacao = Array.isArray(raw.textosReprovacao) && raw.textosReprovacao.length ? raw.textosReprovacao : seed.textosReprovacao
-  return { catalog: { ...raw, itens, textosReprovacao }, changed: true }
+  return { catalog: { ...raw, itens, textos, textosReprovacao, config }, changed: true }
 }
 
 // ─── Small UI atoms ─────────────────────────────────────────────────────────────
@@ -335,6 +362,7 @@ export default function WorkflowProgramasClient() {
   const [analises, setAnalises] = useState<AnaliseRow[]>([])
   const [anexos, setAnexos] = useState<Anexo[]>([])
   const [view, setView] = useState<View>('analises')
+  const [textosSub, setTextosSub] = useState<'hub' | 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade'>('hub')
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -427,27 +455,76 @@ export default function WorkflowProgramasClient() {
       .map(l => { const i = getI(l.itemId); return i ? { ...i, textoLink: l.textoId || i.textoId } : null })
       .filter((i): i is ChecklistItem & { textoLink: string } => i !== null && (i.documento === 'GERAL' || docs.includes(i.documento)))
       .filter(i => {
-        if (!i.condicaoItemId || !i.condicaoStatus || i.condicaoItemId === i.id) return true
-        return a.respostas[i.condicaoItemId]?.status === i.condicaoStatus
+        if (!i.condicaoItemId || !i.condicaoValor || i.condicaoItemId === i.id) return true
+        const condItem = getI(i.condicaoItemId)
+        if (condItem?.tipo === 'opcoes') return (a.respostas[i.condicaoItemId]?.opcoesSelecionadas || []).includes(i.condicaoValor)
+        return a.respostas[i.condicaoItemId]?.status === i.condicaoValor
       })
       .sort((x, y) => DOC_ORDER.indexOf(x.documento) - DOC_ORDER.indexOf(y.documento))
   }
 
-  function ctxDe(a: AnaliseDados) {
+  function ctxDe(a: AnaliseDados, itens?: ChecklistItem[]) {
     const c = getC(a.contratanteId)
+    const vars: Record<string, string> = {}
+    itens?.forEach(i => {
+      if (i.tipo !== 'opcoes' || !i.variavel) return
+      const sel = a.respostas[i.id]?.opcoesSelecionadas || []
+      const livres = a.respostas[i.id]?.textosLivres || {}
+      vars[i.variavel] = i.opcoes.filter(o => sel.includes(o.id))
+        .map(o => aplicaVars(o.corpo, { detalhe: livres[o.id] || '' }))
+        .filter(Boolean).join(' ')
+    })
     return {
       empresa: a.empresa || '[EMPRESA]', cnpj: a.cnpj || '[CNPJ]',
       contratante: nomeC(c) || '[CONTRATANTE]', prazo: fmtD(a.prazo) || '[PRAZO]',
       data: fmtD(a.data), responsavel: a.responsavel || catalog?.config.responsavel || '',
       unidade: c?.unidade || '',
       documentos: joinDocs(a.documentos || []),
+      ...vars,
     }
+  }
+
+  /** Observação automática de validade — usa os textos configurados (categoria "validade") por tipo. */
+  function buildValidadeObservacao(a: AnaliseDados, baseCtx: Record<string, string>): string {
+    if (!catalog) return ''
+    const anualBucket = (a.documentos || []).filter((d): d is DocValidavel => a.validades?.[d as DocValidavel]?.tipo === 'anual')
+    const persBucket = (a.documentos || []).filter((d): d is DocValidavel => {
+      const v = a.validades?.[d as DocValidavel]
+      return v?.tipo === 'personalizada' && v.meses <= 23
+    })
+    const partes: string[] = []
+    if (anualBucket.length) {
+      const t = getT(catalog.config.validadeAnualId)
+      if (t) {
+        const txt = aplicaVars(t.corpo, {
+          ...baseCtx,
+          documentosValidade: joinDocs(anualBucket.map(d => 'o ' + d)),
+          verbo: anualBucket.length > 1 ? 'estão' : 'está',
+          adjetivo: anualBucket.length > 1 ? 'anuais' : 'anual',
+        })
+        if (txt.trim()) partes.push(txt)
+      }
+    }
+    if (persBucket.length) {
+      const t = getT(catalog.config.validadePersonalizadaId)
+      if (t) {
+        const meses = Array.from(new Set(persBucket.map(d => a.validades[d]!.meses))).join('/')
+        const txt = aplicaVars(t.corpo, {
+          ...baseCtx,
+          documentosValidade: joinDocs(persBucket.map(d => 'o ' + d)),
+          verbo: persBucket.length > 1 ? 'estão' : 'está',
+          meses,
+        })
+        if (txt.trim()) partes.push(txt)
+      }
+    }
+    return partes.join('\n\n')
   }
 
   function buildEmail(a: AnaliseDados) {
     const c = getC(a.contratanteId)
-    const ctx = ctxDe(a)
     const itens = itensDaAnalise(a)
+    const ctx = ctxDe(a, itens)
     const apontar = itens.filter(i => { const s = a.respostas[i.id]?.status; return s === 'nao' || s === 'restricao' })
     const pend = itens.filter(i => a.respostas[i.id]?.status === 'nao')
     const restricoes = itens.filter(i => a.respostas[i.id]?.status === 'restricao')
@@ -455,7 +532,7 @@ export default function WorkflowProgramasClient() {
     const partes: string[] = []
     if (apontar.length === 0 && marcados.length > 0) {
       partes.push(aplicaVars(getT(c?.aprovadoId || catalog?.config.aprovadoId)?.corpo || '', ctx))
-      const obsValidade = buildValidadeObservacao(a)
+      const obsValidade = buildValidadeObservacao(a, ctx)
       if (obsValidade) partes.push(obsValidade)
     } else {
       partes.push(aplicaVars(getT(c?.aberturaId || catalog?.config.aberturaId)?.corpo || '', ctx))
@@ -481,7 +558,7 @@ export default function WorkflowProgramasClient() {
 
   function buildReprovacao(a: AnaliseDados, criticosReprovados: (ChecklistItem & { textoLink: string })[]) {
     const c = getC(a.contratanteId)
-    const ctx = ctxDe(a)
+    const ctx = ctxDe(a, itensDaAnalise(a))
     const partes: string[] = []
     partes.push(aplicaVars('Prezados, bom dia.\n\nApós análise da documentação de Saúde e Segurança do Trabalho da empresa {{empresa}} (CNPJ {{cnpj}}), referente à prestação de serviços para {{contratante}}, identificamos item(ns) crítico(s) que resultam na reprovação do cadastro:', ctx))
     criticosReprovados.forEach((i, n) => {
@@ -531,6 +608,7 @@ export default function WorkflowProgramasClient() {
 
   function go(v: View) {
     if (v === 'nova' && !draft) novaAnalise()
+    if (v === 'textos') setTextosSub('hub')
     setView(v)
   }
 
@@ -635,6 +713,35 @@ export default function WorkflowProgramasClient() {
     setDraft(prev => {
       if (!prev) return prev
       return { ...prev, respostas: { ...prev.respostas, [itemId]: { status: prev.respostas[itemId]?.status || '', obs } } }
+    })
+    setEmailEditado(false)
+  }
+
+  function setOpcao(itemId: string, opcaoId: string, multipla: boolean) {
+    setDraft(prev => {
+      if (!prev) return prev
+      const r = prev.respostas[itemId]
+      const atual = r?.opcoesSelecionadas || []
+      const marcado = atual.includes(opcaoId)
+      const next = multipla
+        ? (marcado ? atual.filter(id => id !== opcaoId) : [...atual, opcaoId])
+        : (marcado ? [] : [opcaoId])
+      return { ...prev, respostas: { ...prev.respostas, [itemId]: { status: r?.status || '', obs: r?.obs || '', opcoesSelecionadas: next, textosLivres: r?.textosLivres } } }
+    })
+    setEmailEditado(false)
+  }
+
+  function setOpcaoTexto(itemId: string, opcaoId: string, texto: string) {
+    setDraft(prev => {
+      if (!prev) return prev
+      const r = prev.respostas[itemId]
+      return {
+        ...prev,
+        respostas: {
+          ...prev.respostas,
+          [itemId]: { status: r?.status || '', obs: r?.obs || '', opcoesSelecionadas: r?.opcoesSelecionadas, textosLivres: { ...r?.textosLivres, [opcaoId]: texto } },
+        },
+      }
     })
     setEmailEditado(false)
   }
@@ -803,7 +910,8 @@ export default function WorkflowProgramasClient() {
     if (!catalog || !modalContratante) return
     const novo: ChecklistItem = {
       id: uid('i'), titulo, documento, descricao: 'Exigência específica da contratante.', escopo: 'especifico', textoId, critico: false,
-      textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', condicaoItemId: '', condicaoStatus: '',
+      textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', condicaoItemId: '', condicaoValor: '',
+      tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
     }
     const nextCatalog = { ...catalog, itens: [...catalog.itens, novo] }
     setCatalog(nextCatalog)
@@ -817,14 +925,19 @@ export default function WorkflowProgramasClient() {
     setModalItemNovo(true)
     setModalItemEdit({
       id: uid('i'), titulo: '', documento: 'PGR', descricao: '', escopo: 'base', textoId: '', critico: false,
-      textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', condicaoItemId: '', condicaoStatus: '',
+      textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', condicaoItemId: '', condicaoValor: '',
+      tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
     })
   }
   function editarItemModal(i: ChecklistItem) { setModalItemNovo(false); setModalItemEdit({ ...i }) }
   function salvarItemModal() {
     if (!catalog || !modalItemEdit) return
     if (!modalItemEdit.titulo.trim()) { showToast('Informe o título do item'); return }
-    if (modalItemEdit.condicaoItemId && !modalItemEdit.condicaoStatus) { showToast('Selecione o status exigido da condição'); return }
+    if (modalItemEdit.condicaoItemId && !modalItemEdit.condicaoValor) { showToast('Selecione o valor exigido da condição'); return }
+    if (modalItemEdit.tipo === 'opcoes') {
+      if (!modalItemEdit.variavel.trim()) { showToast('Informe o nome da variável'); return }
+      if (!modalItemEdit.opcoes.length || modalItemEdit.opcoes.some(o => !o.label.trim())) { showToast('Cadastre ao menos uma opção com rótulo'); return }
+    }
     const next = { ...catalog }
     if (modalItemNovo) {
       next.itens = [...catalog.itens, modalItemEdit]
@@ -846,8 +959,8 @@ export default function WorkflowProgramasClient() {
   }
 
   // ── catálogo: textos ──
-  const CATS: Record<CategoriaTexto, string> = { abertura: 'Abertura', apontamento: 'Apontamento', fechamento: 'Fechamento', assinatura: 'Assinatura', restricao: 'Restrição' }
-  function novoTextoModal() { setModalTextoNovo(true); setModalTextoEdit({ id: uid('t'), titulo: '', categoria: 'apontamento', corpo: '' }) }
+  const CATS: Record<CategoriaTexto, string> = { aprovacao: 'Aprovação', abertura: 'Abertura', apontamento: 'Apontamento', fechamento: 'Fechamento', assinatura: 'Assinatura', restricao: 'Restrição', validade: 'Validade' }
+  function novoTextoModal(categoriaPadrao: CategoriaTexto = 'apontamento') { setModalTextoNovo(true); setModalTextoEdit({ id: uid('t'), titulo: '', categoria: categoriaPadrao, corpo: '' }) }
   function editarTextoModal(t: TextoEmail) { setModalTextoNovo(false); setModalTextoEdit({ ...t }) }
   function salvarTextoModal() {
     if (!catalog || !modalTextoEdit) return
@@ -934,8 +1047,7 @@ export default function WorkflowProgramasClient() {
     { g: 'Bases' },
     { k: 'contratantes', t: 'Contratantes', i: '🏭' },
     { k: 'itens', t: 'Itens de checklist', i: '☑️' },
-    { k: 'textos', t: 'Textos de e-mail', i: '✉️' },
-    { k: 'reprovacao', t: 'Textos de reprovação', i: '🚫' },
+    { k: 'textos', t: 'Textos', i: '✉️' },
     { g: 'Sistema' },
     { k: 'config', t: 'Configurações', i: '⚙️' },
   ]
@@ -976,7 +1088,7 @@ export default function WorkflowProgramasClient() {
         <VAnalise
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} anexos={anexos}
-          onField={setDraftField} onToggleDoc={toggleDoc} onDot={toggleDot} onObs={setObs} onValidade={setValidade}
+          onField={setDraftField} onToggleDoc={toggleDoc} onDot={toggleDot} onObs={setObs} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
@@ -1007,16 +1119,56 @@ export default function WorkflowProgramasClient() {
         <VItens catalog={catalog} getT={getT} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} />
       )}
 
-      {view === 'textos' && (
-        <VTextos catalog={catalog} CATS={CATS} onNovo={novoTextoModal} onEditar={editarTextoModal} onDel={delTexto} />
+      {view === 'textos' && textosSub === 'hub' && (
+        <VTextosHub catalog={catalog} onAbrir={setTextosSub} />
       )}
-
-      {view === 'reprovacao' && (
-        <VReprovacao catalog={catalog} onNovo={novoReprovacaoModal} onEditar={editarReprovacaoModal} onDel={delReprovacao} />
+      {view === 'textos' && textosSub === 'aprovacao' && (
+        <div>
+          <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
+          <div style={{ marginTop: 10 }}>
+            <VTextos catalog={catalog} CATS={{ aprovacao: 'Aprovação' }} onNovo={() => novoTextoModal('aprovacao')} onEditar={editarTextoModal} onDel={delTexto} />
+          </div>
+        </div>
+      )}
+      {view === 'textos' && textosSub === 'apontamento' && (
+        <div>
+          <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
+          <div style={{ marginTop: 10 }}>
+            <VTextos
+              catalog={catalog}
+              CATS={{ abertura: 'Abertura', apontamento: 'Apontamento', fechamento: 'Fechamento', assinatura: 'Assinatura' }}
+              onNovo={() => novoTextoModal('apontamento')} onEditar={editarTextoModal} onDel={delTexto}
+            />
+          </div>
+        </div>
+      )}
+      {view === 'textos' && textosSub === 'restricao' && (
+        <div>
+          <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
+          <div style={{ marginTop: 10 }}>
+            <VTextos catalog={catalog} CATS={{ restricao: 'Aprovação com restrição' }} onNovo={() => novoTextoModal('restricao')} onEditar={editarTextoModal} onDel={delTexto} />
+          </div>
+        </div>
+      )}
+      {view === 'textos' && textosSub === 'reprovacao' && (
+        <div>
+          <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
+          <div style={{ marginTop: 10 }}>
+            <VReprovacao catalog={catalog} onNovo={novoReprovacaoModal} onEditar={editarReprovacaoModal} onDel={delReprovacao} />
+          </div>
+        </div>
+      )}
+      {view === 'textos' && textosSub === 'validade' && (
+        <div>
+          <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
+          <div style={{ marginTop: 10 }}>
+            <VTextos catalog={catalog} CATS={{ validade: 'Validade' }} onNovo={() => novoTextoModal('validade')} onEditar={editarTextoModal} onDel={delTexto} />
+          </div>
+        </div>
       )}
 
       {view === 'config' && (
-        <VConfig config={catalog.config} onSalvar={salvarConfig} />
+        <VConfig config={catalog.config} textos={catalog.textos} onSalvar={salvarConfig} />
       )}
 
       {/* ── Modal: Contratante ── */}
@@ -1132,7 +1284,7 @@ function VAnalises({ lista, getC, nomeC, statusAnalise, onNova, onAbrir, onDel }
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, itensDaAnalise, getT, getR, nomeC, anexos, onField, onToggleDoc, onDot, onObs, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, itensDaAnalise, getT, getR, nomeC, anexos, onField, onToggleDoc, onDot, onObs, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; pend: number; restricoes: number; total: number; marcados: number } | null; modoReprovacao: boolean
   itensDaAnalise: (a: AnaliseDados) => (ChecklistItem & { textoLink: string })[]
@@ -1140,16 +1292,19 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
   anexos: Anexo[]
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
   onToggleDoc: (d: DocKey) => void; onDot: (itemId: string, val: StatusResp) => void; onObs: (itemId: string, obs: string) => void
+  onOpcao: (itemId: string, opcaoId: string, multipla: boolean) => void
+  onOpcaoTexto: (itemId: string, opcaoId: string, texto: string) => void
   onValidade: (doc: DocValidavel, patch: Partial<ValidadeInfo>) => void
   onLimpar: () => void; onSalvar: () => void; onFinalizar: () => void
   onEmailChange: (v: string) => void; onCopiar: () => void; onEml: () => void; onMailto: () => void; onRegerar: () => void
   onBaixarAnexo: (id: string) => void
 }) {
   const itens = itensDaAnalise(draft)
+  const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
-  const ok = itens.filter(i => draft.respostas[i.id]?.status === 'ok').length
-  const restr = itens.filter(i => draft.respostas[i.id]?.status === 'restricao').length
-  const na = itens.filter(i => draft.respostas[i.id]?.status === 'na').length
+  const ok = itensStatus.filter(i => draft.respostas[i.id]?.status === 'ok').length
+  const restr = itensStatus.filter(i => draft.respostas[i.id]?.status === 'restricao').length
+  const na = itensStatus.filter(i => draft.respostas[i.id]?.status === 'na').length
   const textoIdsRelevantes = new Set<string>()
   itens.forEach(i => {
     const s = draft.respostas[i.id]?.status
@@ -1157,7 +1312,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
     else if (s === 'restricao' && i.textoRestricaoId) textoIdsRelevantes.add(i.textoRestricaoId)
   })
   const anexosSugeridos = anexos.filter(a => textoIdsRelevantes.has(a.texto_id))
-  const apl = itens.length - na
+  const apl = itensStatus.length - na
   const pct = apl ? Math.round((ok + restr) / apl * 100) : 0
 
   return (
@@ -1215,20 +1370,52 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
             <Empty title="Nenhum item vinculado" sub="Cadastre a contratante e selecione os itens de checklist aplicáveis." />
           ) : grupos.map(d => {
             const g = itens.filter(i => i.documento === d)
-            const okG = g.filter(i => draft.respostas[i.id]?.status === 'ok').length
+            const gStatus = g.filter(i => i.tipo !== 'opcoes')
+            const okG = gStatus.filter(i => draft.respostas[i.id]?.status === 'ok').length
             return (
               <div key={d} style={{ border: `1px solid ${LINE}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12, background: '#fff' }}>
                 <div style={{ background: '#F7F9FD', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}` }}>
                   <b style={{ fontSize: 13, letterSpacing: '.02em' }}>{d}</b>
-                  <span style={{ color: MU, fontSize: 12 }}>{okG}/{g.length} conformes</span>
+                  <span style={{ color: MU, fontSize: 12 }}>{okG}/{gStatus.length} conformes</span>
                 </div>
                 {g.map((i, idx) => {
+                  if (i.tipo === 'opcoes') {
+                    const selecionadas = draft.respostas[i.id]?.opcoesSelecionadas || []
+                    return (
+                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < g.length - 1 ? '1px solid #F0F3F8' : undefined }}>
+                        <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {i.titulo}
+                          {i.escopo === 'especifico' && <Tag tone="acc">exigência da contratante</Tag>}
+                          <Tag>{'{{' + (i.variavel || '?') + '}}'}</Tag>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: MU, marginTop: 2 }}>{i.descricao}</div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                          {i.opcoes.map(o => {
+                            const sel = selecionadas.includes(o.id)
+                            return (
+                              <button key={o.id} onClick={() => onOpcao(i.id, o.id, i.multiplaEscolha)} style={{
+                                padding: '6px 13px', borderRadius: 99, border: `1.5px solid ${sel ? P : LINE}`,
+                                background: sel ? P : '#fff', color: sel ? '#fff' : TX, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', fontWeight: sel ? 600 : 400,
+                              }}>{o.label || '(sem rótulo)'}</button>
+                            )
+                          })}
+                          {!i.opcoes.length && <span style={{ fontSize: 12, color: MU }}>Nenhuma opção cadastrada neste item.</span>}
+                        </div>
+                        {i.opcoes.filter(o => o.pedirTexto && selecionadas.includes(o.id)).map(o => (
+                          <input key={o.id} style={{ ...inputStyle, marginTop: 8, fontSize: 12.5, padding: '6px 9px' }}
+                            placeholder={o.placeholder || `Detalhe de "${o.label}"`}
+                            value={draft.respostas[i.id]?.textosLivres?.[o.id] || ''}
+                            onChange={e => onOpcaoTexto(i.id, o.id, e.target.value)} />
+                        ))}
+                      </div>
+                    )
+                  }
                   const r = draft.respostas[i.id] || { status: '' as StatusResp, obs: '' }
                   const t = getT(i.textoLink)
                   const tRestr = getT(i.textoRestricaoId)
                   const bg = r.status === 'nao' ? '#FEF8F8' : r.status === 'ok' ? '#F8FDFA' : r.status === 'restricao' ? ASO : undefined
-                  const opcoes = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
-                  const dots = ALL_DOTS.filter(dd => opcoes.includes(dd.val))
+                  const opcoesStatus = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
+                  const dots = ALL_DOTS.filter(dd => opcoesStatus.includes(dd.val))
                   return (
                     <div key={i.id} style={{ display: 'flex', gap: 14, padding: '12px 14px', borderBottom: idx < g.length - 1 ? '1px solid #F0F3F8' : undefined, alignItems: 'flex-start', background: bg }}>
                       <div style={{ display: 'flex', gap: 6, paddingTop: 2 }}>
@@ -1249,8 +1436,8 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
                           {i.titulo}
                           {i.critico && <Tag tone="no">crítico</Tag>}
                           {i.escopo === 'especifico' && <Tag tone="acc">exigência da contratante</Tag>}
-                          {opcoes.includes('nao') && !t && <Tag tone="no">sem texto vinculado</Tag>}
-                          {opcoes.includes('restricao') && !tRestr && <Tag tone="acc">sem texto de restrição</Tag>}
+                          {opcoesStatus.includes('nao') && !t && <Tag tone="no">sem texto vinculado</Tag>}
+                          {opcoesStatus.includes('restricao') && !tRestr && <Tag tone="acc">sem texto de restrição</Tag>}
                         </div>
                         <div style={{ fontSize: 12.5, color: MU, marginTop: 2 }}>{i.descricao}</div>
                         {r.status === 'nao' && i.critico && (
@@ -1487,10 +1674,11 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                 <tbody>
                   {lista.map(a => {
                     const s = statusAnalise(a), c = getC(a.dados.contratanteId), itens = itensDaAnalise(a.dados)
-                    const ok = itens.filter(i => a.dados.respostas[i.id]?.status === 'ok').length
-                    const restr = itens.filter(i => a.dados.respostas[i.id]?.status === 'restricao').length
-                    const na = itens.filter(i => a.dados.respostas[i.id]?.status === 'na').length
-                    const apl = itens.length - na, p = apl ? Math.round((ok + restr) / apl * 100) : 0
+                    const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
+                    const ok = itensStatus.filter(i => a.dados.respostas[i.id]?.status === 'ok').length
+                    const restr = itensStatus.filter(i => a.dados.respostas[i.id]?.status === 'restricao').length
+                    const na = itensStatus.filter(i => a.dados.respostas[i.id]?.status === 'na').length
+                    const apl = itensStatus.length - na, p = apl ? Math.round((ok + restr) / apl * 100) : 0
                     const open = aberto === a.id
                     return (
                       <Fragment key={a.id}>
@@ -1632,7 +1820,7 @@ function ContratanteModal({ draft, catalog, novo, onChange, onSave, onClose, onC
   )
 
   const bloco = (escopo: Escopo, titulo: string, hint: string) => {
-    const g = catalog.itens.filter(i => i.escopo === escopo && (!q || (i.titulo + i.descricao + i.documento).toLowerCase().includes(q.toLowerCase())))
+    const g = ordenarPorDocumento(catalog.itens.filter(i => i.escopo === escopo && (!q || (i.titulo + i.descricao + i.documento).toLowerCase().includes(q.toLowerCase()))))
     const marc = g.filter(i => draft.itens.some(l => l.itemId === i.id)).length
     return (
       <div style={{ marginTop: 14 }}>
@@ -1685,7 +1873,7 @@ function ContratanteModal({ draft, catalog, novo, onChange, onSave, onClose, onC
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
         <div><span style={{ color: MU, fontSize: 12 }}>Abertura</span>{selT('aberturaId', 'abertura')}</div>
         <div><span style={{ color: MU, fontSize: 12 }}>Fechamento</span>{selT('fechamentoId', 'fechamento')}</div>
-        <div><span style={{ color: MU, fontSize: 12 }}>Aprovação</span>{selT('aprovadoId', 'fechamento')}</div>
+        <div><span style={{ color: MU, fontSize: 12 }}>Aprovação</span>{selT('aprovadoId', 'aprovacao')}</div>
         <div><span style={{ color: MU, fontSize: 12 }}>Assinatura</span>{selT('assinaturaId', 'assinatura')}</div>
       </div>
       <div style={{ height: 1, background: LINE, margin: '14px 0' }} />
@@ -1729,20 +1917,27 @@ function VItens({ catalog, getT, onNovo, onEditar, onDel }: {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 8 }}>
               <tbody>
                 {g.map(i => {
-                  const opcoes = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
+                  const statusOpcoes = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
                   const condItem = i.condicaoItemId ? catalog.itens.find(x => x.id === i.condicaoItemId) : undefined
+                  const condLabel = condItem && (condItem.tipo === 'opcoes'
+                    ? condItem.opcoes.find(o => o.id === i.condicaoValor)?.label ?? i.condicaoValor
+                    : STATUS_LABELS[i.condicaoValor as Exclude<StatusResp, ''>] ?? i.condicaoValor)
                   return (
                     <tr key={i.id}>
                       <td style={{ padding: '10px 18px', borderBottom: `1px solid ${LINE}` }}>
                         <b>{i.titulo}</b> {i.critico && <Tag tone="no">crítico</Tag>} {i.escopo === 'especifico' ? <Tag tone="acc">específico</Tag> : <Tag>base</Tag>}
-                        {opcoes.length !== DEFAULT_STATUS_OPTIONS.length || opcoes.some(o => !DEFAULT_STATUS_OPTIONS.includes(o)) ? (
-                          <Tag>{opcoes.map(o => ALL_DOTS.find(d => d.val === o)?.symbol).join(' ')}</Tag>
+                        {i.tipo === 'opcoes' ? (
+                          <Tag tone="acc">opções de texto · {i.opcoes.length} · {'{{' + (i.variavel || '?') + '}}'}</Tag>
+                        ) : (statusOpcoes.length !== DEFAULT_STATUS_OPTIONS.length || statusOpcoes.some(o => !DEFAULT_STATUS_OPTIONS.includes(o))) ? (
+                          <Tag>{statusOpcoes.map(o => ALL_DOTS.find(d => d.val === o)?.symbol).join(' ')}</Tag>
                         ) : null}
-                        {condItem && <Tag tone="acc">só se &quot;{condItem.titulo}&quot; = {STATUS_LABELS[i.condicaoStatus as Exclude<StatusResp, ''>] ?? i.condicaoStatus}</Tag>}
+                        {condItem && <Tag tone="acc">só se &quot;{condItem.titulo}&quot; = {condLabel}</Tag>}
                         <div style={{ color: MU, fontSize: 12 }}>{i.descricao}</div>
                       </td>
                       <td style={{ width: 200, padding: 10, borderBottom: `1px solid ${LINE}` }}>
-                        {getT(i.textoId) ? <Tag tone="acc">{getT(i.textoId)!.titulo}</Tag> : <Tag tone="no">sem texto</Tag>}
+                        {i.tipo === 'opcoes' ? (
+                          <span style={{ color: MU, fontSize: 12 }}>{i.multiplaEscolha ? 'múltipla escolha' : 'escolha única'}</span>
+                        ) : getT(i.textoId) ? <Tag tone="acc">{getT(i.textoId)!.titulo}</Tag> : <Tag tone="no">sem texto</Tag>}
                       </td>
                       <td style={{ width: 150, padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right' }}>
                         <Btn small onClick={() => onEditar(i)}>Editar</Btn>{' '}<Btn small variant="gho" onClick={() => onDel(i.id)}>Excluir</Btn>
@@ -1759,10 +1954,15 @@ function VItens({ catalog, getT, onNovo, onEditar, onDel }: {
   )
 }
 
+function slugifyVar(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+
 function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
   draft: ChecklistItem; catalog: Catalog; novo: boolean; onChange: (i: ChecklistItem) => void; onSave: () => void; onClose: () => void
 }) {
   function set<K extends keyof ChecklistItem>(k: K, v: ChecklistItem[K]) { onChange({ ...draft, [k]: v }) }
+  const condItem = draft.condicaoItemId ? catalog.itens.find(x => x.id === draft.condicaoItemId) : undefined
   return (
     <ModalShell title={novo ? 'Novo item de checklist' : 'Editar item'} onClose={onClose} onSave={onSave}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1783,59 +1983,114 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
             <option value="especifico">Específico — só quando a contratante exigir</option>
           </select>
         </Field>
-        <Field label={'Texto vinculado ao "não conforme"'}>
-          <select style={inputStyle} value={draft.textoId} onChange={e => set('textoId', e.target.value)}>
-            <option value="">— nenhum —</option>
-            {catalog.textos.filter(t => t.categoria === 'apontamento').map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
+        <Field label="Tipo de item">
+          <select style={inputStyle} value={draft.tipo} onChange={e => set('tipo', e.target.value as ChecklistItemTipo)}>
+            <option value="status">Bolinhas de status (padrão)</option>
+            <option value="opcoes">Opções de texto</option>
           </select>
         </Field>
       </div>
-      <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input type="checkbox" checked={draft.critico} onChange={e => set('critico', e.target.checked)} />
-        <span>Item crítico (bloqueia a liberação)</span>
-      </div>
-      {draft.critico && (
-        <div style={{ marginTop: 12 }}>
-          <Field label="Texto de reprovação (quando este item crítico for marcado como não conforme)">
-            <select style={inputStyle} value={draft.textoReprovacaoId} onChange={e => set('textoReprovacaoId', e.target.value)}>
-              <option value="">— nenhum —</option>
-              {catalog.textosReprovacao.filter(r => r.documento === draft.documento || draft.documento === 'GERAL').map(r => (
-                <option key={r.id} value={r.id}>{r.titulo}{r.escopo === 'especifico' ? ' (específico)' : ''}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
-      )}
 
-      <div style={{ height: 1, background: LINE, margin: '16px 0' }} />
-      <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, marginBottom: 8 }}>
-        Bolinhas deste item <span style={{ fontWeight: 400, textTransform: 'none', color: MU }}>— padrão: Conforme / Não conforme / Não aplicável</span>
-      </label>
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        {ALL_DOTS.map(dd => {
-          const checked = draft.statusOptions.includes(dd.val)
-          const isLast = checked && draft.statusOptions.length === 1
-          return (
-            <label key={dd.val} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: isLast ? 'not-allowed' : 'pointer', opacity: isLast ? 0.6 : 1 }}>
-              <input
-                type="checkbox" checked={checked} disabled={isLast}
-                onChange={() => set('statusOptions', checked ? draft.statusOptions.filter(o => o !== dd.val) : [...draft.statusOptions, dd.val])}
-              />
-              <span style={{ width: 18, height: 18, borderRadius: '50%', background: dd.on, color: dd.onFg, display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800 }}>{dd.symbol}</span>
-              {dd.label.split(' —')[0]}
-            </label>
-          )
-        })}
-      </div>
-      {draft.statusOptions.includes('restricao') && (
-        <div style={{ marginTop: 12 }}>
-          <Field label="Texto de restrição (quando marcado como Aprovado com restrição)">
-            <select style={inputStyle} value={draft.textoRestricaoId} onChange={e => set('textoRestricaoId', e.target.value)}>
-              <option value="">— nenhum —</option>
-              {catalog.textos.filter(t => t.categoria === 'restricao').map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
-            </select>
+      {draft.tipo === 'status' ? (
+        <>
+          <div style={{ marginTop: 12 }}>
+            <Field label={'Texto vinculado ao "não conforme"'}>
+              <select style={inputStyle} value={draft.textoId} onChange={e => set('textoId', e.target.value)}>
+                <option value="">— nenhum —</option>
+                {catalog.textos.filter(t => t.categoria === 'apontamento').map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" checked={draft.critico} onChange={e => set('critico', e.target.checked)} />
+            <span>Item crítico (bloqueia a liberação)</span>
+          </div>
+          {draft.critico && (
+            <div style={{ marginTop: 12 }}>
+              <Field label="Texto de reprovação (quando este item crítico for marcado como não conforme)">
+                <select style={inputStyle} value={draft.textoReprovacaoId} onChange={e => set('textoReprovacaoId', e.target.value)}>
+                  <option value="">— nenhum —</option>
+                  {catalog.textosReprovacao.filter(r => r.documento === draft.documento || draft.documento === 'GERAL').map(r => (
+                    <option key={r.id} value={r.id}>{r.titulo}{r.escopo === 'especifico' ? ' (específico)' : ''}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          )}
+
+          <div style={{ height: 1, background: LINE, margin: '16px 0' }} />
+          <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, marginBottom: 8 }}>
+            Bolinhas deste item <span style={{ fontWeight: 400, textTransform: 'none', color: MU }}>— padrão: Conforme / Não conforme / Não aplicável</span>
+          </label>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            {ALL_DOTS.map(dd => {
+              const checked = draft.statusOptions.includes(dd.val)
+              const isLast = checked && draft.statusOptions.length === 1
+              return (
+                <label key={dd.val} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: isLast ? 'not-allowed' : 'pointer', opacity: isLast ? 0.6 : 1 }}>
+                  <input
+                    type="checkbox" checked={checked} disabled={isLast}
+                    onChange={() => set('statusOptions', checked ? draft.statusOptions.filter(o => o !== dd.val) : [...draft.statusOptions, dd.val])}
+                  />
+                  <span style={{ width: 18, height: 18, borderRadius: '50%', background: dd.on, color: dd.onFg, display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800 }}>{dd.symbol}</span>
+                  {dd.label.split(' —')[0]}
+                </label>
+              )
+            })}
+          </div>
+          {draft.statusOptions.includes('restricao') && (
+            <div style={{ marginTop: 12 }}>
+              <Field label="Texto de restrição (quando marcado como Aprovado com restrição)">
+                <select style={inputStyle} value={draft.textoRestricaoId} onChange={e => set('textoRestricaoId', e.target.value)}>
+                  <option value="">— nenhum —</option>
+                  {catalog.textos.filter(t => t.categoria === 'restricao').map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
+                </select>
+              </Field>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{ height: 1, background: LINE, margin: '16px 0' }} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <input type="checkbox" checked={draft.multiplaEscolha} onChange={e => set('multiplaEscolha', e.target.checked)} />
+            <span>Permitir marcar mais de uma opção</span>
+          </div>
+          <Field label={'Nome da variável — vira {{' + (draft.variavel || 'nome') + '}} para usar em outros textos'}>
+            <input style={inputStyle} value={draft.variavel} onChange={e => set('variavel', slugifyVar(e.target.value))} placeholder="ex.: treinamentos" />
           </Field>
-        </div>
+          <div style={{ marginTop: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, marginBottom: 8 }}>Opções</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {draft.opcoes.map((o, idx) => (
+                <div key={o.id} style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto', gap: 8, alignItems: 'start' }}>
+                    <input style={inputStyle} value={o.label} placeholder="Rótulo (ex.: NR-10)"
+                      onChange={e => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))} />
+                    <textarea style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }} rows={2} value={o.corpo}
+                      placeholder={o.pedirTexto ? 'Texto da opção — use {{detalhe}} onde entra o texto livre digitado' : 'Texto que entra na variável quando esta opção for marcada'}
+                      onChange={e => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, corpo: e.target.value } : x))} />
+                    <Btn small variant="gho" onClick={() => set('opcoes', draft.opcoes.filter((_, i) => i !== idx))}>Excluir</Btn>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8 }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={o.pedirTexto}
+                        onChange={e => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, pedirTexto: e.target.checked } : x))} />
+                      Pedir um detalhe livre ao marcar esta opção (ex.: número da página)
+                    </label>
+                    {o.pedirTexto && (
+                      <input style={{ ...inputStyle, flex: 1 }} value={o.placeholder} placeholder="Texto de exemplo do campo (ex.: Qual página?)"
+                        onChange={e => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, placeholder: e.target.value } : x))} />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Btn small onClick={() => set('opcoes', [...draft.opcoes, { id: uid('op'), label: '', corpo: '', pedirTexto: false, placeholder: '' }])}>✚ Adicionar opção</Btn>
+            </div>
+          </div>
+        </>
       )}
 
       <div style={{ height: 1, background: LINE, margin: '16px 0' }} />
@@ -1844,17 +2099,19 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
       </label>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="Depende do item">
-          <select style={inputStyle} value={draft.condicaoItemId} onChange={e => { const v = e.target.value; set('condicaoItemId', v); if (!v) set('condicaoStatus', '') }}>
+          <select style={inputStyle} value={draft.condicaoItemId} onChange={e => { const v = e.target.value; set('condicaoItemId', v); if (!v) set('condicaoValor', '') }}>
             <option value="">— nenhum, sempre aparece —</option>
-            {catalog.itens.filter(i => i.id !== draft.id).map(i => (
+            {ordenarPorDocumento(catalog.itens.filter(i => i.id !== draft.id)).map(i => (
               <option key={i.id} value={i.id}>{i.documento} — {i.titulo}</option>
             ))}
           </select>
         </Field>
-        <Field label="Status exigido">
-          <select style={inputStyle} value={draft.condicaoStatus} disabled={!draft.condicaoItemId} onChange={e => set('condicaoStatus', e.target.value as StatusResp)}>
+        <Field label="Valor exigido">
+          <select style={inputStyle} value={draft.condicaoValor} disabled={!draft.condicaoItemId} onChange={e => set('condicaoValor', e.target.value)}>
             <option value="">— selecione —</option>
-            {ALL_DOTS.map(dd => <option key={dd.val} value={dd.val}>{STATUS_LABELS[dd.val]}</option>)}
+            {condItem?.tipo === 'opcoes'
+              ? condItem.opcoes.map(o => <option key={o.id} value={o.id}>{o.label || '(sem rótulo)'}</option>)
+              : ALL_DOTS.map(dd => <option key={dd.val} value={dd.val}>{STATUS_LABELS[dd.val]}</option>)}
           </select>
         </Field>
       </div>
@@ -1862,10 +2119,43 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
   )
 }
 
+// ─── View: Textos (hub) ─────────────────────────────────────────────────────
+
+function VTextosHub({ catalog, onAbrir }: {
+  catalog: Catalog; onAbrir: (k: 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade') => void
+}) {
+  const contar = (cats: CategoriaTexto[]) => catalog.textos.filter(t => cats.includes(t.categoria)).length
+  const cards: { k: 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade'; titulo: string; desc: string; n: number; icon: string }[] = [
+    { k: 'aprovacao', titulo: 'Aprovação', desc: 'Texto usado quando a análise fecha sem nenhuma pendência.', n: contar(['aprovacao']), icon: '✅' },
+    { k: 'apontamento', titulo: 'Apontamento', desc: 'Abertura, textos por item, fechamento e assinatura — usados quando há pendências.', n: contar(['abertura', 'apontamento', 'fechamento', 'assinatura']), icon: '✉️' },
+    { k: 'restricao', titulo: 'Aprovação com restrição', desc: 'Texto usado quando um item é marcado como aprovado com restrição.', n: contar(['restricao']), icon: '◐' },
+    { k: 'reprovacao', titulo: 'Reprovação', desc: 'Texto usado quando um item crítico reprova o cadastro.', n: catalog.textosReprovacao.length, icon: '🚫' },
+    { k: 'validade', titulo: 'Validade', desc: 'Observação automática quando PGR/PCMSO/LTCAT ficam anuais ou personalizados até 23 meses.', n: contar(['validade']), icon: '📅' },
+  ]
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: MU, marginBottom: 14 }}>Escolha a categoria de texto — cada uma liga com itens de checklist.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+        {cards.map(c => (
+          <div key={c.k} onClick={() => onAbrir(c.k)} style={{
+            background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, padding: 18, cursor: 'pointer',
+            boxShadow: '0 1px 2px rgba(27,36,50,.06), 0 4px 16px rgba(27,36,50,.06)',
+          }}>
+            <div style={{ fontSize: 24 }}>{c.icon}</div>
+            <div style={{ fontWeight: 700, fontSize: 15, marginTop: 8 }}>{c.titulo}</div>
+            <div style={{ fontSize: 12.5, color: MU, marginTop: 4, minHeight: 32 }}>{c.desc}</div>
+            <div style={{ marginTop: 10 }}><Tag>{c.n} texto(s)</Tag></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── View: Textos de e-mail ───────────────────────────────────────────────────
 
 function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
-  catalog: Catalog; CATS: Record<CategoriaTexto, string>
+  catalog: Catalog; CATS: Partial<Record<CategoriaTexto, string>>
   onNovo: () => void; onEditar: (t: TextoEmail) => void; onDel: (id: string) => void
 }) {
   return (
@@ -1906,7 +2196,8 @@ function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
   )
 }
 
-const VARS = ['empresa', 'cnpj', 'contratante', 'unidade', 'prazo', 'data', 'responsavel']
+const VARS = ['empresa', 'cnpj', 'contratante', 'unidade', 'prazo', 'data', 'responsavel', 'documentos']
+const VARS_VALIDADE = ['documentosValidade', 'verbo', 'adjetivo', 'meses']
 
 function fmtBytes(n: number): string {
   if (n < 1024) return n + ' B'
@@ -1941,12 +2232,17 @@ function TextoModal({ draft, novo, CATS, onChange, onSave, onClose, anexos, onUp
       </div>
       <div style={{ marginTop: 10 }}>
         <span style={{ color: MU, fontSize: 12 }}>Variáveis (clique para copiar): </span>
-        {VARS.map(v => (
+        {[...VARS, ...(draft.categoria === 'validade' ? VARS_VALIDADE : [])].map(v => (
           <code key={v} onClick={() => navigator.clipboard.writeText(`{{${v}}}`)}
             style={{ background: PS, color: P, padding: '1px 6px', borderRadius: 5, fontSize: 11.5, marginRight: 5, display: 'inline-block', cursor: 'pointer' }}>
             {`{{${v}}}`}
           </code>
         ))}
+        {draft.categoria === 'validade' && (
+          <div style={{ fontSize: 11.5, color: MU, marginTop: 6 }}>
+            {'{{documentosValidade}}'} = &quot;o PGR e o PCMSO&quot; · {'{{verbo}}'} = está/estão · {'{{adjetivo}}'} = anual/anuais (só no texto Anual) · {'{{meses}}'} = quantidade de meses (só no texto Personalizada)
+          </div>
+        )}
       </div>
 
       <div style={{ height: 1, background: LINE, margin: '16px 0' }} />
@@ -2065,25 +2361,49 @@ function ReprovacaoModal({ draft, novo, onChange, onSave, onClose }: {
 
 // ─── View: Configurações ─────────────────────────────────────────────────────
 
-function VConfig({ config, onSalvar }: { config: CatalogConfig; onSalvar: (patch: Partial<CatalogConfig>) => void }) {
+function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: TextoEmail[]; onSalvar: (patch: Partial<CatalogConfig>) => void }) {
   const [prazoDias, setPrazoDias] = useState(config.prazoDias)
   const [assunto, setAssunto] = useState(config.assunto)
+  const [validadeAnualId, setValidadeAnualId] = useState(config.validadeAnualId)
+  const [validadePersonalizadaId, setValidadePersonalizadaId] = useState(config.validadePersonalizadaId)
+  const textosValidade = textos.filter(t => t.categoria === 'validade')
 
   return (
     <div>
       <div style={{ fontSize: 13, color: MU, marginBottom: 14 }}>Padrões gerais usados como base para novas análises e novas contratantes.</div>
-      <Card style={{ padding: '16px 18px' }}>
+      <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: MU, background: PS, border: `1px solid ${LINE}`, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
           O campo &quot;Analista&quot; de cada análise agora é preenchido automaticamente com o nome de quem está logado — não é mais um valor fixo aqui.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Prazo padrão (dias)"><input style={inputStyle} value={prazoDias} onChange={e => setPrazoDias(parseInt(e.target.value) || 7)} /></Field>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <Btn variant="pri" onClick={() => onSalvar({ prazoDias, assunto })}>Salvar padrões</Btn>
+            <Btn variant="pri" onClick={() => onSalvar({ prazoDias, assunto, validadeAnualId, validadePersonalizadaId })}>Salvar padrões</Btn>
           </div>
         </div>
         <div style={{ marginTop: 12 }}>
           <Field label="Assunto do e-mail"><input style={inputStyle} value={assunto} onChange={e => setAssunto(e.target.value)} /></Field>
+        </div>
+      </Card>
+      <Card style={{ padding: '16px 18px' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Observação automática de validade</div>
+        <div style={{ fontSize: 12.5, color: MU, marginBottom: 12 }}>
+          Textos usados quando um PGR/PCMSO/LTCAT é marcado como Anual ou Personalizada até 23 meses na análise aprovada.
+          Edite o conteúdo em Textos → Validade.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Field label="Texto — Validade Anual">
+            <select style={inputStyle} value={validadeAnualId} onChange={e => setValidadeAnualId(e.target.value)}>
+              <option value="">— nenhum, não indica nada —</option>
+              {textosValidade.map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
+            </select>
+          </Field>
+          <Field label="Texto — Validade Personalizada (até 23 meses)">
+            <select style={inputStyle} value={validadePersonalizadaId} onChange={e => setValidadePersonalizadaId(e.target.value)}>
+              <option value="">— nenhum, não indica nada —</option>
+              {textosValidade.map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
+            </select>
+          </Field>
         </div>
       </Card>
     </div>
