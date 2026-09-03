@@ -6,7 +6,7 @@ import { useUser, displayName } from '../components/UserContext'
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type StatusResp = 'ok' | 'nao' | 'na' | 'restricao' | ''
-type Resposta = { status: StatusResp; obs: string; opcoesSelecionadas?: string[]; textosLivres?: Record<string, string> }
+type Resposta = { status: StatusResp; obs: string; opcoesSelecionadas?: string[]; textosLivres?: Record<string, string>; prazoRestricaoDias?: number }
 type DocKey = 'PGR' | 'PCMSO' | 'LTCAT' | 'GERAL'
 type Escopo = 'base' | 'especifico'
 type CategoriaTexto = 'abertura' | 'apontamento' | 'fechamento' | 'assinatura' | 'aprovacao' | 'restricao' | 'validade'
@@ -547,10 +547,17 @@ export default function WorkflowProgramasClient() {
 
   /** {{contratante}} dentro do bloco de texto de um item específico de uma só contratante
    *  passa a ser o nome dela, não a lista agregada da análise inteira. */
-  function ctxParaItem(ctx: Record<string, string>, item: { contratanteIds: string[] }): Record<string, string> {
-    if (item.contratanteIds.length !== 1) return ctx
-    const nome = nomeC(getC(item.contratanteIds[0]))
-    return nome ? { ...ctx, contratante: nome } : ctx
+  function ctxParaItem(ctx: Record<string, string>, item: { id: string; contratanteIds: string[] }, a: AnaliseDados): Record<string, string> {
+    let next = ctx
+    if (item.contratanteIds.length === 1) {
+      const nome = nomeC(getC(item.contratanteIds[0]))
+      if (nome) next = { ...next, contratante: nome }
+    }
+    const r = a.respostas[item.id]
+    if (r?.status === 'restricao') {
+      next = { ...next, prazorestricao: String(r.prazoRestricaoDias || 60) }
+    }
+    return next
   }
 
   /** Observação automática de validade — usa os textos configurados (categoria "validade") por tipo. */
@@ -611,7 +618,7 @@ export default function WorkflowProgramasClient() {
       const obs = a.respostas[i.id]?.obs
       const tag = status === 'restricao' ? ' — APROVADO COM RESTRIÇÃO' : status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
       let bloco = (n + 1) + ') ' + i.documento + ' — ' + i.titulo.toUpperCase() + tag + '\n' +
-        aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i))
+        aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i, a))
       if (obs) bloco += '\nObservação: ' + obs
       partes.push(bloco)
     })
@@ -633,7 +640,7 @@ export default function WorkflowProgramasClient() {
     const linhas = [`Favor rever ${plural ? 'os seguintes itens' : 'o seguinte item'}:`]
     criticosReprovados.forEach((i, n) => {
       const t = getR(i.textoReprovacaoId)
-      linhas.push((n + 1) + ' - ' + aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxParaItem(ctx, i)))
+      linhas.push((n + 1) + ' - ' + aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxParaItem(ctx, i, a)))
     })
     const corpo = [linhas.join('\n'), aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx)].filter(Boolean).join('\n\n')
     return {
@@ -787,7 +794,7 @@ export default function WorkflowProgramasClient() {
       if (!prev) return prev
       const cur = prev.respostas[itemId]?.status
       const status: StatusResp = cur === val ? '' : val
-      return { ...prev, respostas: { ...prev.respostas, [itemId]: { status, obs: prev.respostas[itemId]?.obs || '' } } }
+      return { ...prev, respostas: { ...prev.respostas, [itemId]: { ...prev.respostas[itemId], status, obs: prev.respostas[itemId]?.obs || '' } } }
     })
     setEmailEditado(false)
   }
@@ -795,7 +802,16 @@ export default function WorkflowProgramasClient() {
   function setObs(itemId: string, obs: string) {
     setDraft(prev => {
       if (!prev) return prev
-      return { ...prev, respostas: { ...prev.respostas, [itemId]: { status: prev.respostas[itemId]?.status || '', obs } } }
+      return { ...prev, respostas: { ...prev.respostas, [itemId]: { ...prev.respostas[itemId], status: prev.respostas[itemId]?.status || '', obs } } }
+    })
+    setEmailEditado(false)
+  }
+
+  function setPrazoRestricao(itemId: string, dias: number) {
+    setDraft(prev => {
+      if (!prev) return prev
+      const r = prev.respostas[itemId]
+      return { ...prev, respostas: { ...prev.respostas, [itemId]: { ...r, status: r?.status || '', obs: r?.obs || '', prazoRestricaoDias: dias } } }
     })
     setEmailEditado(false)
   }
@@ -1215,7 +1231,7 @@ export default function WorkflowProgramasClient() {
         <VAnalise
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos}
-          onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onDot={toggleDot} onObs={setObs} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
+          onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
@@ -1419,7 +1435,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onDot, onObs, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
@@ -1429,6 +1445,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
   onToggleDoc: (d: DocKey) => void; onToggleContratante: (id: string) => void
   onDot: (itemId: string, val: StatusResp) => void; onObs: (itemId: string, obs: string) => void
+  onPrazoRestricao: (itemId: string, dias: number) => void
   onOpcao: (itemId: string, opcaoId: string, multipla: boolean) => void
   onOpcaoTexto: (itemId: string, opcaoId: string, texto: string) => void
   onValidade: (doc: DocValidavel, patch: Partial<ValidadeInfo>) => void
@@ -1631,6 +1648,20 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                         {r.status === 'restricao' && (
                           <div style={{ marginTop: 6, fontSize: 12, color: '#8A6A22' }}>
                             ◐ Restrição: {tRestr?.titulo || 'sem texto de restrição vinculado — cadastre um texto de categoria Restrição'}
+                          </div>
+                        )}
+                        {r.status === 'restricao' && (
+                          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 11.5, color: MU }}>Prazo da restrição ({'{{prazorestricao}}'}):</span>
+                            {[30, 60, 90].map(dias => {
+                              const sel = (r.prazoRestricaoDias || 60) === dias
+                              return (
+                                <button key={dias} onClick={() => onPrazoRestricao(i.id, dias)} style={{
+                                  padding: '3px 12px', borderRadius: 99, border: `1.5px solid ${sel ? AC : LINE}`,
+                                  background: sel ? ASO : '#fff', color: sel ? '#8A6A22' : MU, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', fontWeight: sel ? 700 : 400,
+                                }}>{dias} dias</button>
+                              )
+                            })}
                           </div>
                         )}
                         {(r.status === 'nao' || r.status === 'restricao') && (
