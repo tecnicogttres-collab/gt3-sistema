@@ -343,6 +343,13 @@ export default function CoisasAFazerClient() {
     } catch { showToast('Erro') }
   }
 
+  async function copiarTexto(texto: string) {
+    try {
+      await navigator.clipboard.writeText(texto)
+      showToast('Texto copiado')
+    } catch { showToast('Erro ao copiar') }
+  }
+
   function iniciarArquivar(id: string) {
     setArquivarId(id)
     setArquivarStep(1)
@@ -556,7 +563,7 @@ export default function CoisasAFazerClient() {
                     ))}
                   </div>
                   {canManage && (
-                    <Btn size="sm" variant="ghost" onClick={() => { setPendingModuloId(mod.id); setFormTextoItem(''); setFormVisibItem('todos'); setModalItem(true) }}>
+                    <Btn size="sm" variant="ghost" onClick={() => { setPendingModuloId(mod.id); setFormTextoItem(`No módulo de ${mod.nome}, preciso que `); setFormVisibItem('todos'); setModalItem(true) }}>
                       + Adicionar item
                     </Btn>
                   )}
@@ -604,6 +611,13 @@ export default function CoisasAFazerClient() {
                               )}
                               <span>{fmtDate(item.criado_em)}</span>
                             </div>
+                            <button
+                              onClick={() => copiarTexto(item.texto)}
+                              title="Copiar texto do item"
+                              style={{ marginTop: 6, border: 'none', background: 'transparent', color: '#2A4F96', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}
+                            >
+                              📋 Copiar
+                            </button>
                             {isDone && item.finalizado_por && (
                               <div style={{ fontSize: 11.5, color: '#94A3B8', marginTop: 4 }}>
                                 ✓ Finalizado por {item.finalizado_por} em {fmtDate(item.finalizado_em!)}
@@ -688,6 +702,7 @@ export default function CoisasAFazerClient() {
             onChange={e => setFormTextoItem(e.target.value)}
             placeholder="Ex.: Revisar coluna de status no card de NR 35..."
             autoFocus
+            onFocus={e => { const el = e.currentTarget; const len = el.value.length; el.setSelectionRange(len, len) }}
           />
         </Field>
         <Field label="Visibilidade">
