@@ -13,7 +13,7 @@ type CategoriaTexto = 'abertura' | 'apontamento' | 'fechamento' | 'assinatura' |
 type ChecklistItemTipo = 'status' | 'opcoes'
 /** pedirTexto: pede um detalhe livre ao marcar (ex.: "qual página?") — sempre disponível como {{detalhe}}
  *  dentro de corpo, e também como {{variavelDetalhe}} se um nome próprio for definido. */
-type ChecklistOpcao = { id: string; label: string; corpo: string; pedirTexto: boolean; placeholder: string; variavelDetalhe: string }
+type ChecklistOpcao = { id: string; label: string; corpo: string; pedirTexto: boolean; placeholder: string; variavelDetalhe: string; padrao: boolean }
 
 type ChecklistItem = {
   id: string; titulo: string; documento: DocKey; descricao: string
@@ -66,11 +66,22 @@ type ValidadeInfo = { tipo: ValidadeTipo; meses: number }
 type DocValidavel = 'PGR' | 'PCMSO' | 'LTCAT'
 
 type AnaliseDados = {
-  contratanteId: string; documentos: DocKey[]
+  contratanteIds: string[]; documentos: DocKey[]
   empresa: string; cnpj: string; emailDestino: string
   data: string; prazo: string; responsavel: string
   respostas: Record<string, Resposta>
   validades: Partial<Record<DocValidavel, ValidadeInfo>>
+}
+
+/** Item resolvido para uma análise: `textoLink` já considera override por contratante;
+ *  `contratanteIds` marca de quais contratantes selecionadas na análise esse item veio. */
+type ItemDaAnalise = ChecklistItem & { textoLink: string; contratanteIds: string[] }
+
+/** Análises salvas antes do suporte a múltiplas contratantes tinham `contratanteId` (singular). */
+function normalizeAnaliseDados(dados: AnaliseDados & { contratanteId?: string }): AnaliseDados {
+  if (Array.isArray(dados.contratanteIds)) return dados
+  const { contratanteId, ...resto } = dados
+  return { ...resto, contratanteIds: contratanteId ? [contratanteId] : [] }
 }
 type Anexo = { id: string; texto_id: string; name: string; filename: string; mime_type: string; size_bytes: number; created_at: string }
 
@@ -268,7 +279,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
   const idsAprovado = new Set([raw.config?.aprovadoId, ...raw.contratantes.map(c => c.aprovadoId)].filter(Boolean))
   const precisaUpgrade = !Array.isArray(raw.textosReprovacao)
     || raw.itens.some(i => typeof i.textoReprovacaoId !== 'string' || typeof i.textoAprovadoId !== 'string' || !Array.isArray(i.statusOptions) || typeof i.condicaoItemId !== 'string'
-      || typeof i.tipo !== 'string' || !Array.isArray(i.opcoes) || i.opcoes.some(o => typeof o.pedirTexto !== 'boolean' || typeof o.variavelDetalhe !== 'string'))
+      || typeof i.tipo !== 'string' || !Array.isArray(i.opcoes) || i.opcoes.some(o => typeof o.pedirTexto !== 'boolean' || typeof o.variavelDetalhe !== 'string' || typeof o.padrao !== 'boolean'))
     || raw.textos.some(t => idsAprovado.has(t.id) && t.categoria !== 'aprovacao')
     || typeof raw.config.validadeAnualId !== 'string' || typeof raw.config.validadePersonalizadaId !== 'string'
   if (!precisaUpgrade) return { catalog: raw, changed: false }
@@ -301,6 +312,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
       opcoes: (Array.isArray(i.opcoes) ? i.opcoes : []).map(o => ({
         ...o, pedirTexto: !!o.pedirTexto, placeholder: typeof o.placeholder === 'string' ? o.placeholder : '',
         variavelDetalhe: typeof o.variavelDetalhe === 'string' ? o.variavelDetalhe : '',
+        padrao: !!o.padrao,
       })),
       variavel: typeof i.variavel === 'string' ? i.variavel : '',
     }
@@ -446,7 +458,8 @@ export default function WorkflowProgramasClient() {
         }).catch(() => {})
       }
       setCatalog(cat)
-      setAnalises(Array.isArray(listRes) ? listRes : [])
+      const listaAnalises: AnaliseRow[] = Array.isArray(listRes) ? listRes : []
+      setAnalises(listaAnalises.map(a => ({ ...a, dados: normalizeAnaliseDados(a.dados) })))
       setAnexos(Array.isArray(anexosRes) ? anexosRes : [])
       setLoading(false)
     }
@@ -468,14 +481,29 @@ export default function WorkflowProgramasClient() {
   const getR = (id?: string | null) => (id ? catalog?.textosReprovacao.find(r => r.id === id) : undefined)
   const nomeC = (c?: Contratante) => (c ? c.nome + (c.unidade ? ' — ' + c.unidade : '') : '')
 
-  function itensDaAnalise(a: AnaliseDados): (ChecklistItem & { textoLink: string })[] {
+  /** Une os itens de todas as contratantes selecionadas na análise. `contratanteIds` no
+   *  retorno marca de quais dessas contratantes cada item veio — item.contratanteIds.length
+   *  igual a a.contratanteIds.length = comum a todas; menor = específico de algumas. O
+   *  override de texto (textoLink) fica com a primeira contratante (na ordem selecionada)
+   *  que define aquele item. */
+  function itensDaAnalise(a: AnaliseDados): ItemDaAnalise[] {
     if (!catalog) return []
-    const c = getC(a.contratanteId)
-    if (!c) return []
     const docs = a.documentos?.length ? a.documentos : (['PGR', 'PCMSO'] as DocKey[])
-    return c.itens
-      .map(l => { const i = getI(l.itemId); return i ? { ...i, textoLink: l.textoId || i.textoId } : null })
-      .filter((i): i is ChecklistItem & { textoLink: string } => i !== null && (i.documento === 'GERAL' || docs.includes(i.documento)))
+    const map = new Map<string, { item: ChecklistItem; textoLink: string; contratanteIds: string[] }>()
+    a.contratanteIds.forEach(cid => {
+      const c = getC(cid)
+      if (!c) return
+      c.itens.forEach(l => {
+        const i = getI(l.itemId)
+        if (!i) return
+        const atual = map.get(i.id)
+        if (atual) atual.contratanteIds.push(cid)
+        else map.set(i.id, { item: i, textoLink: l.textoId || i.textoId, contratanteIds: [cid] })
+      })
+    })
+    return Array.from(map.values())
+      .map(({ item, textoLink, contratanteIds }) => ({ ...item, textoLink, contratanteIds }))
+      .filter((i): i is ItemDaAnalise => i.documento === 'GERAL' || docs.includes(i.documento))
       .filter(i => {
         if (!i.condicaoItemId || !i.condicaoValor || i.condicaoItemId === i.id) return true
         const condItem = getI(i.condicaoItemId)
@@ -485,14 +513,20 @@ export default function WorkflowProgramasClient() {
       .sort((x, y) => DOC_ORDER.indexOf(x.documento) - DOC_ORDER.indexOf(y.documento))
   }
 
+  /** Nomes das contratantes selecionadas, unidos em português ("A", "A e B", "A, B e C"). */
+  function nomesContratantes(ids: string[]): string {
+    return joinDocs(ids.map(id => nomeC(getC(id))).filter(Boolean))
+  }
+
   function ctxDe(a: AnaliseDados, itens?: ChecklistItem[]) {
-    const c = getC(a.contratanteId)
+    const c = getC(a.contratanteIds[0])
     const vars: Record<string, string> = {}
     itens?.forEach(i => {
       if (i.tipo !== 'opcoes' || !i.variavel) return
       const sel = a.respostas[i.id]?.opcoesSelecionadas || []
       const livres = a.respostas[i.id]?.textosLivres || {}
-      vars[i.variavel] = i.opcoes.filter(o => sel.includes(o.id))
+      const opcoesEfetivas = sel.length ? i.opcoes.filter(o => sel.includes(o.id)) : i.opcoes.filter(o => o.padrao)
+      vars[i.variavel] = opcoesEfetivas
         .map(o => {
           const valor = livres[o.id] || ''
           const varsDetalhe: Record<string, string> = { detalhe: valor }
@@ -503,12 +537,20 @@ export default function WorkflowProgramasClient() {
     })
     return {
       empresa: a.empresa || '[EMPRESA]', cnpj: a.cnpj || '[CNPJ]',
-      contratante: nomeC(c) || '[CONTRATANTE]', prazo: fmtD(a.prazo) || '[PRAZO]',
+      contratante: nomesContratantes(a.contratanteIds) || '[CONTRATANTE]', prazo: fmtD(a.prazo) || '[PRAZO]',
       data: fmtD(a.data), responsavel: a.responsavel || catalog?.config.responsavel || '',
       unidade: c?.unidade || '',
       documentos: joinDocs(a.documentos || []),
       ...vars,
     }
+  }
+
+  /** {{contratante}} dentro do bloco de texto de um item específico de uma só contratante
+   *  passa a ser o nome dela, não a lista agregada da análise inteira. */
+  function ctxParaItem(ctx: Record<string, string>, item: { contratanteIds: string[] }): Record<string, string> {
+    if (item.contratanteIds.length !== 1) return ctx
+    const nome = nomeC(getC(item.contratanteIds[0]))
+    return nome ? { ...ctx, contratante: nome } : ctx
   }
 
   /** Observação automática de validade — usa os textos configurados (categoria "validade") por tipo. */
@@ -550,7 +592,7 @@ export default function WorkflowProgramasClient() {
 
   /** Parecer — só para aprovado / aprovado com restrição. Não conforme não-crítico entra como orientativo (não bloqueia). */
   function buildEmail(a: AnaliseDados) {
-    const c = getC(a.contratanteId)
+    const c = getC(a.contratanteIds[0])
     const itens = itensDaAnalise(a)
     const ctx = ctxDe(a, itens)
     const restricoes = itens.filter(i => a.respostas[i.id]?.status === 'restricao')
@@ -569,7 +611,7 @@ export default function WorkflowProgramasClient() {
       const obs = a.respostas[i.id]?.obs
       const tag = status === 'restricao' ? ' — APROVADO COM RESTRIÇÃO' : status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
       let bloco = (n + 1) + ') ' + i.documento + ' — ' + i.titulo.toUpperCase() + tag + '\n' +
-        aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctx)
+        aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i))
       if (obs) bloco += '\nObservação: ' + obs
       partes.push(bloco)
     })
@@ -584,14 +626,14 @@ export default function WorkflowProgramasClient() {
   }
 
   /** Reprovação — só item crítico marcado como não conforme entra aqui. */
-  function buildReprovacao(a: AnaliseDados, criticosReprovados: (ChecklistItem & { textoLink: string })[]) {
-    const c = getC(a.contratanteId)
+  function buildReprovacao(a: AnaliseDados, criticosReprovados: ItemDaAnalise[]) {
+    const c = getC(a.contratanteIds[0])
     const ctx = ctxDe(a, itensDaAnalise(a))
     const plural = criticosReprovados.length > 1
     const linhas = [`Favor rever ${plural ? 'os seguintes itens' : 'o seguinte item'}:`]
     criticosReprovados.forEach((i, n) => {
       const t = getR(i.textoReprovacaoId)
-      linhas.push((n + 1) + ' - ' + aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctx))
+      linhas.push((n + 1) + ' - ' + aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxParaItem(ctx, i)))
     })
     const corpo = [linhas.join('\n'), aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx)].filter(Boolean).join('\n\n')
     return {
@@ -621,7 +663,7 @@ export default function WorkflowProgramasClient() {
     if (!catalog) return
     setDraftId(null)
     setDraft({
-      contratanteId: '',
+      contratanteIds: [],
       documentos: ['PGR', 'PCMSO'],
       empresa: '', cnpj: '', emailDestino: '',
       data: hoje(), prazo: addDias(catalog.config.prazoDias || 7),
@@ -721,6 +763,15 @@ export default function WorkflowProgramasClient() {
       docs = docs.sort((x, y) => DOC_ORDER.indexOf(x) - DOC_ORDER.indexOf(y))
       if (!docs.length) { showToast('Selecione ao menos um documento'); docs = [d] }
       return { ...prev, documentos: docs }
+    })
+    setEmailEditado(false)
+  }
+
+  function toggleContratante(id: string) {
+    setDraft(prev => {
+      if (!prev) return prev
+      const ids = prev.contratanteIds.includes(id) ? prev.contratanteIds.filter(x => x !== id) : [...prev.contratanteIds, id]
+      return { ...prev, contratanteIds: ids }
     })
     setEmailEditado(false)
   }
@@ -830,7 +881,7 @@ export default function WorkflowProgramasClient() {
     return finalizadas.filter(a => {
       const d = a.data_final || a.dados.data
       if (q && !((a.empresa || '') + ' ' + (a.cnpj || '')).toLowerCase().includes(q)) return false
-      if (bancoContratante && a.dados.contratanteId !== bancoContratante) return false
+      if (bancoContratante && !a.dados.contratanteIds.includes(bancoContratante)) return false
       if (bancoStatus && statusAnalise(a).k !== bancoStatus) return false
       if (bancoDe && (d || '') < bancoDe) return false
       if (bancoAte && (d || '') > bancoAte) return false
@@ -891,11 +942,11 @@ export default function WorkflowProgramasClient() {
     const lista = bancoFiltrado
     const linhas: string[][] = [['Empresa', 'CNPJ', 'Contratante', 'Documentos', 'Data análise', 'Finalizada', 'Item', 'Documento', 'Resultado', 'Observação']]
     lista.forEach(a => {
-      const c = getC(a.dados.contratanteId)
+      const nomesC = nomesContratantes(a.dados.contratanteIds)
       itensDaAnalise(a.dados).forEach(i => {
         const r = a.dados.respostas[i.id]
         linhas.push([
-          a.empresa, a.cnpj, nomeC(c), (a.dados.documentos || []).join(' '), fmtD(a.dados.data), fmtD(a.data_final || a.dados.data),
+          a.empresa, a.cnpj, nomesC, (a.dados.documentos || []).join(' '), fmtD(a.dados.data), fmtD(a.data_final || a.dados.data),
           i.titulo, i.documento, ({ ok: 'Conforme', nao: 'Reprovação', na: 'Não aplicável', restricao: 'Aprovado com restrição' } as Record<string, string>)[r?.status || ''] || 'Não avaliado', r?.obs || '',
         ])
       })
@@ -1151,14 +1202,14 @@ export default function WorkflowProgramasClient() {
       </div>
 
       {view === 'analises' && (
-        <VAnalises lista={emAndamento} getC={getC} nomeC={nomeC} statusAnalise={statusAnalise} onNova={() => go('nova')} onAbrir={abrirAnalise} onDel={delAnalise} />
+        <VAnalises lista={emAndamento} nomesContratantes={nomesContratantes} statusAnalise={statusAnalise} onNova={() => go('nova')} onAbrir={abrirAnalise} onDel={delAnalise} />
       )}
 
       {view === 'nova' && draft && (
         <VAnalise
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao}
-          itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} anexos={anexos}
-          onField={setDraftField} onToggleDoc={toggleDoc} onDot={toggleDot} onObs={setObs} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
+          itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos}
+          onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onDot={toggleDot} onObs={setObs} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
@@ -1174,7 +1225,7 @@ export default function WorkflowProgramasClient() {
           contratante={bancoContratante} setContratante={setBancoContratante}
           status={bancoStatus} setStatus={setBancoStatus} de={bancoDe} setDe={setBancoDe} ate={bancoAte} setAte={setBancoAte}
           aberto={bancoAberto} setAberto={setBancoAberto} itemAberto={bancoItem} setItemAberto={setBancoItem}
-          lista={bancoFiltrado} catalog={catalog} getC={getC} nomeC={nomeC} itensDaAnalise={itensDaAnalise}
+          lista={bancoFiltrado} catalog={catalog} nomeC={nomeC} nomesContratantes={nomesContratantes} itensDaAnalise={itensDaAnalise}
           statusAnalise={statusAnalise} relatorioItens={relatorioItens}
           onLimparFiltros={() => { setBancoQ(''); setBancoContratante(''); setBancoStatus(''); setBancoDe(''); setBancoAte('') }}
           onDelFiltro={bDelFiltro} onExportCsv={exportarCsv} onDel={bDel} onReabrir={bReabrir}
@@ -1303,8 +1354,8 @@ function ModalShell({ title, onClose, onSave, saveLabel = 'Salvar', children, wi
 
 // ─── View: Em andamento ─────────────────────────────────────────────────────
 
-function VAnalises({ lista, getC, nomeC, statusAnalise, onNova, onAbrir, onDel }: {
-  lista: AnaliseRow[]; getC: (id?: string) => Contratante | undefined; nomeC: (c?: Contratante) => string
+function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, onDel }: {
+  lista: AnaliseRow[]; nomesContratantes: (ids: string[]) => string
   statusAnalise: (r: AnaliseRow) => { t: string; c: 'ok' | 'no' | 'na' | 'acc' | 'default'; k: string }
   onNova: () => void; onAbrir: (r: AnaliseRow) => void; onDel: (id: string) => void
 }) {
@@ -1329,14 +1380,14 @@ function VAnalises({ lista, getC, nomeC, statusAnalise, onNova, onAbrir, onDel }
               </thead>
               <tbody>
                 {lista.slice().sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || '')).map(a => {
-                  const s = statusAnalise(a), c = getC(a.dados.contratanteId)
+                  const s = statusAnalise(a)
                   return (
                     <tr key={a.id}>
                       <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
                         <b>{a.empresa || '(sem nome)'}</b>
                         <div style={{ color: MU, fontSize: 12 }}>{a.cnpj}</div>
                       </td>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{nomeC(c)}</td>
+                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{nomesContratantes(a.dados.contratanteIds)}</td>
                       <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
                         {(a.dados.documentos || []).map(d => <span key={d} style={{ marginRight: 4 }}><Tag>{d}</Tag></span>)}
                       </td>
@@ -1362,14 +1413,16 @@ function VAnalises({ lista, getC, nomeC, statusAnalise, onNova, onAbrir, onDel }
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, itensDaAnalise, getT, getR, nomeC, anexos, onField, onToggleDoc, onDot, onObs, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onDot, onObs, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean
-  itensDaAnalise: (a: AnaliseDados) => (ChecklistItem & { textoLink: string })[]
+  itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
   getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined; nomeC: (c?: Contratante) => string
+  nomesContratantes: (ids: string[]) => string
   anexos: Anexo[]
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
-  onToggleDoc: (d: DocKey) => void; onDot: (itemId: string, val: StatusResp) => void; onObs: (itemId: string, obs: string) => void
+  onToggleDoc: (d: DocKey) => void; onToggleContratante: (id: string) => void
+  onDot: (itemId: string, val: StatusResp) => void; onObs: (itemId: string, obs: string) => void
   onOpcao: (itemId: string, opcaoId: string, multipla: boolean) => void
   onOpcaoTexto: (itemId: string, opcaoId: string, texto: string) => void
   onValidade: (doc: DocValidavel, patch: Partial<ValidadeInfo>) => void
@@ -1407,20 +1460,36 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 430px', gap: 16, alignItems: 'start' }}>
         <div>
           <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Empresa prestadora"><input style={inputStyle} value={draft.empresa} onChange={e => onField('empresa', e.target.value)} placeholder="Razão social" /></Field>
-              <Field label="Contratante">
-                <select style={inputStyle} value={draft.contratanteId} onChange={e => onField('contratanteId', e.target.value)}>
-                  <option value="">{catalog.contratantes.length === 0 ? 'Cadastre uma contratante' : '— Selecione —'}</option>
-                  {catalog.contratantes.map(c => <option key={c.id} value={c.id}>{nomeC(c)}</option>)}
-                </select>
-              </Field>
-            </div>
+            <Field label="Empresa prestadora"><input style={inputStyle} value={draft.empresa} onChange={e => onField('empresa', e.target.value)} placeholder="Razão social" /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 12 }}>
               <Field label="E-mail de destino"><input style={inputStyle} type="email" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br" /></Field>
               <Field label="Data da análise"><input style={inputStyle} type="date" value={draft.data} onChange={e => onField('data', e.target.value)} /></Field>
               <Field label="Analista"><input style={inputStyle} value={draft.responsavel} onChange={e => onField('responsavel', e.target.value)} /></Field>
             </div>
+            <div style={{ height: 1, background: LINE, margin: '14px 0' }} />
+            <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>
+              Contratante(s) {draft.contratanteIds.length > 1 && <span style={{ fontWeight: 400, textTransform: 'none', color: MU }}>— itens específicos de cada uma ficam separados no checklist</span>}
+            </label>
+            {catalog.contratantes.length === 0 ? (
+              <span style={{ color: MU, fontSize: 12.5 }}>Cadastre uma contratante primeiro.</span>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {catalog.contratantes.map(c => {
+                  const sel = draft.contratanteIds.includes(c.id)
+                  return (
+                    <button key={c.id} onClick={() => onToggleContratante(c.id)} style={{
+                      border: `1px solid ${P}`, background: sel ? P : '#fff', color: sel ? '#fff' : P,
+                      padding: '6px 14px', borderRadius: 99, cursor: 'pointer', fontSize: 12.5, fontWeight: sel ? 600 : 400, fontFamily: 'inherit',
+                    }}>{nomeC(c)}</button>
+                  )
+                })}
+              </div>
+            )}
+            {draft.contratanteIds.length > 0 && (
+              <div style={{ fontSize: 11.5, color: MU, marginTop: 6 }}>
+                {'{{contratante}}'} nos textos gerais do parecer: <b>{nomesContratantes(draft.contratanteIds)}</b>
+              </div>
+            )}
             <div style={{ height: 1, background: LINE, margin: '14px 0' }} />
             <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>Documentos analisados</label>
             <div style={{ display: 'inline-flex', border: `1px solid ${P}`, borderRadius: 9, overflow: 'hidden' }}>
@@ -1442,28 +1511,43 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
             </div>
           </Card>
 
-          {!draft.contratanteId ? (
-            <Empty title="Selecione uma contratante" sub="O checklist libera assim que uma contratante for indicada acima." />
+          {!draft.contratanteIds.length ? (
+            <Empty title="Selecione ao menos uma contratante" sub="O checklist libera assim que uma contratante for indicada acima." />
           ) : !itens.length ? (
             <Empty title="Nenhum item vinculado" sub="Cadastre a contratante e selecione os itens de checklist aplicáveis." />
           ) : grupos.map(d => {
             const g = itens.filter(i => i.documento === d)
             const gStatus = g.filter(i => i.tipo !== 'opcoes')
             const okG = gStatus.filter(i => draft.respostas[i.id]?.status === 'ok').length
-            return (
-              <div key={d} style={{ border: `1px solid ${LINE}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12, background: '#fff' }}>
-                <div style={{ background: '#F7F9FD', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}` }}>
-                  <b style={{ fontSize: 13, letterSpacing: '.02em' }}>{d}</b>
-                  <span style={{ color: MU, fontSize: 12 }}>{okG}/{gStatus.length} conformes</span>
-                </div>
-                {g.map((i, idx) => {
+            const multi = draft.contratanteIds.length > 1
+            const comuns = multi ? g.filter(i => i.contratanteIds.length === draft.contratanteIds.length) : g
+            const especificos = multi
+              ? draft.contratanteIds
+                .map(cid => ({
+                  contratanteId: cid,
+                  nome: nomeC(catalog.contratantes.find(c => c.id === cid)),
+                  itens: g.filter(i => i.contratanteIds.length < draft.contratanteIds.length && i.contratanteIds.includes(cid)),
+                }))
+                .filter(eg => eg.itens.length > 0)
+              : []
+            const subheader = (texto: string) => (
+              <div style={{ padding: '8px 14px', background: '#FBFCFE', borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+                <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: MU, fontWeight: 600 }}>{texto}</span>
+              </div>
+            )
+            const renderItem = (i: ItemDaAnalise, idx: number, arr: ItemDaAnalise[]) => {
                   if (i.tipo === 'opcoes') {
-                    const selecionadas = draft.respostas[i.id]?.opcoesSelecionadas || []
+                    const respondido = draft.respostas[i.id]?.opcoesSelecionadas
+                    const selecionadas = respondido && respondido.length ? respondido : i.opcoes.filter(o => o.padrao).map(o => o.id)
                     return (
-                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < g.length - 1 ? '1px solid #F0F3F8' : undefined }}>
+                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined }}>
                         <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           {i.titulo}
-                          {i.escopo === 'especifico' && <Tag tone="acc">exigência da contratante</Tag>}
+                          {multi && i.contratanteIds.length < draft.contratanteIds.length ? (
+                            <Tag tone="acc">{i.contratanteIds.map(cid => nomeC(catalog.contratantes.find(c => c.id === cid))).join(', ')}</Tag>
+                          ) : i.escopo === 'especifico' ? (
+                            <Tag tone="acc">exigência da contratante</Tag>
+                          ) : null}
                           <Tag>{'{{' + (i.variavel || '?') + '}}'}</Tag>
                         </div>
                         <div style={{ fontSize: 12.5, color: MU, marginTop: 2 }}>{i.descricao}</div>
@@ -1496,7 +1580,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
                   const opcoesStatus = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
                   const dots = ALL_DOTS.filter(dd => opcoesStatus.includes(dd.val))
                   return (
-                    <div key={i.id} style={{ display: 'flex', gap: 14, padding: '12px 14px', borderBottom: idx < g.length - 1 ? '1px solid #F0F3F8' : undefined, alignItems: 'flex-start', background: bg }}>
+                    <div key={i.id} style={{ display: 'flex', gap: 14, padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, alignItems: 'flex-start', background: bg }}>
                       <div style={{ display: 'flex', gap: 6, paddingTop: 2 }}>
                         {dots.map(dd => {
                           const on = r.status === dd.val
@@ -1514,7 +1598,11 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
                         <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           {i.titulo}
                           {i.critico && <Tag tone="no">crítico</Tag>}
-                          {i.escopo === 'especifico' && <Tag tone="acc">exigência da contratante</Tag>}
+                          {multi && i.contratanteIds.length < draft.contratanteIds.length ? (
+                            <Tag tone="acc">{i.contratanteIds.map(cid => nomeC(catalog.contratantes.find(c => c.id === cid))).join(', ')}</Tag>
+                          ) : i.escopo === 'especifico' ? (
+                            <Tag tone="acc">exigência da contratante</Tag>
+                          ) : null}
                           {opcoesStatus.includes('nao') && !t && <Tag tone="no">sem texto vinculado</Tag>}
                           {opcoesStatus.includes('restricao') && !tRestr && <Tag tone="acc">sem texto de restrição</Tag>}
                         </div>
@@ -1546,7 +1634,31 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
                       </div>
                     </div>
                   )
-                })}
+            }
+            return (
+              <div key={d} style={{ border: `1px solid ${LINE}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12, background: '#fff' }}>
+                <div style={{ background: '#F7F9FD', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${LINE}` }}>
+                  <b style={{ fontSize: 13, letterSpacing: '.02em' }}>{d}</b>
+                  <span style={{ color: MU, fontSize: 12 }}>{okG}/{gStatus.length} conformes</span>
+                </div>
+                {!multi ? (
+                  comuns.map((i, idx) => renderItem(i, idx, comuns))
+                ) : (
+                  <>
+                    {comuns.length > 0 && (
+                      <>
+                        {subheader('Comuns')}
+                        {comuns.map((i, idx) => renderItem(i, idx, comuns))}
+                      </>
+                    )}
+                    {especificos.map(eg => (
+                      <div key={eg.contratanteId}>
+                        {subheader('Específicos — ' + eg.nome)}
+                        {eg.itens.map((i, idx) => renderItem(i, idx, eg.itens))}
+                      </div>
+                    ))}
+                  </>
+                )}
                 {(d === 'PGR' || d === 'PCMSO' || d === 'LTCAT') && draft.respostas[FRENTE_TRABALHO_ITEM_ID]?.status !== 'nao' && (
                   <div style={{ padding: '10px 14px', background: '#F7F9FD', borderTop: `1px solid ${LINE}` }}>
                     <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: MU, fontWeight: 600 }}>Validade do {d}</span>
@@ -1579,10 +1691,10 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
         </div>
 
         <div style={{ position: 'sticky', top: 16 }}>
-        {!draft.contratanteId ? (
+        {!draft.contratanteIds.length ? (
           <Card style={{ padding: '32px 20px', textAlign: 'center', color: MU }}>
             <b style={{ display: 'block', color: TX, marginBottom: 4, fontSize: 15 }}>E-mail bloqueado</b>
-            Selecione uma contratante para liberar a montagem do e-mail.
+            Selecione ao menos uma contratante para liberar a montagem do e-mail.
           </Card>
         ) : (
         <>
@@ -1646,13 +1758,13 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
 
 // ─── View: Banco de dados ───────────────────────────────────────────────────
 
-function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, getC, nomeC, itensDaAnalise, statusAnalise, relatorioItens, onLimparFiltros, onDelFiltro, onExportCsv, onDel, onReabrir }: {
+function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, nomeC, nomesContratantes, itensDaAnalise, statusAnalise, relatorioItens, onLimparFiltros, onDelFiltro, onExportCsv, onDel, onReabrir }: {
   aba: 'empresas' | 'relatorio'; setAba: (v: 'empresas' | 'relatorio') => void
   q: string; setQ: (v: string) => void; contratante: string; setContratante: (v: string) => void
   status: string; setStatus: (v: string) => void; de: string; setDe: (v: string) => void; ate: string; setAte: (v: string) => void
   aberto: string | null; setAberto: (v: string | null) => void; itemAberto: string | null; setItemAberto: (v: string | null) => void
-  lista: AnaliseRow[]; catalog: Catalog; getC: (id?: string) => Contratante | undefined; nomeC: (c?: Contratante) => string
-  itensDaAnalise: (a: AnaliseDados) => (ChecklistItem & { textoLink: string })[]
+  lista: AnaliseRow[]; catalog: Catalog; nomeC: (c?: Contratante) => string; nomesContratantes: (ids: string[]) => string
+  itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
   statusAnalise: (r: AnaliseRow) => { t: string; c: 'ok' | 'no' | 'na' | 'acc' | 'default'; k: string }
   relatorioItens: (l: AnaliseRow[]) => { i: ChecklistItem; ok: number; nao: number; na: number; restr: number; tot: number; empresasNao: string[]; empresasOk: string[] }[]
   onLimparFiltros: () => void; onDelFiltro: () => void; onExportCsv: () => void; onDel: (id: string, nome: string) => void; onReabrir: (r: AnaliseRow) => void
@@ -1773,7 +1885,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                 ))}</tr></thead>
                 <tbody>
                   {lista.map(a => {
-                    const s = statusAnalise(a), c = getC(a.dados.contratanteId), itens = itensDaAnalise(a.dados)
+                    const s = statusAnalise(a), itens = itensDaAnalise(a.dados)
                     const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
                     const ok = itensStatus.filter(i => a.dados.respostas[i.id]?.status === 'ok').length
                     const restr = itensStatus.filter(i => a.dados.respostas[i.id]?.status === 'restricao').length
@@ -1784,7 +1896,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                       <Fragment key={a.id}>
                         <tr style={{ cursor: 'pointer' }} onClick={() => setAberto(open ? null : a.id)}>
                           <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><b>{a.empresa || '(sem nome)'}</b><div style={{ color: MU, fontSize: 12 }}>{a.cnpj}</div></td>
-                          <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{nomeC(c)}</td>
+                          <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{nomesContratantes(a.dados.contratanteIds)}</td>
                           <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{(a.dados.documentos || []).map(d => <span key={d} style={{ marginRight: 4 }}><Tag>{d}</Tag></span>)}</td>
                           <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{fmtD(a.data_final || a.dados.data)}</td>
                           <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
@@ -2011,6 +2123,15 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: 
   onNovo: () => void; onEditar: (i: ChecklistItem) => void; onDel: (id: string) => void
   onAbrirTexto: (item: ChecklistItem, campo: InspectorCampo) => void
 }) {
+  const [abertos, setAbertos] = useState<Set<DocKey>>(new Set())
+  function toggleDoc(d: DocKey) {
+    setAbertos(prev => {
+      const next = new Set(prev)
+      if (next.has(d)) next.delete(d)
+      else next.add(d)
+      return next
+    })
+  }
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -2020,9 +2141,17 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: 
       {DOC_ORDER.map(d => {
         const g = catalog.itens.filter(i => i.documento === d)
         if (!g.length) return null
+        const aberto = abertos.has(d)
         return (
           <Card key={d} style={{ marginBottom: 14 }}>
-            <div style={{ padding: '14px 18px 0' }}><b>{d}</b> <span style={{ color: MU }}>· {g.length} itens</span></div>
+            <div
+              onClick={() => toggleDoc(d)}
+              style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+            >
+              <div><b>{d}</b> <span style={{ color: MU }}>· {g.length} itens</span></div>
+              <span style={{ color: MU, fontSize: 12 }}>{aberto ? '▲ recolher' : '▼ expandir'}</span>
+            </div>
+            {aberto && (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 8 }}>
                 <thead>
@@ -2075,6 +2204,7 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: 
                 </tbody>
               </table>
             </div>
+            )}
           </Card>
         )
       })}
@@ -2250,6 +2380,11 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
                         onChange={e => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, pedirTexto: e.target.checked } : x))} />
                       Pedir um detalhe livre ao marcar esta opção (ex.: número da página)
                     </label>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }} title="Usada na variável quando nenhuma opção estiver marcada ainda">
+                      <input type="radio" name={'padrao-' + draft.id} checked={o.padrao}
+                        onChange={() => set('opcoes', draft.opcoes.map((x, i) => ({ ...x, padrao: i === idx })))} />
+                      Padrão
+                    </label>
                     {o.pedirTexto && (
                       <>
                         <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} value={o.placeholder} placeholder="Texto de exemplo do campo (ex.: Qual página?)"
@@ -2268,7 +2403,7 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
               ))}
             </div>
             <div style={{ marginTop: 8 }}>
-              <Btn small onClick={() => set('opcoes', [...draft.opcoes, { id: uid('op'), label: '', corpo: '', pedirTexto: false, placeholder: '', variavelDetalhe: '' }])}>✚ Adicionar opção</Btn>
+              <Btn small onClick={() => set('opcoes', [...draft.opcoes, { id: uid('op'), label: '', corpo: '', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false }])}>✚ Adicionar opção</Btn>
             </div>
           </div>
         </>
