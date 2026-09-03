@@ -300,12 +300,13 @@ function dismissPdiNotifStorage(pdiId: string, userId: string) {
 
 // ─── Lembretes helpers ────────────────────────────────────────────────────────
 
-function lembreteDismissKey(userId: string) { return `lembretes_notif_dismissed_${userId}` }
-function getLembreteDismissDate(userId: string): string {
-  try { return sessionStorage.getItem(lembreteDismissKey(userId)) ?? '' } catch { return '' }
+function lembreteSnoozeKey(userId: string) { return `lembretes_notif_snoozed_ate_${userId}` }
+function getLembreteSnoozedAte(userId: string): string {
+  try { return localStorage.getItem(lembreteSnoozeKey(userId)) ?? '' } catch { return '' }
 }
-function dismissLembreteNotifStorage(userId: string) {
-  try { sessionStorage.setItem(lembreteDismissKey(userId), new Date().toISOString().split('T')[0]) } catch { /* noop */ }
+/** Adia o pop-up de lembretes pendentes até a data informada (YYYY-MM-DD), inclusive. */
+function snoozeLembreteNotifStorage(userId: string, ateIso: string) {
+  try { localStorage.setItem(lembreteSnoozeKey(userId), ateIso) } catch { /* noop */ }
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -493,8 +494,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         if (!mounted || !res.ok) return
         const data: Array<{ data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual'; hora_inicio: string | null; concluido: boolean; confirmado?: boolean }> = await res.json()
         const today = new Date().toISOString().split('T')[0]
-        const dismissedDate = getLembreteDismissDate(userId)
-        if (dismissedDate === today) return
+        const snoozedAte = getLembreteSnoozedAte(userId)
+        if (snoozedAte && today <= snoozedAte) return
         // Só conta como atrasado quem tem ocorrência real neste mês (não apenas
         // uma data_inicio antiga) — senão um lembrete "único" já confirmado no
         // passado volta a acusar atraso todo mês, sem nenhuma forma de resolver.
@@ -1002,8 +1003,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {showLembrete && profile && (
         <LembreteNotificacao
           count={lembreteCount}
-          onVerAgora={() => { setShowLembreteNotif(false); dismissLembreteNotifStorage(profile.id); router.push('/lembretes') }}
-          onVerDepois={() => { setShowLembreteNotif(false); dismissLembreteNotifStorage(profile.id) }}
+          onVerAgora={() => {
+            setShowLembreteNotif(false)
+            snoozeLembreteNotifStorage(profile.id, new Date().toISOString().split('T')[0])
+            router.push('/lembretes')
+          }}
+          onAdiar={ateIso => { setShowLembreteNotif(false); snoozeLembreteNotifStorage(profile.id, ateIso) }}
         />
       )}
 

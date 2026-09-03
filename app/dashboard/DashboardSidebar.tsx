@@ -30,6 +30,7 @@ type BdayItem = {
 }
 
 type LembreteItem = {
+  id: string
   titulo: string
   daysLeft: number
 }
@@ -251,7 +252,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!res.ok) { setLembreteItems([]); return }
-        const data: Array<{ titulo: string; periodo: string; data_inicio: string; concluido: boolean; confirmado: boolean }> = await res.json()
+        const data: Array<{ id: string; titulo: string; periodo: string; data_inicio: string; concluido: boolean; confirmado: boolean }> = await res.json()
         const todayBase = new Date(); todayBase.setHours(0, 0, 0, 0)
         const items: LembreteItem[] = []
         for (const r of data) {
@@ -260,7 +261,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           const next = nextOccStr(r.periodo, r.data_inicio)
           const diff = Math.round((next.getTime() - todayBase.getTime()) / 86400000)
           if (diff >= 0 && diff <= 3) {
-            items.push({ titulo: r.titulo, daysLeft: diff })
+            items.push({ id: r.id, titulo: r.titulo, daysLeft: diff })
           }
         }
         items.sort((a, b) => a.daysLeft - b.daysLeft)
@@ -287,6 +288,8 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       .channel(`dashboard-sheets-rt-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'home_office_sheets' }, () => loadData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'controle_revisao_sheets' }, () => loadData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lembretes_historico' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes' }, () => loadData())
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -617,11 +620,13 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               📌 Lembretes
             </div>
             {lembreteItems.map((item, i) => (
-              <div
-                key={i}
+              <Link
+                key={item.id}
+                href={`/lembretes?edit=${item.id}`}
+                title="Abrir e editar este lembrete"
                 style={{
-                  fontSize: 13, color: '#1E293B',
-                  padding: '5px 0',
+                  fontSize: 13, color: '#1E293B', textDecoration: 'none',
+                  padding: '5px 0', display: 'block',
                   borderBottom: i < lembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none',
                   lineHeight: 1.5,
                 }}
@@ -632,7 +637,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                 <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
                   {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

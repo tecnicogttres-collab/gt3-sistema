@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { PERIODS, type Period, findMonthOccurrence, currentMonthOccurrence, isLembreteOverdue } from '../lib/lembretes'
@@ -88,6 +89,8 @@ const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_
 
 export default function LembretesClient() {
   const { profile } = useUser()
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [lembretes, setLembretes] = useState<Lembrete[]>([])
   const [historico, setHistorico] = useState<HistoricoRow[]>([])
@@ -162,6 +165,17 @@ export default function LembretesClient() {
   }, [isGestorOrAdmin, profile?.id])
 
   useEffect(() => { void load() }, [load])
+
+  // Abre direto para edição quando vem de um link do dashboard (?edit=<id>).
+  useEffect(() => {
+    if (loading) return
+    const editId = searchParams.get('edit')
+    if (!editId) return
+    const r = lembretes.find(x => x.id === editId)
+    if (r) openEdit(r)
+    router.replace('/lembretes')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, lembretes, searchParams])
 
   useEffect(() => {
     const today = new Date()
@@ -316,6 +330,14 @@ export default function LembretesClient() {
   function openNew() {
     setEditingId(null)
     setForm({ ...emptyForm, data_inicio: fmtDateStr(new Date()) })
+    setUserSearch('')
+    setModalOpen(true)
+    void loadUsers()
+  }
+
+  function openNewOnDate(dataIso: string) {
+    setEditingId(null)
+    setForm({ ...emptyForm, data_inicio: dataIso })
     setUserSearch('')
     setModalOpen(true)
     void loadUsers()
@@ -771,34 +793,42 @@ export default function LembretesClient() {
             const isT  = ds === todayStr
             const hits = calDayMap.get(ds) ?? []
             return (
-              <div key={d} style={{
-                minHeight: 72,
-                background: '#fff',
-                border: `${isT ? 2 : 1}px solid ${isT ? GOLD : hits.length > 0 ? '#4A6DB5' : BORDER}`,
-                borderRadius: 6, padding: 6, fontSize: 12,
-              }}>
-                <div style={{ fontWeight: 600, fontSize: 12, color: isT ? '#7A5A1E' : TEXT_FAINT, marginBottom: 3 }}>
+              <div
+                key={d}
+                onClick={() => openNewOnDate(ds)}
+                title="Clique para criar um lembrete nesta data"
+                style={{
+                  minHeight: 72,
+                  background: isT ? '#FFF8EA' : hits.length > 0 ? '#F5F8FF' : '#fff',
+                  border: `${isT ? 2 : 1.5}px solid ${isT ? GOLD : hits.length > 0 ? '#4A6DB5' : '#C8C5BC'}`,
+                  borderRadius: 6, padding: 6, fontSize: 12, cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = isT ? '#FFF3D9' : hits.length > 0 ? '#EBF0FA' : '#FAFAF8' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isT ? '#FFF8EA' : hits.length > 0 ? '#F5F8FF' : '#fff' }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 12, color: isT ? '#7A5A1E' : TEXT_MID, marginBottom: 3 }}>
                   {d}
                 </div>
                 {hits.slice(0, 5).map((r, idx) => {
                   const confirmed = confirmedIds.has(r.id)
                   const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
-                    <div key={idx} title="Clique para editar" onClick={() => openEdit(r)} style={{
+                    <div key={idx} title="Clique para editar" onClick={e => { e.stopPropagation(); openEdit(r) }} style={{
                       fontSize: 10, borderRadius: 3, padding: '1px 4px', marginBottom: 2,
                       background: confirmed ? '#DCFCE7' : over ? '#FBF0E8' : '#EBF0FA',
                       color: confirmed ? '#166534' : over ? '#7A3A0E' : '#1A3266',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                       cursor: 'pointer',
                     }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.filter = 'brightness(0.93)' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.filter = 'none' }}>
+                    onMouseEnter={e => { e.stopPropagation(); (e.currentTarget as HTMLElement).style.filter = 'brightness(0.93)' }}
+                    onMouseLeave={e => { e.stopPropagation(); (e.currentTarget as HTMLElement).style.filter = 'none' }}>
                       {confirmed ? '✓ ' : ''}{r.titulo}
                     </div>
                   )
                 })}
                 {hits.length > 5 && (
-                  <div style={{ fontSize: 10, color: TEXT_FAINT, padding: '1px 4px', opacity: 0.5 }}>
+                  <div style={{ fontSize: 10, color: TEXT_MID, padding: '1px 4px', opacity: 0.7 }}>
                     +{hits.length - 5}
                   </div>
                 )}
