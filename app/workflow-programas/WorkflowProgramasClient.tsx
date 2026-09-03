@@ -649,6 +649,12 @@ export default function WorkflowProgramasClient() {
     [draft, catalog],
   )
   const modoReprovacao = criticosReprovados.length > 0
+  const criticosRestritos = useMemo(
+    () => (draft ? itensDaAnalise(draft).filter(i => i.critico && draft.respostas[i.id]?.status === 'restricao') : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draft, catalog],
+  )
+  const modoRestricaoCritica = !modoReprovacao && criticosRestritos.length > 0
   const emailBuiltNormal = useMemo(() => (draft ? buildEmail(draft) : null), [draft, catalog]) // eslint-disable-line react-hooks/exhaustive-deps
   const reprovacaoBuilt = useMemo(
     () => (draft && modoReprovacao ? buildReprovacao(draft, criticosReprovados) : null),
@@ -1207,7 +1213,7 @@ export default function WorkflowProgramasClient() {
 
       {view === 'nova' && draft && (
         <VAnalise
-          draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao}
+          draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos}
           onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onDot={toggleDot} onObs={setObs} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise}
@@ -1413,9 +1419,9 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onDot, onObs, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onDot, onObs, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
-  emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean
+  emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
   getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined; nomeC: (c?: Contratante) => string
   nomesContratantes: (ids: string[]) => string
@@ -1698,8 +1704,8 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
           </Card>
         ) : (
         <>
-          <div style={{ background: modoReprovacao ? NO : P, color: '#fff', padding: '12px 16px', borderRadius: '10px 10px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <b style={{ fontSize: 13.5 }}>{modoReprovacao ? '🚫 Reprovação em construção' : '✉️ Parecer em construção'}</b>
+          <div style={{ background: modoReprovacao ? NO : modoRestricaoCritica ? AC : P, color: modoRestricaoCritica && !modoReprovacao ? '#3A2E14' : '#fff', padding: '12px 16px', borderRadius: '10px 10px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <b style={{ fontSize: 13.5 }}>{modoReprovacao ? '🚫 Reprovação em construção' : modoRestricaoCritica ? '◐ Parecer com restrição crítica' : '✉️ Parecer em construção'}</b>
             <span style={{ fontSize: 12 }}>
               {modoReprovacao
                 ? (emailBuilt ? emailBuilt.criticos + ' item(ns) crítico(s)' : '')
@@ -1715,6 +1721,11 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, iten
           {modoReprovacao && (
             <div style={{ background: NOS, color: NO, fontSize: 12, padding: '8px 16px', borderLeft: `1px solid ${LINE}`, borderRight: `1px solid ${LINE}` }}>
               Item(ns) crítico(s) reprovado(s) — cadastro não pode ser liberado enquanto não forem corrigidos.
+            </div>
+          )}
+          {!modoReprovacao && modoRestricaoCritica && (
+            <div style={{ background: ASO, color: '#8A6A22', fontSize: 12, padding: '8px 16px', borderLeft: `1px solid ${LINE}`, borderRight: `1px solid ${LINE}` }}>
+              Item(ns) crítico(s) aprovado(s) com restrição — o parecer já contempla o prazo indicado no checklist.
             </div>
           )}
           <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderTop: 0, borderRadius: '0 0 10px 10px' }}>
