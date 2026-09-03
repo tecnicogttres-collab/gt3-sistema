@@ -37,6 +37,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if ('pdi_slug' in body) profileUpdates.pdi_slug = body.pdi_slug ?? null
   if ('modulos_permitidos' in body) profileUpdates.modulos_permitidos = body.modulos_permitidos ?? null
   if ('modulos_dashboard' in body) profileUpdates.modulos_dashboard = body.modulos_dashboard ?? null
+  if ('aniversario_dia' in body) profileUpdates.aniversario_dia = body.aniversario_dia ?? null
+  if ('aniversario_mes' in body) profileUpdates.aniversario_mes = body.aniversario_mes ?? null
   if (Object.keys(profileUpdates).length > 0) {
     const { error: updateErr } = await admin.from('profiles').update(profileUpdates).eq('id', id)
     if (updateErr) return Response.json({ error: updateErr.message }, { status: 500 })

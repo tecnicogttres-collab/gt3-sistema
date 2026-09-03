@@ -20,7 +20,7 @@ export async function GET() {
   const { data: { users }, error } = await admin.auth.admin.listUsers({ perPage: 1000 })
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  const { data: profiles } = await admin.from('profiles').select('id, nome, usuario, papel, pdi_slug, modulos_permitidos, modulos_dashboard')
+  const { data: profiles } = await admin.from('profiles').select('id, nome, usuario, papel, pdi_slug, modulos_permitidos, modulos_dashboard, aniversario_dia, aniversario_mes')
   const profileMap = new Map(
     (profiles ?? []).map((p: Record<string, unknown>) => [p.id as string, p])
   )
@@ -40,6 +40,8 @@ export async function GET() {
       pdi_slug: profile?.pdi_slug ?? null,
       modulos_permitidos: profile?.modulos_permitidos ?? null,
       modulos_dashboard: profile?.modulos_dashboard ?? null,
+      aniversario_dia: profile?.aniversario_dia ?? null,
+      aniversario_mes: profile?.aniversario_mes ?? null,
     }
   })
 

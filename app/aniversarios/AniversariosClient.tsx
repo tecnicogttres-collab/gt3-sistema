@@ -1,32 +1,24 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '../lib/supabase'
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
-type BdayData = Record<string, string[]>
+type Pessoa = { key: string; nome: string; usuarioId: string | null; livreId: string | null }
+type BdayData = Record<string, Pessoa[]>
+type UsuarioOpcao = { id: string; nome: string | null; usuario: string | null; vinculado: boolean }
 
 function dateKey(month: number, day: number): string {
   return `${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
-function rowsToBdayData(rows: { nome: string; dia: number; mes: number }[]): BdayData {
-  const result: BdayData = {}
-  for (const r of rows) {
-    const k = dateKey(r.mes - 1, r.dia)
-    if (!result[k]) result[k] = []
-    result[k].push(r.nome)
-  }
-  return result
 }
 
 function DayCell({
   day, people, isToday, isLastCol, onClick,
 }: {
   day: number
-  people: string[]
+  people: Pessoa[]
   isToday: boolean
   isLastCol: boolean
   onClick: () => void
@@ -67,8 +59,8 @@ function DayCell({
       {/* Birthday tags */}
       {people.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {people.slice(0, 3).map((name, i) => (
-            <div key={i} style={{
+          {people.slice(0, 3).map((p) => (
+            <div key={p.key} style={{
               background: '#EBF0FB', color: '#1E3A6E',
               borderRadius: 4, padding: '2px 6px',
               fontSize: 11, fontWeight: 500,
@@ -81,7 +73,7 @@ function DayCell({
                 <circle cx="8" cy="7" r="1" fill="#2A4F96" stroke="none"/>
                 <circle cx="16" cy="7" r="1" fill="#2A4F96" stroke="none"/>
               </svg>
-              {name}
+              {p.nome}
             </div>
           ))}
           {people.length > 3 && (
@@ -105,16 +97,30 @@ export default function AniversariosClient() {
   const [cy, setCy] = useState(today.getFullYear())
   const [cm, setCm] = useState(today.getMonth())
   const [data, setData] = useState<BdayData>({})
+  const [usuarios, setUsuarios] = useState<UsuarioOpcao[]>([])
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [modo, setModo] = useState<'login' | 'livre'>('login')
+  const [selectedUserId, setSelectedUserId] = useState('')
   const [inputName, setInputName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
 
   const loadAll = useCallback(async () => {
-    const supabase = createClient()
-    const { data: rows, error } = await supabase
-      .from('aniversarios')
-      .select('nome, dia, mes')
-    if (error) { console.error('Erro ao carregar aniversários:', error); return }
-    setData(rowsToBdayData(rows ?? []))
+    try {
+      const res = await fetch('/api/aniversarios')
+      if (!res.ok) return
+      const json = await res.json() as {
+        vinculados: { usuario_id: string; nome: string | null; dia: number; mes: number }[]
+        livres: { id: string; nome: string; dia: number; mes: number }[]
+        usuarios: UsuarioOpcao[]
+      }
+      const result: BdayData = {}
+      const push = (k: string, p: Pessoa) => { if (!result[k]) result[k] = []; result[k].push(p) }
+      json.vinculados.forEach(v => push(dateKey(v.mes - 1, v.dia), { key: 'u_' + v.usuario_id, nome: v.nome ?? '—', usuarioId: v.usuario_id, livreId: null }))
+      json.livres.forEach(l => push(dateKey(l.mes - 1, l.dia), { key: 'l_' + l.id, nome: l.nome, usuarioId: null, livreId: l.id }))
+      setData(result)
+      setUsuarios(json.usuarios)
+    } catch { /* noop */ }
   }, [])
 
   useEffect(() => { void loadAll() }, [loadAll])
@@ -129,46 +135,43 @@ export default function AniversariosClient() {
     else setCm(m => m + 1)
   }
 
-  const addPerson = async () => {
+  const usuariosDisponiveis = useMemo(() => usuarios.filter(u => !u.vinculado), [usuarios])
+
+  const vincularUsuario = async () => {
+    if (!selectedUserId || selectedDay === null) return
+    setSaving(true)
+    setMsg('')
+    const res = await fetch('/api/aniversarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: selectedUserId, dia: selectedDay, mes: cm + 1 }),
+    })
+    setSaving(false)
+    if (!res.ok) { setMsg((await res.json().catch(() => ({})))?.error ?? 'Erro ao vincular.'); return }
+    setSelectedUserId('')
+    await loadAll()
+  }
+
+  const addPersonLivre = async () => {
     const name = inputName.trim()
     if (!name || selectedDay === null) return
-    const k = dateKey(cm, selectedDay)
-    if ((data[k] ?? []).includes(name)) return
-    setData(prev => {
-      const next = { ...prev, [k]: [...(prev[k] ?? []), name] }
-      return next
-    })
     setInputName('')
     const supabase = createClient()
     const { error } = await supabase
       .from('aniversarios')
       .insert({ nome: name, dia: selectedDay, mes: cm + 1 })
-    if (error) {
-      console.error('Erro ao adicionar aniversário:', error)
-      void loadAll()
-    }
+    if (error) console.error('Erro ao adicionar aniversário:', error)
+    await loadAll()
   }
 
-  const removePerson = async (k: string, i: number) => {
-    const name = data[k]?.[i]
-    if (!name) return
-    setData(prev => {
-      const next = { ...prev, [k]: (prev[k] ?? []).filter((_, idx) => idx !== i) }
-      if (next[k].length === 0) delete next[k]
-      return next
-    })
-    const [mes, dia] = k.split('-').map(Number)
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('aniversarios')
-      .delete()
-      .eq('nome', name)
-      .eq('mes', mes)
-      .eq('dia', dia)
-    if (error) {
-      console.error('Erro ao remover aniversário:', error)
-      void loadAll()
+  const removePerson = async (p: Pessoa) => {
+    if (p.usuarioId) {
+      await fetch(`/api/aniversarios?usuario_id=${encodeURIComponent(p.usuarioId)}`, { method: 'DELETE' })
+    } else if (p.livreId) {
+      const supabase = createClient()
+      await supabase.from('aniversarios').delete().eq('id', p.livreId)
     }
+    await loadAll()
   }
 
   const firstDay = new Date(cy, cm, 1).getDay()
@@ -182,9 +185,9 @@ export default function AniversariosClient() {
     d.setDate(ref.getDate() + offset)
     const k = dateKey(d.getMonth(), d.getDate())
     if (data[k]?.length > 0) {
-      data[k].forEach(name => {
+      data[k].forEach(p => {
         const label = offset === 0 ? 'Hoje' : offset === 1 ? 'Amanhã' : `${d.getDate()}/${d.getMonth() + 1}`
-        upcoming.push({ name, label })
+        upcoming.push({ name: p.nome, label })
       })
     }
   }
@@ -277,7 +280,7 @@ export default function AniversariosClient() {
                 people={data[k] ?? []}
                 isToday={isToday}
                 isLastCol={colIndex === 6}
-                onClick={() => { setSelectedDay(d); setInputName('') }}
+                onClick={() => { setSelectedDay(d); setInputName(''); setSelectedUserId(''); setModo('login'); setMsg('') }}
               />
             )
           })}
@@ -294,7 +297,7 @@ export default function AniversariosClient() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(26,25,22,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) setSelectedDay(null) }}
         >
-          <div style={{ background: '#fff', borderRadius: 14, width: 360, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.12)', overflow: 'hidden', animation: 'none' }}>
+          <div style={{ background: '#fff', borderRadius: 14, width: 380, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
             {/* Modal header */}
             <div style={{ background: '#2A4F96', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h2 style={{ fontWeight: 600, fontSize: 17, color: '#fff', letterSpacing: -0.2, margin: 0 }}>
@@ -317,12 +320,15 @@ export default function AniversariosClient() {
                 </p>
               ) : (
                 <div style={{ marginBottom: 16 }}>
-                  {modalPeople.map((name, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#F4F6FA', borderRadius: 6, marginBottom: 4, fontSize: 13, color: '#1E293B' }}>
-                      <span>{name}</span>
+                  {modalPeople.map((p) => (
+                    <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#F4F6FA', borderRadius: 6, marginBottom: 4, fontSize: 13, color: '#1E293B' }}>
+                      <span>
+                        {p.nome}
+                        {p.usuarioId && <span style={{ marginLeft: 6, fontSize: 10, color: '#2A4F96', fontWeight: 600 }}>· login vinculado</span>}
+                      </span>
                       <button
-                        onClick={() => { if (modalKey) void removePerson(modalKey, i) }}
-                        title={`Remover ${name}`}
+                        onClick={() => void removePerson(p)}
+                        title={`Remover ${p.nome}`}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B0ADA5', fontSize: 16, lineHeight: 1, padding: '0 2px' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#E74C3C' }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#B0ADA5' }}
@@ -332,32 +338,63 @@ export default function AniversariosClient() {
                 </div>
               )}
 
-              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#B0ADA5', marginBottom: 8 }}>
-                Adicionar colaborador
+              <div style={{ display: 'flex', gap: 14, marginBottom: 10 }}>
+                {([['login', 'Vincular login'], ['livre', 'Nome sem login']] as const).map(([val, label]) => (
+                  <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: modo === val ? '#2A4F96' : '#6B7A99', fontWeight: modo === val ? 600 : 400, cursor: 'pointer' }}>
+                    <input type="radio" checked={modo === val} onChange={() => setModo(val)} style={{ accentColor: '#2A4F96' }} />
+                    {label}
+                  </label>
+                ))}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="text"
-                  value={inputName}
-                  onChange={e => setInputName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') void addPerson() }}
-                  placeholder="Nome completo"
-                  maxLength={80}
-                  autoComplete="off"
-                  autoFocus
-                  style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 6, padding: '9px 12px', fontSize: 14, background: '#fff', color: '#1E293B', outline: 'none' }}
-                  onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#2A4F96' }}
-                  onBlur={e => { (e.target as HTMLInputElement).style.borderColor = '#E2E8F0' }}
-                />
-                <button
-                  onClick={() => void addPerson()}
-                  style={{ background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E3A6E' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2A4F96' }}
-                >
-                  Adicionar
-                </button>
-              </div>
+
+              {modo === 'login' ? (
+                <>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      value={selectedUserId}
+                      onChange={e => setSelectedUserId(e.target.value)}
+                      style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 6, padding: '9px 12px', fontSize: 14, background: '#fff', color: '#1E293B', outline: 'none' }}
+                    >
+                      <option value="">Selecione um login...</option>
+                      {usuariosDisponiveis.map(u => (
+                        <option key={u.id} value={u.id}>{u.nome || u.usuario || u.id}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => void vincularUsuario()}
+                      disabled={!selectedUserId || saving}
+                      style={{ background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 14, fontWeight: 500, cursor: !selectedUserId || saving ? 'not-allowed' : 'pointer', opacity: !selectedUserId || saving ? 0.6 : 1, whiteSpace: 'nowrap' }}
+                    >
+                      {saving ? 'Salvando...' : 'Vincular'}
+                    </button>
+                  </div>
+                  {usuariosDisponiveis.length === 0 && (
+                    <p style={{ fontSize: 11, color: '#B0ADA5', marginTop: 6 }}>Todos os logins já têm aniversário cadastrado.</p>
+                  )}
+                </>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    value={inputName}
+                    onChange={e => setInputName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') void addPersonLivre() }}
+                    placeholder="Nome completo (sem login no sistema)"
+                    maxLength={80}
+                    autoComplete="off"
+                    style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 6, padding: '9px 12px', fontSize: 14, background: '#fff', color: '#1E293B', outline: 'none' }}
+                    onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#2A4F96' }}
+                    onBlur={e => { (e.target as HTMLInputElement).style.borderColor = '#E2E8F0' }}
+                  />
+                  <button
+                    onClick={() => void addPersonLivre()}
+                    style={{ background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    Adicionar
+                  </button>
+                </div>
+              )}
+              {msg && <p style={{ fontSize: 12, color: '#E74C3C', marginTop: 8 }}>{msg}</p>}
             </div>
           </div>
         </div>

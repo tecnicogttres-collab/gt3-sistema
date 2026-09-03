@@ -9,9 +9,9 @@ export async function GET() {
   const admin = createAdminClient()
   const { data } = await admin
     .from('profiles')
-    .select('id, nome, usuario, email, papel, modulos_permitidos, modulos_dashboard')
+    .select('id, nome, usuario, email, papel, modulos_permitidos, modulos_dashboard, aniversario_dia, aniversario_mes')
     .eq('id', user.id)
     .single()
 
-  return Response.json(data)
+  return Response.json(data ? { ...data, created_at: user.created_at } : data)
 }

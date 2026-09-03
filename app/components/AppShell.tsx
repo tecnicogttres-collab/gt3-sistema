@@ -25,7 +25,6 @@ import PdiCriadoNotificacao from './PdiCriadoNotificacao'
 import QuoteBanner from './QuoteBanner'
 import IntroScreen, { shouldShowIntro } from './IntroScreen'
 import { displayName } from './UserContext'
-import { normalizeName } from '../lib/format'
 
 function useBreadcrumb(pathname: string): string {
   const { modules } = useModules()
@@ -235,7 +234,13 @@ export async function markPrioridadeVista(id: string, userId: string) {
 
 // ─── Atas helpers ─────────────────────────────────────────────────────────────
 
-type AtaNotif = { id: string; data: string; titulo: string | null }
+type AtaNotif = { id: string; data: string; titulo: string | null; created_at: string }
+
+/** Itens criados antes da conta do usuário existir não devem virar notificação/leitura pendente. */
+function criadoAposConta(createdAt: string | null | undefined, profileCreatedAt: string | null | undefined) {
+  if (!createdAt || !profileCreatedAt) return true
+  return new Date(createdAt).getTime() >= new Date(profileCreatedAt).getTime()
+}
 
 export async function markAtaNotifVista(id: string, userId: string) {
   try {
@@ -359,39 +364,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (shouldShowIntro()) setIntroVisible(true)
   }, [])
 
-  // Aniversário do usuário logado — checa a tabela "aniversarios" (nome livre, sem
-  // vínculo com profiles) comparando com o nome do perfil de forma tolerante a acentos.
-  const [isBirthdayToday, setIsBirthdayToday] = useState(false)
-  useEffect(() => {
-    if (!profile) return
-    let alive = true
-    const today = new Date()
-    const supabase = createClient()
-    supabase
-      .from('aniversarios')
-      .select('nome')
-      .eq('dia', today.getDate())
-      .eq('mes', today.getMonth() + 1)
-      .then(({ data }) => {
-        if (!alive || !data) return
-        const meu = normalizeName(displayName(profile))
-        setIsBirthdayToday(data.some(r => normalizeName(r.nome as string) === meu))
-      })
-    return () => { alive = false }
-  }, [profile])
+  // Aniversário do usuário logado — comparação direta com profiles.aniversario_dia/mes.
+  const today = new Date()
+  const isBirthdayToday = !!profile && profile.aniversario_dia === today.getDate() && profile.aniversario_mes === today.getMonth() + 1
 
   const isColabOrTrainee = profile?.papel === 'colaborador' || profile?.papel === 'trainee'
 
-  const loadLegislacoesPendentes = useCallback(async () => {
+  const loadLegislacoesPendentes = useCallback(async (profileCreatedAt: string | null | undefined) => {
     try {
       const res = await fetch('/api/legislacoes')
       if (!res.ok) return
-      const data: Array<{ lida: boolean; para_mim: boolean }> = await res.json()
-      setLegislacoesPendentes(data.filter(l => !l.lida && l.para_mim).length)
+      const data: Array<{ lida: boolean; para_mim: boolean; created_at: string }> = await res.json()
+      setLegislacoesPendentes(data.filter(l => !l.lida && l.para_mim && criadoAposConta(l.created_at, profileCreatedAt)).length)
     } catch { /* noop */ }
   }, [])
 
-  const loadUnreadAtas = useCallback(async (userId: string) => {
+  const loadUnreadAtas = useCallback(async (userId: string, profileCreatedAt: string | null | undefined) => {
     if (!isColabOrTrainee) return
     try {
       const res = await fetch('/api/atas')
@@ -403,7 +391,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         .select('ata_id')
         .eq('user_id', userId)
       const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
-      setUnreadAtas(atas.filter(a => !seenSet.has(a.id)))
+      setUnreadAtas(atas.filter(a => !seenSet.has(a.id) && criadoAposConta(a.created_at, profileCreatedAt)))
     } catch { /* noop */ }
   }, [isColabOrTrainee])
 
@@ -441,7 +429,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .select('ata_id')
           .eq('user_id', userId)
         const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
-        const unnotified = atas.filter(a => !seenSet.has(a.id))
+        const unnotified = atas.filter(a => !seenSet.has(a.id) && criadoAposConta(a.created_at, profile?.created_at))
         if (unnotified.length > 0) setAtaQueue(unnotified)
         setUnreadAtas(unnotified)
       } catch { /* noop */ }
@@ -523,7 +511,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       checkUnseenSugestoes(),
       checkUnseenEnquetes(),
       checkLembretesPendentes(),
-      loadLegislacoesPendentes(),
+      loadLegislacoesPendentes(profile.created_at),
     ])
 
     let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -557,22 +545,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'atas', filter: 'status=eq.Validada' },
         (payload) => {
-          const record = payload.new as { id: string; data: string; titulo: string | null; status: string }
+          const record = payload.new as { id: string; data: string; titulo: string | null; status: string; created_at: string }
           if (record?.status !== 'Validada' || !record?.id) return
           setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
           setUnreadAtas(prev =>
-            prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
+            prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo, created_at: record.created_at }]
           )
         }
       )
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'atas', filter: 'status=eq.Validada' },
         (payload) => {
-          const record = payload.new as { id: string; data: string; titulo: string | null; status: string }
+          const record = payload.new as { id: string; data: string; titulo: string | null; status: string; created_at: string }
           if (record?.status !== 'Validada' || !record?.id) return
           setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
           setUnreadAtas(prev =>
-            prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo }]
+            prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo, created_at: record.created_at }]
           )
         }
       )
@@ -622,12 +610,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Reload unread banner when navigating away from atas / legislacoes
   useEffect(() => {
     if (!profile || !isColabOrTrainee) return
-    loadUnreadAtas(profile.id)
+    loadUnreadAtas(profile.id, profile.created_at)
   }, [pathname, profile, isColabOrTrainee, loadUnreadAtas])
 
   useEffect(() => {
     if (!profile) return
-    loadLegislacoesPendentes()
+    loadLegislacoesPendentes(profile.created_at)
   }, [pathname, profile, loadLegislacoesPendentes])
 
   if (pathname === '/login') return <>{children}</>

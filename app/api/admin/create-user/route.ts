@@ -30,6 +30,8 @@ export async function POST(request: NextRequest) {
     senha: string
     papel: string
     pdi_slug?: string
+    aniversario_dia?: number | string
+    aniversario_mes?: number | string
   }
   const { nome, usuario, senha, papel, pdi_slug } = body
 
@@ -39,6 +41,9 @@ export async function POST(request: NextRequest) {
   if (!['colaborador', 'gestor', 'trainee'].includes(papel)) {
     return Response.json({ error: 'Papel inválido' }, { status: 400 })
   }
+
+  const aniversario_dia = body.aniversario_dia ? Number(body.aniversario_dia) : null
+  const aniversario_mes = body.aniversario_mes ? Number(body.aniversario_mes) : null
 
   const nomeParte = usuario.trim().replace(/^GT3\./i, '').toLowerCase()
   const normalizedEmail = `gt3.${nomeParte}@gt3.internal`
@@ -65,6 +70,8 @@ export async function POST(request: NextRequest) {
     email: normalizedEmail,
     papel,
     ...(pdi_slug ? { pdi_slug } : {}),
+    ...(aniversario_dia ? { aniversario_dia } : {}),
+    ...(aniversario_mes ? { aniversario_mes } : {}),
   })
 
   if (insertError) {

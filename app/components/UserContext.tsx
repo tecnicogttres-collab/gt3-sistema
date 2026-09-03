@@ -14,6 +14,9 @@ export type Profile = {
   pdi_slug: string | null
   modulos_permitidos: string[] | null
   modulos_dashboard: string[] | null
+  created_at: string | null
+  aniversario_dia: number | null
+  aniversario_mes: number | null
 }
 
 export type PapelRole = NonNullable<Profile['papel']>

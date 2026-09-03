@@ -24,7 +24,11 @@ export type UserRow = {
   banned: boolean
   last_sign_in: string | null
   created_at: string
+  aniversario_dia: number | null
+  aniversario_mes: number | null
 }
+
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 const PAPEIS_CRIACAO = ['colaborador', 'gestor', 'trainee'] as const
 const PAPEIS_TODOS = ['colaborador', 'gestor', 'admin', 'trainee'] as const
@@ -59,7 +63,7 @@ function formatDate(iso: string | null) {
   })
 }
 
-const EMPTY_FORM = { nome: '', usuario: '', senha: '', papel: 'colaborador', pdi_slug: '' }
+const EMPTY_FORM = { nome: '', usuario: '', senha: '', papel: 'colaborador', pdi_slug: '', aniversario_dia: '', aniversario_mes: '' }
 
 export default function LoginsClient() {
   const { user, profile, loading: profileLoading, reloadProfile } = useUser()
@@ -73,6 +77,7 @@ export default function LoginsClient() {
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
   const [search, setSearch] = useState('')
+  const [archivedOpen, setArchivedOpen] = useState(false)
 
   // Create user modal
   const [createOpen, setCreateOpen] = useState(false)
@@ -83,7 +88,7 @@ export default function LoginsClient() {
 
   // Edit user modal
   const [editUser, setEditUser] = useState<UserRow | null>(null)
-  const [editForm, setEditForm] = useState({ nome: '', usuario: '', papel: '', pdi_slug: '' })
+  const [editForm, setEditForm] = useState({ nome: '', usuario: '', papel: '', pdi_slug: '', aniversario_dia: '', aniversario_mes: '' })
   const [editModulos, setEditModulos] = useState<string[] | null>(null)
   const [editModulosDashboard, setEditModulosDashboard] = useState<string[] | null>(null)
   const [editLoading, setEditLoading] = useState(false)
@@ -129,6 +134,8 @@ export default function LoginsClient() {
       (u.papel ?? '').toLowerCase().includes(q)
     )
   })
+  const activeUsers = filtered.filter((u) => !u.banned)
+  const archivedUsers = filtered.filter((u) => u.banned)
 
   // ── Create user ──────────────────────────────────────────────
   async function handleCreate(e: React.FormEvent) {
@@ -159,7 +166,10 @@ export default function LoginsClient() {
   // ── Edit user ─────────────────────────────────────────────────
   function openEdit(u: UserRow) {
     setEditUser(u)
-    setEditForm({ nome: u.nome ?? '', usuario: u.usuario ?? '', papel: u.papel ?? 'colaborador', pdi_slug: u.pdi_slug ?? '' })
+    setEditForm({
+      nome: u.nome ?? '', usuario: u.usuario ?? '', papel: u.papel ?? 'colaborador', pdi_slug: u.pdi_slug ?? '',
+      aniversario_dia: u.aniversario_dia ? String(u.aniversario_dia) : '', aniversario_mes: u.aniversario_mes ? String(u.aniversario_mes) : '',
+    })
     setEditModulos(u.modulos_permitidos ?? null)
     setEditModulosDashboard(u.modulos_dashboard ?? null)
     setEditMsg('')
@@ -205,6 +215,8 @@ export default function LoginsClient() {
         pdi_slug: editForm.pdi_slug || null,
         modulos_permitidos: editModulos,
         modulos_dashboard: editModulosDashboard,
+        aniversario_dia: editForm.aniversario_dia ? Number(editForm.aniversario_dia) : null,
+        aniversario_mes: editForm.aniversario_mes ? Number(editForm.aniversario_mes) : null,
       }),
     })
 
@@ -218,7 +230,10 @@ export default function LoginsClient() {
     setUsers((prev) =>
       prev.map((u) =>
         u.id === editUser.id
-          ? { ...u, nome: editForm.nome, usuario: editForm.usuario, papel: editForm.papel, pdi_slug: editForm.pdi_slug || null, modulos_permitidos: editModulos, modulos_dashboard: editModulosDashboard }
+          ? {
+              ...u, nome: editForm.nome, usuario: editForm.usuario, papel: editForm.papel, pdi_slug: editForm.pdi_slug || null, modulos_permitidos: editModulos, modulos_dashboard: editModulosDashboard,
+              aniversario_dia: editForm.aniversario_dia ? Number(editForm.aniversario_dia) : null, aniversario_mes: editForm.aniversario_mes ? Number(editForm.aniversario_mes) : null,
+            }
           : u
       )
     )
@@ -335,7 +350,8 @@ export default function LoginsClient() {
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1E293B' }}>Gestão de Usuários</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7A99' }}>
-            {users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}
+            {activeUsers.length} usuário{activeUsers.length !== 1 ? 's' : ''} ativo{activeUsers.length !== 1 ? 's' : ''}
+            {archivedUsers.length > 0 && ` · ${archivedUsers.length} arquivado${archivedUsers.length !== 1 ? 's' : ''}`}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -397,7 +413,7 @@ export default function LoginsClient() {
       <div style={{ backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflowX: 'auto' }}>
         {loading ? (
           <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7A99', fontSize: 14 }}>Carregando...</div>
-        ) : filtered.length === 0 ? (
+        ) : activeUsers.length === 0 ? (
           <div style={{ padding: '48px 0', textAlign: 'center', color: '#6B7A99', fontSize: 14 }}>Nenhum usuário encontrado.</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -411,7 +427,7 @@ export default function LoginsClient() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u, i) => {
+              {activeUsers.map((u, i) => {
                 const colors = PAPEL_COLORS[u.papel ?? ''] ?? { bg: '#F3F4F6', color: '#374151' }
                 const initials = (u.usuario || u.nome || u.email).slice(0, 2).toUpperCase()
                 // Rows belonging to another admin are read-only
@@ -419,7 +435,7 @@ export default function LoginsClient() {
                 const canEditThisRow = canManage && !isProtectedAdmin
                 const canManageThisRow = canManage && !isProtectedAdmin
                 return (
-                  <tr key={u.id} style={{ borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none', opacity: u.banned ? 0.5 : 1 }}>
+                  <tr key={u.id} style={{ borderBottom: i < activeUsers.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
 
                     {/* Nome */}
                     <td style={{ padding: '13px 16px' }}>
@@ -534,6 +550,73 @@ export default function LoginsClient() {
         )}
       </div>
 
+      {/* Arquivados */}
+      {archivedUsers.length > 0 && (
+        <div style={{ marginTop: 16, backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+          <button
+            onClick={() => setArchivedOpen((v) => !v)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#6B7A99' }}>
+              🗄️ Arquivados ({archivedUsers.length})
+            </span>
+            <span style={{ color: '#94A3B8', fontSize: 12 }}>{archivedOpen ? '▲' : '▼'}</span>
+          </button>
+          {archivedOpen && (
+            <div style={{ overflowX: 'auto', borderTop: '1px solid #F1F5F9' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                    {['Nome', 'Usuário', 'Papel', 'Último acesso', 'Ações'].map((col) => (
+                      <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {archivedUsers.map((u, i) => {
+                    const colors = PAPEL_COLORS[u.papel ?? ''] ?? { bg: '#F3F4F6', color: '#374151' }
+                    const initials = (u.usuario || u.nome || u.email).slice(0, 2).toUpperCase()
+                    const isProtectedAdmin = u.papel === 'admin' && user?.id !== u.id
+                    const canManageThisRow = canManage && !isProtectedAdmin
+                    return (
+                      <tr key={u.id} style={{ borderBottom: i < archivedUsers.length - 1 ? '1px solid #F1F5F9' : 'none', opacity: 0.6 }}>
+                        <td style={{ padding: '13px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#1E3A6E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D1AE6E', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                              {initials}
+                            </div>
+                            <span style={{ fontSize: 14, fontWeight: 500, color: '#1E293B' }}>{u.nome ?? '—'}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '13px 16px', fontSize: 13, color: '#6B7A99' }}>{u.usuario || toUsername(u.email)}</td>
+                        <td style={{ padding: '13px 16px' }}>
+                          <span style={{ padding: '4px 8px', borderRadius: 6, backgroundColor: colors.bg, color: colors.color, fontSize: 12, fontWeight: 500 }}>
+                            {PAPEL_LABELS[u.papel ?? ''] ?? u.papel ?? '—'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '13px 16px', fontSize: 13, color: '#6B7A99', whiteSpace: 'nowrap' }}>{formatDate(u.last_sign_in)}</td>
+                        <td style={{ padding: '13px 16px' }}>
+                          {canManageThisRow && (
+                            <button
+                              onClick={() => handleToggleBan(u)}
+                              style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #BBF7D0', backgroundColor: '#F0FFF4', color: '#16A34A', fontSize: 12, cursor: 'pointer' }}
+                            >
+                              Reativar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Modal: Novo usuário ────────────────────────────────── */}
       {createOpen && (
         <div
@@ -592,6 +675,28 @@ export default function LoginsClient() {
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
                 </select>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 5 }}>Aniversário</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    value={form.aniversario_dia}
+                    onChange={(e) => setForm((f) => ({ ...f, aniversario_dia: e.target.value }))}
+                    style={{ width: 90, padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                  >
+                    <option value="">Dia</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <select
+                    value={form.aniversario_mes}
+                    onChange={(e) => setForm((f) => ({ ...f, aniversario_mes: e.target.value }))}
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                  >
+                    <option value="">Mês</option>
+                    {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
               </div>
 
               {createError && (
@@ -684,6 +789,28 @@ export default function LoginsClient() {
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
                 </select>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 5 }}>Aniversário</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    value={editForm.aniversario_dia}
+                    onChange={(e) => setEditForm((f) => ({ ...f, aniversario_dia: e.target.value }))}
+                    style={{ width: 90, padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                  >
+                    <option value="">Dia</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <select
+                    value={editForm.aniversario_mes}
+                    onChange={(e) => setEditForm((f) => ({ ...f, aniversario_mes: e.target.value }))}
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                  >
+                    <option value="">Mês</option>
+                    {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
               </div>
 
               <div style={{ marginBottom: 20 }}>
