@@ -37,6 +37,15 @@ type ChecklistItem = {
 }
 type TextoEmail = { id: string; titulo: string; categoria: CategoriaTexto; corpo: string }
 type TextoReprovacao = { id: string; titulo: string; documento: DocKey; escopo: Escopo; corpo: string }
+
+/** Os 4 campos de texto de um ChecklistItem, usados pelo inspetor de "Itens de checklist". */
+type InspectorCampo = 'textoAprovadoId' | 'textoId' | 'textoReprovacaoId' | 'textoRestricaoId'
+const CAMPO_INFO: Record<InspectorCampo, { label: string; tone: 'ok' | 'laranja' | 'no' | 'dourado'; categoria?: 'aprovacao' | 'apontamento' | 'restricao' }> = {
+  textoAprovadoId: { label: 'Aprovado', tone: 'ok', categoria: 'aprovacao' },
+  textoId: { label: 'Não conforme', tone: 'laranja', categoria: 'apontamento' },
+  textoReprovacaoId: { label: 'Reprovado', tone: 'no' },
+  textoRestricaoId: { label: 'Aprovado com restrição', tone: 'dourado', categoria: 'restricao' },
+}
 type ItemLink = { itemId: string; textoId: string | null }
 type Contratante = {
   id: string; nome: string; unidade: string; email: string; prazoDias: number
@@ -400,6 +409,10 @@ export default function WorkflowProgramasClient() {
   const [modalTextoNovo, setModalTextoNovo] = useState(false)
   const [modalReprovacaoEdit, setModalReprovacaoEdit] = useState<TextoReprovacao | null>(null)
   const [modalReprovacaoNovo, setModalReprovacaoNovo] = useState(false)
+
+  // inspetor de texto (painel lateral aberto a partir de "Itens de checklist")
+  const [inspecionar, setInspecionar] = useState<{ item: ChecklistItem; campo: InspectorCampo } | null>(null)
+  const [pendingLink, setPendingLink] = useState<{ itemId: string; campo: InspectorCampo } | null>(null)
 
   function showToast(m: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -984,9 +997,13 @@ export default function WorkflowProgramasClient() {
     if (!modalTextoEdit.titulo.trim()) { showToast('Informe o título'); return }
     const next = { ...catalog }
     next.textos = modalTextoNovo ? [...catalog.textos, modalTextoEdit] : catalog.textos.map(t => (t.id === modalTextoEdit.id ? modalTextoEdit : t))
+    if (pendingLink && pendingLink.campo !== 'textoReprovacaoId') {
+      next.itens = catalog.itens.map(i => (i.id === pendingLink.itemId ? { ...i, [pendingLink.campo]: modalTextoEdit.id } : i))
+    }
     persistCatalog(next)
     setModalTextoEdit(null)
-    showToast('Texto salvo')
+    showToast(pendingLink ? 'Texto criado e vinculado ao item' : 'Texto salvo')
+    setPendingLink(null)
   }
   function delTexto(id: string) {
     if (!catalog || !confirm('Excluir texto?')) return
@@ -1021,7 +1038,7 @@ export default function WorkflowProgramasClient() {
   }
 
   // ── catálogo: textos de reprovação ──
-  function novoReprovacaoModal() { setModalReprovacaoNovo(true); setModalReprovacaoEdit({ id: uid('r'), titulo: '', documento: 'PGR', escopo: 'base', corpo: '' }) }
+  function novoReprovacaoModal(documentoPadrao: DocKey = 'PGR') { setModalReprovacaoNovo(true); setModalReprovacaoEdit({ id: uid('r'), titulo: '', documento: documentoPadrao === 'GERAL' ? 'PGR' : documentoPadrao, escopo: 'base', corpo: '' }) }
   function editarReprovacaoModal(r: TextoReprovacao) { setModalReprovacaoNovo(false); setModalReprovacaoEdit({ ...r }) }
   function salvarReprovacaoModal() {
     if (!catalog || !modalReprovacaoEdit) return
@@ -1030,9 +1047,13 @@ export default function WorkflowProgramasClient() {
     next.textosReprovacao = modalReprovacaoNovo
       ? [...catalog.textosReprovacao, modalReprovacaoEdit]
       : catalog.textosReprovacao.map(r => (r.id === modalReprovacaoEdit.id ? modalReprovacaoEdit : r))
+    if (pendingLink && pendingLink.campo === 'textoReprovacaoId') {
+      next.itens = catalog.itens.map(i => (i.id === pendingLink.itemId ? { ...i, textoReprovacaoId: modalReprovacaoEdit.id } : i))
+    }
     persistCatalog(next)
     setModalReprovacaoEdit(null)
-    showToast('Texto de reprovação salvo')
+    showToast(pendingLink ? 'Texto criado e vinculado ao item' : 'Texto de reprovação salvo')
+    setPendingLink(null)
   }
   function delReprovacao(id: string) {
     if (!catalog || !confirm('Excluir texto de reprovação? Itens críticos vinculados a ele ficarão sem texto.')) return
@@ -1041,6 +1062,38 @@ export default function WorkflowProgramasClient() {
       textosReprovacao: catalog.textosReprovacao.filter(r => r.id !== id),
       itens: catalog.itens.map(i => (i.textoReprovacaoId === id ? { ...i, textoReprovacaoId: '' } : i)),
     })
+  }
+
+  // ── inspetor de texto (a partir de "Itens de checklist") ──
+  function abrirTexto(item: ChecklistItem, campo: InspectorCampo) {
+    const id = item[campo]
+    if (id) { setInspecionar({ item, campo }); return }
+    setPendingLink({ itemId: item.id, campo })
+    if (campo === 'textoReprovacaoId') {
+      setTextosSub('reprovacao')
+      setView('textos')
+      novoReprovacaoModal(item.documento)
+    } else {
+      setTextosSub(CAMPO_INFO[campo].categoria!)
+      setView('textos')
+      novoTextoModal(CAMPO_INFO[campo].categoria!)
+    }
+  }
+  function abrirDoInspector() {
+    if (!inspecionar) return
+    const { item, campo } = inspecionar
+    if (campo === 'textoReprovacaoId') {
+      const r = getR(item.textoReprovacaoId)
+      setTextosSub('reprovacao')
+      setView('textos')
+      if (r) editarReprovacaoModal(r)
+    } else {
+      const t = getT(item[campo])
+      setTextosSub(CAMPO_INFO[campo].categoria!)
+      setView('textos')
+      if (t) editarTextoModal(t)
+    }
+    setInspecionar(null)
   }
 
   // ── config ──
@@ -1133,7 +1186,7 @@ export default function WorkflowProgramasClient() {
       )}
 
       {view === 'itens' && (
-        <VItens catalog={catalog} getT={getT} getR={getR} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} />
+        <VItens catalog={catalog} getT={getT} getR={getR} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} onAbrirTexto={abrirTexto} />
       )}
 
       {view === 'textos' && textosSub === 'hub' && (
@@ -1205,13 +1258,21 @@ export default function WorkflowProgramasClient() {
       {/* ── Modal: Texto ── */}
       {modalTextoEdit && (
         <TextoModal
-          draft={modalTextoEdit} novo={modalTextoNovo} CATS={CATS} onChange={setModalTextoEdit} onSave={salvarTextoModal} onClose={() => setModalTextoEdit(null)}
+          draft={modalTextoEdit} novo={modalTextoNovo} CATS={CATS} onChange={setModalTextoEdit} onSave={salvarTextoModal} onClose={() => { setModalTextoEdit(null); setPendingLink(null) }}
           anexos={anexos.filter(a => a.texto_id === modalTextoEdit.id)} onUpload={uploadAnexo} onDelAnexo={delAnexo} onBaixarAnexo={baixarAnexo}
         />
       )}
 
       {modalReprovacaoEdit && (
-        <ReprovacaoModal draft={modalReprovacaoEdit} novo={modalReprovacaoNovo} onChange={setModalReprovacaoEdit} onSave={salvarReprovacaoModal} onClose={() => setModalReprovacaoEdit(null)} />
+        <ReprovacaoModal draft={modalReprovacaoEdit} novo={modalReprovacaoNovo} onChange={setModalReprovacaoEdit} onSave={salvarReprovacaoModal} onClose={() => { setModalReprovacaoEdit(null); setPendingLink(null) }} />
+      )}
+
+      {inspecionar && (
+        <InspectorPanel
+          item={inspecionar.item} campo={inspecionar.campo}
+          texto={inspecionar.campo === 'textoReprovacaoId' ? getR(inspecionar.item.textoReprovacaoId) : getT(inspecionar.item[inspecionar.campo])}
+          onAbrir={abrirDoInspector} onClose={() => setInspecionar(null)}
+        />
       )}
     </div>
   )
@@ -1937,13 +1998,18 @@ function ContratanteModal({ draft, catalog, novo, onChange, onSave, onClose, onC
 
 // ─── View: Itens de checklist ────────────────────────────────────────────────
 
-function TextoCell({ texto, tone, vazio = 'sem texto' }: { texto: { titulo: string } | undefined; tone: 'ok' | 'laranja' | 'no' | 'dourado'; vazio?: string }) {
-  return texto ? <Tag tone={tone}>{texto.titulo}</Tag> : <span style={{ color: MU, fontSize: 11.5 }}>{vazio}</span>
+function TextoCell({ texto, tone, vazio = 'sem texto', onClick }: { texto: { titulo: string } | undefined; tone: 'ok' | 'laranja' | 'no' | 'dourado'; vazio?: string; onClick: () => void }) {
+  return (
+    <span onClick={onClick} title={texto ? 'Ver texto vinculado' : 'Criar texto para este item'} style={{ cursor: 'pointer' }}>
+      {texto ? <Tag tone={tone}>{texto.titulo}</Tag> : <span style={{ color: MU, fontSize: 11.5, textDecoration: 'underline dotted' }}>{vazio}</span>}
+    </span>
+  )
 }
 
-function VItens({ catalog, getT, getR, onNovo, onEditar, onDel }: {
+function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: {
   catalog: Catalog; getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined
   onNovo: () => void; onEditar: (i: ChecklistItem) => void; onDel: (id: string) => void
+  onAbrirTexto: (item: ChecklistItem, campo: InspectorCampo) => void
 }) {
   return (
     <div>
@@ -1994,10 +2060,10 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel }: {
                           </td>
                         ) : (
                           <>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><TextoCell texto={getT(i.textoAprovadoId)} tone="ok" /></td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><TextoCell texto={getT(i.textoId)} tone="laranja" /></td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{i.critico ? <TextoCell texto={getR(i.textoReprovacaoId)} tone="no" /> : <span style={{ color: MU, fontSize: 11.5 }}>não crítico</span>}</td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><TextoCell texto={getT(i.textoRestricaoId)} tone="dourado" /></td>
+                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><TextoCell texto={getT(i.textoAprovadoId)} tone="ok" onClick={() => onAbrirTexto(i, 'textoAprovadoId')} /></td>
+                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><TextoCell texto={getT(i.textoId)} tone="laranja" onClick={() => onAbrirTexto(i, 'textoId')} /></td>
+                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{i.critico ? <TextoCell texto={getR(i.textoReprovacaoId)} tone="no" onClick={() => onAbrirTexto(i, 'textoReprovacaoId')} /> : <span style={{ color: MU, fontSize: 11.5 }}>não crítico</span>}</td>
+                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><TextoCell texto={getT(i.textoRestricaoId)} tone="dourado" onClick={() => onAbrirTexto(i, 'textoRestricaoId')} /></td>
                           </>
                         )}
                         <td style={{ padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -2012,6 +2078,44 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel }: {
           </Card>
         )
       })}
+    </div>
+  )
+}
+
+function InspectorPanel({ item, campo, texto, onAbrir, onClose }: {
+  item: ChecklistItem; campo: InspectorCampo; texto: { titulo: string; corpo: string } | undefined
+  onAbrir: () => void; onClose: () => void
+}) {
+  const info = CAMPO_INFO[campo]
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999 }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(20,28,42,.35)' }} />
+      <div style={{
+        position: 'absolute', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw',
+        background: CARD, boxShadow: '-6px 0 24px rgba(0,0,0,.15)', display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: '18px 22px', borderBottom: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', color: MU, marginBottom: 4 }}>{item.documento} · {item.titulo}</div>
+            <Tag tone={info.tone}>{info.label}</Tag>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: MU, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ padding: 22, overflowY: 'auto', flex: 1 }}>
+          {texto ? (
+            <>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', color: MU, marginBottom: 6 }}>Texto vinculado</div>
+              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>{texto.titulo}</div>
+              <div style={{ fontSize: 13, color: TX, whiteSpace: 'pre-wrap', lineHeight: 1.5, background: PS, borderRadius: 8, padding: 14 }}>{texto.corpo || '(sem conteúdo)'}</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: MU }}>Este item ainda não tem texto vinculado nesta categoria.</div>
+          )}
+        </div>
+        <div style={{ padding: 18, borderTop: `1px solid ${LINE}` }}>
+          <Btn variant="pri" onClick={onAbrir}>{texto ? 'Abrir em Textos →' : 'Criar texto em Textos →'}</Btn>
+        </div>
+      </div>
     </div>
   )
 }
