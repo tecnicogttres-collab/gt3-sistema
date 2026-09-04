@@ -167,6 +167,8 @@ export default function CoisasAFazerClient() {
   const [openModulos, setOpenModulos] = useState<Set<string>>(new Set())
   const [viewMap, setViewMap] = useState<Record<string, 'ativos' | 'historico'>>({})
   const [autorFiltro, setAutorFiltro] = useState<'todos' | 'meus'>('todos')
+  const [buscaModulo, setBuscaModulo] = useState('')
+  const [ordemModulo, setOrdemModulo] = useState<'asc' | 'desc'>('asc')
 
   // Modals
   const [modalModulo, setModalModulo]     = useState(false)
@@ -207,9 +209,6 @@ export default function CoisasAFazerClient() {
       const data = await res.json()
       setModulos(data.modulos ?? [])
       setItens(data.itens ?? [])
-      if (data.modulos?.length) {
-        setOpenModulos(new Set([data.modulos[0].id]))
-      }
     } finally {
       setLoading(false)
     }
@@ -409,6 +408,10 @@ export default function CoisasAFazerClient() {
 
   const arquivandoModulo = modulos.find(m => m.id === arquivarId)
 
+  const modulosFiltrados = modulos
+    .filter(m => !buscaModulo.trim() || m.nome.toLowerCase().includes(buscaModulo.trim().toLowerCase()))
+    .sort((a, b) => ordemModulo === 'asc' ? a.nome.localeCompare(b.nome, 'pt-BR') : b.nome.localeCompare(a.nome, 'pt-BR'))
+
   // ── Styles ─────────────────────────────────────────────────────────────────
 
   const inpStyle: React.CSSProperties = {
@@ -470,6 +473,26 @@ export default function CoisasAFazerClient() {
         </div>
       </div>
 
+      {/* Busca de módulo */}
+      {modulos.length > 0 && (
+        <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            placeholder="🔎 Buscar módulo..."
+            value={buscaModulo}
+            onChange={e => setBuscaModulo(e.target.value)}
+            style={{ width: '100%', maxWidth: 320, padding: '9px 14px', border: '1px solid #D1D7E3', borderRadius: 8, fontSize: 14, color: '#1F2937', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          />
+          <button
+            onClick={() => setOrdemModulo(v => v === 'asc' ? 'desc' : 'asc')}
+            title={ordemModulo === 'asc' ? 'Ordenando A-Z — clique para Z-A' : 'Ordenando Z-A — clique para A-Z'}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', border: '1px solid #D1D7E3', borderRadius: 8, background: '#fff', color: '#1F2937', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+          >
+            {ordemModulo === 'asc' ? 'A → Z' : 'Z → A'}
+          </button>
+        </div>
+      )}
+
       {/* Module list */}
       {loading && <p style={{ color: '#9CA3AF', fontSize: 14 }}>Carregando…</p>}
 
@@ -480,7 +503,13 @@ export default function CoisasAFazerClient() {
         </div>
       )}
 
-      {modulos.map(mod => {
+      {!loading && modulos.length > 0 && modulosFiltrados.length === 0 && (
+        <div style={{ background: '#fff', border: '1px solid #E5E9F0', borderRadius: 14, padding: '28px 20px', textAlign: 'center', color: '#9CA3AF', fontSize: 13.5 }}>
+          Nenhum módulo encontrado para &quot;{buscaModulo}&quot;.
+        </div>
+      )}
+
+      {modulosFiltrados.map(mod => {
         const isOpen = openModulos.has(mod.id)
         const view = getView(mod.id)
         const ativos = countAtivos(mod.id)
@@ -744,7 +773,7 @@ export default function CoisasAFazerClient() {
               value={formModuloExistente}
               onChange={e => setFormModuloExistente(e.target.value)}
             >
-              {modulos.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              {[...modulos].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
           </Field>
         ) : (

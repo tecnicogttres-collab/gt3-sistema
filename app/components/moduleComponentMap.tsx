@@ -31,6 +31,7 @@ const DynRamais           = dynamic(() => import('../ramais/RamaisClient'),     
 const DynFrases           = dynamic(() => import('../frases-diarias/FrasesClient'),                   { ssr: false })
 const DynNotificacoes     = dynamic(() => import('../notificacoes/NotificacoesClient'),                { ssr: false })
 const DynPerfil           = dynamic(() => import('../perfil/PerfilClient'),                            { ssr: false })
+const DynCoisasAFazer     = dynamic(() => import('../coisas-a-fazer/CoisasAFazerClient'),              { ssr: false })
 
 // AtasClient calls useSearchParams() — must live inside a Suspense boundary.
 const DynAtas = dynamic(() => import('../atas/AtasClient'), { ssr: false })
@@ -69,6 +70,7 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/frases-diarias':     DynFrases,
   '/notificacoes':       DynNotificacoes,
   '/perfil':             DynPerfil,
+  '/coisas-a-fazer':     DynCoisasAFazer,
   '/pgr-pcmso-ltcat':       DynPgrPcmso,
   '/workflow-programas':    DynWorkflowProgramas,
   '/repositorio-modelos':   DynRepositorioModelos,
