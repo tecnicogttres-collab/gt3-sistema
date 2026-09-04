@@ -1549,7 +1549,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
   const camposFaltando = (catalog.config.camposObrigatorios ?? []).filter(key => campoAnaliseVazio(draft, key))
   const campoObrigatorioVazio = (key: string) => (catalog.config.camposObrigatorios ?? []).includes(key) && campoAnaliseVazio(draft, key)
-  const redStyle = (vazio: boolean): React.CSSProperties => (vazio ? { borderColor: NO, background: NOS } : {})
+  const redStyle = (vazio: boolean): React.CSSProperties => (vazio ? { border: `1px solid ${NO}`, background: NOS } : {})
   const ok = itensStatus.filter(i => draft.respostas[i.id]?.status === 'ok').length
   const restr = itensStatus.filter(i => draft.respostas[i.id]?.status === 'restricao').length
   const na = itensStatus.filter(i => draft.respostas[i.id]?.status === 'na').length
