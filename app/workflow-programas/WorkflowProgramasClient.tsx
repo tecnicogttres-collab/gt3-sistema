@@ -282,6 +282,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
       || typeof i.tipo !== 'string' || !Array.isArray(i.opcoes) || i.opcoes.some(o => typeof o.pedirTexto !== 'boolean' || typeof o.variavelDetalhe !== 'string' || typeof o.padrao !== 'boolean'))
     || raw.textos.some(t => idsAprovado.has(t.id) && t.categoria !== 'aprovacao')
     || typeof raw.config.validadeAnualId !== 'string' || typeof raw.config.validadePersonalizadaId !== 'string'
+    || !raw.config.aprovadoId || !raw.textos.some(t => t.id === raw.config.aprovadoId)
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   let textos = raw.textos.map(t => (idsAprovado.has(t.id) && t.categoria !== 'aprovacao' ? { ...t, categoria: 'aprovacao' as const } : t))
@@ -295,6 +296,13 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     const seedTexto = seed.textos.find(t => t.id === 't_validade_personalizada')!
     if (!textos.some(t => t.id === seedTexto.id)) textos = [...textos, seedTexto]
     config.validadePersonalizadaId = seedTexto.id
+  }
+  // Reconstrói o texto de aprovação padrão se o id configurado não existir mais em `textos`
+  // (ex.: apagado sem querer) — sem ele, todo parecer 100% aprovado sai com abertura vazia.
+  if (!config.aprovadoId || !textos.some(t => t.id === config.aprovadoId)) {
+    const seedTexto = seed.textos.find(t => t.id === 't_aprovado')!
+    if (!textos.some(t => t.id === seedTexto.id)) textos = [...textos, seedTexto]
+    config.aprovadoId = seedTexto.id
   }
   const defaultLink: Record<string, string> = { i_pgr_val: 'r_pgr_validade', i_pcm_val: 'r_pcm_validade' }
   const itens = raw.itens.map(i => {
@@ -533,7 +541,7 @@ export default function WorkflowProgramasClient() {
           if (o.variavelDetalhe && o.variavelDetalhe !== 'detalhe') varsDetalhe[o.variavelDetalhe] = valor
           return aplicaVars(o.corpo, varsDetalhe)
         })
-        .filter(Boolean).join(' ')
+        .filter(Boolean).join(', ')
     })
     return {
       empresa: a.empresa || '[EMPRESA]', cnpj: a.cnpj || '[CNPJ]',
@@ -757,10 +765,8 @@ export default function WorkflowProgramasClient() {
       setAnalises(prev => [row, ...prev])
     }
     showToast('Análise finalizada e enviada ao banco de dados')
-    setBancoAberto(row.id)
-    setBancoAba('empresas')
     novaAnalise()
-    setView('banco')
+    setView('nova')
   }
 
   function limparRespostas() {
