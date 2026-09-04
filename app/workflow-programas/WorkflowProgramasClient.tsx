@@ -9,7 +9,7 @@ type StatusResp = 'ok' | 'nao' | 'na' | 'restricao' | ''
 type Resposta = { status: StatusResp; obs: string; opcoesSelecionadas?: string[]; textosLivres?: Record<string, string>; prazoRestricaoDias?: number }
 type DocKey = 'PGR' | 'PCMSO' | 'LTCAT' | 'GERAL'
 type Escopo = 'base' | 'especifico'
-type CategoriaTexto = 'abertura' | 'apontamento' | 'fechamento' | 'assinatura' | 'aprovacao' | 'restricao' | 'validade'
+type CategoriaTexto = 'abertura' | 'apontamento' | 'fechamento' | 'assinatura' | 'aprovacao' | 'restricao' | 'validade' | 'segmento'
 type ChecklistItemTipo = 'status' | 'opcoes'
 /** pedirTexto: pede um detalhe livre ao marcar (ex.: "qual página?") — sempre disponível como {{detalhe}}
  *  dentro de corpo, e também como {{variavelDetalhe}} se um nome próprio for definido. */
@@ -35,7 +35,8 @@ type ChecklistItem = {
   /** Nome da variável {{...}} preenchida com o texto das opções marcadas (só tipo "opcoes") */
   variavel: string
 }
-type TextoEmail = { id: string; titulo: string; categoria: CategoriaTexto; corpo: string }
+/** `segmentos` só é usado quando categoria === 'segmento' — quais setores de atuação disparam este texto no parecer. */
+type TextoEmail = { id: string; titulo: string; categoria: CategoriaTexto; corpo: string; segmentos?: string[] }
 type TextoReprovacao = { id: string; titulo: string; documento: DocKey; escopo: Escopo; corpo: string }
 
 /** Os 4 campos de texto de um ChecklistItem, usados pelo inspetor de "Itens de checklist". */
@@ -71,7 +72,7 @@ type AnaliseDados = {
   contratanteIds: string[]; documentos: DocKey[]
   empresa: string; cnpj: string; emailDestino: string
   data: string; prazo: string; responsavel: string
-  reincidencia: Reincidencia; setorAtuacao: string
+  reincidencia: Reincidencia; setoresAtuacao: string[]
   respostas: Record<string, Resposta>
   validades: Partial<Record<DocValidavel, ValidadeInfo>>
 }
@@ -87,13 +88,13 @@ const SETORES_ATUACAO = [
 type ItemDaAnalise = ChecklistItem & { textoLink: string; contratanteIds: string[] }
 
 /** Análises salvas antes do suporte a múltiplas contratantes tinham `contratanteId` (singular). */
-function normalizeAnaliseDados(dados: AnaliseDados & { contratanteId?: string }): AnaliseDados {
-  const { contratanteId, ...resto } = dados
+function normalizeAnaliseDados(dados: AnaliseDados & { contratanteId?: string; setorAtuacao?: string }): AnaliseDados {
+  const { contratanteId, setorAtuacao, ...resto } = dados
   return {
     ...resto,
     contratanteIds: Array.isArray(dados.contratanteIds) ? dados.contratanteIds : (contratanteId ? [contratanteId] : []),
     reincidencia: dados.reincidencia ?? '',
-    setorAtuacao: dados.setorAtuacao ?? '',
+    setoresAtuacao: Array.isArray(dados.setoresAtuacao) ? dados.setoresAtuacao : (setorAtuacao ? [setorAtuacao] : []),
   }
 }
 type Anexo = { id: string; texto_id: string; name: string; filename: string; mime_type: string; size_bytes: number; created_at: string }
@@ -413,7 +414,7 @@ export default function WorkflowProgramasClient() {
   const [analises, setAnalises] = useState<AnaliseRow[]>([])
   const [anexos, setAnexos] = useState<Anexo[]>([])
   const [view, setView] = useState<View>('analises')
-  const [textosSub, setTextosSub] = useState<'hub' | 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade'>('hub')
+  const [textosSub, setTextosSub] = useState<'hub' | 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade' | 'segmento'>('hub')
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -563,7 +564,7 @@ export default function WorkflowProgramasClient() {
       unidade: c?.unidade || '',
       documentos: joinDocs(a.documentos || []),
       reincidencia: a.reincidencia === 'reincidente' ? 'Reincidente' : a.reincidencia === 'nova' ? 'Nova' : '',
-      setoratuacao: a.setorAtuacao || '',
+      setoratuacao: joinDocs(a.setoresAtuacao || []),
       ...vars,
     }
   }
@@ -620,6 +621,20 @@ export default function WorkflowProgramasClient() {
     return partes.join('\n\n')
   }
 
+  /** Observações automáticas por setor de atuação da empresa (categoria "segmento") — entram
+   *  no parecer sempre que a análise tiver algum dos setores vinculados àquele texto. */
+  function buildSegmentoObservacoes(a: AnaliseDados, baseCtx: Record<string, string>): string {
+    if (!catalog || !a.setoresAtuacao?.length) return ''
+    const partes: string[] = []
+    catalog.textos
+      .filter(t => t.categoria === 'segmento' && (t.segmentos ?? []).some(s => a.setoresAtuacao.includes(s)))
+      .forEach(t => {
+        const txt = aplicaVars(t.corpo, baseCtx)
+        if (txt.trim()) partes.push(txt)
+      })
+    return partes.join('\n\n')
+  }
+
   /** Parecer — só para aprovado / aprovado com restrição. Não conforme não-crítico entra como orientativo (não bloqueia). */
   function buildEmail(a: AnaliseDados) {
     const c = getC(a.contratanteIds[0])
@@ -647,6 +662,8 @@ export default function WorkflowProgramasClient() {
     })
     const obsValidade = buildValidadeObservacao(a, ctx)
     if (obsValidade) partes.push(obsValidade)
+    const obsSegmento = buildSegmentoObservacoes(a, ctx)
+    if (obsSegmento) partes.push(obsSegmento)
     partes.push(aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx))
     return {
       assunto: aplicaVars(catalog?.config.assunto || '', ctx),
@@ -704,7 +721,7 @@ export default function WorkflowProgramasClient() {
       empresa: '', cnpj: '', emailDestino: '',
       data: hoje(), prazo: addDias(catalog.config.prazoDias || 7),
       responsavel: displayName(profile, catalog.config.responsavel || ''),
-      reincidencia: '', setorAtuacao: '',
+      reincidencia: '', setoresAtuacao: [],
       respostas: {},
       validades: {},
     })
@@ -807,6 +824,15 @@ export default function WorkflowProgramasClient() {
       if (!prev) return prev
       const ids = prev.contratanteIds.includes(id) ? prev.contratanteIds.filter(x => x !== id) : [...prev.contratanteIds, id]
       return { ...prev, contratanteIds: ids }
+    })
+    setEmailEditado(false)
+  }
+
+  function toggleSetorAtuacao(setor: string) {
+    setDraft(prev => {
+      if (!prev) return prev
+      const setores = prev.setoresAtuacao.includes(setor) ? prev.setoresAtuacao.filter(x => x !== setor) : [...prev.setoresAtuacao, setor]
+      return { ...prev, setoresAtuacao: setores }
     })
     setEmailEditado(false)
   }
@@ -1084,7 +1110,7 @@ export default function WorkflowProgramasClient() {
   }
 
   // ── catálogo: textos ──
-  const CATS: Record<CategoriaTexto, string> = { aprovacao: 'Aprovação', abertura: 'Abertura', apontamento: 'Apontamento', fechamento: 'Fechamento', assinatura: 'Assinatura', restricao: 'Restrição', validade: 'Validade' }
+  const CATS: Record<CategoriaTexto, string> = { aprovacao: 'Aprovação', abertura: 'Abertura', apontamento: 'Apontamento', fechamento: 'Fechamento', assinatura: 'Assinatura', restricao: 'Restrição', validade: 'Validade', segmento: 'Segmento' }
   function novoTextoModal(categoriaPadrao: CategoriaTexto = 'apontamento') { setModalTextoNovo(true); setModalTextoEdit({ id: uid('t'), titulo: '', categoria: categoriaPadrao, corpo: '' }) }
   function editarTextoModal(t: TextoEmail) { setModalTextoNovo(false); setModalTextoEdit({ ...t }) }
   function salvarTextoModal() {
@@ -1253,7 +1279,7 @@ export default function WorkflowProgramasClient() {
         <VAnalise
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos}
-          onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
+          onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
@@ -1328,6 +1354,14 @@ export default function WorkflowProgramasClient() {
           <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
           <div style={{ marginTop: 10 }}>
             <VTextos catalog={catalog} CATS={{ validade: 'Validade' }} onNovo={() => novoTextoModal('validade')} onEditar={editarTextoModal} onDel={delTexto} />
+          </div>
+        </div>
+      )}
+      {view === 'textos' && textosSub === 'segmento' && (
+        <div>
+          <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
+          <div style={{ marginTop: 10 }}>
+            <VTextos catalog={catalog} CATS={{ segmento: 'Segmento' }} onNovo={() => novoTextoModal('segmento')} onEditar={editarTextoModal} onDel={delTexto} />
           </div>
         </div>
       )}
@@ -1457,7 +1491,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
@@ -1465,7 +1499,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   nomesContratantes: (ids: string[]) => string
   anexos: Anexo[]
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
-  onToggleDoc: (d: DocKey) => void; onToggleContratante: (id: string) => void
+  onToggleDoc: (d: DocKey) => void; onToggleContratante: (id: string) => void; onToggleSetor: (setor: string) => void
   onDot: (itemId: string, val: StatusResp) => void; onObs: (itemId: string, obs: string) => void
   onPrazoRestricao: (itemId: string, dias: number) => void
   onOpcao: (itemId: string, opcaoId: string, multipla: boolean) => void
@@ -1506,29 +1540,29 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
         <div>
           <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
             <Field label="Empresa prestadora"><input style={inputStyle} value={draft.empresa} onChange={e => onField('empresa', e.target.value)} placeholder="Razão social" /></Field>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-              <Field label="Empresa reincidente ou nova?">
-                <div style={{ display: 'inline-flex', border: `1px solid ${P}`, borderRadius: 9, overflow: 'hidden', width: '100%' }}>
-                  {([['nova', 'Nova'], ['reincidente', 'Reincidente']] as const).map(([val, label], idx) => (
-                    <button key={val} onClick={() => onField('reincidencia', draft.reincidencia === val ? '' : val)} style={{
-                      flex: 1, border: 0, background: draft.reincidencia === val ? P : '#fff', color: draft.reincidencia === val ? '#fff' : P,
-                      padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: draft.reincidencia === val ? 600 : 400,
-                      borderRight: idx === 0 ? `1px solid ${P}` : 'none', fontFamily: 'inherit',
-                    }}>{label}</button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="Setor de atuação">
-                <select style={inputStyle} value={draft.setorAtuacao} onChange={e => onField('setorAtuacao', e.target.value)}>
-                  <option value="">— Selecione —</option>
-                  {SETORES_ATUACAO.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </Field>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 12 }}>
               <Field label="E-mail de destino"><input style={inputStyle} type="email" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br" /></Field>
               <Field label="Data da análise"><input style={inputStyle} type="date" value={draft.data} onChange={e => onField('data', e.target.value)} /></Field>
               <Field label="Analista"><input style={inputStyle} value={draft.responsavel} onChange={e => onField('responsavel', e.target.value)} /></Field>
+              <Field label="Reincidência">
+                <select style={inputStyle} value={draft.reincidencia} onChange={e => onField('reincidencia', e.target.value as Reincidencia)}>
+                  <option value="">— Selecione —</option>
+                  <option value="nova">Nova</option>
+                  <option value="reincidente">Reincidente</option>
+                </select>
+              </Field>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Field label="Setor(es) de atuação">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', padding: '9px 12px', border: `1px solid ${LINE}`, borderRadius: 8 }}>
+                  {SETORES_ATUACAO.map(s => (
+                    <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: TX, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={draft.setoresAtuacao.includes(s)} onChange={() => onToggleSetor(s)} />
+                      {s}
+                    </label>
+                  ))}
+                </div>
+              </Field>
             </div>
             <div style={{ height: 1, background: LINE, margin: '14px 0' }} />
             <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>
@@ -2521,15 +2555,16 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
 // ─── View: Textos (hub) ─────────────────────────────────────────────────────
 
 function VTextosHub({ catalog, onAbrir }: {
-  catalog: Catalog; onAbrir: (k: 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade') => void
+  catalog: Catalog; onAbrir: (k: 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade' | 'segmento') => void
 }) {
   const contar = (cats: CategoriaTexto[]) => catalog.textos.filter(t => cats.includes(t.categoria)).length
-  const cards: { k: 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade'; titulo: string; desc: string; n: number; icon: string }[] = [
+  const cards: { k: 'aprovacao' | 'apontamento' | 'restricao' | 'reprovacao' | 'validade' | 'segmento'; titulo: string; desc: string; n: number; icon: string }[] = [
     { k: 'aprovacao', titulo: 'Aprovação', desc: 'Texto base do parecer — usado em toda análise aprovada, com ou sem restrição/orientativo.', n: contar(['aprovacao']), icon: '✅' },
     { k: 'apontamento', titulo: 'Apontamento', desc: 'Texto por item usado como orientativo no parecer quando um item não crítico é marcado como reprovação (bolinha ✕). Assinatura também fica aqui.', n: contar(['abertura', 'apontamento', 'fechamento', 'assinatura']), icon: '✉️' },
     { k: 'restricao', titulo: 'Aprovação com restrição', desc: 'Texto usado quando um item é marcado como aprovado com restrição.', n: contar(['restricao']), icon: '◐' },
     { k: 'reprovacao', titulo: 'Reprovação', desc: 'Texto usado quando um item crítico reprova o cadastro.', n: catalog.textosReprovacao.length, icon: '🚫' },
     { k: 'validade', titulo: 'Validade', desc: 'Observação automática quando PGR/PCMSO/LTCAT ficam anuais ou personalizados até 23 meses.', n: contar(['validade']), icon: '📅' },
+    { k: 'segmento', titulo: 'Segmento', desc: 'Observação automática incluída no parecer quando a análise tiver o setor de atuação vinculado (ex.: Transporte).', n: contar(['segmento']), icon: '🏭' },
   ]
   return (
     <div>
@@ -2577,9 +2612,10 @@ function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
                     <tr key={t.id}>
                       <td style={{ padding: '10px 18px', borderBottom: `1px solid ${LINE}` }}>
                         <b>{t.titulo}</b>
+                        {cat === 'segmento' && (t.segmentos ?? []).map(s => <Tag key={s} tone="acc">{s}</Tag>)}
                         <div style={{ color: MU, fontSize: 12, marginTop: 3 }}>{t.corpo.slice(0, 150)}{t.corpo.length > 150 ? '…' : ''}</div>
                       </td>
-                      <td style={{ width: 110, padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag>{usos} uso(s)</Tag></td>
+                      <td style={{ width: 110, padding: 10, borderBottom: `1px solid ${LINE}` }}>{cat !== 'segmento' && <Tag>{usos} uso(s)</Tag>}</td>
                       <td style={{ width: 150, padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right' }}>
                         <Btn small onClick={() => onEditar(t)}>Editar</Btn>{' '}<Btn small variant="gho" onClick={() => onDel(t.id)}>Excluir</Btn>
                       </td>
@@ -2626,6 +2662,24 @@ function TextoModal({ draft, novo, CATS, onChange, onSave, onClose, anexos, onUp
           </select>
         </Field>
       </div>
+      {draft.categoria === 'segmento' && (
+        <div style={{ marginTop: 12 }}>
+          <Field label="Setor(es) que disparam este texto no parecer">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', padding: '9px 12px', border: `1px solid ${LINE}`, borderRadius: 8 }}>
+              {SETORES_ATUACAO.map(s => {
+                const sel = (draft.segmentos ?? []).includes(s)
+                return (
+                  <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: TX, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={sel}
+                      onChange={() => set('segmentos', sel ? (draft.segmentos ?? []).filter(x => x !== s) : [...(draft.segmentos ?? []), s])} />
+                    {s}
+                  </label>
+                )
+              })}
+            </div>
+          </Field>
+        </div>
+      )}
       <div style={{ marginTop: 12 }}>
         <Field label="Texto"><textarea rows={12} style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }} value={draft.corpo} onChange={e => set('corpo', e.target.value)} /></Field>
       </div>
