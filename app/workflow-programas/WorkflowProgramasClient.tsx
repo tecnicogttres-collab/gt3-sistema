@@ -49,7 +49,7 @@ const CAMPO_INFO: Record<InspectorCampo, { label: string; tone: 'ok' | 'laranja'
 }
 type ItemLink = { itemId: string; textoId: string | null }
 type Contratante = {
-  id: string; nome: string; unidade: string; email: string; prazoDias: number
+  id: string; nome: string; unidade: string; email: string
   aberturaId: string; fechamentoId: string; assinaturaId: string; aprovadoId: string
   obs: string; itens: ItemLink[]
 }
@@ -80,7 +80,7 @@ function campoAnaliseVazio(draft: AnaliseDados, key: string): boolean {
 }
 type Catalog = { contratantes: Contratante[]; itens: ChecklistItem[]; textos: TextoEmail[]; textosReprovacao: TextoReprovacao[]; config: CatalogConfig }
 
-type ValidadeTipo = 'bienal' | 'anual' | 'personalizada'
+type ValidadeTipo = 'bienal' | 'anual' | 'personalizada' | 'na'
 type ValidadeInfo = { tipo: ValidadeTipo; meses: number }
 type DocValidavel = 'PGR' | 'PCMSO' | 'LTCAT'
 
@@ -142,7 +142,7 @@ function ordenarPorDocumento<T extends { documento: DocKey }>(itens: T[]): T[] {
  *  estiver marcado como não conforme. */
 const FRENTE_TRABALHO_ITEM_ID = 'i_ger_frente'
 const VALIDADE_TIPOS: { val: ValidadeTipo; label: string }[] = [
-  { val: 'bienal', label: 'Bienal' }, { val: 'anual', label: 'Anual' }, { val: 'personalizada', label: 'Personalizada' },
+  { val: 'bienal', label: 'Bienal' }, { val: 'anual', label: 'Anual' }, { val: 'personalizada', label: 'Personalizada' }, { val: 'na', label: 'Não aplicável' },
 ]
 
 const DEFAULT_STATUS_OPTIONS: StatusResp[] = ['ok', 'nao', 'na']
@@ -283,7 +283,7 @@ function seedCatalog(): Catalog {
 
   const base: ItemLink[] = itens.filter(i => i.escopo === 'base').map(i => ({ itemId: i.id, textoId: null }))
   const C = (id: string, nome: string, unidade: string, extras: string[]): Contratante => ({
-    id, nome, unidade, email: '', prazoDias: 7,
+    id, nome, unidade, email: '',
     aberturaId: 't_abertura', fechamentoId: 't_fechamento', assinaturaId: 't_assinatura', aprovadoId: 't_aprovado', obs: '',
     itens: [...base.map(x => ({ ...x })), ...extras.map(e => ({ itemId: e, textoId: null }))],
   })
@@ -570,14 +570,17 @@ export default function WorkflowProgramasClient() {
       const sel = a.respostas[i.id]?.opcoesSelecionadas || []
       const livres = a.respostas[i.id]?.textosLivres || {}
       const opcoesEfetivas = sel.length ? i.opcoes.filter(o => sel.includes(o.id)) : i.opcoes.filter(o => o.padrao)
-      vars[i.variavel] = opcoesEfetivas
+      const partesOpcoes = opcoesEfetivas
         .map(o => {
           const valor = livres[o.id] || ''
           const varsDetalhe: Record<string, string> = { detalhe: valor }
           if (o.variavelDetalhe && o.variavelDetalhe !== 'detalhe') varsDetalhe[o.variavelDetalhe] = valor
           return aplicaVars(o.corpo, varsDetalhe)
         })
-        .filter(Boolean).join(', ')
+        .filter(Boolean)
+      // Múltipla escolha (ex.: treinamentos) entra como tópicos, um por linha; escolha única
+      // (ex.: local de assinatura) entra inline, já que costuma ser usado no meio de uma frase.
+      vars[i.variavel] = i.multiplaEscolha ? partesOpcoes.map(p => '• ' + p).join('\n') : partesOpcoes.join(', ')
     })
     return {
       empresa: a.empresa || '[EMPRESA]', cnpj: a.cnpj || '[CNPJ]',
@@ -808,8 +811,13 @@ export default function WorkflowProgramasClient() {
   async function finalizarAnalise() {
     if (!draft || !draft.empresa.trim()) { showToast('Informe a empresa prestadora'); return }
     const itens = itensDaAnalise(draft)
-    const semMarcar = itens.filter(i => !draft.respostas[i.id]?.status).length
-    if (semMarcar && !confirm(`${semMarcar} item(ns) ainda sem marcação. Finalizar mesmo assim?`)) return
+    const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
+    const semMarcar = itensStatus.filter(i => !draft.respostas[i.id]?.status).length
+    const criticoReprovado = itensStatus.some(i => i.critico && draft.respostas[i.id]?.status === 'nao')
+    if (semMarcar && !criticoReprovado) {
+      showToast(`Faltam ${semMarcar} item(ns) sem marcação — não é possível finalizar.`)
+      return
+    }
     const dataFinal = hoje()
     let row: AnaliseRow
     if (draftId) {
@@ -1068,7 +1076,7 @@ export default function WorkflowProgramasClient() {
     if (!catalog) return
     setModalContratanteNovo(true)
     setModalContratante({
-      id: uid('c'), nome: '', unidade: '', email: '', prazoDias: catalog.config.prazoDias, obs: '',
+      id: uid('c'), nome: '', unidade: '', email: '', obs: '',
       aberturaId: catalog.config.aberturaId, fechamentoId: catalog.config.fechamentoId,
       assinaturaId: catalog.config.assinaturaId, aprovadoId: catalog.config.aprovadoId,
       itens: catalog.itens.filter(i => i.escopo === 'base').map(i => ({ itemId: i.id, textoId: null })),
@@ -1328,6 +1336,7 @@ export default function WorkflowProgramasClient() {
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise} onDescartar={descartarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
+          onCopiarAssunto={() => { navigator.clipboard.writeText(emailBuilt?.assunto || ''); showToast('Assunto copiado') }}
           onEml={baixarEml} onMailto={abrirMailto}
           onRegerar={() => { setEmailEditado(false); showToast('E-mail regerado') }}
           onBaixarAnexo={baixarAnexo}
@@ -1536,7 +1545,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
@@ -1551,7 +1560,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   onOpcaoTexto: (itemId: string, opcaoId: string, texto: string) => void
   onValidade: (doc: DocValidavel, patch: Partial<ValidadeInfo>) => void
   onLimpar: () => void; onSalvar: () => void; onFinalizar: () => void; onDescartar: () => void
-  onEmailChange: (v: string) => void; onCopiar: () => void; onEml: () => void; onMailto: () => void; onRegerar: () => void
+  onEmailChange: (v: string) => void; onCopiar: () => void; onCopiarAssunto: () => void; onEml: () => void; onMailto: () => void; onRegerar: () => void
   onBaixarAnexo: (id: string) => void
 }) {
   const itens = itensDaAnalise(draft)
@@ -1560,6 +1569,8 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   const camposFaltando = (catalog.config.camposObrigatorios ?? []).filter(key => campoAnaliseVazio(draft, key))
   const campoObrigatorioVazio = (key: string) => (catalog.config.camposObrigatorios ?? []).includes(key) && campoAnaliseVazio(draft, key)
   const redStyle = (vazio: boolean): React.CSSProperties => (vazio ? { border: `1px solid ${NO}`, background: NOS } : {})
+  const semMarcar = itensStatus.filter(i => !draft.respostas[i.id]?.status).length
+  const podeFinalizarOuCopiar = semMarcar === 0 || modoReprovacao
   const ok = itensStatus.filter(i => draft.respostas[i.id]?.status === 'ok').length
   const restr = itensStatus.filter(i => draft.respostas[i.id]?.status === 'restricao').length
   const na = itensStatus.filter(i => draft.respostas[i.id]?.status === 'na').length
@@ -1581,7 +1592,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
           <Btn variant="gho" onClick={onLimpar}>Limpar respostas</Btn>
           <Btn onClick={onSalvar}>💾 Salvar rascunho</Btn>
           <Btn variant="danger" onClick={onDescartar}>🗑 Descartar análise</Btn>
-          <Btn variant="acc" onClick={onFinalizar}>✔ Finalizar análise</Btn>
+          <Btn variant="acc" disabled={!podeFinalizarOuCopiar} onClick={onFinalizar} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>✔ Finalizar análise</Btn>
         </div>
       </div>
 
@@ -1832,7 +1843,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                       {VALIDADE_TIPOS.map(vt => {
                         const on = draft.validades?.[d]?.tipo === vt.val
                         return (
-                          <button key={vt.val} onClick={() => onValidade(d, vt.val === 'anual' ? { tipo: 'anual', meses: 12 } : vt.val === 'bienal' ? { tipo: 'bienal', meses: 24 } : { tipo: 'personalizada', meses: draft.validades?.[d]?.meses ?? 12 })}
+                          <button key={vt.val} onClick={() => onValidade(d, vt.val === 'anual' ? { tipo: 'anual', meses: 12 } : vt.val === 'bienal' ? { tipo: 'bienal', meses: 24 } : vt.val === 'na' ? { tipo: 'na', meses: 0 } : { tipo: 'personalizada', meses: draft.validades?.[d]?.meses ?? 12 })}
                             style={{
                               border: `1px solid ${on ? P : LINE}`, background: on ? P : '#fff', color: on ? '#fff' : TX,
                               borderRadius: 7, padding: '5px 12px', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
@@ -1895,18 +1906,26 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
           )}
           <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderTop: 0, borderRadius: '0 0 10px 10px' }}>
             <div style={{ padding: '12px 12px 0' }}>
-              <Field label="Assunto"><input style={{ ...inputStyle, background: '#F7F9FD' }} readOnly value={emailBuilt?.assunto || ''} /></Field>
+              <Field label="Assunto">
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input style={{ ...inputStyle, background: '#F7F9FD', flex: 1 }} readOnly value={emailBuilt?.assunto || ''} />
+                  <Btn small title="Copiar assunto" onClick={onCopiarAssunto}>📋</Btn>
+                </div>
+              </Field>
             </div>
             <div style={{ padding: '12px 12px 0' }}><label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>Corpo</label></div>
             <textarea value={emailCorpo} onChange={e => onEmailChange(e.target.value)} style={{
               width: '100%', border: 0, borderRadius: 0, minHeight: 340, fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12.5,
               lineHeight: 1.62, padding: '0 12px 12px', outline: 'none', resize: 'vertical', boxSizing: 'border-box',
             }} />
-            <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: `1px solid ${LINE}`, flexWrap: 'wrap' }}>
-              <Btn variant="pri" small onClick={onCopiar}>📋 Copiar</Btn>
-              <Btn small onClick={onEml}>⬇️ Baixar .eml</Btn>
-              <Btn small onClick={onMailto}>↗ Abrir no e-mail</Btn>
+            <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: `1px solid ${LINE}`, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Btn variant="pri" small disabled={!podeFinalizarOuCopiar} onClick={onCopiar} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>📋 Copiar</Btn>
+              <Btn small disabled={!podeFinalizarOuCopiar} onClick={onEml} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>⬇️ Baixar .eml</Btn>
+              <Btn small disabled={!podeFinalizarOuCopiar} onClick={onMailto} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>↗ Abrir no e-mail</Btn>
               <Btn variant="gho" small onClick={onRegerar}>↻ Regerar</Btn>
+              {!podeFinalizarOuCopiar && (
+                <span style={{ fontSize: 11.5, color: NO }}>⚠ Faltam {semMarcar} item(ns) sem marcação para liberar cópia/envio.</span>
+              )}
             </div>
             {anexosSugeridos.length > 0 && (
               <div style={{ padding: 12, borderTop: `1px solid ${LINE}`, background: '#F7F9FD' }}>
@@ -2143,7 +2162,7 @@ function VContratantes({ catalog, getI, onNovo, onEditar, onDel }: {
         <Card>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead><tr>{['Contratante', 'Unidade', 'Itens no checklist', 'Exigências específicas', 'Prazo', ''].map(h => (
+              <thead><tr>{['Contratante', 'Unidade', 'Itens no checklist', 'Exigências específicas', ''].map(h => (
                 <th key={h} style={{ fontSize: 11, textTransform: 'uppercase', color: MU, textAlign: 'left', padding: '9px 10px', borderBottom: `1px solid ${LINE}` }}>{h}</th>
               ))}</tr></thead>
               <tbody>
@@ -2157,7 +2176,6 @@ function VContratantes({ catalog, getI, onNovo, onEditar, onDel }: {
                       <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
                         {esp.length ? esp.map(i => <span key={i.id} style={{ marginRight: 4 }}><Tag tone="acc">{i.titulo}</Tag></span>) : <span style={{ color: MU }}>—</span>}
                       </td>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{c.prazoDias} dias</td>
                       <td style={{ padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right' }}>
                         <Btn small onClick={() => onEditar(c)}>Editar</Btn>{' '}
                         <Btn small variant="gho" onClick={() => onDel(c.id)}>Excluir</Btn>
@@ -2247,10 +2265,9 @@ function ContratanteModal({ draft, catalog, novo, onChange, onSave, onClose, onC
 
   return (
     <ModalShell title={novo ? 'Nova contratante' : 'Editar contratante'} onClose={onClose} onSave={onSave} wide>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="Nome"><input style={inputStyle} value={draft.nome} onChange={e => set('nome', e.target.value)} placeholder="Ex.: Marcopolo" /></Field>
         <Field label="Unidade"><input style={inputStyle} value={draft.unidade} onChange={e => set('unidade', e.target.value)} placeholder="Ex.: Ana Rech" /></Field>
-        <Field label="Prazo padrão (dias)"><input style={inputStyle} value={draft.prazoDias} onChange={e => set('prazoDias', parseInt(e.target.value) || 7)} /></Field>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
         <Field label="E-mail de cópia (opcional)"><input style={inputStyle} value={draft.email || ''} onChange={e => set('email', e.target.value)} /></Field>
