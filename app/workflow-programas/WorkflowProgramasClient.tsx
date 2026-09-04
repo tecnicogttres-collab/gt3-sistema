@@ -65,13 +65,22 @@ type ValidadeTipo = 'bienal' | 'anual' | 'personalizada'
 type ValidadeInfo = { tipo: ValidadeTipo; meses: number }
 type DocValidavel = 'PGR' | 'PCMSO' | 'LTCAT'
 
+type Reincidencia = '' | 'nova' | 'reincidente'
+
 type AnaliseDados = {
   contratanteIds: string[]; documentos: DocKey[]
   empresa: string; cnpj: string; emailDestino: string
   data: string; prazo: string; responsavel: string
+  reincidencia: Reincidencia; setorAtuacao: string
   respostas: Record<string, Resposta>
   validades: Partial<Record<DocValidavel, ValidadeInfo>>
 }
+
+/** Setores genéricos de atuação da empresa prestadora — usado no campo "Setor de atuação". */
+const SETORES_ATUACAO = [
+  'Transporte', 'Manutenção', 'Administrativo', 'Construção Civil', 'Logística / Armazenagem',
+  'Elétrica', 'Metalurgia / Metalmecânica', 'Limpeza e Conservação', 'Segurança Patrimonial', 'Alimentação / Refeitório',
+]
 
 /** Item resolvido para uma análise: `textoLink` já considera override por contratante;
  *  `contratanteIds` marca de quais contratantes selecionadas na análise esse item veio. */
@@ -79,9 +88,13 @@ type ItemDaAnalise = ChecklistItem & { textoLink: string; contratanteIds: string
 
 /** Análises salvas antes do suporte a múltiplas contratantes tinham `contratanteId` (singular). */
 function normalizeAnaliseDados(dados: AnaliseDados & { contratanteId?: string }): AnaliseDados {
-  if (Array.isArray(dados.contratanteIds)) return dados
   const { contratanteId, ...resto } = dados
-  return { ...resto, contratanteIds: contratanteId ? [contratanteId] : [] }
+  return {
+    ...resto,
+    contratanteIds: Array.isArray(dados.contratanteIds) ? dados.contratanteIds : (contratanteId ? [contratanteId] : []),
+    reincidencia: dados.reincidencia ?? '',
+    setorAtuacao: dados.setorAtuacao ?? '',
+  }
 }
 type Anexo = { id: string; texto_id: string; name: string; filename: string; mime_type: string; size_bytes: number; created_at: string }
 
@@ -549,6 +562,8 @@ export default function WorkflowProgramasClient() {
       data: fmtD(a.data), responsavel: a.responsavel || catalog?.config.responsavel || '',
       unidade: c?.unidade || '',
       documentos: joinDocs(a.documentos || []),
+      reincidencia: a.reincidencia === 'reincidente' ? 'Reincidente' : a.reincidencia === 'nova' ? 'Nova' : '',
+      setoratuacao: a.setorAtuacao || '',
       ...vars,
     }
   }
@@ -689,6 +704,7 @@ export default function WorkflowProgramasClient() {
       empresa: '', cnpj: '', emailDestino: '',
       data: hoje(), prazo: addDias(catalog.config.prazoDias || 7),
       responsavel: displayName(profile, catalog.config.responsavel || ''),
+      reincidencia: '', setorAtuacao: '',
       respostas: {},
       validades: {},
     })
@@ -1490,6 +1506,25 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
         <div>
           <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
             <Field label="Empresa prestadora"><input style={inputStyle} value={draft.empresa} onChange={e => onField('empresa', e.target.value)} placeholder="Razão social" /></Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+              <Field label="Empresa reincidente ou nova?">
+                <div style={{ display: 'inline-flex', border: `1px solid ${P}`, borderRadius: 9, overflow: 'hidden', width: '100%' }}>
+                  {([['nova', 'Nova'], ['reincidente', 'Reincidente']] as const).map(([val, label], idx) => (
+                    <button key={val} onClick={() => onField('reincidencia', draft.reincidencia === val ? '' : val)} style={{
+                      flex: 1, border: 0, background: draft.reincidencia === val ? P : '#fff', color: draft.reincidencia === val ? '#fff' : P,
+                      padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: draft.reincidencia === val ? 600 : 400,
+                      borderRight: idx === 0 ? `1px solid ${P}` : 'none', fontFamily: 'inherit',
+                    }}>{label}</button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Setor de atuação">
+                <select style={inputStyle} value={draft.setorAtuacao} onChange={e => onField('setorAtuacao', e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {SETORES_ATUACAO.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </Field>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 12 }}>
               <Field label="E-mail de destino"><input style={inputStyle} type="email" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br" /></Field>
               <Field label="Data da análise"><input style={inputStyle} type="date" value={draft.data} onChange={e => onField('data', e.target.value)} /></Field>
@@ -2560,7 +2595,7 @@ function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
   )
 }
 
-const VARS = ['empresa', 'cnpj', 'contratante', 'unidade', 'prazo', 'data', 'responsavel', 'documentos']
+const VARS = ['empresa', 'cnpj', 'contratante', 'unidade', 'prazo', 'data', 'responsavel', 'documentos', 'reincidencia', 'setoratuacao']
 const VARS_VALIDADE = ['documentosValidade', 'verbo', 'adjetivo', 'meses']
 
 function fmtBytes(n: number): string {
