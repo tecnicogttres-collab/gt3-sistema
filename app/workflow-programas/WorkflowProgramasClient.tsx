@@ -1174,8 +1174,18 @@ export default function WorkflowProgramasClient() {
     const form = new FormData()
     form.append('file', file)
     form.append('texto_id', textoId)
-    const res = await fetch('/api/workflow-programas/anexos', { method: 'POST', body: form })
-    if (!res.ok) { showToast('Erro ao enviar anexo'); return }
+    let res: Response
+    try {
+      res = await fetch('/api/workflow-programas/anexos', { method: 'POST', body: form })
+    } catch {
+      showToast('Erro de conexão ao enviar anexo')
+      return
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      showToast(body?.error ? `Erro ao enviar anexo: ${body.error}` : `Erro ao enviar anexo (${res.status})`)
+      return
+    }
     const created: Anexo = await res.json()
     setAnexos(prev => [...prev, created])
     showToast('Anexo adicionado')
