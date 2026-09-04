@@ -61,7 +61,23 @@ type CatalogConfig = {
   prazoDias: number
   /** Chaves de CAMPOS_ANALISE que precisam estar preenchidas antes do checklist liberar em Nova análise. */
   camposObrigatorios: string[]
+  /** Ordem dos blocos ao montar o parecer final (ver BlocoParecer) — editável em Configurações. */
+  ordemBlocos: BlocoParecer[]
+  /** true depois que os corpos de texto (plain-text com \n) foram migrados uma única vez para HTML — ver upgradeCatalog. */
+  textosHtmlMigrados: boolean
 }
+
+/** Cada "bloco" é um trecho do parecer final montado por `buildEmail`; a ordem deles é
+ *  configurável em Configurações → Ordem do parecer (ver CatalogConfig.ordemBlocos). */
+type BlocoParecer = 'aprovacao' | 'observacoes' | 'validade' | 'segmento' | 'assinatura'
+const BLOCOS_PARECER_LABELS: Record<BlocoParecer, string> = {
+  aprovacao: 'Texto de abertura (aprovação)',
+  observacoes: 'Observações dos itens (restrições, orientativos, aprovados com texto)',
+  validade: 'Observação automática de validade',
+  segmento: 'Observações por setor de atuação (segmento)',
+  assinatura: 'Assinatura (fechamento)',
+}
+const ORDEM_BLOCOS_PADRAO: BlocoParecer[] = ['aprovacao', 'observacoes', 'validade', 'segmento', 'assinatura']
 
 /** Campos do cabeçalho de "Nova análise" que podem ser marcados como obrigatórios pelas Configurações. */
 const CAMPOS_ANALISE: { key: 'empresa' | 'emailDestino' | 'data' | 'responsavel' | 'reincidencia' | 'setoresAtuacao'; label: string }[] = [
@@ -295,7 +311,10 @@ function seedCatalog(): Catalog {
   contratantes[2].obs = 'Unidade exige descrição do local de execução no PGR.'
 
   return {
-    contratantes, itens, textos, textosReprovacao,
+    contratantes,
+    itens: itens.map(i => ({ ...i, opcoes: i.opcoes.map(o => ({ ...o, corpo: textoParaHtml(o.corpo) })) })),
+    textos: textos.map(t => ({ ...t, corpo: textoParaHtml(t.corpo) })),
+    textosReprovacao: textosReprovacao.map(r => ({ ...r, corpo: textoParaHtml(r.corpo) })),
     config: {
       responsavel: 'Rodrigo Balem',
       assunto: 'GT3 · Análise de documentação SST — {{empresa}} — {{contratante}}',
@@ -303,6 +322,8 @@ function seedCatalog(): Catalog {
       validadeAnualId: 't_validade_anual', validadePersonalizadaId: 't_validade_personalizada',
       prazoDias: 7,
       camposObrigatorios: [],
+      ordemBlocos: [...ORDEM_BLOCOS_PADRAO],
+      textosHtmlMigrados: true,
     },
   }
 }
@@ -317,10 +338,22 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || typeof raw.config.validadeAnualId !== 'string' || typeof raw.config.validadePersonalizadaId !== 'string'
     || !raw.config.aprovadoId || !raw.textos.some(t => t.id === raw.config.aprovadoId)
     || !Array.isArray(raw.config.camposObrigatorios)
+    || !Array.isArray(raw.config.ordemBlocos)
+    || (raw.textosReprovacao ?? []).some(t => /^favor rever:?\s*/i.test(t.corpo))
+    || !raw.config.textosHtmlMigrados
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
-  let textos = raw.textos.map(t => (idsAprovado.has(t.id) && t.categoria !== 'aprovacao' ? { ...t, categoria: 'aprovacao' as const } : t))
+  // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
+  // abaixo para que os demais passos (ex.: remoção de "Favor rever:") operem sempre em texto puro.
+  const jaMigrado = !!raw.config.textosHtmlMigrados
+  let textos = raw.textos.map(t => {
+    let next = t
+    if (idsAprovado.has(t.id) && t.categoria !== 'aprovacao') next = { ...next, categoria: 'aprovacao' as const }
+    if (!jaMigrado) next = { ...next, corpo: textoParaHtml(next.corpo) }
+    return next
+  })
   const config = { ...raw.config }
+  config.textosHtmlMigrados = true
   if (typeof config.validadeAnualId !== 'string') {
     const seedTexto = seed.textos.find(t => t.id === 't_validade_anual')!
     if (!textos.some(t => t.id === seedTexto.id)) textos = [...textos, seedTexto]
@@ -339,6 +372,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     config.aprovadoId = seedTexto.id
   }
   if (!Array.isArray(config.camposObrigatorios)) config.camposObrigatorios = []
+  if (!Array.isArray(config.ordemBlocos)) config.ordemBlocos = [...ORDEM_BLOCOS_PADRAO]
   const defaultLink: Record<string, string> = { i_pgr_val: 'r_pgr_validade', i_pcm_val: 'r_pcm_validade' }
   const itens = raw.itens.map(i => {
     const legado = i as ChecklistItem & { condicaoStatus?: string }
@@ -356,11 +390,18 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
         ...o, pedirTexto: !!o.pedirTexto, placeholder: typeof o.placeholder === 'string' ? o.placeholder : '',
         variavelDetalhe: typeof o.variavelDetalhe === 'string' ? o.variavelDetalhe : '',
         padrao: !!o.padrao,
+        corpo: jaMigrado ? o.corpo : textoParaHtml(o.corpo),
       })),
       variavel: typeof i.variavel === 'string' ? i.variavel : '',
     }
   })
-  const textosReprovacao = Array.isArray(raw.textosReprovacao) && raw.textosReprovacao.length ? raw.textosReprovacao : seed.textosReprovacao
+  // Remove o prefixo "Favor rever:" de cada texto individual — `buildReprovacao` já antepõe
+  // "Favor rever o(s) seguinte(s) item(ns):" automaticamente, então o texto por item não precisa repetir.
+  const textosReprovacaoBase = Array.isArray(raw.textosReprovacao) && raw.textosReprovacao.length ? raw.textosReprovacao : seed.textosReprovacao
+  const textosReprovacao = textosReprovacaoBase.map(t => {
+    const semPrefixo = t.corpo.replace(/^favor rever:?\s*/i, '')
+    return { ...t, corpo: jaMigrado ? semPrefixo : textoParaHtml(semPrefixo) }
+  })
   return { catalog: { ...raw, itens, textos, textosReprovacao, config }, changed: true }
 }
 
@@ -425,6 +466,117 @@ function Empty({ title, sub }: { title: string; sub: string }) {
       <b style={{ display: 'block', color: TX, marginBottom: 4, fontSize: 15 }}>{title}</b>{sub}
     </Card>
   )
+}
+
+// ─── Rich text ────────────────────────────────────────────────────────────────
+// Editor de texto formatado (negrito, grifado, etc.) usado em todo campo de texto do módulo —
+// mesmo padrão de app/atas/AtasEditor.tsx (contentEditable + execCommand), com a paleta deste módulo.
+
+const HILITE_COLORS = ['#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', 'transparent']
+const FONT_COLORS = [TX, NO, P, OK, LARANJA, DOURADO, '#7C3AED', '#DB2777']
+
+function RichTextEditor({ value, onChange, placeholder, minRows = 3, resizable = false }: {
+  value: string
+  onChange: (html: string) => void
+  placeholder?: string
+  minRows?: number
+  resizable?: boolean
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const focused = useRef(false)
+  const [colorPicker, setColorPicker] = useState<null | 'fore' | 'hilite'>(null)
+
+  useEffect(() => {
+    if (!ref.current) return
+    if (!focused.current && ref.current.innerHTML !== value) ref.current.innerHTML = value
+  }, [value])
+
+  const execCmd = (cmd: string, val?: string) => {
+    ref.current?.focus()
+    try { document.execCommand('styleWithCSS', false, 'true') } catch {}
+    document.execCommand(cmd, false, val)
+    onChange(ref.current?.innerHTML ?? '')
+  }
+
+  const toolbarBtns = [
+    { label: 'N', title: 'Negrito', cmd: 'bold', style: { fontWeight: 800 } },
+    { label: 'I', title: 'Itálico', cmd: 'italic', style: { fontStyle: 'italic' } },
+    { label: 'S', title: 'Sublinhado', cmd: 'underline', style: { textDecoration: 'underline' } },
+    { label: 'T', title: 'Tachado', cmd: 'strikeThrough', style: { textDecoration: 'line-through' } },
+  ]
+  const btnBase: React.CSSProperties = { width: 24, height: 22, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 12, color: P, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+
+  return (
+    <div style={{ border: `1px solid ${LINE}`, borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '3px 6px', borderBottom: `1px solid ${LINE}`, background: PS, position: 'relative' }}>
+        {toolbarBtns.map(btn => (
+          <button key={btn.cmd} title={btn.title} onMouseDown={e => { e.preventDefault(); execCmd(btn.cmd) }} style={{ ...btnBase, ...btn.style }}>{btn.label}</button>
+        ))}
+        <div style={{ width: 1, height: 14, background: LINE, margin: '0 3px' }} />
+        <button title="Lista" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }} style={btnBase}>≡</button>
+        <div style={{ width: 1, height: 14, background: LINE, margin: '0 3px' }} />
+        <button title="Cor da letra" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'fore' ? null : 'fore') }} style={{ ...btnBase, flexDirection: 'column', gap: 0, lineHeight: 1 }}>
+          <span style={{ fontWeight: 700 }}>A</span>
+          <span style={{ width: 14, height: 3, background: NO, borderRadius: 1 }} />
+        </button>
+        <button title="Grifar (realce)" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'hilite' ? null : 'hilite') }} style={{ ...btnBase, background: '#FEF08A55' }}>🖍</button>
+        {colorPicker && (
+          <div style={{ position: 'absolute', top: 28, left: colorPicker === 'fore' ? 96 : 124, zIndex: 30, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: 8, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', width: 132 }}>
+            {(colorPicker === 'fore' ? FONT_COLORS : HILITE_COLORS).map(c => (
+              <button
+                key={c}
+                onMouseDown={e => {
+                  e.preventDefault()
+                  if (colorPicker === 'fore') execCmd('foreColor', c)
+                  else execCmd('hiliteColor', c === 'transparent' ? '#ffffff00' : c)
+                  setColorPicker(null)
+                }}
+                title={c === 'transparent' ? 'Remover realce' : c}
+                style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(0,0,0,0.12)', background: c === 'transparent' ? 'repeating-linear-gradient(45deg,#fff,#fff 4px,#eee 4px,#eee 8px)' : c, cursor: 'pointer' }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder={placeholder}
+        onFocus={() => { focused.current = true }}
+        onBlur={() => { focused.current = false; setColorPicker(null) }}
+        onInput={() => onChange(ref.current?.innerHTML ?? '')}
+        style={{ minHeight: minRows * 22, maxHeight: resizable ? 500 : undefined, padding: '8px 11px', fontSize: 13, fontFamily: 'inherit', color: TX, outline: 'none', lineHeight: 1.6, overflowWrap: 'break-word', resize: resizable ? 'vertical' : 'none', overflow: resizable ? 'auto' : 'visible' }}
+      />
+    </div>
+  )
+}
+
+/** Escapa um valor antes de injetá-lo em corpo HTML (ex.: via aplicaVars) — evita que
+ *  &/</> em um nome de empresa, e-mail etc. corrompa a marcação ao redor. */
+function escapeHtml(s: string): string {
+  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** Converte um corpo de texto puro (\n como quebra de linha) para HTML equivalente —
+ *  migração única de dados antigos para o formato usado pelo RichTextEditor (ver upgradeCatalog). */
+function textoParaHtml(corpo: string): string {
+  return escapeHtml(corpo).replace(/\n/g, '<br>')
+}
+
+/** Junta blocos de HTML já prontos (corpo de textos, observações etc.) com um espaçador visual —
+ *  substitui o antigo join('\n\n') de texto puro, que não produz quebra visível em HTML. */
+function htmlJoinBlocos(partes: string[]): string {
+  return partes.filter(Boolean).join('<div style="height:12px"></div>')
+}
+
+/** Converte HTML (de um corpo formatado) para texto puro — usado nos canais que não
+ *  suportam formatação (mailto, CSV/relatórios) e como fallback text/plain ao copiar. */
+function htmlToPlainText(html: string): string {
+  if (typeof document === 'undefined') return html.replace(/<[^>]+>/g, '')
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return (div.innerText ?? div.textContent ?? '').trim()
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -578,9 +730,11 @@ export default function WorkflowProgramasClient() {
           return aplicaVars(o.corpo, varsDetalhe)
         })
         .filter(Boolean)
-      // Múltipla escolha (ex.: treinamentos) entra como tópicos, um por linha; escolha única
+      // Múltipla escolha (ex.: treinamentos) entra como lista de tópicos; escolha única
       // (ex.: local de assinatura) entra inline, já que costuma ser usado no meio de uma frase.
-      vars[i.variavel] = i.multiplaEscolha ? partesOpcoes.map(p => '• ' + p).join('\n') : partesOpcoes.join(', ')
+      vars[i.variavel] = i.multiplaEscolha
+        ? '<ul>' + partesOpcoes.map(p => `<li>${p}</li>`).join('') + '</ul>'
+        : partesOpcoes.join(', ')
     })
     return {
       empresa: a.empresa || '[EMPRESA]', cnpj: a.cnpj || '[CNPJ]',
@@ -644,7 +798,7 @@ export default function WorkflowProgramasClient() {
         if (txt.trim()) partes.push(txt)
       }
     }
-    return partes.join('\n\n')
+    return htmlJoinBlocos(partes)
   }
 
   /** Observações automáticas por setor de atuação da empresa (categoria "segmento") — entram
@@ -658,7 +812,7 @@ export default function WorkflowProgramasClient() {
         const txt = aplicaVars(t.corpo, baseCtx)
         if (txt.trim()) partes.push(txt)
       })
-    return partes.join('\n\n')
+    return htmlJoinBlocos(partes)
   }
 
   /** Parecer — só para aprovado / aprovado com restrição. Não conforme não-crítico entra como orientativo (não bloqueia). */
@@ -674,26 +828,27 @@ export default function WorkflowProgramasClient() {
       return s === 'restricao' || (!i.critico && s === 'nao') || (s === 'ok' && !!i.textoAprovadoId)
     })
     const marcados = itens.filter(i => a.respostas[i.id]?.status)
-    const partes: string[] = []
-    partes.push(aplicaVars(getT(c?.aprovadoId || catalog?.config.aprovadoId)?.corpo || '', ctx))
-    observacoes.forEach((i, n) => {
-      const status = a.respostas[i.id]?.status
-      const t = status === 'restricao' ? getT(i.textoRestricaoId) : status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
-      const obs = a.respostas[i.id]?.obs
-      const tag = status === 'restricao' ? ' — APROVADO COM RESTRIÇÃO' : status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
-      let bloco = (n + 1) + ') ' + i.documento + ' — ' + i.titulo.toUpperCase() + tag + '\n' +
-        aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i, a))
-      if (obs) bloco += '\nObservação: ' + obs
-      partes.push(bloco)
-    })
-    const obsValidade = buildValidadeObservacao(a, ctx)
-    if (obsValidade) partes.push(obsValidade)
-    const obsSegmento = buildSegmentoObservacoes(a, ctx)
-    if (obsSegmento) partes.push(obsSegmento)
-    partes.push(aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx))
+    const blocos: Record<BlocoParecer, () => string> = {
+      aprovacao: () => aplicaVars(getT(c?.aprovadoId || catalog?.config.aprovadoId)?.corpo || '', ctx),
+      observacoes: () => htmlJoinBlocos(observacoes.map((i, n) => {
+        const status = a.respostas[i.id]?.status
+        const t = status === 'restricao' ? getT(i.textoRestricaoId) : status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
+        const obs = a.respostas[i.id]?.obs
+        const tag = status === 'restricao' ? ' — APROVADO COM RESTRIÇÃO' : status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
+        let bloco = `<div style="font-weight:700;margin-bottom:4px">${n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
+          aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i, a))
+        if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
+        return bloco
+      })),
+      validade: () => buildValidadeObservacao(a, ctx),
+      segmento: () => buildSegmentoObservacoes(a, ctx),
+      assinatura: () => aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx),
+    }
+    const ordem = catalog?.config.ordemBlocos?.length ? catalog.config.ordemBlocos : ORDEM_BLOCOS_PADRAO
+    const partes = ordem.map(k => blocos[k]())
     return {
       assunto: aplicaVars(catalog?.config.assunto || '', ctx),
-      corpo: partes.filter(Boolean).join('\n\n'),
+      corpo: htmlJoinBlocos(partes),
       restricoes: restricoes.length, orientativos: orientativos.length, aprovados: aprovados.length, criticos: 0, total: itens.length, marcados: marcados.length,
     }
   }
@@ -703,12 +858,12 @@ export default function WorkflowProgramasClient() {
     const c = getC(a.contratanteIds[0])
     const ctx = ctxDe(a, itensDaAnalise(a))
     const plural = criticosReprovados.length > 1
-    const linhas = [`Favor rever ${plural ? 'os seguintes itens' : 'o seguinte item'}:`]
-    criticosReprovados.forEach((i, n) => {
+    const itensHtml = criticosReprovados.map((i, n) => {
       const t = getR(i.textoReprovacaoId)
-      linhas.push((n + 1) + ' - ' + aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxParaItem(ctx, i, a)))
-    })
-    const corpo = [linhas.join('\n'), aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx)].filter(Boolean).join('\n\n')
+      return `<div>${n + 1} - ${aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxParaItem(ctx, i, a))}</div>`
+    }).join('')
+    const abertura = `<div>Favor rever ${plural ? 'os seguintes itens' : 'o seguinte item'}:</div>` + itensHtml
+    const corpo = htmlJoinBlocos([abertura, aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx)])
     return {
       assunto: 'GT3 · Reprovação de cadastro — ' + ctx.empresa + ' — ' + ctx.contratante,
       corpo,
@@ -953,9 +1108,10 @@ export default function WorkflowProgramasClient() {
   function baixarEml() {
     if (!draft || !emailBuilt) return
     const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)))
+    const html = `<html><head><meta charset="utf-8"></head><body>${emailCorpo}</body></html>`
     const eml = [
       'To: ' + (draft.emailDestino || ''), 'Subject: =?UTF-8?B?' + b64(emailBuilt.assunto) + '?=',
-      'X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', emailCorpo,
+      'X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', html,
     ].join('\r\n')
     const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
     const el = document.createElement('a')
@@ -965,9 +1121,27 @@ export default function WorkflowProgramasClient() {
     showToast('Arquivo .eml gerado')
   }
 
+  /** mailto: só suporta corpo em texto puro (RFC 6068) — não existe forma de carregar HTML
+   *  por esse canal em nenhum cliente de e-mail, então a formatação não sobrevive aqui. */
   function abrirMailto() {
     if (!draft || !emailBuilt) return
-    location.href = 'mailto:' + (draft.emailDestino || '') + '?subject=' + encodeURIComponent(emailBuilt.assunto) + '&body=' + encodeURIComponent(emailCorpo)
+    location.href = 'mailto:' + (draft.emailDestino || '') + '?subject=' + encodeURIComponent(emailBuilt.assunto) + '&body=' + encodeURIComponent(htmlToPlainText(emailCorpo))
+  }
+
+  /** Copia com formatação (text/html) e um fallback em texto puro (text/plain) — é o que faz
+   *  negrito/grifado sobreviverem ao colar num cliente de e-mail. */
+  async function copiarParecer() {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([emailCorpo], { type: 'text/html' }),
+          'text/plain': new Blob([htmlToPlainText(emailCorpo)], { type: 'text/plain' }),
+        }),
+      ])
+    } catch {
+      await navigator.clipboard.writeText(htmlToPlainText(emailCorpo))
+    }
+    showToast('E-mail copiado')
   }
 
   // ── banco de dados ──
@@ -1060,7 +1234,7 @@ export default function WorkflowProgramasClient() {
         const r = a.dados.respostas[i.id]
         linhas.push([
           a.empresa, a.cnpj, nomesC, (a.dados.documentos || []).join(' '), fmtD(a.dados.data), fmtD(a.data_final || a.dados.data),
-          i.titulo, i.documento, ({ ok: 'Conforme', nao: 'Reprovação', na: 'Não aplicável', restricao: 'Aprovado com restrição' } as Record<string, string>)[r?.status || ''] || 'Não avaliado', r?.obs || '',
+          i.titulo, i.documento, ({ ok: 'Conforme', nao: 'Reprovação', na: 'Não aplicável', restricao: 'Aprovado com restrição' } as Record<string, string>)[r?.status || ''] || 'Não avaliado', r?.obs ? htmlToPlainText(r.obs) : '',
         ])
       })
     })
@@ -1298,6 +1472,11 @@ export default function WorkflowProgramasClient() {
 
   return (
     <div style={{ padding: '24px 28px 60px', maxWidth: 1400, margin: '0 auto', fontFamily: 'inherit', color: TX }}>
+      <style>{`
+        [contenteditable]:empty:before { content: attr(data-placeholder); color: #adb5bd; pointer-events: none; display: block; }
+        [contenteditable] ul { margin: 4px 0; padding-left: 20px; }
+        [contenteditable] li { margin: 2px 0; }
+      `}</style>
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1100, background: TX, color: '#fff', padding: '11px 20px', borderRadius: 8, fontSize: 13.5, boxShadow: '0 4px 16px rgba(0,0,0,.2)' }}>
           {toast}
@@ -1335,7 +1514,7 @@ export default function WorkflowProgramasClient() {
           onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise} onDescartar={descartarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
-          onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
+          onCopiar={copiarParecer}
           onCopiarAssunto={() => { navigator.clipboard.writeText(emailBuilt?.assunto || ''); showToast('Assunto copiado') }}
           onEml={baixarEml} onMailto={abrirMailto}
           onRegerar={() => { setEmailEditado(false); showToast('E-mail regerado') }}
@@ -1805,8 +1984,10 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                           </div>
                         )}
                         {(r.status === 'nao' || r.status === 'restricao') && (
-                          <input style={{ ...inputStyle, marginTop: 8, fontSize: 12.5, padding: '6px 9px' }} placeholder="Observação específica (entra no e-mail abaixo do texto padrão)"
-                            value={r.obs} onChange={e => onObs(i.id, e.target.value)} />
+                          <div style={{ marginTop: 8 }}>
+                            <RichTextEditor value={r.obs} minRows={1} placeholder="Observação específica (entra no e-mail abaixo do texto padrão)"
+                              onChange={v => onObs(i.id, v)} />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1914,10 +2095,9 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
               </Field>
             </div>
             <div style={{ padding: '12px 12px 0' }}><label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>Corpo</label></div>
-            <textarea value={emailCorpo} onChange={e => onEmailChange(e.target.value)} style={{
-              width: '100%', border: 0, borderRadius: 0, minHeight: 340, fontFamily: 'ui-monospace,Consolas,monospace', fontSize: 12.5,
-              lineHeight: 1.62, padding: '0 12px 12px', outline: 'none', resize: 'vertical', boxSizing: 'border-box',
-            }} />
+            <div style={{ padding: '0 12px 12px' }}>
+              <RichTextEditor value={emailCorpo} onChange={onEmailChange} minRows={15} resizable />
+            </div>
             <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: `1px solid ${LINE}`, flexWrap: 'wrap', alignItems: 'center' }}>
               <Btn variant="pri" small disabled={!podeFinalizarOuCopiar} onClick={onCopiar} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>📋 Copiar</Btn>
               <Btn small disabled={!podeFinalizarOuCopiar} onClick={onEml} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>⬇️ Baixar .eml</Btn>
@@ -2119,7 +2299,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                                     <tr key={i.id}>
                                       <td style={{ width: 120, padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone={m[0]}>{m[1]}</Tag></td>
                                       <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag>{i.documento}</Tag> {i.titulo}
-                                        {r?.obs && <div style={{ color: MU, fontSize: 12 }}>Obs.: {r.obs}</div>}</td>
+                                        {r?.obs && <div style={{ color: MU, fontSize: 12 }}>Obs.: <span dangerouslySetInnerHTML={{ __html: r.obs }} /></div>}</td>
                                     </tr>
                                   )
                                 })}
@@ -2271,7 +2451,7 @@ function ContratanteModal({ draft, catalog, novo, onChange, onSave, onClose, onC
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
         <Field label="E-mail de cópia (opcional)"><input style={inputStyle} value={draft.email || ''} onChange={e => set('email', e.target.value)} /></Field>
-        <Field label="Observações internas"><input style={inputStyle} value={draft.obs || ''} onChange={e => set('obs', e.target.value)} /></Field>
+        <Field label="Observações internas"><RichTextEditor value={draft.obs || ''} minRows={2} onChange={v => set('obs', v)} /></Field>
       </div>
       <div style={{ height: 1, background: LINE, margin: '14px 0' }} />
       <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, marginBottom: 8 }}>Textos de e-mail desta contratante</label>
@@ -2429,7 +2609,7 @@ function InspectorPanel({ item, campo, texto, onAbrir, onClose }: {
             <>
               <div style={{ fontSize: 11, textTransform: 'uppercase', color: MU, marginBottom: 6 }}>Texto vinculado</div>
               <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>{texto.titulo}</div>
-              <div style={{ fontSize: 13, color: TX, whiteSpace: 'pre-wrap', lineHeight: 1.5, background: PS, borderRadius: 8, padding: 14 }}>{texto.corpo || '(sem conteúdo)'}</div>
+              <div style={{ fontSize: 13, color: TX, lineHeight: 1.5, background: PS, borderRadius: 8, padding: 14 }} dangerouslySetInnerHTML={{ __html: texto.corpo || '(sem conteúdo)' }} />
             </>
           ) : (
             <div style={{ fontSize: 13, color: MU }}>Este item ainda não tem texto vinculado nesta categoria.</div>
@@ -2559,13 +2739,15 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {draft.opcoes.map((o, idx) => (
                 <div key={o.id} style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: 10 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr auto', gap: 8, alignItems: 'start' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'start' }}>
                     <input style={inputStyle} value={o.label} placeholder="Rótulo (ex.: NR-10)"
                       onChange={e => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))} />
-                    <textarea style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }} rows={2} value={o.corpo}
-                      placeholder={o.pedirTexto ? `Texto da opção — use {{detalhe}}${o.variavelDetalhe ? ' ou {{' + o.variavelDetalhe + '}}' : ''} onde entra o texto livre digitado` : 'Texto que entra na variável quando esta opção for marcada'}
-                      onChange={e => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, corpo: e.target.value } : x))} />
                     <Btn small variant="gho" onClick={() => set('opcoes', draft.opcoes.filter((_, i) => i !== idx))}>Excluir</Btn>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <RichTextEditor value={o.corpo} minRows={2}
+                      placeholder={o.pedirTexto ? `Texto da opção — use {{detalhe}}${o.variavelDetalhe ? ' ou {{' + o.variavelDetalhe + '}}' : ''} onde entra o texto livre digitado` : 'Texto que entra na variável quando esta opção for marcada'}
+                      onChange={v => set('opcoes', draft.opcoes.map((x, i) => i === idx ? { ...x, corpo: v } : x))} />
                   </div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
                     <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}>
@@ -2689,7 +2871,7 @@ function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
                       <td style={{ padding: '10px 18px', borderBottom: `1px solid ${LINE}` }}>
                         <b>{t.titulo}</b>
                         {cat === 'segmento' && (t.segmentos ?? []).map(s => <Tag key={s} tone="acc">{s}</Tag>)}
-                        <div style={{ color: MU, fontSize: 12, marginTop: 3 }}>{t.corpo.slice(0, 150)}{t.corpo.length > 150 ? '…' : ''}</div>
+                        <div style={{ color: MU, fontSize: 12, marginTop: 3 }}>{(() => { const p = htmlToPlainText(t.corpo); return p.slice(0, 150) + (p.length > 150 ? '…' : '') })()}</div>
                       </td>
                       <td style={{ width: 110, padding: 10, borderBottom: `1px solid ${LINE}` }}>{cat !== 'segmento' && <Tag>{usos} uso(s)</Tag>}</td>
                       <td style={{ width: 150, padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right' }}>
@@ -2757,7 +2939,7 @@ function TextoModal({ draft, novo, CATS, onChange, onSave, onClose, anexos, onUp
         </div>
       )}
       <div style={{ marginTop: 12 }}>
-        <Field label="Texto"><textarea rows={12} style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }} value={draft.corpo} onChange={e => set('corpo', e.target.value)} /></Field>
+        <Field label="Texto"><RichTextEditor value={draft.corpo} onChange={v => set('corpo', v)} minRows={12} resizable /></Field>
       </div>
       <div style={{ marginTop: 10 }}>
         <span style={{ color: MU, fontSize: 12 }}>Variáveis (clique para copiar): </span>
@@ -2834,7 +3016,7 @@ function VReprovacao({ catalog, onNovo, onEditar, onDel }: {
                     <tr key={r.id}>
                       <td style={{ padding: '10px 18px', borderBottom: `1px solid ${LINE}` }}>
                         <b>{r.titulo}</b> {r.escopo === 'especifico' && <Tag tone="acc">específico</Tag>}
-                        <div style={{ color: MU, fontSize: 12, marginTop: 3 }}>{r.corpo.slice(0, 150)}{r.corpo.length > 150 ? '…' : ''}</div>
+                        <div style={{ color: MU, fontSize: 12, marginTop: 3 }}>{(() => { const p = htmlToPlainText(r.corpo); return p.slice(0, 150) + (p.length > 150 ? '…' : '') })()}</div>
                       </td>
                       <td style={{ width: 110, padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone={usos ? 'no' : 'default'}>{usos} item(ns)</Tag></td>
                       <td style={{ width: 150, padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right' }}>
@@ -2873,7 +3055,7 @@ function ReprovacaoModal({ draft, novo, onChange, onSave, onClose }: {
         </Field>
       </div>
       <div style={{ marginTop: 12 }}>
-        <Field label="Texto"><textarea rows={12} style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }} value={draft.corpo} onChange={e => set('corpo', e.target.value)} /></Field>
+        <Field label="Texto"><RichTextEditor value={draft.corpo} onChange={v => set('corpo', v)} minRows={12} resizable /></Field>
       </div>
       <div style={{ marginTop: 10 }}>
         <span style={{ color: MU, fontSize: 12 }}>Variáveis (clique para copiar): </span>
@@ -2896,12 +3078,22 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
   const [validadeAnualId, setValidadeAnualId] = useState(config.validadeAnualId)
   const [validadePersonalizadaId, setValidadePersonalizadaId] = useState(config.validadePersonalizadaId)
   const [camposObrigatorios, setCamposObrigatorios] = useState<string[]>(config.camposObrigatorios ?? [])
+  const [ordemBlocos, setOrdemBlocos] = useState<BlocoParecer[]>(config.ordemBlocos?.length ? config.ordemBlocos : ORDEM_BLOCOS_PADRAO)
   const textosValidade = textos.filter(t => t.categoria === 'validade')
 
   function toggleCampoObrigatorio(key: string) {
     const next = camposObrigatorios.includes(key) ? camposObrigatorios.filter(k => k !== key) : [...camposObrigatorios, key]
     setCamposObrigatorios(next)
     onSalvar({ camposObrigatorios: next })
+  }
+
+  function moverBloco(idx: number, dir: -1 | 1) {
+    const tgt = idx + dir
+    if (tgt < 0 || tgt >= ordemBlocos.length) return
+    const next = [...ordemBlocos]
+    ;[next[idx], next[tgt]] = [next[tgt], next[idx]]
+    setOrdemBlocos(next)
+    onSalvar({ ordemBlocos: next })
   }
 
   return (
@@ -2953,6 +3145,22 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
               <input type="checkbox" checked={camposObrigatorios.includes(c.key)} onChange={() => toggleCampoObrigatorio(c.key)} />
               {c.label}
             </label>
+          ))}
+        </div>
+      </Card>
+      <Card style={{ padding: '16px 18px', marginTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Ordem do parecer</div>
+        <div style={{ fontSize: 12.5, color: MU, marginBottom: 12 }}>
+          Define em que ordem cada trecho entra ao montar o parecer final (aprovado / aprovado com restrição). Use as setas para reordenar.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {ordemBlocos.map((b, idx) => (
+            <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: PS, border: `1px solid ${LINE}`, borderRadius: 8 }}>
+              <span style={{ width: 20, height: 20, borderRadius: 5, background: P, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{idx + 1}</span>
+              <span style={{ fontSize: 13, flex: 1 }}>{BLOCOS_PARECER_LABELS[b]}</span>
+              <button onClick={() => moverBloco(idx, -1)} disabled={idx === 0} title="Mover acima" style={{ width: 24, height: 24, border: `1px solid ${LINE}`, borderRadius: 5, background: '#fff', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 12 }}>↑</button>
+              <button onClick={() => moverBloco(idx, 1)} disabled={idx === ordemBlocos.length - 1} title="Mover abaixo" style={{ width: 24, height: 24, border: `1px solid ${LINE}`, borderRadius: 5, background: '#fff', cursor: idx === ordemBlocos.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === ordemBlocos.length - 1 ? 0.4 : 1, fontSize: 12 }}>↓</button>
+            </div>
           ))}
         </div>
       </Card>
