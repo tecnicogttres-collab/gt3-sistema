@@ -59,6 +59,24 @@ type CatalogConfig = {
   /** Textos usados na observação automática de validade (categoria "validade") — vazio = nenhuma observação */
   validadeAnualId: string; validadePersonalizadaId: string
   prazoDias: number
+  /** Chaves de CAMPOS_ANALISE que precisam estar preenchidas antes do checklist liberar em Nova análise. */
+  camposObrigatorios: string[]
+}
+
+/** Campos do cabeçalho de "Nova análise" que podem ser marcados como obrigatórios pelas Configurações. */
+const CAMPOS_ANALISE: { key: 'empresa' | 'emailDestino' | 'data' | 'responsavel' | 'reincidencia' | 'setoresAtuacao'; label: string }[] = [
+  { key: 'empresa', label: 'Empresa prestadora' },
+  { key: 'emailDestino', label: 'E-mail de destino' },
+  { key: 'data', label: 'Data da análise' },
+  { key: 'responsavel', label: 'Analista' },
+  { key: 'reincidencia', label: 'Reincidência' },
+  { key: 'setoresAtuacao', label: 'Setor(es) de atuação' },
+]
+
+function campoAnaliseVazio(draft: AnaliseDados, key: string): boolean {
+  const v = (draft as unknown as Record<string, unknown>)[key]
+  if (Array.isArray(v)) return v.length === 0
+  return typeof v === 'string' ? !v.trim() : !v
 }
 type Catalog = { contratantes: Contratante[]; itens: ChecklistItem[]; textos: TextoEmail[]; textosReprovacao: TextoReprovacao[]; config: CatalogConfig }
 
@@ -284,6 +302,7 @@ function seedCatalog(): Catalog {
       aberturaId: 't_abertura', fechamentoId: 't_fechamento', assinaturaId: 't_assinatura', aprovadoId: 't_aprovado',
       validadeAnualId: 't_validade_anual', validadePersonalizadaId: 't_validade_personalizada',
       prazoDias: 7,
+      camposObrigatorios: [],
     },
   }
 }
@@ -297,6 +316,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || raw.textos.some(t => idsAprovado.has(t.id) && t.categoria !== 'aprovacao')
     || typeof raw.config.validadeAnualId !== 'string' || typeof raw.config.validadePersonalizadaId !== 'string'
     || !raw.config.aprovadoId || !raw.textos.some(t => t.id === raw.config.aprovadoId)
+    || !Array.isArray(raw.config.camposObrigatorios)
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   let textos = raw.textos.map(t => (idsAprovado.has(t.id) && t.categoria !== 'aprovacao' ? { ...t, categoria: 'aprovacao' as const } : t))
@@ -318,6 +338,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     if (!textos.some(t => t.id === seedTexto.id)) textos = [...textos, seedTexto]
     config.aprovadoId = seedTexto.id
   }
+  if (!Array.isArray(config.camposObrigatorios)) config.camposObrigatorios = []
   const defaultLink: Record<string, string> = { i_pgr_val: 'r_pgr_validade', i_pcm_val: 'r_pcm_validade' }
   const itens = raw.itens.map(i => {
     const legado = i as ChecklistItem & { condicaoStatus?: string }
@@ -360,13 +381,14 @@ function Tag({ children, tone = 'default' }: { children: React.ReactNode; tone?:
 }
 
 function Btn({ children, onClick, variant = 'default', small = false, disabled = false, title }: {
-  children: React.ReactNode; onClick?: () => void; variant?: 'default' | 'pri' | 'acc' | 'gho'; small?: boolean; disabled?: boolean; title?: string
+  children: React.ReactNode; onClick?: () => void; variant?: 'default' | 'pri' | 'acc' | 'gho' | 'danger'; small?: boolean; disabled?: boolean; title?: string
 }) {
   const styles: Record<string, React.CSSProperties> = {
     default: { background: '#fff', border: `1px solid ${LINE}`, color: TX },
     pri: { background: P, border: `1px solid ${P}`, color: '#fff' },
     acc: { background: AC, border: `1px solid ${AC}`, color: '#3A2E14', fontWeight: 600 },
     gho: { background: 'transparent', border: '1px solid transparent', color: MU },
+    danger: { background: NO, border: `1px solid ${NO}`, color: '#fff', fontWeight: 600 },
   }
   return (
     <button onClick={onClick} disabled={disabled} title={title} style={{
@@ -565,6 +587,7 @@ export default function WorkflowProgramasClient() {
       documentos: joinDocs(a.documentos || []),
       reincidencia: a.reincidencia === 'reincidente' ? 'Reincidente' : a.reincidencia === 'nova' ? 'Nova' : '',
       setoratuacao: joinDocs(a.setoresAtuacao || []),
+      email: a.emailDestino || '',
       ...vars,
     }
   }
@@ -746,6 +769,18 @@ export default function WorkflowProgramasClient() {
     const res = await fetch(`/api/workflow-programas/${id}`, { method: 'DELETE' })
     if (res.ok) setAnalises(prev => prev.filter(a => a.id !== id))
     else showToast('Sem permissão para excluir')
+  }
+
+  async function descartarAnalise() {
+    if (!confirm('Descartar esta análise? Todo o preenchimento será perdido.')) return
+    if (!confirm('Tem certeza mesmo? Essa ação não pode ser desfeita.')) return
+    if (draftId) {
+      const res = await fetch(`/api/workflow-programas/${draftId}`, { method: 'DELETE' })
+      if (res.ok) setAnalises(prev => prev.filter(a => a.id !== draftId))
+      else { showToast('Sem permissão para excluir'); return }
+    }
+    novaAnalise()
+    showToast('Análise descartada')
   }
 
   async function salvarAnalise() {
@@ -1280,7 +1315,7 @@ export default function WorkflowProgramasClient() {
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos}
           onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
-          onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise}
+          onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise} onDescartar={descartarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={() => { navigator.clipboard.writeText(emailCorpo); showToast('E-mail copiado') }}
           onEml={baixarEml} onMailto={abrirMailto}
@@ -1491,7 +1526,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
@@ -1505,13 +1540,16 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   onOpcao: (itemId: string, opcaoId: string, multipla: boolean) => void
   onOpcaoTexto: (itemId: string, opcaoId: string, texto: string) => void
   onValidade: (doc: DocValidavel, patch: Partial<ValidadeInfo>) => void
-  onLimpar: () => void; onSalvar: () => void; onFinalizar: () => void
+  onLimpar: () => void; onSalvar: () => void; onFinalizar: () => void; onDescartar: () => void
   onEmailChange: (v: string) => void; onCopiar: () => void; onEml: () => void; onMailto: () => void; onRegerar: () => void
   onBaixarAnexo: (id: string) => void
 }) {
   const itens = itensDaAnalise(draft)
   const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
+  const camposFaltando = (catalog.config.camposObrigatorios ?? []).filter(key => campoAnaliseVazio(draft, key))
+  const campoObrigatorioVazio = (key: string) => (catalog.config.camposObrigatorios ?? []).includes(key) && campoAnaliseVazio(draft, key)
+  const redStyle = (vazio: boolean): React.CSSProperties => (vazio ? { borderColor: NO, background: NOS } : {})
   const ok = itensStatus.filter(i => draft.respostas[i.id]?.status === 'ok').length
   const restr = itensStatus.filter(i => draft.respostas[i.id]?.status === 'restricao').length
   const na = itensStatus.filter(i => draft.respostas[i.id]?.status === 'na').length
@@ -1532,6 +1570,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Btn variant="gho" onClick={onLimpar}>Limpar respostas</Btn>
           <Btn onClick={onSalvar}>💾 Salvar rascunho</Btn>
+          <Btn variant="danger" onClick={onDescartar}>🗑 Descartar análise</Btn>
           <Btn variant="acc" onClick={onFinalizar}>✔ Finalizar análise</Btn>
         </div>
       </div>
@@ -1539,13 +1578,13 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 430px', gap: 16, alignItems: 'start' }}>
         <div>
           <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
-            <Field label="Empresa prestadora"><input style={inputStyle} value={draft.empresa} onChange={e => onField('empresa', e.target.value)} placeholder="Razão social" /></Field>
+            <Field label="Empresa prestadora"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('empresa')) }} value={draft.empresa} onChange={e => onField('empresa', e.target.value)} placeholder="Razão social" /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 12 }}>
-              <Field label="E-mail de destino"><input style={inputStyle} type="email" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br" /></Field>
-              <Field label="Data da análise"><input style={inputStyle} type="date" value={draft.data} onChange={e => onField('data', e.target.value)} /></Field>
-              <Field label="Analista"><input style={inputStyle} value={draft.responsavel} onChange={e => onField('responsavel', e.target.value)} /></Field>
+              <Field label="E-mail de destino"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('emailDestino')) }} type="email" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br" /></Field>
+              <Field label="Data da análise"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('data')) }} type="date" value={draft.data} onChange={e => onField('data', e.target.value)} /></Field>
+              <Field label="Analista"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('responsavel')) }} value={draft.responsavel} onChange={e => onField('responsavel', e.target.value)} /></Field>
               <Field label="Reincidência">
-                <select style={inputStyle} value={draft.reincidencia} onChange={e => onField('reincidencia', e.target.value as Reincidencia)}>
+                <select style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('reincidencia')) }} value={draft.reincidencia} onChange={e => onField('reincidencia', e.target.value as Reincidencia)}>
                   <option value="">— Selecione —</option>
                   <option value="nova">Nova</option>
                   <option value="reincidente">Reincidente</option>
@@ -1554,7 +1593,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
             </div>
             <div style={{ marginTop: 12 }}>
               <Field label="Setor(es) de atuação">
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', padding: '9px 12px', border: `1px solid ${LINE}`, borderRadius: 8 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', padding: '9px 12px', borderRadius: 8, border: `1px solid ${LINE}`, ...redStyle(campoObrigatorioVazio('setoresAtuacao')) }}>
                   {SETORES_ATUACAO.map(s => (
                     <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: TX, cursor: 'pointer' }}>
                       <input type="checkbox" checked={draft.setoresAtuacao.includes(s)} onChange={() => onToggleSetor(s)} />
@@ -1611,6 +1650,11 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
 
           {!draft.contratanteIds.length ? (
             <Empty title="Selecione ao menos uma contratante" sub="O checklist libera assim que uma contratante for indicada acima." />
+          ) : camposFaltando.length > 0 ? (
+            <Empty
+              title="Preencha os campos obrigatórios"
+              sub={'Faltam: ' + camposFaltando.map(k => CAMPOS_ANALISE.find(c => c.key === k)?.label || k).join(', ') + ' (destacados em vermelho acima).'}
+            />
           ) : !itens.length ? (
             <Empty title="Nenhum item vinculado" sub="Cadastre a contratante e selecione os itens de checklist aplicáveis." />
           ) : grupos.map(d => {
@@ -1807,6 +1851,11 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
           <Card style={{ padding: '32px 20px', textAlign: 'center', color: MU }}>
             <b style={{ display: 'block', color: TX, marginBottom: 4, fontSize: 15 }}>E-mail bloqueado</b>
             Selecione ao menos uma contratante para liberar a montagem do e-mail.
+          </Card>
+        ) : camposFaltando.length > 0 ? (
+          <Card style={{ padding: '32px 20px', textAlign: 'center', color: MU }}>
+            <b style={{ display: 'block', color: TX, marginBottom: 4, fontSize: 15 }}>E-mail bloqueado</b>
+            Preencha os campos obrigatórios destacados em vermelho acima.
           </Card>
         ) : (
         <>
@@ -2631,7 +2680,7 @@ function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
   )
 }
 
-const VARS = ['empresa', 'cnpj', 'contratante', 'unidade', 'prazo', 'data', 'responsavel', 'documentos', 'reincidencia', 'setoratuacao']
+const VARS = ['empresa', 'cnpj', 'contratante', 'unidade', 'prazo', 'data', 'responsavel', 'documentos', 'reincidencia', 'setoratuacao', 'email']
 const VARS_VALIDADE = ['documentosValidade', 'verbo', 'adjetivo', 'meses']
 
 function fmtBytes(n: number): string {
@@ -2819,7 +2868,14 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
   const [assunto, setAssunto] = useState(config.assunto)
   const [validadeAnualId, setValidadeAnualId] = useState(config.validadeAnualId)
   const [validadePersonalizadaId, setValidadePersonalizadaId] = useState(config.validadePersonalizadaId)
+  const [camposObrigatorios, setCamposObrigatorios] = useState<string[]>(config.camposObrigatorios ?? [])
   const textosValidade = textos.filter(t => t.categoria === 'validade')
+
+  function toggleCampoObrigatorio(key: string) {
+    const next = camposObrigatorios.includes(key) ? camposObrigatorios.filter(k => k !== key) : [...camposObrigatorios, key]
+    setCamposObrigatorios(next)
+    onSalvar({ camposObrigatorios: next })
+  }
 
   return (
     <div>
@@ -2857,6 +2913,20 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
               {textosValidade.map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
             </select>
           </Field>
+        </div>
+      </Card>
+      <Card style={{ padding: '16px 18px', marginTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Campos obrigatórios em Nova análise</div>
+        <div style={{ fontSize: 12.5, color: MU, marginBottom: 12 }}>
+          O checklist só libera depois de uma contratante selecionada e destes campos preenchidos — eles ficam destacados em vermelho enquanto vazios.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
+          {CAMPOS_ANALISE.map(c => (
+            <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={camposObrigatorios.includes(c.key)} onChange={() => toggleCampoObrigatorio(c.key)} />
+              {c.label}
+            </label>
+          ))}
         </div>
       </Card>
     </div>
