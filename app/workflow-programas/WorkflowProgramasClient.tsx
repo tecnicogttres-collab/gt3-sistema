@@ -341,6 +341,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || !Array.isArray(raw.config.ordemBlocos)
     || (raw.textosReprovacao ?? []).some(t => /^favor rever:?\s*/i.test(t.corpo))
     || !raw.config.textosHtmlMigrados
+    || !raw.itens.some(i => i.id === 'i_reg_pgr')
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
@@ -405,7 +406,55 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     const semPrefixo = t.corpo.replace(/^favor rever:?\s*/i, '')
     return { ...t, corpo: jaMigrado ? semPrefixo : textoParaHtml(semPrefixo) }
   })
-  return { catalog: { ...raw, itens, textos, textosReprovacao, config }, changed: true }
+  // "Registro do elaborador" (CREA/CRM/MTE) — cria o item e a escolha de tipo por documento
+  // (PGR/PCMSO/LTCAT) e religa os "ART" e "Comprov. Especializ. Med do Trabalho" já existentes
+  // como derivadas: CREA libera o ART daquele documento, CRM libera o Comprov., MTE não libera nada.
+  // Migração única — depois disso os itens ficam editáveis normalmente em Itens de checklist.
+  let itensFinal = itens
+  let contratantesFinal = raw.contratantes
+  if (!itens.some(i => i.id === 'i_reg_pgr')) {
+    const regs: { doc: DocKey; regId: string; opcoesId: string; creaOp: string; crmOp: string; mteOp: string; artId?: string; comprovIds: string[] }[] = [
+      { doc: 'PGR', regId: 'i_reg_pgr', opcoesId: 'i_reg_opcoes_pgr', creaOp: 'op_reg_crea_pgr', crmOp: 'op_reg_crm_pgr', mteOp: 'op_reg_mte_pgr', artId: 'i_63m78g2', comprovIds: ['i_a2cfzsv'] },
+      { doc: 'PCMSO', regId: 'i_reg_pcm', opcoesId: 'i_reg_opcoes_pcm', creaOp: 'op_reg_crea_pcm', crmOp: 'op_reg_crm_pcm', mteOp: 'op_reg_mte_pcm', comprovIds: ['i_54r3k9j'] },
+      { doc: 'LTCAT', regId: 'i_reg_lt', opcoesId: 'i_reg_opcoes_lt', creaOp: 'op_reg_crea_lt', crmOp: 'op_reg_crm_lt', mteOp: 'op_reg_mte_lt', artId: 'i_fyar37f', comprovIds: ['i_bpw8qvt'] },
+    ]
+    const novos: ChecklistItem[] = []
+    regs.forEach(r => {
+      novos.push({
+        id: r.regId, titulo: 'Registro do elaborador', documento: r.doc,
+        descricao: 'Tipo de registro profissional de quem elaborou o documento — define se pede ART (CREA) ou certificado de especialização médica (CRM).',
+        escopo: 'especifico', textoId: '', critico: false,
+        textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '',
+        condicaoItemId: '', condicaoValor: '', tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
+      })
+      novos.push({
+        id: r.opcoesId, titulo: 'Tipo de registro do elaborador', documento: r.doc, descricao: '',
+        escopo: 'especifico', textoId: '', critico: false,
+        textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '',
+        condicaoItemId: r.regId, condicaoValor: 'ok', tipo: 'opcoes', multiplaEscolha: false, variavel: 'registrodoelaborador',
+        opcoes: [
+          { id: r.creaOp, label: 'CREA', corpo: 'CREA', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
+          { id: r.crmOp, label: 'CRM', corpo: 'CRM', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
+          { id: r.mteOp, label: 'MTE', corpo: 'MTE', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
+        ],
+      })
+    })
+    itensFinal = [...itens, ...novos].map(i => {
+      const r = regs.find(x => x.artId === i.id || x.comprovIds.includes(i.id))
+      if (!r) return i
+      return { ...i, condicaoItemId: r.opcoesId, condicaoValor: i.id === r.artId ? r.creaOp : r.crmOp }
+    })
+    contratantesFinal = raw.contratantes.map(c => {
+      const temAlgum = (ids: (string | undefined)[]) => ids.some(id => id && c.itens.some(l => l.itemId === id))
+      let extras: ItemLink[] = []
+      regs.forEach(r => {
+        if (temAlgum([r.artId, ...r.comprovIds])) extras = [...extras, { itemId: r.regId, textoId: null }, { itemId: r.opcoesId, textoId: null }]
+      })
+      if (!extras.length) return c
+      return { ...c, itens: [...c.itens, ...extras.filter(e => !c.itens.some(l => l.itemId === e.itemId))] }
+    })
+  }
+  return { catalog: { ...raw, itens: itensFinal, contratantes: contratantesFinal, textos, textosReprovacao, config }, changed: true }
 }
 
 // ─── Small UI atoms ─────────────────────────────────────────────────────────────
@@ -654,7 +703,9 @@ export default function WorkflowProgramasClient() {
       if (precisaSalvar) {
         fetch('/api/workflow-programas/config', {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dados: cat }),
-        }).catch(() => {})
+        })
+          .then(res => { if (!res.ok && alive) showToast('Falha ao salvar atualização automática do catálogo — tente recarregar a página') })
+          .catch(() => { if (alive) showToast('Falha ao salvar atualização automática do catálogo — tente recarregar a página') })
       }
       setCatalog(cat)
       const listaAnalises: AnaliseRow[] = Array.isArray(listRes) ? listRes : []
@@ -670,7 +721,9 @@ export default function WorkflowProgramasClient() {
     setCatalog(next)
     fetch('/api/workflow-programas/config', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dados: next }),
-    }).catch(() => showToast('Falha ao salvar — tente novamente'))
+    })
+      .then(res => { if (!res.ok) showToast('Falha ao salvar — tente novamente') })
+      .catch(() => showToast('Falha ao salvar — tente novamente'))
   }
 
   // ── getters ──
@@ -709,21 +762,34 @@ export default function WorkflowProgramasClient() {
         if (condItem?.tipo === 'opcoes') return (a.respostas[i.condicaoItemId]?.opcoesSelecionadas || []).includes(i.condicaoValor)
         return a.respostas[i.condicaoItemId]?.status === i.condicaoValor
       })
+    // A ordem dos itens em "Nova análise" segue a posição deles em catalog.itens (dentro do
+    // mesmo documento) — a mesma ordem editável em "Itens de checklist", com as setas de mover.
     // Um item condicionado a outro (ex.: lista de treinamentos que só aparece quando "possui
-    // treinamentos" é respondido) deve sempre renderizar logo abaixo do item que o libera,
-    // independentemente da ordem em que foram cadastrados na contratante.
-    const ordemOriginal = new Map(itensFiltrados.map((i, idx) => [i.id, idx]))
-    const ordemEfetiva = (i: ItemDaAnalise): number => {
-      const propria = ordemOriginal.get(i.id) ?? 0
-      if (i.condicaoItemId && i.condicaoItemId !== i.id && ordemOriginal.has(i.condicaoItemId)) {
-        return (ordemOriginal.get(i.condicaoItemId) ?? 0) + 0.5 + propria / 100000
+    // treinamentos" é respondido) sempre renderiza logo abaixo do item que o libera — de forma
+    // recursiva, então cadeias com mais de um nível (ex.: Registro do elaborador → CREA/CRM/MTE
+    // → ART → assinatura do ART) também ficam agrupadas em sequência, mesmo que os itens não
+    // estejam fisicamente próximos em catalog.itens.
+    const ordemOriginal = new Map(catalog.itens.map((i, idx) => [i.id, idx]))
+    const condicaoPorId = new Map(catalog.itens.map(i => [i.id, { condicaoItemId: i.condicaoItemId, condicaoValor: i.condicaoValor }]))
+    const ordemEfetivaCache = new Map<string, number>()
+    const ordemEfetivaPorId = (id: string, visitados: Set<string> = new Set()): number => {
+      const cache = ordemEfetivaCache.get(id)
+      if (cache !== undefined) return cache
+      const propria = ordemOriginal.get(id) ?? 0
+      const cond = condicaoPorId.get(id)
+      if (cond?.condicaoItemId && cond.condicaoValor && cond.condicaoItemId !== id && ordemOriginal.has(cond.condicaoItemId) && !visitados.has(id)) {
+        visitados.add(id)
+        const val = ordemEfetivaPorId(cond.condicaoItemId, visitados) + 0.5 + propria / 100000
+        ordemEfetivaCache.set(id, val)
+        return val
       }
+      ordemEfetivaCache.set(id, propria)
       return propria
     }
     return itensFiltrados.sort((x, y) => {
       const porDocumento = DOC_ORDER.indexOf(x.documento) - DOC_ORDER.indexOf(y.documento)
       if (porDocumento !== 0) return porDocumento
-      return ordemEfetiva(x) - ordemEfetiva(y)
+      return ordemEfetivaPorId(x.id) - ordemEfetivaPorId(y.id)
     })
   }
 
@@ -1066,12 +1132,42 @@ export default function WorkflowProgramasClient() {
     setEmailEditado(false)
   }
 
+  /** Um item condicionado só "conta" resposta se a condição dele (e a de quem ele depende,
+   *  recursivamente) ainda for válida com as respostas atuais. */
+  function condicaoAindaValida(item: ChecklistItem, respostas: Record<string, Resposta>): boolean {
+    if (!item.condicaoItemId || !item.condicaoValor || item.condicaoItemId === item.id) return true
+    const condItem = getI(item.condicaoItemId)
+    if (!condItem) return true
+    if (!condicaoAindaValida(condItem, respostas)) return false
+    return condItem.tipo === 'opcoes'
+      ? (respostas[item.condicaoItemId]?.opcoesSelecionadas || []).includes(item.condicaoValor)
+      : respostas[item.condicaoItemId]?.status === item.condicaoValor
+  }
+  /** Descarta respostas de itens que deixaram de valer (ex.: trocar de CREA pra CRM some com
+   *  o ART e a assinatura do ART deve sumir junto, não ficar pedida com base em resposta velha). */
+  function limparRespostasOrfas(respostas: Record<string, Resposta>): Record<string, Resposta> {
+    if (!catalog) return respostas
+    let atual = respostas
+    for (let iter = 0; iter < 8; iter++) {
+      const orfaos = Object.keys(atual).filter(id => {
+        const item = getI(id)
+        return item ? !condicaoAindaValida(item, atual) : false
+      })
+      if (!orfaos.length) break
+      const next = { ...atual }
+      orfaos.forEach(id => { delete next[id] })
+      atual = next
+    }
+    return atual
+  }
+
   function toggleDot(itemId: string, val: StatusResp) {
     setDraft(prev => {
       if (!prev) return prev
       const cur = prev.respostas[itemId]?.status
       const status: StatusResp = cur === val ? '' : val
-      return { ...prev, respostas: { ...prev.respostas, [itemId]: { ...prev.respostas[itemId], status, obs: prev.respostas[itemId]?.obs || '' } } }
+      const respostas = limparRespostasOrfas({ ...prev.respostas, [itemId]: { ...prev.respostas[itemId], status, obs: prev.respostas[itemId]?.obs || '' } })
+      return { ...prev, respostas }
     })
     setEmailEditado(false)
   }
@@ -1102,7 +1198,8 @@ export default function WorkflowProgramasClient() {
       const next = multipla
         ? (marcado ? atual.filter(id => id !== opcaoId) : [...atual, opcaoId])
         : (marcado ? [] : [opcaoId])
-      return { ...prev, respostas: { ...prev.respostas, [itemId]: { status: r?.status || '', obs: r?.obs || '', opcoesSelecionadas: next, textosLivres: r?.textosLivres } } }
+      const respostas = limparRespostasOrfas({ ...prev.respostas, [itemId]: { status: r?.status || '', obs: r?.obs || '', opcoesSelecionadas: next, textosLivres: r?.textosLivres } })
+      return { ...prev, respostas }
     })
     setEmailEditado(false)
   }
@@ -1356,6 +1453,22 @@ export default function WorkflowProgramasClient() {
       contratantes: catalog.contratantes.map(c => ({ ...c, itens: c.itens.filter(l => l.itemId !== id) })),
     })
   }
+  /** Reordena um item dentro do seu documento em `catalog.itens` — essa ordem é o que
+   *  define a sequência dos itens em "Nova análise" (ver `itensDaAnalise`). */
+  function moverItem(id: string, dir: -1 | 1) {
+    if (!catalog) return
+    const item = catalog.itens.find(i => i.id === id)
+    if (!item) return
+    const doDoc = catalog.itens.map((it, idx) => ({ it, idx })).filter(x => x.it.documento === item.documento)
+    const pos = doDoc.findIndex(x => x.it.id === id)
+    const alvo = pos + dir
+    if (alvo < 0 || alvo >= doDoc.length) return
+    const reordenado = [...doDoc]
+    ;[reordenado[pos], reordenado[alvo]] = [reordenado[alvo], reordenado[pos]]
+    const nextItens = [...catalog.itens]
+    doDoc.forEach((slot, i) => { nextItens[slot.idx] = reordenado[i].it })
+    persistCatalog({ ...catalog, itens: nextItens })
+  }
 
   // ── catálogo: textos ──
   const CATS: Record<CategoriaTexto, string> = { aprovacao: 'Aprovação', abertura: 'Abertura', apontamento: 'Apontamento', fechamento: 'Fechamento', assinatura: 'Assinatura', restricao: 'Restrição', validade: 'Validade', segmento: 'Segmento' }
@@ -1571,7 +1684,7 @@ export default function WorkflowProgramasClient() {
       )}
 
       {view === 'itens' && (
-        <VItens catalog={catalog} getT={getT} getR={getR} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} onAbrirTexto={abrirTexto} />
+        <VItens catalog={catalog} getT={getT} getR={getR} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} onMover={moverItem} onAbrirTexto={abrirTexto} />
       )}
 
       {view === 'textos' && textosSub === 'hub' && (
@@ -2529,9 +2642,9 @@ function TextoCell({ texto, tone, vazio = 'sem texto', onClick }: { texto: { tit
   )
 }
 
-function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: {
+function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onMover, onAbrirTexto }: {
   catalog: Catalog; getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined
-  onNovo: () => void; onEditar: (i: ChecklistItem) => void; onDel: (id: string) => void
+  onNovo: () => void; onEditar: (i: ChecklistItem) => void; onDel: (id: string) => void; onMover: (id: string, dir: -1 | 1) => void
   onAbrirTexto: (item: ChecklistItem, campo: InspectorCampo) => void
 }) {
   const [abertos, setAbertos] = useState<Set<DocKey>>(new Set())
@@ -2546,7 +2659,7 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ fontSize: 13, color: MU }}>Catálogo único de verificações. Itens &quot;base&quot; já entram em toda contratante nova.</div>
+        <div style={{ fontSize: 13, color: MU }}>Catálogo único de verificações. Itens &quot;base&quot; já entram em toda contratante nova. Use as setas para reordenar — é essa ordem que aparece em Nova análise.</div>
         <Btn variant="pri" onClick={onNovo}>✚ Novo item</Btn>
       </div>
       {DOC_ORDER.map(d => {
@@ -2567,6 +2680,7 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: 
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 8 }}>
                 <thead>
                   <tr>
+                    <th style={{ width: 50 }} />
                     <th style={{ padding: '6px 18px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', color: MU }}>Item</th>
                     <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', color: OK }}>Aprovado</th>
                     <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', color: LARANJA }}>Não conforme</th>
@@ -2576,7 +2690,7 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: 
                   </tr>
                 </thead>
                 <tbody>
-                  {g.map(i => {
+                  {g.map((i, idx) => {
                     const statusOpcoes = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
                     const condItem = i.condicaoItemId ? catalog.itens.find(x => x.id === i.condicaoItemId) : undefined
                     const condLabel = condItem && (condItem.tipo === 'opcoes'
@@ -2584,6 +2698,12 @@ function VItens({ catalog, getT, getR, onNovo, onEditar, onDel, onAbrirTexto }: 
                       : STATUS_LABELS[i.condicaoValor as Exclude<StatusResp, ''>] ?? i.condicaoValor)
                     return (
                       <tr key={i.id}>
+                        <td style={{ padding: '10px 4px', borderBottom: `1px solid ${LINE}`, whiteSpace: 'nowrap' }}>
+                          <button onClick={() => onMover(i.id, -1)} disabled={idx === 0} title="Mover para cima"
+                            style={{ border: 'none', background: 'none', cursor: idx === 0 ? 'default' : 'pointer', color: idx === 0 ? '#CBD5E1' : MU, fontSize: 14, padding: '2px 4px' }}>▲</button>
+                          <button onClick={() => onMover(i.id, 1)} disabled={idx === g.length - 1} title="Mover para baixo"
+                            style={{ border: 'none', background: 'none', cursor: idx === g.length - 1 ? 'default' : 'pointer', color: idx === g.length - 1 ? '#CBD5E1' : MU, fontSize: 14, padding: '2px 4px' }}>▼</button>
+                        </td>
                         <td style={{ padding: '10px 18px', borderBottom: `1px solid ${LINE}` }}>
                           <b>{i.titulo}</b> {i.critico && <Tag tone="no">crítico</Tag>} {i.escopo === 'especifico' ? <Tag tone="acc">específico</Tag> : <Tag>base</Tag>}
                           {i.tipo === 'opcoes' ? (
@@ -3160,19 +3280,19 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Texto — Validade Bienal">
-            <select style={inputStyle} value={validadeBienalId} onChange={e => setValidadeBienalId(e.target.value)}>
+            <select style={inputStyle} value={validadeBienalId} onChange={e => { const v = e.target.value; setValidadeBienalId(v); onSalvar({ validadeBienalId: v }) }}>
               <option value="">— nenhum, não indica nada —</option>
               {textosValidade.map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
             </select>
           </Field>
           <Field label="Texto — Validade Anual">
-            <select style={inputStyle} value={validadeAnualId} onChange={e => setValidadeAnualId(e.target.value)}>
+            <select style={inputStyle} value={validadeAnualId} onChange={e => { const v = e.target.value; setValidadeAnualId(v); onSalvar({ validadeAnualId: v }) }}>
               <option value="">— nenhum, não indica nada —</option>
               {textosValidade.map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
             </select>
           </Field>
           <Field label="Texto — Validade Personalizada (até 23 meses)">
-            <select style={inputStyle} value={validadePersonalizadaId} onChange={e => setValidadePersonalizadaId(e.target.value)}>
+            <select style={inputStyle} value={validadePersonalizadaId} onChange={e => { const v = e.target.value; setValidadePersonalizadaId(v); onSalvar({ validadePersonalizadaId: v }) }}>
               <option value="">— nenhum, não indica nada —</option>
               {textosValidade.map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
             </select>
