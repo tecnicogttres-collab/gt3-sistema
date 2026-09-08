@@ -43,6 +43,8 @@ const EXT_META: Record<string, { bg: string; color: string }> = {
   jpg:  { bg: '#FAEEDA', color: '#854F0B' },
   jpeg: { bg: '#FAEEDA', color: '#854F0B' },
   png:  { bg: '#FAEEDA', color: '#854F0B' },
+  html: { bg: '#FDF0DA', color: '#9A5B0C' },
+  htm:  { bg: '#FDF0DA', color: '#9A5B0C' },
 }
 
 const PRIMARY    = '#2A4F96'
@@ -493,14 +495,14 @@ export default function RepositorioClient() {
                     ) : (
                       <>
                         Clique ou arraste o arquivo aqui
-                        <div style={{ fontSize: 11, color: TEXT_FAINT, marginTop: 4 }}>DOCX, XLS, XLSX, PDF, JPG e outros</div>
+                        <div style={{ fontSize: 11, color: TEXT_FAINT, marginTop: 4 }}>DOCX, XLS, XLSX, PDF, JPG, HTML e outros</div>
                       </>
                     )}
                   </div>
                   <input
                     id="rm-file-input"
                     type="file"
-                    accept=".docx,.doc,.xls,.xlsx,.pdf,.jpg,.jpeg,.png,.pptx,.ppt"
+                    accept=".docx,.doc,.xls,.xlsx,.pdf,.jpg,.jpeg,.png,.pptx,.ppt,.html,.htm"
                     style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) pickFile(f) }}
                   />

@@ -222,6 +222,22 @@ function normalizaEmpresa(s: string): string {
   return s.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
+/** Resultado de um item pra exibição no Banco/CSV. Itens de opções (ex.: Treinamentos) não
+ *  têm `.status` — antes disso os relatórios liam só `.status` e mostravam "Não avaliado"
+ *  pra qualquer item de opções, mesmo quando algo estava selecionado (ex.: NR-35 marcada). */
+function resultadoItem(i: { tipo: string; opcoes: { id: string; label: string }[] }, r: Resposta | undefined): { tone: 'ok' | 'no' | 'na' | 'acc'; label: string } {
+  if (i.tipo === 'opcoes') {
+    const sel = r?.opcoesSelecionadas || []
+    if (!sel.length) return { tone: 'na', label: 'Não avaliado' }
+    return { tone: 'ok', label: sel.map(id => i.opcoes.find(o => o.id === id)?.label || id).join(', ') }
+  }
+  const map: Record<string, { tone: 'ok' | 'no' | 'na' | 'acc'; label: string }> = {
+    ok: { tone: 'ok', label: 'Conforme' }, nao: { tone: 'no', label: 'Reprovação' },
+    na: { tone: 'na', label: 'Não aplicável' }, restricao: { tone: 'acc', label: 'Aprovado com restrição' },
+  }
+  return map[r?.status || ''] || { tone: 'na', label: 'Não avaliado' }
+}
+
 /** Quantos itens do checklist visível ainda faltam ser marcados — itens de status (bolinha)
  *  sem resposta, E itens de opções (ex.: Treinamentos) sem nenhuma opção marcada, a não ser
  *  que tenham uma opção "padrão" configurada. Usado para travar Finalizar/Copiar/e-mail —
@@ -1476,7 +1492,7 @@ export default function WorkflowProgramasClient() {
         const r = a.dados.respostas[i.id]
         linhas.push([
           a.empresa, a.cnpj, nomesC, (a.dados.documentos || []).join(' '), fmtD(a.dados.data), fmtD(a.data_final || a.dados.data),
-          i.titulo, i.documento, ({ ok: 'Conforme', nao: 'Reprovação', na: 'Não aplicável', restricao: 'Aprovado com restrição' } as Record<string, string>)[r?.status || ''] || 'Não avaliado', r?.obs ? htmlToPlainText(r.obs) : '',
+          i.titulo, i.documento, resultadoItem(i, r).label, r?.obs ? htmlToPlainText(r.obs) : '',
         ])
       })
     })
@@ -2616,11 +2632,10 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}><tbody>
                                 {itens.map(i => {
                                   const r = a.dados.respostas[i.id]
-                                  const map: Record<string, ['ok' | 'no' | 'na' | 'acc', string]> = { ok: ['ok', 'Conforme'], nao: ['no', 'Reprovação'], na: ['na', 'Não aplicável'], restricao: ['acc', 'Aprovado com restrição'] }
-                                  const m = map[r?.status || ''] || ['na', 'Não avaliado']
+                                  const res = resultadoItem(i, r)
                                   return (
                                     <tr key={i.id}>
-                                      <td style={{ width: 120, padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone={m[0]}>{m[1]}</Tag></td>
+                                      <td style={{ width: 160, padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone={res.tone}>{res.label}</Tag></td>
                                       <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag>{i.documento}</Tag> {i.titulo}
                                         {r?.obs && <div style={{ color: MU, fontSize: 12 }}>Obs.: <span dangerouslySetInnerHTML={{ __html: r.obs }} /></div>}</td>
                                     </tr>
