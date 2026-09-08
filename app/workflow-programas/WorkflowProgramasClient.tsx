@@ -107,6 +107,9 @@ type AnaliseDados = {
   empresa: string; cnpj: string; emailDestino: string
   data: string; prazo: string; responsavel: string
   reincidencia: Reincidencia; setoresAtuacao: string[]
+  /** Empresa prestadora subcontratada por outra empresa (já cadastrada no banco), em vez de
+   *  contratada direto por um dos Contratantes fixos — só metadado, não afeta o parecer. */
+  subcontratada: boolean; empresaContratanteSub: string
   respostas: Record<string, Resposta>
   validades: Partial<Record<DocValidavel, ValidadeInfo>>
 }
@@ -129,6 +132,8 @@ function normalizeAnaliseDados(dados: AnaliseDados & { contratanteId?: string; s
     contratanteIds: Array.isArray(dados.contratanteIds) ? dados.contratanteIds : (contratanteId ? [contratanteId] : []),
     reincidencia: dados.reincidencia ?? '',
     setoresAtuacao: Array.isArray(dados.setoresAtuacao) ? dados.setoresAtuacao : (setorAtuacao ? [setorAtuacao] : []),
+    subcontratada: dados.subcontratada ?? false,
+    empresaContratanteSub: dados.empresaContratanteSub ?? '',
   }
 }
 type Anexo = { id: string; texto_id: string; name: string; filename: string; mime_type: string; size_bytes: number; created_at: string }
@@ -203,6 +208,36 @@ function joinDocs(itens: string[]): string {
   if (itens.length === 1) return itens[0]
   if (itens.length === 2) return itens[0] + ' e ' + itens[1]
   return itens.slice(0, -1).join(', ') + ' e ' + itens[itens.length - 1]
+}
+
+/** "E-mail de destino" aceita vários endereços separados por ";" (formato pedido pelo
+ *  usuário) — mailto: e o cabeçalho To: do .eml exigem vírgula, então convertemos aqui. */
+function emailsParaEnvio(destino: string): string {
+  return destino.split(';').map(e => e.trim()).filter(Boolean).join(', ')
+}
+
+/** Normaliza nome de empresa pra comparação de duplicidade — ignora diferenças de espaço
+ *  (múltiplos espaços, espaço nas pontas) e de maiúsculas/minúsculas. */
+function normalizaEmpresa(s: string): string {
+  return s.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+/** Quantos itens do checklist visível ainda faltam ser marcados — itens de status (bolinha)
+ *  sem resposta, E itens de opções (ex.: Treinamentos) sem nenhuma opção marcada, a não ser
+ *  que tenham uma opção "padrão" configurada. Usado para travar Finalizar/Copiar/e-mail —
+ *  antes um item de opções nunca contava aqui, o que deixava passar aprovação sem nada
+ *  selecionado em "Treinamentos" (só a bolinha de "possui treinamentos?" era exigida). */
+function contarItensSemMarcar(itens: ItemDaAnalise[], respostas: Record<string, Resposta>): number {
+  let n = 0
+  for (const i of itens) {
+    if (i.tipo === 'opcoes') {
+      const sel = respostas[i.id]?.opcoesSelecionadas
+      if ((!sel || !sel.length) && !i.opcoes.some(o => o.padrao)) n++
+    } else if (!respostas[i.id]?.status) {
+      n++
+    }
+  }
+  return n
 }
 
 
@@ -342,6 +377,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || (raw.textosReprovacao ?? []).some(t => /^favor rever:?\s*/i.test(t.corpo))
     || !raw.config.textosHtmlMigrados
     || !raw.itens.some(i => i.id === 'i_reg_pgr')
+    || raw.itens.some(i => (i.opcoes ?? []).some(o => ['op_2sg6d08', 'op_uuofk76', 'op_6rqa6iy'].includes(o.id) && !o.corpo?.trim()))
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
@@ -406,13 +442,25 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     const semPrefixo = t.corpo.replace(/^favor rever:?\s*/i, '')
     return { ...t, corpo: jaMigrado ? semPrefixo : textoParaHtml(semPrefixo) }
   })
+  // Opções de NR-11 em "Treinamentos" cadastradas só com rótulo, sem texto — por isso não
+  // apareciam no parecer quando marcadas (a variável {{treinamentos}} pula opção sem corpo).
+  const NR11_TEXTOS: Record<string, string> = {
+    op_2sg6d08: 'NR-11 (Transporte, Movimentação, Armazenagem e Manuseio de Materiais) — Operador de Empilhadeira',
+    op_uuofk76: 'NR-11 (Transporte, Movimentação, Armazenagem e Manuseio de Materiais) — Operador de Ponte Rolante',
+    op_6rqa6iy: 'NR-11 (Transporte, Movimentação, Armazenagem e Manuseio de Materiais) — Operador de Guincho',
+  }
+  const itensComNr11 = itens.map(i => (
+    i.opcoes.some(o => NR11_TEXTOS[o.id] && !o.corpo.trim())
+      ? { ...i, opcoes: i.opcoes.map(o => (NR11_TEXTOS[o.id] && !o.corpo.trim() ? { ...o, corpo: NR11_TEXTOS[o.id] } : o)) }
+      : i
+  ))
   // "Registro do elaborador" (CREA/CRM/MTE) — cria o item e a escolha de tipo por documento
   // (PGR/PCMSO/LTCAT) e religa os "ART" e "Comprov. Especializ. Med do Trabalho" já existentes
   // como derivadas: CREA libera o ART daquele documento, CRM libera o Comprov., MTE não libera nada.
   // Migração única — depois disso os itens ficam editáveis normalmente em Itens de checklist.
-  let itensFinal = itens
+  let itensFinal = itensComNr11
   let contratantesFinal = raw.contratantes
-  if (!itens.some(i => i.id === 'i_reg_pgr')) {
+  if (!itensComNr11.some(i => i.id === 'i_reg_pgr')) {
     const regs: { doc: DocKey; regId: string; opcoesId: string; creaOp: string; crmOp: string; mteOp: string; artId?: string; comprovIds: string[] }[] = [
       { doc: 'PGR', regId: 'i_reg_pgr', opcoesId: 'i_reg_opcoes_pgr', creaOp: 'op_reg_crea_pgr', crmOp: 'op_reg_crm_pgr', mteOp: 'op_reg_mte_pgr', artId: 'i_63m78g2', comprovIds: ['i_a2cfzsv'] },
       { doc: 'PCMSO', regId: 'i_reg_pcm', opcoesId: 'i_reg_opcoes_pcm', creaOp: 'op_reg_crea_pcm', crmOp: 'op_reg_crm_pcm', mteOp: 'op_reg_mte_pcm', comprovIds: ['i_54r3k9j'] },
@@ -439,7 +487,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
         ],
       })
     })
-    itensFinal = [...itens, ...novos].map(i => {
+    itensFinal = [...itensComNr11, ...novos].map(i => {
       const r = regs.find(x => x.artId === i.id || x.comprovIds.includes(i.id))
       if (!r) return i
       return { ...i, condicaoItemId: r.opcoesId, condicaoValor: i.id === r.artId ? r.creaOp : r.crmOp }
@@ -527,12 +575,16 @@ function Empty({ title, sub }: { title: string; sub: string }) {
 const HILITE_COLORS = ['#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', 'transparent']
 const FONT_COLORS = [TX, NO, P, OK, LARANJA, DOURADO, '#7C3AED', '#DB2777']
 
-function RichTextEditor({ value, onChange, placeholder, minRows = 3, resizable = false }: {
+function RichTextEditor({ value, onChange, placeholder, minRows = 3, resizable = false, locked = false, lockedMessage }: {
   value: string
   onChange: (html: string) => void
   placeholder?: string
   minRows?: number
   resizable?: boolean
+  /** Trava edição, seleção e cópia (mouse e teclado) — usado no parecer final enquanto
+   *  o checklist não estiver 100% marcado, pra ninguém copiar/enviar algo incompleto. */
+  locked?: boolean
+  lockedMessage?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const focused = useRef(false)
@@ -558,47 +610,64 @@ function RichTextEditor({ value, onChange, placeholder, minRows = 3, resizable =
   ]
   const btnBase: React.CSSProperties = { width: 24, height: 22, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 12, color: P, display: 'flex', alignItems: 'center', justifyContent: 'center' }
 
+  const bloquear = (e: React.SyntheticEvent) => { e.preventDefault(); e.stopPropagation() }
+
   return (
-    <div style={{ border: `1px solid ${LINE}`, borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '3px 6px', borderBottom: `1px solid ${LINE}`, background: PS, position: 'relative' }}>
-        {toolbarBtns.map(btn => (
-          <button key={btn.cmd} title={btn.title} onMouseDown={e => { e.preventDefault(); execCmd(btn.cmd) }} style={{ ...btnBase, ...btn.style }}>{btn.label}</button>
-        ))}
-        <div style={{ width: 1, height: 14, background: LINE, margin: '0 3px' }} />
-        <button title="Lista" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }} style={btnBase}>≡</button>
-        <div style={{ width: 1, height: 14, background: LINE, margin: '0 3px' }} />
-        <button title="Cor da letra" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'fore' ? null : 'fore') }} style={{ ...btnBase, flexDirection: 'column', gap: 0, lineHeight: 1 }}>
-          <span style={{ fontWeight: 700 }}>A</span>
-          <span style={{ width: 14, height: 3, background: NO, borderRadius: 1 }} />
-        </button>
-        <button title="Grifar (realce)" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'hilite' ? null : 'hilite') }} style={{ ...btnBase, background: '#FEF08A55' }}>🖍</button>
-        {colorPicker && (
-          <div style={{ position: 'absolute', top: 28, left: colorPicker === 'fore' ? 96 : 124, zIndex: 30, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: 8, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', width: 132 }}>
-            {(colorPicker === 'fore' ? FONT_COLORS : HILITE_COLORS).map(c => (
-              <button
-                key={c}
-                onMouseDown={e => {
-                  e.preventDefault()
-                  if (colorPicker === 'fore') execCmd('foreColor', c)
-                  else execCmd('hiliteColor', c === 'transparent' ? '#ffffff00' : c)
-                  setColorPicker(null)
-                }}
-                title={c === 'transparent' ? 'Remover realce' : c}
-                style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(0,0,0,0.12)', background: c === 'transparent' ? 'repeating-linear-gradient(45deg,#fff,#fff 4px,#eee 4px,#eee 8px)' : c, cursor: 'pointer' }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+    <div style={{ border: `1px solid ${locked ? NO : LINE}`, borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+      {locked ? (
+        <div style={{ padding: '7px 11px', background: NOS, color: NO, fontSize: 12, fontWeight: 600, borderBottom: `1px solid ${LINE}` }}>
+          🔒 {lockedMessage || 'Campo bloqueado até o checklist estar 100% marcado'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '3px 6px', borderBottom: `1px solid ${LINE}`, background: PS, position: 'relative' }}>
+          {toolbarBtns.map(btn => (
+            <button key={btn.cmd} title={btn.title} onMouseDown={e => { e.preventDefault(); execCmd(btn.cmd) }} style={{ ...btnBase, ...btn.style }}>{btn.label}</button>
+          ))}
+          <div style={{ width: 1, height: 14, background: LINE, margin: '0 3px' }} />
+          <button title="Lista" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }} style={btnBase}>≡</button>
+          <div style={{ width: 1, height: 14, background: LINE, margin: '0 3px' }} />
+          <button title="Cor da letra" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'fore' ? null : 'fore') }} style={{ ...btnBase, flexDirection: 'column', gap: 0, lineHeight: 1 }}>
+            <span style={{ fontWeight: 700 }}>A</span>
+            <span style={{ width: 14, height: 3, background: NO, borderRadius: 1 }} />
+          </button>
+          <button title="Grifar (realce)" onMouseDown={e => { e.preventDefault(); setColorPicker(p => p === 'hilite' ? null : 'hilite') }} style={{ ...btnBase, background: '#FEF08A55' }}>🖍</button>
+          {colorPicker && (
+            <div style={{ position: 'absolute', top: 28, left: colorPicker === 'fore' ? 96 : 124, zIndex: 30, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: 8, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', width: 132 }}>
+              {(colorPicker === 'fore' ? FONT_COLORS : HILITE_COLORS).map(c => (
+                <button
+                  key={c}
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    if (colorPicker === 'fore') execCmd('foreColor', c)
+                    else execCmd('hiliteColor', c === 'transparent' ? '#ffffff00' : c)
+                    setColorPicker(null)
+                  }}
+                  title={c === 'transparent' ? 'Remover realce' : c}
+                  style={{ width: 24, height: 24, borderRadius: 5, border: '1px solid rgba(0,0,0,0.12)', background: c === 'transparent' ? 'repeating-linear-gradient(45deg,#fff,#fff 4px,#eee 4px,#eee 8px)' : c, cursor: 'pointer' }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div
         ref={ref}
-        contentEditable
+        contentEditable={!locked}
         suppressContentEditableWarning
         data-placeholder={placeholder}
         onFocus={() => { focused.current = true }}
         onBlur={() => { focused.current = false; setColorPicker(null) }}
         onInput={() => onChange(ref.current?.innerHTML ?? '')}
-        style={{ minHeight: minRows * 22, maxHeight: resizable ? 500 : undefined, padding: '8px 11px', fontSize: 13, fontFamily: 'inherit', color: TX, outline: 'none', lineHeight: 1.6, overflowWrap: 'break-word', resize: resizable ? 'vertical' : 'none', overflow: resizable ? 'auto' : 'visible' }}
+        onCopy={locked ? bloquear : undefined}
+        onCut={locked ? bloquear : undefined}
+        onContextMenu={locked ? bloquear : undefined}
+        onDragStart={locked ? bloquear : undefined}
+        style={{
+          minHeight: minRows * 22, maxHeight: resizable ? 500 : undefined, padding: '8px 11px', fontSize: 13, fontFamily: 'inherit', color: TX, outline: 'none',
+          lineHeight: 1.6, overflowWrap: 'break-word', resize: resizable ? 'vertical' : 'none', overflow: resizable ? 'auto' : 'visible',
+          userSelect: locked ? 'none' : 'text', WebkitUserSelect: locked ? 'none' : 'text',
+          background: locked ? '#FAFAFA' : undefined, cursor: locked ? 'not-allowed' : 'text',
+        }}
       />
     </div>
   )
@@ -661,6 +730,7 @@ export default function WorkflowProgramasClient() {
   const [bancoItem, setBancoItem] = useState<string | null>(null)
 
   // modals
+  const [dupEmpresa, setDupEmpresa] = useState<AnaliseRow | null>(null)
   const [modalContratante, setModalContratante] = useState<Contratante | null>(null)
   const [modalContratanteNovo, setModalContratanteNovo] = useState(false)
   const [modalItemEdit, setModalItemEdit] = useState<ChecklistItem | null>(null)
@@ -920,10 +990,20 @@ export default function WorkflowProgramasClient() {
     const restricoes = itens.filter(i => a.respostas[i.id]?.status === 'restricao')
     const orientativos = itens.filter(i => !i.critico && a.respostas[i.id]?.status === 'nao')
     const aprovados = itens.filter(i => a.respostas[i.id]?.status === 'ok' && i.textoAprovadoId)
-    const observacoes = itens.filter(i => {
+    const observacoesBase = itens.filter(i => {
       const s = a.respostas[i.id]?.status
       return s === 'restricao' || (!i.critico && s === 'nao') || (s === 'ok' && !!i.textoAprovadoId)
     })
+    // Itens aprovados com restrição entram agrupados (juntos), igual à reprovação — em vez de
+    // espalhados entre orientativos/aprovados na ordem dos documentos. Quando há 2+ restrições,
+    // todas usam um prazo só: o menor prazo marcado entre elas (não o prazo individual de cada uma).
+    const observacoes = [
+      ...restricoes,
+      ...observacoesBase.filter(i => a.respostas[i.id]?.status !== 'restricao'),
+    ]
+    const prazoRestricaoComum = restricoes.length
+      ? Math.min(...restricoes.map(i => a.respostas[i.id]?.prazoRestricaoDias || 60))
+      : undefined
     const marcados = itens.filter(i => a.respostas[i.id]?.status)
     const blocos: Record<BlocoParecer, () => string> = {
       aprovacao: () => aplicaVars(getT(c?.aprovadoId || catalog?.config.aprovadoId)?.corpo || '', ctx),
@@ -932,8 +1012,11 @@ export default function WorkflowProgramasClient() {
         const t = status === 'restricao' ? getT(i.textoRestricaoId) : status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
         const obs = a.respostas[i.id]?.obs
         const tag = status === 'restricao' ? ' — APROVADO COM RESTRIÇÃO' : status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
+        const ctxItem = status === 'restricao' && prazoRestricaoComum != null
+          ? { ...ctxParaItem(ctx, i, a), prazorestricao: String(prazoRestricaoComum) }
+          : ctxParaItem(ctx, i, a)
         let bloco = `<div style="font-weight:700;margin-bottom:4px">${n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
-          aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i, a))
+          aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxItem)
         if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
         return bloco
       })),
@@ -1000,6 +1083,7 @@ export default function WorkflowProgramasClient() {
       data: hoje(), prazo: addDias(catalog.config.prazoDias || 7),
       responsavel: displayName(profile, catalog.config.responsavel || ''),
       reincidencia: '', setoresAtuacao: [],
+      subcontratada: false, empresaContratanteSub: '',
       respostas: {},
       validades: {},
     })
@@ -1010,6 +1094,34 @@ export default function WorkflowProgramasClient() {
     if (v === 'nova' && !draft) novaAnalise()
     if (v === 'textos') setTextosSub('hub')
     setView(v)
+  }
+
+  /** Ao sair do campo "Empresa prestadora" numa análise nova (ainda sem draftId), avisa se
+   *  já existe empresa com o mesmo nome no banco (ignorando espaço e maiúscula/minúscula) —
+   *  pra não ficar a mesma empresa duplicada no banco de dados. */
+  function verificarEmpresaDuplicada(nome: string) {
+    if (draftId || !nome.trim()) return
+    const alvo = normalizaEmpresa(nome)
+    const achado = analises.find(a => normalizaEmpresa(a.empresa) === alvo)
+    if (achado) setDupEmpresa(achado)
+  }
+
+  function substituirEmpresaDuplicada() {
+    if (!dupEmpresa || !catalog) return
+    setDraftId(dupEmpresa.id)
+    setDraft({
+      contratanteIds: [], documentos: ['PGR', 'PCMSO'],
+      empresa: dupEmpresa.empresa, cnpj: dupEmpresa.cnpj, emailDestino: '',
+      data: hoje(), prazo: addDias(catalog.config.prazoDias || 7),
+      responsavel: displayName(profile, catalog.config.responsavel || ''),
+      reincidencia: '', setoresAtuacao: [],
+      subcontratada: false, empresaContratanteSub: '',
+      respostas: {},
+      validades: {},
+    })
+    setEmailEditado(false)
+    setDupEmpresa(null)
+    showToast('Preenchimento reiniciado — vai substituir o registro anterior dessa empresa ao salvar')
   }
 
   function abrirAnalise(row: AnaliseRow) {
@@ -1063,9 +1175,8 @@ export default function WorkflowProgramasClient() {
   async function finalizarAnalise() {
     if (!draft || !draft.empresa.trim()) { showToast('Informe a empresa prestadora'); return }
     const itens = itensDaAnalise(draft)
-    const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
-    const semMarcar = itensStatus.filter(i => !draft.respostas[i.id]?.status).length
-    const criticoReprovado = itensStatus.some(i => i.critico && draft.respostas[i.id]?.status === 'nao')
+    const semMarcar = contarItensSemMarcar(itens, draft.respostas)
+    const criticoReprovado = itens.some(i => i.tipo !== 'opcoes' && i.critico && draft.respostas[i.id]?.status === 'nao')
     if (semMarcar && !criticoReprovado) {
       showToast(`Faltam ${semMarcar} item(ns) sem marcação — não é possível finalizar.`)
       return
@@ -1238,7 +1349,7 @@ export default function WorkflowProgramasClient() {
     const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)))
     const html = `<html><head><meta charset="utf-8"></head><body>${emailCorpo}</body></html>`
     const eml = [
-      'To: ' + (draft.emailDestino || ''), 'Subject: =?UTF-8?B?' + b64(emailBuilt.assunto) + '?=',
+      'To: ' + emailsParaEnvio(draft.emailDestino), 'Subject: =?UTF-8?B?' + b64(emailBuilt.assunto) + '?=',
       'X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', html,
     ].join('\r\n')
     const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
@@ -1253,7 +1364,7 @@ export default function WorkflowProgramasClient() {
    *  por esse canal em nenhum cliente de e-mail, então a formatação não sobrevive aqui. */
   function abrirMailto() {
     if (!draft || !emailBuilt) return
-    location.href = 'mailto:' + (draft.emailDestino || '') + '?subject=' + encodeURIComponent(emailBuilt.assunto) + '&body=' + encodeURIComponent(htmlToPlainText(emailCorpo))
+    location.href = 'mailto:' + emailsParaEnvio(draft.emailDestino) + '?subject=' + encodeURIComponent(emailBuilt.assunto) + '&body=' + encodeURIComponent(htmlToPlainText(emailCorpo))
   }
 
   /** Copia com formatação (text/html) e um fallback em texto puro (text/plain) — é o que faz
@@ -1290,6 +1401,9 @@ export default function WorkflowProgramasClient() {
 
   const finalizadas = useMemo(() => analises.filter(a => a.finalizada), [analises])
   const emAndamento = useMemo(() => analises.filter(a => !a.finalizada), [analises])
+  /** Nomes de empresas já cadastradas no banco — usado como sugestão de busca no campo
+   *  "Empresa contratante" quando a prestadora é marcada como subcontratada. */
+  const empresasBanco = useMemo(() => Array.from(new Set(analises.map(a => a.empresa).filter(Boolean))).sort(), [analises])
 
   const bancoFiltrado = useMemo(() => {
     const q = bancoQ.toLowerCase()
@@ -1433,6 +1547,11 @@ export default function WorkflowProgramasClient() {
     if (modalItemEdit.tipo === 'opcoes') {
       if (!modalItemEdit.variavel.trim()) { showToast('Informe o nome da variável'); return }
       if (!modalItemEdit.opcoes.length || modalItemEdit.opcoes.some(o => !o.label.trim())) { showToast('Cadastre ao menos uma opção com rótulo'); return }
+      // Opção sem texto não aparece em lugar nenhum do parecer quando marcada — sem esse
+      // aviso, é fácil cadastrar só o rótulo e esquecer do corpo (foi o que aconteceu com
+      // as opções de NR-11 em "Treinamentos").
+      const semTexto = modalItemEdit.opcoes.find(o => !htmlToPlainText(o.corpo).trim())
+      if (semTexto) { showToast(`A opção "${semTexto.label}" está sem texto — sem isso ela não aparece no parecer quando marcada`); return }
     }
     const next = { ...catalog }
     if (modalItemNovo) {
@@ -1654,8 +1773,8 @@ export default function WorkflowProgramasClient() {
       {view === 'nova' && draft && (
         <VAnalise
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
-          itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos}
-          onField={setDraftField} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
+          itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos} empresasBanco={empresasBanco}
+          onField={setDraftField} onEmpresaBlur={verificarEmpresaDuplicada} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise} onDescartar={descartarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={copiarParecer}
@@ -1745,6 +1864,26 @@ export default function WorkflowProgramasClient() {
 
       {view === 'config' && (
         <VConfig config={catalog.config} textos={catalog.textos} onSalvar={salvarConfig} />
+      )}
+
+      {/* ── Modal: Empresa duplicada no banco ── */}
+      {dupEmpresa && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setDupEmpresa(null) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        >
+          <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 440, padding: 22, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: TX, marginBottom: 8 }}>Empresa já está no banco de dados</div>
+            <div style={{ fontSize: 13, color: MU, lineHeight: 1.6, marginBottom: 18 }}>
+              Já existe uma análise para <b>{dupEmpresa.empresa}</b> ({dupEmpresa.finalizada ? 'finalizada' : 'em andamento'}, criada em {new Date(dupEmpresa.created_at).toLocaleDateString('pt-BR')}).
+              Quer começar um novo preenchimento, substituindo o registro anterior? Assim a empresa não fica duplicada no banco.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <Btn variant="gho" onClick={() => setDupEmpresa(null)}>Não, manter separado</Btn>
+              <Btn variant="pri" onClick={substituirEmpresaDuplicada}>Sim, substituir</Btn>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Modal: Contratante ── */}
@@ -1868,14 +2007,16 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, onField, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
   getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined; nomeC: (c?: Contratante) => string
   nomesContratantes: (ids: string[]) => string
   anexos: Anexo[]
+  empresasBanco: string[]
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
+  onEmpresaBlur: (nome: string) => void
   onToggleDoc: (d: DocKey) => void; onToggleContratante: (id: string) => void; onToggleSetor: (setor: string) => void
   onDot: (itemId: string, val: StatusResp) => void; onObs: (itemId: string, obs: string) => void
   onPrazoRestricao: (itemId: string, dias: number) => void
@@ -1892,7 +2033,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   const camposFaltando = (catalog.config.camposObrigatorios ?? []).filter(key => campoAnaliseVazio(draft, key))
   const campoObrigatorioVazio = (key: string) => (catalog.config.camposObrigatorios ?? []).includes(key) && campoAnaliseVazio(draft, key)
   const redStyle = (vazio: boolean): React.CSSProperties => (vazio ? { border: `1px solid ${NO}`, background: NOS } : {})
-  const semMarcar = itensStatus.filter(i => !draft.respostas[i.id]?.status).length
+  const semMarcar = contarItensSemMarcar(itens, draft.respostas)
   const podeFinalizarOuCopiar = semMarcar === 0 || modoReprovacao
   const ok = itensStatus.filter(i => draft.respostas[i.id]?.status === 'ok').length
   const restr = itensStatus.filter(i => draft.respostas[i.id]?.status === 'restricao').length
@@ -1922,9 +2063,14 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 430px', gap: 16, alignItems: 'start' }}>
         <div>
           <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
-            <Field label="Empresa prestadora"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('empresa')) }} value={draft.empresa} onChange={e => onField('empresa', e.target.value)} placeholder="Razão social" /></Field>
+            <Field label="Empresa prestadora">
+              <input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('empresa')) }} value={draft.empresa}
+                onChange={e => onField('empresa', e.target.value)} onBlur={e => onEmpresaBlur(e.target.value)} placeholder="Razão social" />
+            </Field>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 12 }}>
-              <Field label="E-mail de destino"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('emailDestino')) }} type="email" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br" /></Field>
+              <Field label="E-mail de destino — separe vários com ;">
+                <input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('emailDestino')) }} type="text" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br;financeiro@empresa.com.br" />
+              </Field>
               <Field label="Data da análise"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('data')) }} type="date" value={draft.data} onChange={e => onField('data', e.target.value)} /></Field>
               <Field label="Analista"><input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('responsavel')) }} value={draft.responsavel} onChange={e => onField('responsavel', e.target.value)} /></Field>
               <Field label="Reincidência">
@@ -1946,6 +2092,23 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                   ))}
                 </div>
               </Field>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: TX, cursor: 'pointer' }}>
+                <input type="checkbox" checked={draft.subcontratada} onChange={e => onField('subcontratada', e.target.checked)} />
+                Empresa subcontratada (contratada por outra empresa, não direto pela contratante)
+              </label>
+              {draft.subcontratada && (
+                <div style={{ marginTop: 8 }}>
+                  <Field label="Empresa contratante — busca no banco">
+                    <input style={inputStyle} list="lista-empresas-banco" value={draft.empresaContratanteSub}
+                      onChange={e => onField('empresaContratanteSub', e.target.value)} placeholder="Nome da empresa que subcontratou" />
+                    <datalist id="lista-empresas-banco">
+                      {empresasBanco.map(nome => <option key={nome} value={nome} />)}
+                    </datalist>
+                  </Field>
+                </div>
+              )}
             </div>
             <div style={{ height: 1, background: LINE, margin: '14px 0' }} />
             <label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>
@@ -2247,7 +2410,9 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
             </div>
             <div style={{ padding: '12px 12px 0' }}><label style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>Corpo</label></div>
             <div style={{ padding: '0 12px 12px' }}>
-              <RichTextEditor value={emailCorpo} onChange={onEmailChange} minRows={15} resizable />
+              <RichTextEditor value={emailCorpo} onChange={onEmailChange} minRows={15} resizable
+                locked={!podeFinalizarOuCopiar}
+                lockedMessage={`Faltam ${semMarcar} item(ns) sem marcação — edição e cópia liberam quando o checklist estiver completo`} />
             </div>
             <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: `1px solid ${LINE}`, flexWrap: 'wrap', alignItems: 'center' }}>
               <Btn variant="pri" small disabled={!podeFinalizarOuCopiar} onClick={onCopiar} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>📋 Copiar</Btn>
@@ -2430,7 +2595,11 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                             <span style={{ color: MU, fontSize: 11.5 }}>{ok}{restr ? '+' + restr : ''}/{apl} · {p}%</span>
                           </td>
                           <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone={s.c}>{s.t}</Tag></td>
-                          <td style={{ padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right', color: MU, fontSize: 12 }}>{open ? '▲ fechar' : '▼ detalhes'}</td>
+                          <td style={{ padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right', color: MU, fontSize: 12, whiteSpace: 'nowrap' }}>
+                            <button onClick={e => { e.stopPropagation(); onDel(a.id, a.empresa) }} title="Excluir esta empresa do banco"
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', color: NO, fontSize: 13, padding: '2px 6px', marginRight: 4 }}>🗑</button>
+                            {open ? '▲ fechar' : '▼ detalhes'}
+                          </td>
                         </tr>
                         {open && (
                           <tr><td colSpan={7} style={{ padding: '6px 4px 12px', borderBottom: `1px solid ${LINE}` }}>
@@ -2439,6 +2608,9 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                               <div><span style={{ fontSize: 11, color: MU }}>E-mail de destino</span><div>{a.dados.emailDestino || '—'}</div></div>
                               <div><span style={{ fontSize: 11, color: MU }}>Data da análise</span><div>{fmtD(a.dados.data)}</div></div>
                               <div><span style={{ fontSize: 11, color: MU }}>Prazo dado</span><div>{fmtD(a.dados.prazo)}</div></div>
+                              {a.dados.subcontratada && (
+                                <div><span style={{ fontSize: 11, color: MU }}>Subcontratada por</span><div>{a.dados.empresaContratanteSub || '—'}</div></div>
+                              )}
                             </div>
                             <Card>
                               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}><tbody>
