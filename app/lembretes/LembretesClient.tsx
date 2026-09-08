@@ -177,6 +177,20 @@ export default function LembretesClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, lembretes, searchParams])
 
+  // Abre direto no modal "outros" para um colaborador quando vem do widget de
+  // equipe no dashboard (?outros=<userId>).
+  useEffect(() => {
+    if (loading || !isGestorOrAdmin) return
+    const outrosId = searchParams.get('outros')
+    if (!outrosId) return
+    void (async () => {
+      await openOutros()
+      await loadOutros(outrosId)
+    })()
+    router.replace('/lembretes')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, isGestorOrAdmin, searchParams])
+
   useEffect(() => {
     const today = new Date()
     if (calYear === today.getFullYear() && calMonth === today.getMonth()) {

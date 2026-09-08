@@ -57,7 +57,7 @@ type CatalogConfig = {
   responsavel: string; assunto: string
   aberturaId: string; fechamentoId: string; assinaturaId: string; aprovadoId: string
   /** Textos usados na observação automática de validade (categoria "validade") — vazio = nenhuma observação */
-  validadeAnualId: string; validadePersonalizadaId: string
+  validadeAnualId: string; validadePersonalizadaId: string; validadeBienalId: string
   prazoDias: number
   /** Chaves de CAMPOS_ANALISE que precisam estar preenchidas antes do checklist liberar em Nova análise. */
   camposObrigatorios: string[]
@@ -319,7 +319,7 @@ function seedCatalog(): Catalog {
       responsavel: 'Rodrigo Balem',
       assunto: 'GT3 · Análise de documentação SST — {{empresa}} — {{contratante}}',
       aberturaId: 't_abertura', fechamentoId: 't_fechamento', assinaturaId: 't_assinatura', aprovadoId: 't_aprovado',
-      validadeAnualId: 't_validade_anual', validadePersonalizadaId: 't_validade_personalizada',
+      validadeAnualId: 't_validade_anual', validadePersonalizadaId: 't_validade_personalizada', validadeBienalId: '',
       prazoDias: 7,
       camposObrigatorios: [],
       ordemBlocos: [...ORDEM_BLOCOS_PADRAO],
@@ -335,7 +335,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || raw.itens.some(i => typeof i.textoReprovacaoId !== 'string' || typeof i.textoAprovadoId !== 'string' || !Array.isArray(i.statusOptions) || typeof i.condicaoItemId !== 'string'
       || typeof i.tipo !== 'string' || !Array.isArray(i.opcoes) || i.opcoes.some(o => typeof o.pedirTexto !== 'boolean' || typeof o.variavelDetalhe !== 'string' || typeof o.padrao !== 'boolean'))
     || raw.textos.some(t => idsAprovado.has(t.id) && t.categoria !== 'aprovacao')
-    || typeof raw.config.validadeAnualId !== 'string' || typeof raw.config.validadePersonalizadaId !== 'string'
+    || typeof raw.config.validadeAnualId !== 'string' || typeof raw.config.validadePersonalizadaId !== 'string' || typeof raw.config.validadeBienalId !== 'string'
     || !raw.config.aprovadoId || !raw.textos.some(t => t.id === raw.config.aprovadoId)
     || !Array.isArray(raw.config.camposObrigatorios)
     || !Array.isArray(raw.config.ordemBlocos)
@@ -363,6 +363,9 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     const seedTexto = seed.textos.find(t => t.id === 't_validade_personalizada')!
     if (!textos.some(t => t.id === seedTexto.id)) textos = [...textos, seedTexto]
     config.validadePersonalizadaId = seedTexto.id
+  }
+  if (typeof config.validadeBienalId !== 'string') {
+    config.validadeBienalId = ''
   }
   // Reconstrói o texto de aprovação padrão se o id configurado não existir mais em `textos`
   // (ex.: apagado sem querer) — sem ele, todo parecer 100% aprovado sai com abertura vazia.
@@ -697,7 +700,7 @@ export default function WorkflowProgramasClient() {
         else map.set(i.id, { item: i, textoLink: l.textoId || i.textoId, contratanteIds: [cid] })
       })
     })
-    return Array.from(map.values())
+    const itensFiltrados = Array.from(map.values())
       .map(({ item, textoLink, contratanteIds }) => ({ ...item, textoLink, contratanteIds }))
       .filter((i): i is ItemDaAnalise => i.documento === 'GERAL' || docs.includes(i.documento))
       .filter(i => {
@@ -706,7 +709,22 @@ export default function WorkflowProgramasClient() {
         if (condItem?.tipo === 'opcoes') return (a.respostas[i.condicaoItemId]?.opcoesSelecionadas || []).includes(i.condicaoValor)
         return a.respostas[i.condicaoItemId]?.status === i.condicaoValor
       })
-      .sort((x, y) => DOC_ORDER.indexOf(x.documento) - DOC_ORDER.indexOf(y.documento))
+    // Um item condicionado a outro (ex.: lista de treinamentos que só aparece quando "possui
+    // treinamentos" é respondido) deve sempre renderizar logo abaixo do item que o libera,
+    // independentemente da ordem em que foram cadastrados na contratante.
+    const ordemOriginal = new Map(itensFiltrados.map((i, idx) => [i.id, idx]))
+    const ordemEfetiva = (i: ItemDaAnalise): number => {
+      const propria = ordemOriginal.get(i.id) ?? 0
+      if (i.condicaoItemId && i.condicaoItemId !== i.id && ordemOriginal.has(i.condicaoItemId)) {
+        return (ordemOriginal.get(i.condicaoItemId) ?? 0) + 0.5 + propria / 100000
+      }
+      return propria
+    }
+    return itensFiltrados.sort((x, y) => {
+      const porDocumento = DOC_ORDER.indexOf(x.documento) - DOC_ORDER.indexOf(y.documento)
+      if (porDocumento !== 0) return porDocumento
+      return ordemEfetiva(x) - ordemEfetiva(y)
+    })
   }
 
   /** Nomes das contratantes selecionadas, unidos em português ("A", "A e B", "A, B e C"). */
@@ -772,7 +790,20 @@ export default function WorkflowProgramasClient() {
       const v = a.validades?.[d as DocValidavel]
       return v?.tipo === 'personalizada' && v.meses <= 23
     })
+    const bienalBucket = (a.documentos || []).filter((d): d is DocValidavel => a.validades?.[d as DocValidavel]?.tipo === 'bienal')
     const partes: string[] = []
+    if (bienalBucket.length) {
+      const t = getT(catalog.config.validadeBienalId)
+      if (t) {
+        const txt = aplicaVars(t.corpo, {
+          ...baseCtx,
+          documentosValidade: joinDocs(bienalBucket.map(d => 'o ' + d)),
+          verbo: bienalBucket.length > 1 ? 'estão' : 'está',
+          adjetivo: bienalBucket.length > 1 ? 'bienais' : 'bienal',
+        })
+        if (txt.trim()) partes.push(txt)
+      }
+    }
     if (anualBucket.length) {
       const t = getT(catalog.config.validadeAnualId)
       if (t) {
@@ -1881,10 +1912,17 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                   if (i.tipo === 'opcoes') {
                     const respondido = draft.respostas[i.id]?.opcoesSelecionadas
                     const selecionadas = respondido && respondido.length ? respondido : i.opcoes.filter(o => o.padrao).map(o => o.id)
+                    // Segue restrição: item que só aparece quando o item-condição foi marcado
+                    // "Aprovado com restrição" — usa a cor dourada da restrição, em vez do azul
+                    // padrão, para deixar visualmente claro que os dois estão vinculados.
+                    const seguindoRestricao = i.condicaoValor === 'restricao' && catalog.itens.find(x => x.id === i.condicaoItemId)?.tipo !== 'opcoes'
+                    const corSel = seguindoRestricao ? AC : P
+                    const corTxtSel = seguindoRestricao ? '#3A2E14' : '#fff'
                     return (
-                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined }}>
+                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, background: seguindoRestricao ? ASO : undefined }}>
                         <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           {i.titulo}
+                          {seguindoRestricao && <Tag tone="acc">◐ segue aprovado com restrição</Tag>}
                           {multi && i.contratanteIds.length < draft.contratanteIds.length ? (
                             <Tag tone="acc">{i.contratanteIds.map(cid => nomeC(catalog.contratantes.find(c => c.id === cid))).join(', ')}</Tag>
                           ) : i.escopo === 'especifico' ? (
@@ -1898,8 +1936,8 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                             const sel = selecionadas.includes(o.id)
                             return (
                               <button key={o.id} onClick={() => onOpcao(i.id, o.id, i.multiplaEscolha)} style={{
-                                padding: '6px 13px', borderRadius: 99, border: `1.5px solid ${sel ? P : LINE}`,
-                                background: sel ? P : '#fff', color: sel ? '#fff' : TX, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', fontWeight: sel ? 600 : 400,
+                                padding: '6px 13px', borderRadius: 99, border: `1.5px solid ${sel ? corSel : LINE}`,
+                                background: sel ? corSel : '#fff', color: sel ? corTxtSel : TX, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', fontWeight: sel ? 600 : 400,
                               }}>{o.label || '(sem rótulo)'}</button>
                             )
                           })}
@@ -3077,6 +3115,7 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
   const [assunto, setAssunto] = useState(config.assunto)
   const [validadeAnualId, setValidadeAnualId] = useState(config.validadeAnualId)
   const [validadePersonalizadaId, setValidadePersonalizadaId] = useState(config.validadePersonalizadaId)
+  const [validadeBienalId, setValidadeBienalId] = useState(config.validadeBienalId)
   const [camposObrigatorios, setCamposObrigatorios] = useState<string[]>(config.camposObrigatorios ?? [])
   const [ordemBlocos, setOrdemBlocos] = useState<BlocoParecer[]>(config.ordemBlocos?.length ? config.ordemBlocos : ORDEM_BLOCOS_PADRAO)
   const textosValidade = textos.filter(t => t.categoria === 'validade')
@@ -3106,7 +3145,7 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Field label="Prazo padrão (dias)"><input style={inputStyle} value={prazoDias} onChange={e => setPrazoDias(parseInt(e.target.value) || 7)} /></Field>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <Btn variant="pri" onClick={() => onSalvar({ prazoDias, assunto, validadeAnualId, validadePersonalizadaId })}>Salvar padrões</Btn>
+            <Btn variant="pri" onClick={() => onSalvar({ prazoDias, assunto, validadeAnualId, validadePersonalizadaId, validadeBienalId })}>Salvar padrões</Btn>
           </div>
         </div>
         <div style={{ marginTop: 12 }}>
@@ -3116,10 +3155,16 @@ function VConfig({ config, textos, onSalvar }: { config: CatalogConfig; textos: 
       <Card style={{ padding: '16px 18px' }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Observação automática de validade</div>
         <div style={{ fontSize: 12.5, color: MU, marginBottom: 12 }}>
-          Textos usados quando um PGR/PCMSO/LTCAT é marcado como Anual ou Personalizada até 23 meses na análise aprovada.
+          Textos usados quando um PGR/PCMSO/LTCAT é marcado como Bienal, Anual ou Personalizada até 23 meses na análise aprovada.
           Edite o conteúdo em Textos → Validade.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Field label="Texto — Validade Bienal">
+            <select style={inputStyle} value={validadeBienalId} onChange={e => setValidadeBienalId(e.target.value)}>
+              <option value="">— nenhum, não indica nada —</option>
+              {textosValidade.map(t => <option key={t.id} value={t.id}>{t.titulo}</option>)}
+            </select>
+          </Field>
           <Field label="Texto — Validade Anual">
             <select style={inputStyle} value={validadeAnualId} onChange={e => setValidadeAnualId(e.target.value)}>
               <option value="">— nenhum, não indica nada —</option>

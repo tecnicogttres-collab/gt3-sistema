@@ -35,6 +35,14 @@ type LembreteItem = {
   daysLeft: number
 }
 
+type TeamLembreteItem = {
+  id: string
+  titulo: string
+  horaInicio: string | null
+  colaboradorId: string
+  colaboradorNome: string
+}
+
 type PdiAgendaEntry = {
   colaborador_nome: string
   data_conversa: string
@@ -123,11 +131,14 @@ function prioDateLabel(p: Prioridade): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DashboardSidebar({ role }: { role?: string }) {
+  const isManager = role === 'gestor' || role === 'admin'
   const [priorities, setPriorities] = useState<Prioridade[]>([])
   const [hoNames, setHoNames] = useState<string[]>([])
   const [bsaPerson, setBsaPerson] = useState('')
   const [bdayItems, setBdayItems] = useState<BdayItem[]>([])
   const [lembreteItems, setLembreteItems] = useState<LembreteItem[]>([])
+  const [teamLembretes, setTeamLembretes] = useState<TeamLembreteItem[]>([])
+  const [abaLembretes, setAbaLembretes] = useState<'meus' | 'equipe'>('meus')
   const [modalPrio, setModalPrio] = useState<Prioridade | null>(null)
   const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
   const [pdiConversaColaborador, setPdiConversaColaborador] = useState<PdiConversaColaborador | null>(null)
@@ -270,6 +281,22 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         setLembreteItems([])
       }
     })()
+
+    // Lembretes de outros colaboradores para hoje (aba "Equipe", só gestor/admin)
+    if (isManager) {
+      ;(async () => {
+        try {
+          const res = await fetch('/api/lembretes/equipe-hoje')
+          if (!res.ok) { setTeamLembretes([]); return }
+          const data: TeamLembreteItem[] = await res.json()
+          setTeamLembretes(Array.isArray(data) ? data : [])
+        } catch {
+          setTeamLembretes([])
+        }
+      })()
+    } else {
+      setTeamLembretes([])
+    }
   }
 
   useEffect(() => {
@@ -608,7 +635,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         })()}
 
         {/* ── Block 4: Lembretes próximos (conditional) ────────────────── */}
-        {lembreteItems.length > 0 && (
+        {(lembreteItems.length > 0 || (isManager && teamLembretes.length > 0)) && (
           <div style={{
             background: '#FFF8F0',
             borderRadius: 8,
@@ -616,29 +643,86 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             padding: '12px 14px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
           }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#7A3A0E', marginBottom: 10 }}>
-              📌 Lembretes
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#7A3A0E' }}>
+                📌 Lembretes
+              </div>
+              {isManager && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {(['meus', 'equipe'] as const).map(aba => {
+                    const on = abaLembretes === aba
+                    return (
+                      <button
+                        key={aba}
+                        onClick={() => setAbaLembretes(aba)}
+                        style={{
+                          position: 'relative', border: `1px solid ${on ? '#B85C1A' : '#FDDFC4'}`,
+                          background: on ? '#B85C1A' : '#fff', color: on ? '#fff' : '#7A3A0E',
+                          borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600,
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        {aba === 'meus' ? 'Meus' : 'Equipe'}
+                        {aba === 'equipe' && teamLembretes.length > 0 && (
+                          <span style={{
+                            position: 'absolute', top: -3, right: -3, width: 8, height: 8,
+                            borderRadius: '50%', background: '#D64545', border: '1.5px solid #fff',
+                          }} />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-            {lembreteItems.map((item, i) => (
-              <Link
-                key={item.id}
-                href={`/lembretes?edit=${item.id}`}
-                title="Abrir e editar este lembrete"
-                style={{
-                  fontSize: 13, color: '#1E293B', textDecoration: 'none',
-                  padding: '5px 0', display: 'block',
-                  borderBottom: i < lembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none',
-                  lineHeight: 1.5,
-                }}
-              >
-                <span style={{ fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.titulo}
-                </span>
-                <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
-                  {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
-                </span>
-              </Link>
-            ))}
+
+            {(!isManager || abaLembretes === 'meus') ? (
+              lembreteItems.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: '#9CA3AF', fontStyle: 'italic' }}>Nenhum lembrete seu para os próximos dias.</div>
+              ) : lembreteItems.map((item, i) => (
+                <Link
+                  key={item.id}
+                  href={`/lembretes?edit=${item.id}`}
+                  title="Abrir e editar este lembrete"
+                  style={{
+                    fontSize: 13, color: '#1E293B', textDecoration: 'none',
+                    padding: '5px 0', display: 'block',
+                    borderBottom: i < lembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <span style={{ fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.titulo}
+                  </span>
+                  <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
+                    {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
+                  </span>
+                </Link>
+              ))
+            ) : (
+              teamLembretes.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: '#9CA3AF', fontStyle: 'italic' }}>Nenhum lembrete de outros colaboradores hoje.</div>
+              ) : teamLembretes.map((item, i) => (
+                <Link
+                  key={item.id}
+                  href={`/lembretes?outros=${item.colaboradorId}`}
+                  title="Ver lembretes deste colaborador"
+                  style={{
+                    fontSize: 13, color: '#1E293B', textDecoration: 'none',
+                    padding: '5px 0', display: 'block',
+                    borderBottom: i < teamLembretes.length - 1 ? '1px solid #FDDFC4' : 'none',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <span style={{ fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.titulo}
+                  </span>
+                  <span style={{ color: '#6B7280', fontSize: 11 }}>
+                    {item.colaboradorNome}{item.horaInicio ? ` · ${item.horaInicio.slice(0, 5)}` : ''}
+                  </span>
+                </Link>
+              ))
+            )}
           </div>
         )}
 
