@@ -122,6 +122,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'retorno-de-nr',
+    label: 'Retorno de NR',
+    color: '#4A90D9',
+    path: '/retorno-de-nr',
+    description: 'Orientação ao prestador e registro no GT0100 por treinamento de NR',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'legislacoes',
     label: 'Legislações',
     color: '#4A90D9',
