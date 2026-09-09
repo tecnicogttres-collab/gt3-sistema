@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GT3 · Acompanhamento PGR / PCMSO</title>
+<style>
+:root{
+  --pri:#2A4F96; --pri-dark:#1E3A6E; --pri-soft:#E8EEF9;
+  --acc:#D1AE6E; --acc-soft:#FBF4E6;
+  --bg:#F4F6FA; --card:#FFFFFF; --line:#E2E8F2;
+  --txt:#1B2432; --muted:#6B7A90;
+  --ok:#1E9E6A; --ok-soft:#E6F6EF;
+  --no:#D64545; --no-soft:#FCEBEB;
+  --na:#94A3B8; --na-soft:#EEF1F5;
+  --r:10px; --sh:0 1px 2px rgba(27,36,50,.06), 0 4px 16px rgba(27,36,50,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--pri)}
+
+/* layout */
+.app{display:flex;min-height:100vh}
+.side{width:236px;flex:0 0 236px;background:var(--pri-dark);color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{padding:20px 18px 14px;border-bottom:1px solid rgba(255,255,255,.12)}
+.brand b{display:block;font-size:16px;letter-spacing:.3px}
+.brand span{font-size:11.5px;color:#B9C6DE;text-transform:uppercase;letter-spacing:1.2px}
+.nav{padding:10px 8px;flex:1;overflow:auto}
+.nav button{width:100%;text-align:left;background:none;border:0;color:#D5DEEE;padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;gap:10px;align-items:center;font-size:13.5px}
+.nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav button.on{background:var(--pri);color:#fff;font-weight:600}
+.nav .grp{font-size:10.5px;letter-spacing:1.3px;color:#8CA0C4;padding:14px 12px 6px;text-transform:uppercase}
+.side .foot{padding:12px 14px;font-size:11px;color:#8CA0C4;border-top:1px solid rgba(255,255,255,.12)}
+.main{flex:1;min-width:0;padding:22px 26px 60px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+h1{font-size:21px;margin:0 0 3px}
+.sub{color:var(--muted);font-size:13px;margin:0}
+
+/* components */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh)}
+.pad{padding:16px 18px}
+.grid{display:grid;gap:14px}
+.btn{border:1px solid var(--line);background:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:7px}
+.btn:hover{border-color:var(--pri);color:var(--pri)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.btn.pri:hover{background:var(--pri-dark)}
+.btn.acc{background:var(--acc);border-color:var(--acc);color:#3A2E14;font-weight:600}
+.btn.gho{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.gho:hover{color:var(--no)}
+.btn.sm{padding:5px 10px;font-size:12px}
+label.f{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:5px;font-weight:600}
+input[type=text],input[type=date],input[type=email],select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-soft)}
+textarea{resize:vertical;font-family:inherit}
+.row{display:grid;gap:12px}
+.r2{grid-template-columns:1fr 1fr}.r3{grid-template-columns:1fr 1fr 1fr}.r4{grid-template-columns:repeat(4,1fr)}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:var(--pri-soft);color:var(--pri)}
+.tag.acc{background:var(--acc-soft);color:#8A6A22}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.no{background:var(--no-soft);color:var(--no)}
+.tag.na{background:var(--na-soft);color:#54617A}
+.muted{color:var(--muted)}
+.hr{height:1px;background:var(--line);margin:14px 0}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.empty{text-align:center;padding:44px 20px;color:var(--muted)}
+.empty b{display:block;color:var(--txt);margin-bottom:4px;font-size:15px}
+
+/* checklist */
+.doc-grp{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:12px;background:#fff}
+.doc-hd{background:#F7F9FD;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.doc-hd b{font-size:13px;letter-spacing:.4px}
+.item{display:flex;gap:14px;padding:12px 14px;border-bottom:1px solid #F0F3F8;align-items:flex-start}
+.item:last-child{border-bottom:0}
+.item.st-nao{background:#FEF8F8}
+.item.st-ok{background:#F8FDFA}
+.dots{display:flex;gap:6px;padding-top:2px}
+.dot{width:26px;height:26px;border-radius:50%;border:2px solid var(--pri);background:#fff;cursor:pointer;display:grid;place-items:center;font-size:13px;font-weight:800;color:#A8B7D2;transition:.12s;box-shadow:0 1px 2px rgba(42,79,150,.14)}
+.dot:hover{transform:scale(1.14);box-shadow:0 0 0 3px var(--pri-soft);color:var(--pri)}
+.dot[data-val=ok].on{background:var(--ok);border-color:var(--ok);color:#fff;box-shadow:0 0 0 3px var(--ok-soft)}
+.dot[data-val=nao].on{background:var(--no);border-color:var(--no);color:#fff;box-shadow:0 0 0 3px var(--no-soft)}
+.dot[data-val=na].on{background:var(--na);border-color:var(--na);color:#fff;box-shadow:0 0 0 3px var(--na-soft)}
+.seg{display:inline-flex;border:1px solid var(--pri);border-radius:9px;overflow:hidden;background:#fff}
+.seg button{border:0;background:#fff;padding:8px 20px;cursor:pointer;font-size:13px;color:var(--pri);border-right:1px solid var(--pri)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--pri);color:#fff;font-weight:600}
+.det{background:#F8FAFE;border-top:1px solid var(--line)}
+.rowlink{cursor:pointer}
+.rowlink:hover td{background:#F7F9FD}
+.stat{display:flex;gap:10px;flex-wrap:wrap}
+.stat div{flex:1;min-width:130px;background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.stat b{display:block;font-size:22px;line-height:1.2}
+.stat span{font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.minibar{height:6px;background:var(--no-soft);border-radius:99px;overflow:hidden;min-width:90px}
+.minibar i{display:block;height:100%;background:var(--ok)}
+.item-b{flex:1;min-width:0}
+.item-t{font-weight:600;font-size:13.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item-d{font-size:12.5px;color:var(--muted);margin-top:2px}
+.item-obs{margin-top:8px;font-size:12.5px;padding:6px 9px}
+.pill{font-size:10.5px;padding:1px 7px;border-radius:99px;background:var(--na-soft);color:#54617A;font-weight:600}
+.pill.crit{background:var(--no-soft);color:var(--no)}
+.pill.esp{background:var(--acc-soft);color:#8A6A22}
+.bar{height:7px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);transition:width .25s}
+
+/* email pane */
+.split{display:grid;grid-template-columns:1fr 430px;gap:16px;align-items:start}
+.mail{position:sticky;top:16px}
+.mail-hd{background:var(--pri);color:#fff;padding:12px 16px;border-radius:var(--r) var(--r) 0 0;display:flex;justify-content:space-between;align-items:center}
+.mail-hd b{font-size:13.5px}
+.mail-body{background:#fff;border:1px solid var(--line);border-top:0;border-radius:0 0 var(--r) var(--r)}
+#emailCorpo{border:0;border-radius:0;min-height:340px;font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:12.5px;line-height:1.62}
+#emailCorpo:focus{box-shadow:none}
+.mail-acts{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);flex-wrap:wrap}
+
+/* modal */
+.mask{position:fixed;inset:0;background:rgba(20,28,42,.55);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:50}
+.mask.on{display:flex}
+.modal{background:#fff;border-radius:12px;width:100%;max-width:860px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal-hd{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal-hd b{font-size:16px}
+.modal-bd{padding:18px 20px;max-height:66vh;overflow:auto}
+.modal-ft{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.x{background:none;border:0;font-size:22px;cursor:pointer;color:var(--muted);line-height:1}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--txt);color:#fff;padding:11px 20px;border-radius:8px;opacity:0;pointer-events:none;transition:.25s;z-index:99;font-size:13.5px}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.chk{display:flex;gap:8px;align-items:center}
+.chk input{width:16px;height:16px;accent-color:var(--pri)}
+.vars code{background:var(--pri-soft);color:var(--pri);padding:1px 6px;border-radius:5px;font-size:11.5px;margin-right:5px;display:inline-block;cursor:pointer}
+@media(max-width:1180px){.split{grid-template-columns:1fr}.mail{position:static}}
+@media(max-width:820px){.app{flex-direction:column}.side{width:100%;flex:none;height:auto;position:static}.r2,.r3,.r4{grid-template-columns:1fr}.main{padding:16px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><b>GT3 Consultoria</b><span>Acompanhamento PGR/PCMSO</span></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="foot">Protótipo standalone · v1.0<br>Dados salvos no navegador</div>
+  </aside>
+  <main class="main" id="view"></main>
+</div>
+<div class="mask" id="mask"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   GT3 · Acompanhamento PGR / PCMSO
+   Camadas: Contratantes → Itens de checklist → Textos de e-mail
+            → Análise (checklist + e-mail em tempo real)
+   ============================================================ */
+const $ = (s,r=document)=>r.querySelector(s);
+const uid = p => p+'_'+Math.random().toString(36).slice(2,9);
+const esc = s => (s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hoje = () => new Date().toISOString().slice(0,10);
+const addDias = (n)=>{const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};
+const fmtD = s => s ? s.split('-').reverse().join('/') : '';
+const DOCS = ['PGR','PCMSO','LTCAT','GERAL'];
+
+/* ---------- persistência (artifact window.storage OU localStorage) ---------- */
+const KEY='gt3_pgr_pcmso_v1';
+async function dbLoad(){
+  try{ if(window.storage){ const r=await window.storage.get(KEY); return r? JSON.parse(r.value):null; } }catch(e){}
+  try{ const s=localStorage.getItem(KEY); return s?JSON.parse(s):null; }catch(e){ return null; }
+}
+async function dbSave(){
+  try{ if(window.storage){ await window.storage.set(KEY, JSON.stringify(db)); return; } }catch(e){}
+  try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){}
+}
+
+/* ---------- seed ---------- */
+function seed(){
+ const T=(id,titulo,categoria,corpo)=>({id,titulo,categoria,corpo});
+ const textos=[
+  T('t_abertura','Abertura padrão','abertura','Prezados, bom dia.\n\nRealizamos a análise da documentação de Saúde e Segurança do Trabalho da empresa {{empresa}} (CNPJ {{cnpj}}), referente à prestação de serviços para {{contratante}}.\n\nPara liberação do cadastro, seguem os apontamentos que precisam de ajuste ou complementação:'),
+  T('t_fechamento','Fechamento padrão','fechamento','Solicitamos o reenvio dos documentos corrigidos até {{prazo}}, respondendo a este mesmo e-mail.\n\nEnquanto os apontamentos acima não forem sanados, a documentação permanece pendente e a liberação da frente de trabalho fica condicionada à regularização.'),
+  T('t_aprovado','Documentação aprovada','fechamento','Prezados, bom dia.\n\nInformamos que a documentação de SST da empresa {{empresa}} (CNPJ {{cnpj}}), referente à prestação de serviços para {{contratante}}, foi analisada em {{data}} e encontra-se APROVADA, sem apontamentos.\n\nLembramos que qualquer alteração de escopo, função ou frente de trabalho exige nova análise documental.'),
+  T('t_assinatura','Assinatura GT3','assinatura','Atenciosamente,\n\n{{responsavel}}\nGT3 Consultoria — Gestão de Terceiros\nCaxias do Sul/RS'),
+
+  T('t_pgr_val','PGR — validade vencida','apontamento','O PGR apresentado está com data de elaboração/revisão vencida. Conforme a NR-01, o inventário de riscos e o plano de ação devem ser revisados no prazo máximo de 2 anos (ou 3 anos, quando adotado sistema de gestão de SST certificado), e sempre que houver alteração nos riscos. Favor encaminhar o documento revisado e vigente.'),
+  T('t_pgr_rt','PGR — responsável técnico','apontamento','O documento não apresenta identificação e assinatura legível do responsável técnico habilitado (nome, formação e registro no conselho de classe). Favor reenviar o PGR assinado pelo profissional legalmente habilitado.'),
+  T('t_pgr_dados','Dados cadastrais divergentes','apontamento','Os dados cadastrais do documento (razão social, CNPJ e/ou endereço) divergem do cartão CNPJ da empresa. Favor corrigir a identificação no documento para que corresponda exatamente ao cadastro da prestadora.'),
+  T('t_pgr_inv','Inventário de riscos incompleto','apontamento','O inventário de riscos não contempla todas as funções que serão utilizadas na frente de trabalho indicada. Favor complementar o inventário com as funções: (informar funções) — descrevendo perigos, fontes geradoras, medidas de controle existentes e nível de risco.'),
+  T('t_pgr_psico','Riscos psicossociais não contemplados','apontamento','O inventário de riscos não contempla os fatores de risco psicossociais relacionados ao trabalho. Conforme a NR-01, o gerenciamento de riscos ocupacionais deve incluir a identificação e avaliação desses fatores, com as respectivas medidas de prevenção no plano de ação. Favor complementar o PGR.'),
+  T('t_pgr_plano','Plano de ação sem prazos/responsáveis','apontamento','O plano de ação apresentado não contém medidas de prevenção com prazos definidos, responsáveis pela execução e forma de acompanhamento da eficácia. Favor complementar conforme item 1.5.5 da NR-01.'),
+  T('t_pgr_quant','Avaliações quantitativas ausentes','apontamento','Não foram apresentadas as avaliações quantitativas dos agentes ambientais aplicáveis às atividades (ex.: ruído, calor, agentes químicos), nem a justificativa técnica para sua dispensa. Favor encaminhar os laudos/medições ou a justificativa do responsável técnico.'),
+  T('t_pgr_epi','EPI/EPC sem especificação','apontamento','Os EPIs e EPCs não estão especificados por função, com indicação do Certificado de Aprovação (CA). Favor complementar o documento e anexar as fichas de entrega de EPI dos colaboradores indicados para a frente de trabalho.'),
+  T('t_pcm_val','PCMSO — validade vencida','apontamento','O PCMSO apresentado está fora da vigência. Favor encaminhar o documento vigente, com data de elaboração e período de validade legíveis.'),
+  T('t_pcm_med','PCMSO — médico coordenador','apontamento','O PCMSO não apresenta identificação e assinatura do médico coordenador, com CRM. Conforme a NR-07, o programa deve estar sob responsabilidade de médico do trabalho. Favor reenviar assinado.'),
+  T('t_pcm_vinc','PCMSO desvinculado do PGR','apontamento','Os riscos descritos no PCMSO não correspondem aos riscos identificados no inventário do PGR. Conforme a NR-07, o PCMSO deve ser elaborado a partir do inventário de riscos do PGR. Favor compatibilizar os documentos.'),
+  T('t_pcm_exames','Exames incompatíveis com os riscos','apontamento','Os exames complementares previstos não são compatíveis com os riscos ocupacionais das funções indicadas (ex.: audiometria para exposição a ruído, espirometria para agentes químicos, exames específicos para trabalho em altura). Favor revisar o quadro de exames por função.'),
+  T('t_pcm_rel','Relatório analítico anual','apontamento','Não foi apresentado o relatório analítico anual do PCMSO referente ao último período. Favor encaminhar o relatório assinado pelo médico coordenador.'),
+  T('t_lt_ass','LTCAT sem assinatura habilitada','apontamento','O LTCAT não apresenta assinatura de profissional habilitado (engenheiro de segurança do trabalho ou médico do trabalho) com o respectivo registro. Favor reenviar o laudo devidamente assinado.'),
+  T('t_lt_ag','LTCAT — agentes nocivos','apontamento','O LTCAT não apresenta a caracterização dos agentes nocivos por função, com as respectivas intensidades/concentrações e conclusão quanto ao enquadramento para aposentadoria especial. Favor complementar.'),
+  T('t_ger_frente','Aditivo de frente de trabalho','apontamento','Não foi recebido o Aditivo de Indicação de Frente de Trabalho preenchido e assinado pela empresa, com a identificação da unidade contratante e dos riscos da atividade. Favor preencher e encaminhar junto com a documentação corrigida.'),
+
+  T('t_mpo_psico','Psicossociais — padrão Marcopolo','apontamento','Os fatores de risco psicossociais devem ser apresentados conforme orientação do SESMT da contratante: identificação dos fatores por função, metodologia de avaliação utilizada, classificação do nível de risco e plano de ação com medidas, prazos e responsáveis. O documento apresentado não atende a esse detalhamento. Favor complementar o PGR.'),
+  T('t_mpo_495','Inventário no modelo MOD 495/11','apontamento','O inventário de riscos deve seguir o modelo MOD 495/11 exigido pela contratante, contemplando as categorias de risco por função e a classificação conforme a matriz adotada. Favor adequar e reenviar.'),
+  T('t_mpo_trein','Treinamentos obrigatórios','apontamento','Não foram apresentados os certificados de treinamento exigidos para as atividades a serem executadas na unidade (ex.: NR-06, NR-11, NR-35, NR-33, integração), com carga horária, data e assinatura do instrutor responsável. Favor encaminhar os comprovantes dos colaboradores indicados.'),
+  T('t_vol_croqui','Escopo e local de execução','apontamento','A documentação não deixa claro o local de execução dos serviços e o escopo das atividades dentro da unidade. Favor descrever no PGR as atividades efetivamente executadas na contratante e a área de atuação.')
+ ];
+
+ const I=(id,titulo,doc,desc,escopo,textoId,critico)=>({id,titulo,documento:doc,descricao:desc,escopo,textoId,critico:!!critico});
+ const itens=[
+  I('i_pgr_val','PGR dentro da validade','PGR','Revisão em até 2 anos (ou 3 com sistema de gestão certificado).','base','t_pgr_val',1),
+  I('i_pgr_rt','Assinatura do responsável técnico','PGR','Nome, formação e registro no conselho de classe.','base','t_pgr_rt',1),
+  I('i_pgr_dados','Dados cadastrais conforme cartão CNPJ','PGR','Razão social, CNPJ e endereço conferem.','base','t_pgr_dados',0),
+  I('i_pgr_inv','Inventário contempla todas as funções','PGR','Funções da frente de trabalho descritas com perigos e controles.','base','t_pgr_inv',1),
+  I('i_pgr_psico','Fatores de risco psicossociais (NR-01)','PGR','Identificação e medidas de prevenção no plano de ação.','base','t_pgr_psico',0),
+  I('i_pgr_plano','Plano de ação com prazos e responsáveis','PGR','Medidas, cronograma, responsáveis e verificação de eficácia.','base','t_pgr_plano',0),
+  I('i_pgr_quant','Avaliações quantitativas quando aplicável','PGR','Ruído, calor, agentes químicos — ou justificativa técnica.','base','t_pgr_quant',0),
+  I('i_pgr_epi','EPI/EPC especificados por função com CA','PGR','Inclui fichas de entrega dos colaboradores indicados.','base','t_pgr_epi',0),
+  I('i_pcm_val','PCMSO dentro da validade','PCMSO','Vigência legível e atual.','base','t_pcm_val',1),
+  I('i_pcm_med','Assinatura do médico coordenador (CRM)','PCMSO','Responsabilidade técnica conforme NR-07.','base','t_pcm_med',1),
+  I('i_pcm_vinc','PCMSO vinculado ao PGR','PCMSO','Riscos coincidentes entre os documentos.','base','t_pcm_vinc',1),
+  I('i_pcm_exames','Exames compatíveis com os riscos','PCMSO','Quadro de exames por função e periodicidade.','base','t_pcm_exames',0),
+  I('i_pcm_rel','Relatório analítico anual','PCMSO','Assinado pelo médico coordenador.','base','t_pcm_rel',0),
+  I('i_lt_ass','LTCAT assinado por profissional habilitado','LTCAT','Eng. de segurança ou médico do trabalho com registro.','base','t_lt_ass',0),
+  I('i_lt_ag','Agentes nocivos e enquadramento','LTCAT','Intensidades, concentrações e conclusão técnica.','base','t_lt_ag',0),
+  I('i_ger_frente','Aditivo de indicação de frente de trabalho','GERAL','Preenchido e assinado pela prestadora.','base','t_ger_frente',0),
+  I('e_mpo_psico','Psicossociais no padrão do SESMT da contratante','PGR','Metodologia, classificação e plano de ação específicos.','especifico','t_mpo_psico',1),
+  I('e_mpo_495','Inventário no modelo MOD 495/11','PGR','Categorias de risco conforme matriz da contratante.','especifico','t_mpo_495',0),
+  I('e_mpo_trein','Certificados de treinamento da atividade','GERAL','NR-06, NR-11, NR-35, NR-33 e integração.','especifico','t_mpo_trein',0),
+  I('e_vol_escopo','Escopo e local de execução descritos','GERAL','Atividades e área de atuação dentro da unidade.','especifico','t_vol_croqui',0)
+ ];
+
+ const base = itens.filter(i=>i.escopo==='base').map(i=>({itemId:i.id,textoId:null}));
+ const C=(id,nome,unidade,extras)=>({id,nome,unidade,email:'',prazoDias:7,aberturaId:'t_abertura',fechamentoId:'t_fechamento',assinaturaId:'t_assinatura',aprovadoId:'t_aprovado',obs:'',
+   itens:[...base.map(x=>({...x})), ...extras.map(e=>({itemId:e,textoId:null}))]});
+ const contratantes=[
+  C('c_mpo_ar','Marcopolo','Ana Rech',['e_mpo_psico','e_mpo_495','e_mpo_trein']),
+  C('c_mpo_sc','Marcopolo','São Cristóvão',['e_mpo_psico','e_mpo_495','e_mpo_trein']),
+  C('c_volare','Volare','Caxias do Sul',['e_mpo_psico','e_mpo_trein','e_vol_escopo'])
+ ];
+ contratantes[2].obs='Unidade exige descrição do local de execução no PGR.';
+
+ return {contratantes,itens,textos,analises:[],config:{
+   responsavel:'Rodrigo Balem',
+   assunto:'GT3 · Análise de documentação SST — {{empresa}} — {{contratante}}',
+   aberturaId:'t_abertura',fechamentoId:'t_fechamento',assinaturaId:'t_assinatura',aprovadoId:'t_aprovado',prazoDias:7
+ }};
+}
+
+/* ---------- estado ---------- */
+let db=null;
+let state={view:'analises', analise:null, emailEditado:false,
+  banco:{aba:'empresas', q:'', contratante:'', status:'', de:'', ate:'', aberto:null, item:null}};
+
+const getC = id => db.contratantes.find(x=>x.id===id);
+const getI = id => db.itens.find(x=>x.id===id);
+const getT = id => db.textos.find(x=>x.id===id);
+const nomeC = c => c ? (c.nome + (c.unidade? ' — '+c.unidade : '')) : '';
+
+function itensDaAnalise(a){
+  const c=getC(a.contratanteId); if(!c) return [];
+  const docs=a.documentos&&a.documentos.length? a.documentos : ['PGR','PCMSO','LTCAT'];
+  return c.itens.map(l=>{const i=getI(l.itemId); return i? {...i, textoLink:(l.textoId||i.textoId)} : null})
+    .filter(i=>i && (i.documento==='GERAL' || docs.includes(i.documento)))
+    .sort((x,y)=>DOCS.indexOf(x.documento)-DOCS.indexOf(y.documento));
+}
+function resp(a,id){ if(!a.respostas[id]) a.respostas[id]={status:'',obs:''}; return a.respostas[id]; }
+
+/* ---------- vars ---------- */
+function ctxDe(a){
+  const c=getC(a.contratanteId);
+  return {empresa:a.empresa||'[EMPRESA]', cnpj:a.cnpj||'[CNPJ]', contratante:nomeC(c)||'[CONTRATANTE]',
+    prazo:fmtD(a.prazo)||'[PRAZO]', data:fmtD(a.data), responsavel:a.responsavel||db.config.responsavel, unidade:c?c.unidade:''};
+}
+const aplicaVars = (txt,ctx) => (txt||'').replace(/\{\{(\w+)\}\}/g,(m,k)=> ctx[k]!==undefined? ctx[k] : m);
+
+/* ---------- e-mail ---------- */
+function buildEmail(){
+  const a=state.analise, c=getC(a.contratanteId), ctx=ctxDe(a);
+  const itens=itensDaAnalise(a);
+  const pend=itens.filter(i=>resp(a,i.id).status==='nao');
+  const marcados=itens.filter(i=>resp(a,i.id).status);
+  const partes=[];
+  if(pend.length===0 && marcados.length>0){
+    partes.push(aplicaVars(getT(c?.aprovadoId||db.config.aprovadoId)?.corpo||'', ctx));
+  }else{
+    partes.push(aplicaVars(getT(c?.aberturaId||db.config.aberturaId)?.corpo||'', ctx));
+    pend.forEach((i,n)=>{
+      const t=getT(i.textoLink);
+      const obs=resp(a,i.id).obs;
+      let bloco = (n+1)+') '+i.documento+' — '+i.titulo.toUpperCase()+'\n'+
+        aplicaVars(t? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctx);
+      if(obs) bloco += '\nObservação: '+obs;
+      partes.push(bloco);
+    });
+    if(pend.length) partes.push(aplicaVars(getT(c?.fechamentoId||db.config.fechamentoId)?.corpo||'', ctx));
+  }
+  partes.push(aplicaVars(getT(c?.assinaturaId||db.config.assinaturaId)?.corpo||'', ctx));
+  return {assunto:aplicaVars(db.config.assunto,ctx), corpo:partes.filter(Boolean).join('\n\n'), pend:pend.length, total:itens.length, marcados:marcados.length};
+}
+function updateEmail(){
+  const r=buildEmail();
+  $('#emailAssunto') && ($('#emailAssunto').value=r.assunto);
+  if(!state.emailEditado && $('#emailCorpo')) $('#emailCorpo').value=r.corpo;
+  const st=$('#emailStat'); if(st) st.textContent = r.pend? r.pend+' pendência(s)' : (r.marcados? 'Sem pendências' : 'Nada avaliado');
+  const a=state.analise, itens=itensDaAnalise(a);
+  const ok=itens.filter(i=>resp(a,i.id).status==='ok').length;
+  const na=itens.filter(i=>resp(a,i.id).status==='na').length;
+  const apl=itens.length-na;
+  const p=apl? Math.round(ok/apl*100):0;
+  $('#prog') && ($('#prog').style.width=p+'%');
+  $('#progTxt') && ($('#progTxt').textContent = ok+' de '+apl+' itens conformes ('+p+'%) · '+na+' não aplicáveis');
+}
+
+/* ---------- navegação ---------- */
+const MENU=[
+  {g:'Operação'},
+  {k:'analises',t:'Em andamento',i:'📋'},
+  {k:'nova',t:'Nova análise',i:'✚'},
+  {k:'banco',t:'Banco de dados',i:'🗄️'},
+  {g:'Bases'},
+  {k:'contratantes',t:'Contratantes',i:'🏭'},
+  {k:'itens',t:'Itens de checklist',i:'☑️'},
+  {k:'textos',t:'Textos de e-mail',i:'✉️'},
+  {g:'Sistema'},
+  {k:'config',t:'Configurações',i:'⚙️'}
+];
+function renderNav(){
+  $('#nav').innerHTML = MENU.map(m=> m.g? `<div class="grp">${m.g}</div>`
+    : `<button data-nav="${m.k}" class="${state.view===m.k?'on':''}"><span>${m.i}</span>${m.t}</button>`).join('');
+}
+function go(v){ state.view=v; if(v==='nova' && !state.analise) novaAnalise(); renderNav(); render(); window.scrollTo(0,0); }
+
+/* ---------- views ---------- */
+function render(){
+  const v={analises:vAnalises,nova:vAnalise,banco:vBanco,contratantes:vContratantes,itens:vItens,textos:vTextos,config:vConfig}[state.view];
+  $('#view').innerHTML = v();
+  if(state.view==='nova') updateEmail();
+}
+
+function head(t,s,acts=''){ return `<div class="top"><div><h1>${t}</h1><p class="sub">${s}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap">${acts}</div></div>`; }
+
+/* --- acompanhamentos --- */
+function statusAnalise(a){
+  const itens=itensDaAnalise(a);
+  const nao=itens.filter(i=>(a.respostas[i.id]||{}).status==='nao').length;
+  const marc=itens.filter(i=>(a.respostas[i.id]||{}).status).length;
+  if(!marc) return {t:'Em análise',c:'na',k:'analise'};
+  if(nao) return {t:nao+' pendência(s)',c:'no',k:'pendencias'};
+  return {t:'Aprovada',c:'ok',k:'aprovada'};
+}
+function vAnalises(){
+  const acts=`<button class="btn pri" data-act="nova">✚ Nova análise</button>`;
+  const lista=db.analises.filter(a=>!a.finalizada);
+  let body;
+  if(!lista.length){
+    body=`<div class="card empty"><b>Nenhuma análise em andamento</b>As análises finalizadas ficam na aba Banco de dados.<br><br><button class="btn pri" data-act="nova">Criar análise</button></div>`;
+  }else{
+    body=`<div class="card"><table><thead><tr><th>Empresa prestadora</th><th>Contratante</th><th>Documentos</th><th>Análise</th><th>Situação</th><th style="width:150px"></th></tr></thead><tbody>`+
+    lista.slice().sort((a,b)=>(b.atualizado||'').localeCompare(a.atualizado||'')).map(a=>{
+      const s=statusAnalise(a), c=getC(a.contratanteId);
+      return `<tr><td><b>${esc(a.empresa||'(sem nome)')}</b><div class="muted" style="font-size:12px">${esc(a.cnpj||'')}</div></td>
+      <td>${esc(nomeC(c))}</td><td>${(a.documentos||[]).map(d=>`<span class="tag">${d}</span>`).join(' ')||'<span class="muted">—</span>'}</td>
+      <td>${fmtD(a.data)}<div class="muted" style="font-size:12px">prazo ${fmtD(a.prazo)}</div></td>
+      <td><span class="tag ${s.c}">${s.t}</span></td>
+      <td style="text-align:right"><button class="btn sm" data-act="abrir" data-id="${a.id}">Abrir</button>
+      <button class="btn sm gho" data-act="delAnalise" data-id="${a.id}">Excluir</button></td></tr>`;
+    }).join('')+`</tbody></table></div>`;
+  }
+  return head('Acompanhamentos','Todas as análises documentais registradas.',acts)+body;
+}
+
+/* --- análise (checklist + e-mail) --- */
+function novaAnalise(){
+  state.analise={id:uid('a'),empresa:'',cnpj:'',emailDestino:'',contratanteId:db.contratantes[0]?.id||'',
+    documentos:['PGR','PCMSO'],data:hoje(),prazo:addDias(db.config.prazoDias||7),responsavel:db.config.responsavel,
+    respostas:{},finalizada:false,dataFinal:'',atualizado:new Date().toISOString()};
+  state.emailEditado=false;
+}
+function vAnalise(){
+  const a=state.analise;
+  const optsC=db.contratantes.map(c=>`<option value="${c.id}" ${c.id===a.contratanteId?'selected':''}>${esc(nomeC(c))}</option>`).join('');
+  const itens=itensDaAnalise(a);
+  const grupos=DOCS.map(d=>{
+    const g=itens.filter(i=>i.documento===d); if(!g.length) return '';
+    const okG=g.filter(i=>resp(a,i.id).status==='ok').length;
+    return `<div class="doc-grp"><div class="doc-hd"><b>${d}</b><span class="muted" style="font-size:12px">${okG}/${g.length} conformes</span></div>`+
+      g.map(i=>{
+        const r=resp(a,i.id); const t=getT(i.textoLink);
+        return `<div class="item st-${r.status}" data-i="${i.id}">
+          <div class="dots">
+            <button class="dot ${r.status==='ok'?'on':''}" data-val="ok" data-act="dot" data-id="${i.id}" title="Conforme">✓</button>
+            <button class="dot ${r.status==='nao'?'on':''}" data-val="nao" data-act="dot" data-id="${i.id}" title="Não conforme — entra no e-mail">✕</button>
+            <button class="dot ${r.status==='na'?'on':''}" data-val="na" data-act="dot" data-id="${i.id}" title="Não aplicável">–</button>
+          </div>
+          <div class="item-b">
+            <div class="item-t">${esc(i.titulo)}
+              ${i.critico?'<span class="pill crit">crítico</span>':''}
+              ${i.escopo==='especifico'?'<span class="pill esp">exigência da contratante</span>':''}
+              ${t?'':'<span class="pill crit">sem texto vinculado</span>'}
+            </div>
+            <div class="item-d">${esc(i.descricao)}</div>
+            ${r.status==='nao'? `<input class="item-obs" type="text" placeholder="Observação específica (entra no e-mail abaixo do texto padrão)" value="${esc(r.obs)}" data-obs="${i.id}">`:''}
+          </div></div>`;
+      }).join('')+`</div>`;
+  }).join('');
+
+  const acts=`<button class="btn gho" data-act="limpar">Limpar respostas</button>
+  <button class="btn" data-act="salvar">💾 Salvar rascunho</button>
+  <button class="btn acc" data-act="finalizar">✔ Finalizar análise</button>`;
+  const seg=`<div class="seg">${['PGR','PCMSO','LTCAT'].map(d=>`<button class="${a.documentos.includes(d)?'on':''}" data-act="doc" data-d="${d}">${d}</button>`).join('')}</div>`;
+
+  return head('Análise documental', 'Marque cada item — as não conformidades montam o e-mail automaticamente.', acts)+
+  `<div class="split">
+    <div>
+      <div class="card pad" style="margin-bottom:14px">
+        <div class="row r3">
+          <div><label class="f">Empresa prestadora</label><input type="text" data-a="empresa" value="${esc(a.empresa)}" placeholder="Razão social"></div>
+          <div><label class="f">CNPJ</label><input type="text" data-a="cnpj" value="${esc(a.cnpj)}" placeholder="00.000.000/0001-00"></div>
+          <div><label class="f">Contratante</label><select id="selContratante">${optsC||'<option value="">Cadastre uma contratante</option>'}</select></div>
+        </div>
+        <div class="row r4" style="margin-top:12px">
+          <div><label class="f">E-mail de destino</label><input type="email" data-a="emailDestino" value="${esc(a.emailDestino)}" placeholder="contato@empresa.com.br"></div>
+          <div><label class="f">Data da análise</label><input type="date" data-a="data" value="${a.data}"></div>
+          <div><label class="f">Prazo de retorno</label><input type="date" data-a="prazo" value="${a.prazo}"></div>
+          <div><label class="f">Analista</label><input type="text" data-a="responsavel" value="${esc(a.responsavel)}"></div>
+        </div>
+        <div class="hr"></div>
+        <label class="f">Documentos analisados</label>
+        ${seg}
+        <span class="muted" style="font-size:12px;margin-left:10px">Itens gerais entram sempre.</span>
+        <div class="hr"></div>
+        <div class="bar"><i id="prog" style="width:0%"></i></div>
+        <div class="muted" id="progTxt" style="font-size:12px;margin-top:6px"></div>
+      </div>
+      ${itens.length? grupos : `<div class="card empty"><b>Nenhum item vinculado</b>Cadastre a contratante e selecione os itens de checklist aplicáveis.</div>`}
+    </div>
+
+    <div class="mail">
+      <div class="mail-hd"><b>✉️ E-mail em construção</b><span id="emailStat" style="font-size:12px"></span></div>
+      <div class="mail-body">
+        <div style="padding:12px 12px 0"><label class="f">Assunto</label><input type="text" id="emailAssunto" readonly style="background:#F7F9FD"></div>
+        <div style="padding:12px"><label class="f">Corpo</label></div>
+        <textarea id="emailCorpo"></textarea>
+        <div class="mail-acts">
+          <button class="btn pri sm" data-act="copiar">📋 Copiar</button>
+          <button class="btn sm" data-act="eml">⬇️ Baixar .eml</button>
+          <button class="btn sm" data-act="mailto">↗ Abrir no e-mail</button>
+          <button class="btn sm gho" data-act="regerar">↻ Regerar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* --- contratantes --- */
+function vContratantes(){
+  const acts=`<button class="btn pri" data-act="novoC">✚ Nova contratante</button>`;
+  if(!db.contratantes.length) return head('Contratantes','Base de unidades contratantes e suas exigências.',acts)+
+    `<div class="card empty"><b>Nenhuma contratante cadastrada</b>Cadastre a primeira para liberar o checklist.</div>`;
+  return head('Contratantes','Cada contratante define os itens extras do checklist e os textos vinculados.',acts)+
+  `<div class="card"><table><thead><tr><th>Contratante</th><th>Unidade</th><th>Itens no checklist</th><th>Exigências específicas</th><th>Prazo</th><th></th></tr></thead><tbody>`+
+  db.contratantes.map(c=>{
+    const esp=c.itens.map(l=>getI(l.itemId)).filter(i=>i&&i.escopo==='especifico');
+    return `<tr><td><b>${esc(c.nome)}</b></td><td>${esc(c.unidade||'—')}</td>
+    <td>${c.itens.length}</td>
+    <td>${esp.length? esp.map(i=>`<span class="tag acc" style="margin:2px 2px 0 0">${esc(i.titulo)}</span>`).join(''):'<span class="muted">—</span>'}</td>
+    <td>${c.prazoDias} dias</td>
+    <td style="text-align:right"><button class="btn sm" data-act="editC" data-id="${c.id}">Editar</button>
+    <button class="btn sm gho" data-act="delC" data-id="${c.id}">Excluir</button></td></tr>`;
+  }).join('')+`</tbody></table></div>`;
+}
+let draftC=null;
+function modalContratante(id){
+  const novo=!id;
+  draftC = novo
+    ? {id:uid('c'),nome:'',unidade:'',email:'',prazoDias:db.config.prazoDias,obs:'',
+       aberturaId:db.config.aberturaId,fechamentoId:db.config.fechamentoId,
+       assinaturaId:db.config.assinaturaId,aprovadoId:db.config.aprovadoId,
+       itens:db.itens.filter(i=>i.escopo==='base').map(i=>({itemId:i.id,textoId:null}))}
+    : JSON.parse(JSON.stringify(getC(id)));
+  draftC._novo=novo; draftC._orig=id||null; draftC._q='';
+  abrirModal(novo?'Nova contratante':'Editar contratante', `<div id="cWrap">${bodyC()}</div>`, salvarContratante);
+}
+function lerCamposC(){
+  const m=$('#modal'); if(!m||!draftC) return;
+  m.querySelectorAll('[data-c]').forEach(el=>{ draftC[el.dataset.c]= el.dataset.c==='prazoDias'?(parseInt(el.value)||7):el.value; });
+  m.querySelectorAll('[data-texto]').forEach(s=>{ const l=draftC.itens.find(x=>x.itemId===s.dataset.texto); if(l) l.textoId=s.value||null; });
+  const q=m.querySelector('[data-cq]'); if(q) draftC._q=q.value;
+}
+function refreshC(){ $('#cWrap').innerHTML=bodyC(); const q=$('[data-cq]'); if(q&&draftC._q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} }
+function bodyC(){
+  const c=draftC, q=(c._q||'').toLowerCase();
+  const selT=(campo,cat,val)=>`<select data-c="${campo}">`+db.textos.filter(t=>t.categoria===cat)
+    .map(t=>`<option value="${t.id}" ${t.id===val?'selected':''}>${esc(t.titulo)}</option>`).join('')+`</select>`;
+  const linha=i=>{
+    const l=c.itens.find(x=>x.itemId===i.id);
+    const opts=db.textos.filter(t=>t.categoria==='apontamento')
+      .map(t=>`<option value="${t.id}" ${l&&l.textoId===t.id?'selected':''}>${esc(t.titulo)}</option>`).join('');
+    return `<tr style="${l?'':'opacity:.55'}"><td style="width:42px"><input type="checkbox" data-act="cTog" data-id="${i.id}" ${l?'checked':''}></td>
+    <td><b>${esc(i.titulo)}</b> ${i.critico?'<span class="pill crit">crítico</span>':''} <span class="tag">${i.documento}</span>
+      <div class="muted" style="font-size:12px">${esc(i.descricao)}</div></td>
+    <td style="width:280px">${l?`<select data-texto="${i.id}"><option value="">Texto padrão: ${esc((getT(i.textoId)||{}).titulo||'—')}</option>${opts}</select>`:'<span class="muted" style="font-size:12px">não exigido</span>'}</td></tr>`;
+  };
+  const bloco=(escopo,titulo,hint)=>{
+    const g=db.itens.filter(i=>i.escopo===escopo && (!q || (i.titulo+i.descricao+i.documento).toLowerCase().includes(q)));
+    const marc=g.filter(i=>c.itens.some(l=>l.itemId===i.id)).length;
+    return `<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center">
+      <label class="f" style="margin:0">${titulo} <span class="tag">${marc}/${g.length}</span></label>
+      <div><button class="btn sm" data-act="cAll" data-e="${escopo}" data-v="1">Marcar todos</button>
+      <button class="btn sm" data-act="cAll" data-e="${escopo}" data-v="0">Desmarcar</button></div></div>
+      <div class="muted" style="font-size:12px;margin:4px 0 6px">${hint}</div>
+      <table>${g.length? '<tbody>'+g.map(linha).join('')+'</tbody>' : '<tbody><tr><td class="muted">Nenhum item encontrado.</td></tr></tbody>'}</table></div>`;
+  };
+  return `<div class="row r3">
+    <div><label class="f">Nome</label><input type="text" data-c="nome" value="${esc(c.nome)}" placeholder="Ex.: Marcopolo"></div>
+    <div><label class="f">Unidade</label><input type="text" data-c="unidade" value="${esc(c.unidade)}" placeholder="Ex.: Ana Rech"></div>
+    <div><label class="f">Prazo padrão (dias)</label><input type="text" data-c="prazoDias" value="${c.prazoDias}"></div>
+  </div>
+  <div class="row r2" style="margin-top:12px">
+    <div><label class="f">E-mail de cópia (opcional)</label><input type="text" data-c="email" value="${esc(c.email||'')}"></div>
+    <div><label class="f">Observações internas</label><input type="text" data-c="obs" value="${esc(c.obs||'')}"></div>
+  </div>
+  <div class="hr"></div>
+  <label class="f">Textos de e-mail desta contratante</label>
+  <div class="row r4">
+    <div><span class="muted" style="font-size:12px">Abertura</span>${selT('aberturaId','abertura',c.aberturaId)}</div>
+    <div><span class="muted" style="font-size:12px">Fechamento</span>${selT('fechamentoId','fechamento',c.fechamentoId)}</div>
+    <div><span class="muted" style="font-size:12px">Aprovação</span>${selT('aprovadoId','fechamento',c.aprovadoId)}</div>
+    <div><span class="muted" style="font-size:12px">Assinatura</span>${selT('assinaturaId','assinatura',c.assinaturaId)}</div>
+  </div>
+  <div class="hr"></div>
+  <label class="f">O que esta contratante exige</label>
+  <input type="text" data-cq value="${esc(c._q||'')}" placeholder="Filtrar itens por título, descrição ou documento…">
+  ${bloco('base','Itens base','Desmarque o que esta contratante não cobra.')}
+  ${bloco('especifico','Exigências específicas','Marque o que só esta contratante cobra.')}
+  <div class="hr"></div>
+  <label class="f">Criar exigência nova sem sair daqui</label>
+  <div class="row r4">
+    <div><input type="text" id="niTitulo" placeholder="Título do item"></div>
+    <div><select id="niDoc">${DOCS.map(d=>`<option>${d}</option>`).join('')}</select></div>
+    <div><select id="niTexto"><option value="">Texto vinculado…</option>${db.textos.filter(t=>t.categoria==='apontamento').map(t=>`<option value="${t.id}">${esc(t.titulo)}</option>`).join('')}</select></div>
+    <div><button class="btn pri" data-act="cNovoItem">✚ Criar e vincular</button></div>
+  </div>`;
+}
+function salvarContratante(){
+  lerCamposC();
+  const c=draftC;
+  if(!(c.nome||'').trim()) return toast('Informe o nome da contratante');
+  const novo=c._novo, orig=c._orig;
+  delete c._novo; delete c._orig; delete c._q;
+  if(novo) db.contratantes.push(c); else db.contratantes[db.contratantes.findIndex(x=>x.id===orig)]=c;
+  persist(); fecharModal(); draftC=null; render(); toast('Contratante salva');
+}
+
+/* --- itens --- */
+function vItens(){
+  const acts=`<button class="btn pri" data-act="novoI">✚ Novo item</button>`;
+  return head('Itens de checklist','Catálogo único de verificações. Itens "base" já entram em toda contratante nova.',acts)+
+  DOCS.map(d=>{
+    const g=db.itens.filter(i=>i.documento===d); if(!g.length) return '';
+    return `<div class="card" style="margin-bottom:14px"><div class="pad" style="padding-bottom:0"><b>${d}</b> <span class="muted">· ${g.length} itens</span></div>
+    <table><tbody>`+g.map(i=>`<tr><td><b>${esc(i.titulo)}</b> ${i.critico?'<span class="pill crit">crítico</span>':''} ${i.escopo==='especifico'?'<span class="pill esp">específico</span>':'<span class="pill">base</span>'}
+    <div class="muted" style="font-size:12px">${esc(i.descricao)}</div></td>
+    <td style="width:280px">${getT(i.textoId)? '<span class="tag acc">'+esc(getT(i.textoId).titulo)+'</span>' : '<span class="tag no">sem texto</span>'}</td>
+    <td style="width:150px;text-align:right"><button class="btn sm" data-act="editI" data-id="${i.id}">Editar</button>
+    <button class="btn sm gho" data-act="delI" data-id="${i.id}">Excluir</button></td></tr>`).join('')+`</tbody></table></div>`;
+  }).join('');
+}
+function modalItem(id){
+  const novo=!id;
+  const i= novo? {id:uid('i'),titulo:'',documento:'PGR',descricao:'',escopo:'base',textoId:'',critico:false} : {...getI(id)};
+  const opts=db.textos.filter(t=>t.categoria==='apontamento').map(t=>`<option value="${t.id}" ${t.id===i.textoId?'selected':''}>${esc(t.titulo)}</option>`).join('');
+  abrirModal(novo?'Novo item de checklist':'Editar item',
+  `<div class="row r2">
+    <div><label class="f">Título do item</label><input type="text" data-i="titulo" value="${esc(i.titulo)}" placeholder="O que será verificado"></div>
+    <div><label class="f">Documento</label><select data-i="documento">${DOCS.map(d=>`<option ${d===i.documento?'selected':''}>${d}</option>`).join('')}</select></div>
+  </div>
+  <div style="margin-top:12px"><label class="f">Descrição / critério de aceite</label><input type="text" data-i="descricao" value="${esc(i.descricao)}"></div>
+  <div class="row r2" style="margin-top:12px">
+    <div><label class="f">Escopo</label><select data-i="escopo">
+      <option value="base" ${i.escopo==='base'?'selected':''}>Base — vale para todas</option>
+      <option value="especifico" ${i.escopo==='especifico'?'selected':''}>Específico — só quando a contratante exigir</option></select></div>
+    <div><label class="f">Texto vinculado ao "não conforme"</label><select data-i="textoId"><option value="">— nenhum —</option>${opts}</select></div>
+  </div>
+  <div style="margin-top:14px" class="chk"><input type="checkbox" data-i="critico" ${i.critico?'checked':''}><span>Item crítico (bloqueia a liberação)</span></div>`,
+  ()=>{
+    const m=$('#modal');
+    m.querySelectorAll('[data-i]').forEach(el=>{ i[el.dataset.i]= el.type==='checkbox'? el.checked : el.value; });
+    if(!i.titulo.trim()) return toast('Informe o título do item');
+    if(novo){ db.itens.push(i); if(i.escopo==='base') db.contratantes.forEach(c=>c.itens.push({itemId:i.id,textoId:null})); }
+    else db.itens[db.itens.findIndex(x=>x.id===id)]=i;
+    persist(); fecharModal(); render(); toast('Item salvo');
+  });
+}
+
+/* --- textos --- */
+const CATS={abertura:'Abertura',apontamento:'Apontamento',fechamento:'Fechamento',assinatura:'Assinatura'};
+function vTextos(){
+  const acts=`<button class="btn pri" data-act="novoT">✚ Novo texto</button>`;
+  return head('Biblioteca de textos','Padronize uma vez e vincule aos itens e contratantes.',acts)+
+  Object.keys(CATS).map(cat=>{
+    const g=db.textos.filter(t=>t.categoria===cat); if(!g.length) return '';
+    return `<div class="card" style="margin-bottom:14px"><div class="pad" style="padding-bottom:0"><b>${CATS[cat]}</b> <span class="muted">· ${g.length}</span></div>
+    <table><tbody>`+g.map(t=>{
+      const usos=db.itens.filter(i=>i.textoId===t.id).length + db.contratantes.reduce((n,c)=>n+c.itens.filter(l=>l.textoId===t.id).length,0);
+      return `<tr><td><b>${esc(t.titulo)}</b><div class="muted" style="font-size:12px;margin-top:3px">${esc(t.corpo.slice(0,150))}${t.corpo.length>150?'…':''}</div></td>
+      <td style="width:110px"><span class="tag">${usos} uso(s)</span></td>
+      <td style="width:150px;text-align:right"><button class="btn sm" data-act="editT" data-id="${t.id}">Editar</button>
+      <button class="btn sm gho" data-act="delT" data-id="${t.id}">Excluir</button></td></tr>`;
+    }).join('')+`</tbody></table></div>`;
+  }).join('');
+}
+function modalTexto(id){
+  const novo=!id;
+  const t= novo? {id:uid('t'),titulo:'',categoria:'apontamento',corpo:''} : {...getT(id)};
+  abrirModal(novo?'Novo texto':'Editar texto',
+  `<div class="row r2">
+    <div><label class="f">Título interno</label><input type="text" data-t="titulo" value="${esc(t.titulo)}"></div>
+    <div><label class="f">Categoria</label><select data-t="categoria">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${k===t.categoria?'selected':''}>${v}</option>`).join('')}</select></div>
+  </div>
+  <div style="margin-top:12px"><label class="f">Texto</label><textarea data-t="corpo" rows="12">${esc(t.corpo)}</textarea></div>
+  <div class="vars" style="margin-top:10px"><span class="muted" style="font-size:12px">Variáveis (clique para copiar): </span>
+  ${['empresa','cnpj','contratante','unidade','prazo','data','responsavel'].map(v=>`<code data-var="{{${v}}}">{{${v}}}</code>`).join('')}</div>`,
+  ()=>{
+    const m=$('#modal');
+    m.querySelectorAll('[data-t]').forEach(el=>t[el.dataset.t]=el.value);
+    if(!t.titulo.trim()) return toast('Informe o título');
+    if(novo) db.textos.push(t); else db.textos[db.textos.findIndex(x=>x.id===id)]=t;
+    persist(); fecharModal(); render(); toast('Texto salvo');
+  });
+}
+
+/* --- banco de dados (histórico) --- */
+function finalizadas(){ return db.analises.filter(a=>a.finalizada); }
+function bancoFiltrado(){
+  const f=state.banco, q=(f.q||'').toLowerCase();
+  return finalizadas().filter(a=>{
+    const d=a.dataFinal||a.data;
+    if(q && !((a.empresa||'')+' '+(a.cnpj||'')).toLowerCase().includes(q)) return false;
+    if(f.contratante && a.contratanteId!==f.contratante) return false;
+    if(f.status && statusAnalise(a).k!==f.status) return false;
+    if(f.de && d<f.de) return false;
+    if(f.ate && d>f.ate) return false;
+    return true;
+  }).sort((x,y)=>((y.dataFinal||y.data)||'').localeCompare((x.dataFinal||x.data)||''));
+}
+function vBanco(){
+  const f=state.banco, lista=bancoFiltrado();
+  const acts=`<button class="btn ${f.aba==='empresas'?'pri':''}" data-act="bAba" data-v="empresas">🏢 Empresas</button>
+    <button class="btn ${f.aba==='relatorio'?'pri':''}" data-act="bAba" data-v="relatorio">📊 Relatório por item</button>`;
+  const filtros=`<div class="card pad" style="margin-bottom:14px">
+    <div class="row r4">
+      <div><label class="f">Buscar empresa / CNPJ</label><input type="text" data-b="q" value="${esc(f.q)}" placeholder="Digite para filtrar…"></div>
+      <div><label class="f">Contratante</label><select data-b="contratante"><option value="">Todas</option>${db.contratantes.map(c=>`<option value="${c.id}" ${c.id===f.contratante?'selected':''}>${esc(nomeC(c))}</option>`).join('')}</select></div>
+      <div><label class="f">De (finalização)</label><input type="date" data-b="de" value="${f.de}"></div>
+      <div><label class="f">Até</label><input type="date" data-b="ate" value="${f.ate}"></div>
+    </div>
+    <div class="row r4" style="margin-top:12px">
+      <div><label class="f">Situação</label><select data-b="status"><option value="">Todas</option>
+        <option value="aprovada" ${f.status==='aprovada'?'selected':''}>Aprovadas</option>
+        <option value="pendencias" ${f.status==='pendencias'?'selected':''}>Com pendências</option></select></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn" data-act="bLimpar">Limpar filtros</button></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn gho" data-act="bDelFiltro">🗑 Excluir os ${lista.length} registros filtrados</button></div>
+      <div style="display:flex;align-items:flex-end;justify-content:flex-end"><button class="btn" data-act="bExportCsv">⬇️ Exportar CSV</button></div>
+    </div></div>`;
+
+  const tot=lista.length, apr=lista.filter(a=>statusAnalise(a).k==='aprovada').length;
+  const naos=lista.reduce((n,a)=>n+itensDaAnalise(a).filter(i=>(a.respostas[i.id]||{}).status==='nao').length,0);
+  const cards=`<div class="stat" style="margin-bottom:14px">
+    <div><span>Análises finalizadas</span><b>${tot}</b></div>
+    <div><span>Aprovadas sem apontamento</span><b style="color:var(--ok)">${apr}</b></div>
+    <div><span>Com pendências</span><b style="color:var(--no)">${tot-apr}</b></div>
+    <div><span>Apontamentos gerados</span><b>${naos}</b></div></div>`;
+
+  if(f.aba==='relatorio') return head('Banco de dados','Consolidação dos itens avaliados nas análises finalizadas.',acts)+filtros+cards+relatorioItens(lista);
+
+  let tabela;
+  if(!lista.length){
+    tabela=`<div class="card empty"><b>Nenhum registro no período</b>Finalize uma análise para alimentar o histórico.</div>`;
+  }else{
+    tabela=`<div class="card"><table><thead><tr><th>Empresa</th><th>Contratante</th><th>Docs</th><th>Finalizada</th><th>Conformidade</th><th>Situação</th><th style="width:120px"></th></tr></thead><tbody>`+
+    lista.map(a=>{
+      const s=statusAnalise(a), c=getC(a.contratanteId), itens=itensDaAnalise(a);
+      const ok=itens.filter(i=>(a.respostas[i.id]||{}).status==='ok').length;
+      const na=itens.filter(i=>(a.respostas[i.id]||{}).status==='na').length;
+      const apl=itens.length-na, p=apl?Math.round(ok/apl*100):0;
+      const aberto=f.aberto===a.id;
+      return `<tr class="rowlink" data-act="bAbrir" data-id="${a.id}">
+        <td><b>${esc(a.empresa||'(sem nome)')}</b><div class="muted" style="font-size:12px">${esc(a.cnpj||'')}</div></td>
+        <td>${esc(nomeC(c))}</td><td>${(a.documentos||[]).map(d=>`<span class="tag">${d}</span>`).join(' ')}</td>
+        <td>${fmtD(a.dataFinal||a.data)}</td>
+        <td><div class="minibar"><i style="width:${p}%"></i></div><span class="muted" style="font-size:11.5px">${ok}/${apl} · ${p}%</span></td>
+        <td><span class="tag ${s.c}">${s.t}</span></td>
+        <td style="text-align:right"><span class="muted" style="font-size:12px">${aberto?'▲ fechar':'▼ detalhes'}</span></td></tr>`+
+      (aberto? `<tr class="det"><td colspan="7">${detalheAnalise(a)}</td></tr>`:'');
+    }).join('')+`</tbody></table></div>`;
+  }
+  return head('Banco de dados','Histórico das análises finalizadas, por empresa.',acts)+filtros+cards+tabela;
+}
+function detalheAnalise(a){
+  const itens=itensDaAnalise(a);
+  const lin=(i)=>{
+    const r=a.respostas[i.id]||{};
+    const map={ok:['ok','Conforme'],nao:['no','Não conforme'],na:['na','Não aplicável']};
+    const m=map[r.status]||['na','Não avaliado'];
+    return `<tr><td style="width:120px"><span class="tag ${m[0]}">${m[1]}</span></td>
+      <td><span class="tag">${i.documento}</span> ${esc(i.titulo)}${r.obs?`<div class="muted" style="font-size:12px">Obs.: ${esc(r.obs)}</div>`:''}</td></tr>`;
+  };
+  return `<div style="padding:6px 4px 12px">
+    <div class="row r4" style="margin-bottom:10px">
+      <div><span class="f">Analista</span><div>${esc(a.responsavel||'—')}</div></div>
+      <div><span class="f">E-mail de destino</span><div>${esc(a.emailDestino||'—')}</div></div>
+      <div><span class="f">Data da análise</span><div>${fmtD(a.data)}</div></div>
+      <div><span class="f">Prazo dado</span><div>${fmtD(a.prazo)}</div></div>
+    </div>
+    <div class="card"><table><tbody>${itens.map(lin).join('')}</tbody></table></div>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="btn sm" data-act="bReabrir" data-id="${a.id}">↺ Reabrir para edição</button>
+      <button class="btn sm gho" data-act="bDel" data-id="${a.id}">🗑 Excluir esta empresa do banco</button>
+    </div></div>`;
+}
+function relatorioItens(lista){
+  const f=state.banco;
+  const linhas=db.itens.map(i=>{
+    let ok=0,nao=0,na=0,empresasNao=[],empresasOk=[];
+    lista.forEach(a=>{
+      const r=(a.respostas[i.id]||{}).status;
+      if(!r) return;
+      if(!itensDaAnalise(a).some(x=>x.id===i.id)) return;
+      if(r==='ok'){ok++;empresasOk.push(a.empresa)} else if(r==='nao'){nao++;empresasNao.push(a.empresa)} else na++;
+    });
+    return {i,ok,nao,na,tot:ok+nao,empresasNao,empresasOk};
+  }).filter(l=>l.tot+l.na>0).sort((a,b)=>b.nao-a.nao);
+  if(!linhas.length) return `<div class="card empty"><b>Sem dados para o relatório</b>Finalize análises para consolidar os números.</div>`;
+  return `<div class="card"><table><thead><tr><th>Item avaliado</th><th style="width:90px">Conforme</th><th style="width:110px">Não conforme</th><th style="width:90px">N/A</th><th style="width:180px">Taxa de conformidade</th></tr></thead><tbody>`+
+  linhas.map(l=>{
+    const p=l.tot? Math.round(l.ok/l.tot*100):0;
+    const aberto=f.item===l.i.id;
+    return `<tr class="rowlink" data-act="bItem" data-id="${l.i.id}">
+      <td><b>${esc(l.i.titulo)}</b> <span class="tag">${l.i.documento}</span>${l.i.escopo==='especifico'?' <span class="pill esp">específico</span>':''}</td>
+      <td><span class="tag ok">${l.ok}</span></td><td><span class="tag no">${l.nao}</span></td><td><span class="tag na">${l.na}</span></td>
+      <td><div class="minibar"><i style="width:${p}%"></i></div><span class="muted" style="font-size:11.5px">${p}% de ${l.tot} avaliações</span></td></tr>`+
+    (aberto? `<tr class="det"><td colspan="5"><div style="padding:8px 4px">
+      <div class="row r2">
+        <div><label class="f">Não conformes (${l.nao})</label>${l.empresasNao.map(e=>`<div>• ${esc(e||'(sem nome)')}</div>`).join('')||'<span class="muted">—</span>'}</div>
+        <div><label class="f">Conformes (${l.ok})</label>${l.empresasOk.map(e=>`<div>• ${esc(e||'(sem nome)')}</div>`).join('')||'<span class="muted">—</span>'}</div>
+      </div></div></td></tr>`:'');
+  }).join('')+`</tbody></table></div>`;
+}
+function exportarCsv(){
+  const lista=bancoFiltrado();
+  const linhas=[['Empresa','CNPJ','Contratante','Documentos','Data análise','Finalizada','Item','Documento','Resultado','Observação']];
+  lista.forEach(a=>{ const c=getC(a.contratanteId);
+    itensDaAnalise(a).forEach(i=>{ const r=a.respostas[i.id]||{};
+      linhas.push([a.empresa,a.cnpj,nomeC(c),(a.documentos||[]).join(' '),fmtD(a.data),fmtD(a.dataFinal||a.data),i.titulo,i.documento,
+        ({ok:'Conforme',nao:'Não conforme',na:'Não aplicável'})[r.status]||'Não avaliado',r.obs||'']);
+    });
+  });
+  const csv='\ufeff'+linhas.map(l=>l.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  const el=document.createElement('a'); el.href=url; el.download='gt3-banco-pgr-pcmso.csv'; el.click(); URL.revokeObjectURL(url);
+  toast('CSV exportado');
+}
+
+/* --- config --- */
+function vConfig(){
+  const c=db.config;
+  return head('Configurações','Padrões gerais e backup dos dados.','')+
+  `<div class="card pad" style="margin-bottom:14px">
+    <div class="row r3">
+      <div><label class="f">Analista padrão</label><input type="text" data-cfg="responsavel" value="${esc(c.responsavel)}"></div>
+      <div><label class="f">Prazo padrão (dias)</label><input type="text" data-cfg="prazoDias" value="${c.prazoDias}"></div>
+      <div><label class="f">&nbsp;</label><button class="btn pri" data-act="salvarCfg">Salvar padrões</button></div>
+    </div>
+    <div style="margin-top:12px"><label class="f">Assunto do e-mail</label><input type="text" data-cfg="assunto" value="${esc(c.assunto)}"></div>
+  </div>
+  <div class="card pad">
+    <b>Backup e migração</b>
+    <p class="muted" style="margin:6px 0 12px">Exporte o JSON para reaproveitar as bases ao migrar para o Supabase.</p>
+    <button class="btn" data-act="export">⬇️ Exportar JSON</button>
+    <button class="btn" data-act="import">⬆️ Importar JSON</button>
+    <button class="btn gho" data-act="reset">Restaurar dados de exemplo</button>
+    <input type="file" id="fileIn" accept=".json" style="display:none">
+  </div>`;
+}
+
+/* ---------- modal / toast ---------- */
+let onSave=null;
+function abrirModal(titulo,html,save){
+  onSave=save;
+  $('#modal').innerHTML=`<div class="modal-hd"><b>${esc(titulo)}</b><button class="x" data-act="fechar">×</button></div>
+  <div class="modal-bd">${html}</div>
+  <div class="modal-ft"><button class="btn" data-act="fechar">Cancelar</button><button class="btn pri" data-act="modalSave">Salvar</button></div>`;
+  $('#mask').classList.add('on');
+}
+function fecharModal(){ $('#mask').classList.remove('on'); onSave=null; }
+let tt;
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),2200); }
+
+/* ---------- e-mail: saída ---------- */
+function b64(s){ return btoa(unescape(encodeURIComponent(s))); }
+function baixarEml(){
+  const a=state.analise, assunto=$('#emailAssunto').value, corpo=$('#emailCorpo').value;
+  const eml=['To: '+(a.emailDestino||''),'Subject: =?UTF-8?B?'+b64(assunto)+'?=','X-Unsent: 1','MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8','Content-Transfer-Encoding: 8bit','',corpo].join('\r\n');
+  const url=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));
+  const el=document.createElement('a'); el.href=url;
+  el.download=('SST - '+(a.empresa||'empresa')).replace(/[\\/:*?"<>|]/g,'')+'.eml';
+  el.click(); URL.revokeObjectURL(url); toast('Arquivo .eml gerado');
+}
+
+/* ---------- persistência + eventos ---------- */
+function persist(){ dbSave(); }
+function gravarAnalise(){
+  const a=state.analise;
+  a.atualizado=new Date().toISOString();
+  const idx=db.analises.findIndex(x=>x.id===a.id);
+  if(idx>=0) db.analises[idx]=JSON.parse(JSON.stringify(a)); else db.analises.push(JSON.parse(JSON.stringify(a)));
+  persist();
+}
+function salvarAnalise(){ if(!(state.analise.empresa||'').trim()) return toast('Informe a empresa prestadora');
+  state.analise.finalizada=false; gravarAnalise(); toast('Rascunho salvo'); go('analises'); }
+function finalizarAnalise(){
+  const a=state.analise;
+  if(!(a.empresa||'').trim()) return toast('Informe a empresa prestadora');
+  const itens=itensDaAnalise(a), semMarcar=itens.filter(i=>!resp(a,i.id).status).length;
+  if(semMarcar && !confirm(semMarcar+' item(ns) ainda sem marcação. Finalizar mesmo assim?')) return;
+  a.finalizada=true; a.dataFinal=hoje();
+  gravarAnalise(); toast('Análise finalizada e enviada ao banco de dados');
+  state.banco.aberto=a.id; state.banco.aba='empresas';
+  novaAnalise(); go('banco');
+}
+
+document.addEventListener('click',e=>{
+  const nav=e.target.closest('[data-nav]'); if(nav) return go(nav.dataset.nav);
+  const v=e.target.closest('[data-var]');
+  if(v){ navigator.clipboard.writeText(v.dataset.var); toast('Variável copiada'); return; }
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  const id=b.dataset.id, act=b.dataset.act;
+  const A={
+    nova:()=>{ novaAnalise(); go('nova'); },
+    abrir:()=>{ state.analise=JSON.parse(JSON.stringify(db.analises.find(x=>x.id===id))); state.emailEditado=false; go('nova'); },
+    delAnalise:()=>{ if(confirm('Excluir este acompanhamento?')){ db.analises=db.analises.filter(x=>x.id!==id); persist(); render(); } },
+    dot:()=>{ const r=resp(state.analise,id); r.status = r.status===b.dataset.val? '' : b.dataset.val; state.emailEditado=false; render(); },
+    doc:()=>{ const a=state.analise, d=b.dataset.d;
+      a.documentos = a.documentos.includes(d)? a.documentos.filter(x=>x!==d) : [...a.documentos,d].sort((x,y)=>DOCS.indexOf(x)-DOCS.indexOf(y));
+      if(!a.documentos.length){ toast('Selecione ao menos um documento'); a.documentos=[d]; }
+      state.emailEditado=false; render(); },
+    limpar:()=>{ if(confirm('Limpar todas as respostas desta análise?')){ state.analise.respostas={}; state.emailEditado=false; render(); } },
+    salvar:salvarAnalise,
+    finalizar:finalizarAnalise,
+    /* --- contratante (modal) --- */
+    cTog:()=>{ lerCamposC(); const ex=draftC.itens.findIndex(x=>x.itemId===id);
+      if(ex>=0) draftC.itens.splice(ex,1); else draftC.itens.push({itemId:id,textoId:null}); refreshC(); },
+    cAll:()=>{ lerCamposC(); const g=db.itens.filter(i=>i.escopo===b.dataset.e);
+      if(b.dataset.v==='1') g.forEach(i=>{ if(!draftC.itens.some(l=>l.itemId===i.id)) draftC.itens.push({itemId:i.id,textoId:null}); });
+      else draftC.itens=draftC.itens.filter(l=>!g.some(i=>i.id===l.itemId)); refreshC(); },
+    cNovoItem:()=>{ lerCamposC();
+      const t=$('#niTitulo').value.trim(); if(!t) return toast('Informe o título do item');
+      const novo={id:uid('i'),titulo:t,documento:$('#niDoc').value,descricao:'Exigência específica da contratante.',escopo:'especifico',textoId:$('#niTexto').value||'',critico:false};
+      db.itens.push(novo); draftC.itens.push({itemId:novo.id,textoId:null}); persist(); refreshC(); toast('Item criado e vinculado'); },
+    /* --- banco de dados --- */
+    bAba:()=>{ state.banco.aba=b.dataset.v; state.banco.aberto=null; state.banco.item=null; render(); },
+    bAbrir:()=>{ state.banco.aberto = state.banco.aberto===id? null : id; render(); },
+    bItem:()=>{ state.banco.item = state.banco.item===id? null : id; render(); },
+    bDel:()=>{ const a=db.analises.find(x=>x.id===id);
+      if(confirm('Excluir definitivamente o registro de "'+(a.empresa||'sem nome')+'"? Todos os dados desta análise serão apagados.')){
+        db.analises=db.analises.filter(x=>x.id!==id); state.banco.aberto=null; persist(); render(); toast('Registro excluído'); } },
+    bDelFiltro:()=>{ const alvo=bancoFiltrado(); if(!alvo.length) return toast('Nenhum registro no filtro atual');
+      const f=state.banco, per=(f.de||f.ate)? ' do período '+(fmtD(f.de)||'início')+' a '+(fmtD(f.ate)||'hoje') : '';
+      if(confirm('Excluir '+alvo.length+' registro(s)'+per+'? A ação apaga tudo e não pode ser desfeita.')){
+        const ids=new Set(alvo.map(x=>x.id)); db.analises=db.analises.filter(x=>!ids.has(x.id));
+        state.banco.aberto=null; persist(); render(); toast(alvo.length+' registro(s) excluído(s)'); } },
+    bReabrir:()=>{ const a=db.analises.find(x=>x.id===id); a.finalizada=false; persist();
+      state.analise=JSON.parse(JSON.stringify(a)); state.emailEditado=false; go('nova'); toast('Análise reaberta'); },
+    bLimpar:()=>{ state.banco={...state.banco,q:'',contratante:'',status:'',de:'',ate:''}; render(); },
+    bExportCsv:exportarCsv,
+    copiar:()=>{ navigator.clipboard.writeText($('#emailCorpo').value); toast('E-mail copiado'); },
+    eml:baixarEml,
+    mailto:()=>{ const a=state.analise; location.href='mailto:'+(a.emailDestino||'')+'?subject='+encodeURIComponent($('#emailAssunto').value)+'&body='+encodeURIComponent($('#emailCorpo').value); },
+    regerar:()=>{ state.emailEditado=false; updateEmail(); toast('E-mail regerado'); },
+    novoC:()=>modalContratante(null), editC:()=>modalContratante(id),
+    delC:()=>{ if(confirm('Excluir contratante?')){ db.contratantes=db.contratantes.filter(x=>x.id!==id); persist(); render(); } },
+    novoI:()=>modalItem(null), editI:()=>modalItem(id),
+    delI:()=>{ if(confirm('Excluir item? Ele sairá de todas as contratantes.')){ db.itens=db.itens.filter(x=>x.id!==id); db.contratantes.forEach(c=>c.itens=c.itens.filter(l=>l.itemId!==id)); persist(); render(); } },
+    novoT:()=>modalTexto(null), editT:()=>modalTexto(id),
+    delT:()=>{ if(confirm('Excluir texto?')){ db.textos=db.textos.filter(x=>x.id!==id); persist(); render(); } },
+    fechar:fecharModal,
+    modalSave:()=>onSave&&onSave(),
+    salvarCfg:()=>{ document.querySelectorAll('[data-cfg]').forEach(el=>db.config[el.dataset.cfg]= el.dataset.cfg==='prazoDias'?(parseInt(el.value)||7):el.value); persist(); toast('Padrões salvos'); },
+    export:()=>{ const url=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));
+      const el=document.createElement('a'); el.href=url; el.download='gt3-pgr-pcmso-base.json'; el.click(); URL.revokeObjectURL(url); },
+    import:()=>$('#fileIn').click(),
+    reset:()=>{ if(confirm('Restaurar dados de exemplo? Tudo será substituído.')){ db=seed(); persist(); render(); } }
+  };
+  A[act] && A[act]();
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='selContratante'){ state.analise.contratanteId=e.target.value; state.emailEditado=false; render(); return; }
+  if(e.target.id==='fileIn' && e.target.files[0]){
+    const fr=new FileReader();
+    fr.onload=()=>{ try{ db=JSON.parse(fr.result); persist(); render(); toast('Base importada'); }catch(err){ toast('Arquivo inválido'); } };
+    fr.readAsText(e.target.files[0]);
+  }
+});
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(el.dataset.a){ state.analise[el.dataset.a]=el.value; state.emailEditado=false; updateEmail(); }
+  else if(el.dataset.obs){ resp(state.analise,el.dataset.obs).obs=el.value; state.emailEditado=false; updateEmail(); }
+  else if(el.id==='emailCorpo'){ state.emailEditado=true; }
+  else if(el.dataset.b!==undefined && el.dataset.b){ state.banco[el.dataset.b]=el.value; state.banco.aberto=null; render();
+    const n=document.querySelector('[data-b="'+el.dataset.b+'"]'); if(n){ n.focus(); try{ n.setSelectionRange(n.value.length,n.value.length); }catch(e){} } }
+  else if(el.hasAttribute('data-cq')){ draftC._q=el.value; refreshC(); }
+});
+
+/* ---------- init ---------- */
+(async function(){
+  db = await dbLoad() || seed();
+  if(!db.config) db.config=seed().config;
+  novaAnalise();
+  renderNav(); render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retorno de NR — GT3 Sistema</title>
+<style>
+:root{
+  --primary:#2A4F96;
+  --primary-dark:#1E3A70;
+  --primary-soft:#E8EEF9;
+  --accent:#D1AE6E;
+  --accent-soft:#FBF4E6;
+  --bg:#F4F6FA;
+  --card:#FFFFFF;
+  --line:#E1E6EF;
+  --text:#1F2937;
+  --muted:#6B7280;
+  --ok:#15803D;
+  --ok-soft:#E7F6EC;
+  --warn:#B45309;
+  --warn-soft:#FDF3E3;
+  --danger:#B91C1C;
+  --danger-soft:#FBEAEA;
+  --radius:12px;
+  --shadow:0 1px 3px rgba(30,58,112,.08), 0 6px 18px rgba(30,58,112,.06);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  font-size:15px;line-height:1.5;
+}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+a{color:var(--primary)}
+
+/* ---------- Topo ---------- */
+header{
+  background:var(--primary);color:#fff;padding:0 24px;
+  position:sticky;top:0;z-index:50;box-shadow:0 2px 10px rgba(30,58,112,.18);
+}
+.head-row{display:flex;align-items:center;gap:16px;height:62px;max-width:1280px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:11px;font-size:17px;font-weight:600;letter-spacing:.2px}
+.brand .mark{
+  width:32px;height:32px;border-radius:9px;background:var(--accent);
+  color:var(--primary-dark);display:grid;place-items:center;font-weight:800;font-size:13px;
+}
+.tabs{display:flex;gap:4px;margin-left:auto}
+.tab{
+  background:transparent;border:0;color:#C9D6EE;padding:8px 15px;border-radius:8px;
+  cursor:pointer;font-weight:500;transition:background .15s,color .15s;
+}
+.tab:hover{background:rgba(255,255,255,.10);color:#fff}
+.tab.active{background:#fff;color:var(--primary);font-weight:600}
+.gear{
+  background:rgba(255,255,255,.12);border:0;color:#fff;width:38px;height:38px;border-radius:9px;
+  cursor:pointer;display:grid;place-items:center;margin-left:6px;transition:background .15s,transform .3s;
+}
+.gear:hover{background:rgba(255,255,255,.25)}
+.gear.spin svg{transform:rotate(90deg);transition:transform .3s}
+.gear svg{transition:transform .3s}
+
+main{max-width:1280px;margin:0 auto;padding:26px 24px 70px}
+
+/* ---------- Blocos genéricos ---------- */
+.page-title{font-size:22px;font-weight:600;margin:0 0 4px}
+.page-sub{color:var(--muted);margin:0 0 22px;font-size:14px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.panel-head{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.panel-head h3{margin:0;font-size:15px;font-weight:600}
+.panel-body{padding:18px}
+
+.btn{
+  background:var(--primary);color:#fff;border:0;border-radius:8px;padding:9px 16px;
+  cursor:pointer;font-weight:500;transition:background .15s;
+}
+.btn:hover{background:var(--primary-dark)}
+.btn.ghost{background:#fff;color:var(--primary);border:1px solid var(--line)}
+.btn.ghost:hover{background:var(--primary-soft)}
+.btn.gold{background:var(--accent);color:#3A2E14}
+.btn.gold:hover{background:#C29B55}
+.btn.danger{background:#fff;color:var(--danger);border:1px solid #F0CFCF}
+.btn.danger:hover{background:var(--danger-soft)}
+.btn.sm{padding:6px 11px;font-size:13px}
+.btn:focus-visible,.tab:focus-visible,.gear:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.copybox:focus-visible,.nr-card:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px
+}
+
+label.fld{display:block;margin-bottom:14px}
+label.fld > span{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:5px}
+input[type=text],input[type=date],select,textarea{
+  width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;
+}
+textarea{resize:vertical;min-height:80px;line-height:1.55}
+input:focus,select:focus,textarea:focus{border-color:var(--primary);outline:none;box-shadow:0 0 0 3px rgba(42,79,150,.12)}
+.hint{font-size:12.5px;color:var(--muted);margin-top:5px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+
+/* ---------- Cards da home ---------- */
+.searchbar{display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+.searchbar input{max-width:340px}
+.section-label{font-size:13px;font-weight:600;color:var(--muted);margin:26px 0 12px}
+.section-label:first-child{margin-top:0}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:15px}
+.nr-card{
+  background:var(--card);border:1px solid var(--line);border-left:5px solid var(--primary);
+  border-radius:var(--radius);padding:16px 17px;cursor:pointer;text-align:left;
+  box-shadow:var(--shadow);transition:border-color .15s,box-shadow .15s;display:block;width:100%;
+}
+.nr-card:hover{box-shadow:0 4px 16px rgba(30,58,112,.14);border-color:var(--primary)}
+.nr-card .nome{font-weight:600;font-size:16px;margin-bottom:5px}
+.nr-card .desc{font-size:13px;color:var(--muted);min-height:34px}
+.nr-card .meta{margin-top:11px;font-size:12px;color:var(--primary);font-weight:600}
+.nr-card.combo{border-left-color:var(--accent)}
+.nr-card.combo .meta{color:var(--warn)}
+.empty{padding:34px;text-align:center;color:var(--muted);background:var(--card);border:1px dashed var(--line);border-radius:var(--radius)}
+
+/* ---------- Detalhe ---------- */
+.back{background:none;border:0;color:var(--primary);cursor:pointer;padding:0;font-weight:600;margin-bottom:12px}
+.detail-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:22px;flex-wrap:wrap}
+.detail-head h2{margin:0;font-size:23px;font-weight:600}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.chip{background:var(--primary-soft);color:var(--primary-dark);border-radius:20px;padding:3px 11px;font-size:12.5px;font-weight:600}
+.chip.gold{background:var(--accent-soft);color:#7A5C1E}
+
+.copybox{
+  position:relative;background:#FBFCFE;border:1px solid var(--line);border-radius:10px;
+  padding:15px 16px;white-space:pre-wrap;font-size:14px;line-height:1.62;cursor:pointer;
+  transition:border-color .15s,background .15s;width:100%;text-align:left;font-family:inherit;color:var(--text);
+}
+.copybox:hover{border-color:var(--primary);background:#fff}
+.copybox.copied{border-color:var(--ok);background:var(--ok-soft)}
+.copy-flag{
+  position:absolute;top:9px;right:11px;font-size:11.5px;font-weight:700;color:var(--muted);
+  background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 8px;
+}
+.copybox.copied .copy-flag{color:var(--ok);border-color:#B7E0C4;background:#fff}
+
+.radio-row{display:flex;gap:9px;flex-wrap:wrap}
+.opt{
+  border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 15px;cursor:pointer;
+  font-weight:500;transition:all .15s;
+}
+.opt:hover{border-color:var(--primary);background:var(--primary-soft)}
+.opt.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.opt.on.gold{background:var(--accent);border-color:var(--accent);color:#3A2E14}
+.step{margin-bottom:18px}
+.step > .lab{font-size:13px;font-weight:600;color:#374151;margin-bottom:7px;display:block}
+.divider{height:1px;background:var(--line);margin:20px 0}
+
+/* ---------- Config ---------- */
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:0}
+.subtab{
+  background:none;border:0;border-bottom:2px solid transparent;padding:9px 14px;cursor:pointer;
+  color:var(--muted);font-weight:500;margin-bottom:-1px;
+}
+.subtab:hover{color:var(--primary)}
+.subtab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+
+.list-item{
+  display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);
+  border-radius:9px;background:#fff;margin-bottom:8px;
+}
+.list-item .grow{flex:1;min-width:0}
+.list-item .nm{font-weight:600}
+.list-item .sb{font-size:12.5px;color:var(--muted)}
+.item-row{display:flex;gap:9px;align-items:flex-start;margin-bottom:9px}
+.item-row textarea{min-height:62px}
+.item-row .key{width:160px;flex:none}
+.tag-common{background:var(--accent-soft);color:#7A5C1E;font-size:11.5px;font-weight:700;border-radius:5px;padding:2px 7px;white-space:nowrap}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:12.5px;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:9px 10px;border-bottom:1px solid #F0F2F7;vertical-align:top}
+tr:last-child td{border-bottom:0}
+
+.toast{
+  position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--primary-dark);color:#fff;padding:11px 20px;border-radius:9px;
+  box-shadow:0 8px 24px rgba(0,0,0,.22);opacity:0;transition:all .25s;z-index:200;font-weight:500;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.callout{background:var(--accent-soft);border:1px solid #EBD8B2;border-radius:9px;padding:12px 14px;font-size:13.5px;color:#6B5320;margin-bottom:16px}
+.mono{font-family:Consolas,"Courier New",monospace;font-size:13px;background:#EEF1F7;padding:1px 5px;border-radius:4px}
+
+@media (max-width:820px){
+  .grid2,.grid3{grid-template-columns:1fr}
+  .head-row{height:auto;padding:10px 0;flex-wrap:wrap}
+  .tabs{margin-left:0;width:100%}
+  main{padding:20px 16px 60px}
+  header{padding:0 16px}
+  .item-row{flex-wrap:wrap}
+  .item-row .key{width:100%}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-row">
+    <div class="brand"><div class="mark">GT3</div> Retorno de NR</div>
+    <nav class="tabs">
+      <button class="tab" data-go="home">Retornos</button>
+      <button class="tab" data-go="historico">Histórico</button>
+      <button class="tab" data-go="config">Configurações</button>
+    </nav>
+    <button class="gear" id="gearBtn" title="Configurações" aria-label="Abrir configurações">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main id="app"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   RETORNO DE NR — protótipo HTML autocontido
+   Persistência: localStorage (chave gt3_retorno_nr_v1)
+   Contratantes: lidos automaticamente do módulo
+                 "Informações / Cadastro Contratantes"
+   ========================================================= */
+
+const STORE = 'gt3_retorno_nr_v4';
+
+/* ---------- Textos-base dos treinamentos ----------
+   "chave" identifica itens comuns: itens com a mesma chave
+   em NRs diferentes aparecem UMA única vez na mesclagem.   */
+const COMUNS = {
+  envio: 'Devem ser enviados frente e verso, no campo específico de cada um deles, em um único arquivo, assinados, em PDF;',
+  ead:   'Não é possível aceitar treinamentos 100% EAD.'
+};
+
+function seed(){
+  const t = (id,nome,desc,extras)=>({
+    id, nome, desc, ativo:true,
+    itens:[
+      {id:uid(),chave:'envio',texto:COMUNS.envio},
+      {id:uid(),chave:'ead',texto:COMUNS.ead},
+      ...extras.map(x=>({id:uid(),chave:'',texto:x}))
+    ]
+  });
+
+  return {
+    versao:2,
+    usuario:{nomeCompleto:''},
+    treinamentos:[
+      t('nr10','NR 10','Segurança em instalações e serviços em eletricidade',[
+        'No caso da NR 10, anexar o certificado de formação de 40h + reciclagem, em um único arquivo, em PDF.'
+      ]),
+      t('nr12','NR 12','Segurança em máquinas e equipamentos',[]),
+      t('nr11-guincho','NR 11 Guincho','Operação de guincho / guindaste',[]),
+      t('nr11-empilhadeira','NR 11 Empilhadeira','Operação de empilhadeira',[]),
+      t('nr11-ponte','NR 11 Ponte Rolante','Operação de ponte rolante / talha',[]),
+      t('nr18-pemt','NR 18 PEMT','Plataforma elevatória móvel de trabalho',[]),
+      t('nr20','NR 20','Inflamáveis e combustíveis',[]),
+      t('nr33','NR 33','Espaços confinados',[
+        'No caso da NR 33, anexar o certificado de formação de 40h + reciclagem, em um único arquivo, em PDF.'
+      ]),
+      t('nr35','NR 35','Trabalho em altura',[])
+    ],
+    combos:[
+      {id:'c1',nome:'NR 10 + NR 35',ids:['nr10','nr35']},
+      {id:'c2',nome:'NR 11 Empilhadeira + NR 35',ids:['nr11-empilhadeira','nr35']},
+      {id:'c3',nome:'NR 18 PEMT + NR 35',ids:['nr18-pemt','nr35']},
+      {id:'c4',nome:'NR 33 + NR 35',ids:['nr33','nr35']}
+    ],
+    email:{
+      tituloComuns:'Padrão a todos:',
+      cabecalho:'Olá!\n\nOK, inseridos o(s) treinamento(s) solicitado(s).\n\nConsiderações:',
+      rodape:''
+    },
+    modelos:{
+      contratante:'{{data}}: {{acao}} {{treinamentos}}, conforme solicitação da {{contratante}} via {{contato}}. {{usuario}}',
+      empresa:'{{data}}: {{acao}} {{treinamentos}}, conforme solicitação da própria empresa via {{contato}}. {{usuario}}',
+      atividade:'{{data}}: {{acao}} {{treinamentos}}, conforme atividade da empresa. {{usuario}}'
+    },
+    acoes:{inclusao:'inserido',remocao:'removido'},
+    rotulos:{inclusao:'Aprovação (inclusão)',remocao:'Remoção'},
+    formasContato:['E-mail','Portal','WhatsApp','Outros'],
+    contratantes:{
+      modo:'auto',            // auto = lê do módulo de contratantes; manual = lista abaixo
+      chave:'',               // chave do localStorage detectada/escolhida
+      manual:[],
+      cache:[]
+    },
+    historico:[]
+  };
+}
+
+/* ---------- Estado ---------- */
+let db = null;
+let view = 'home';
+let cfgTab = 'treinamentos';
+let atual = null;           // {tipo:'nr'|'combo', id}
+let form = {};
+let busca = '';
+let editandoTreino = null;
+
+const uid = ()=> Math.random().toString(36).slice(2,9);
+const $  = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE);
+    db = raw ? JSON.parse(raw) : seed();
+  }catch(e){ db = seed(); }
+  if(!db.treinamentos) db = seed();
+  syncContratantes();
+}
+function save(){
+  try{ localStorage.setItem(STORE, JSON.stringify(db)); }
+  catch(e){ toast('Não foi possível salvar neste navegador.'); }
+}
+
+/* =========================================================
+   Contratantes — leitura automática do módulo de cadastro
+   ========================================================= */
+const CAMPOS_NOME = ['nome','razao_social','razaoSocial','nome_fantasia','nomeFantasia','contratante','empresa','cliente','descricao'];
+
+function chavesCandidatas(){
+  const out=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k===STORE) continue;
+    if(!/contratante|cliente|empresa/i.test(k)) continue;
+    if(extrairNomes(k).length) out.push(k);
+  }
+  return out;
+}
+function extrairNomes(chave){
+  try{
+    const raw = localStorage.getItem(chave);
+    if(!raw) return [];
+    const dados = JSON.parse(raw);
+    let arr = Array.isArray(dados) ? dados
+            : (dados && typeof dados==='object')
+              ? (Object.values(dados).find(v=>Array.isArray(v)) || [])
+              : [];
+    const nomes = arr.map(it=>{
+      if(typeof it === 'string') return it;
+      if(it && typeof it === 'object'){
+        for(const c of CAMPOS_NOME) if(it[c]) return String(it[c]);
+      }
+      return null;
+    }).filter(Boolean);
+    return [...new Set(nomes)].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  }catch(e){ return []; }
+}
+function syncContratantes(){
+  const c = db.contratantes;
+  if(c.modo !== 'auto'){ return; }
+  let chave = c.chave;
+  if(!chave || !extrairNomes(chave).length){
+    const cands = chavesCandidatas();
+    chave = cands[0] || '';
+    c.chave = chave;
+  }
+  c.cache = chave ? extrairNomes(chave) : [];
+}
+function listaContratantes(){
+  const c = db.contratantes;
+  return c.modo==='auto' ? (c.cache||[]) : (c.manual||[]);
+}
+// se o módulo de contratantes for atualizado em outra aba, reflete aqui
+window.addEventListener('storage', ()=>{ syncContratantes(); if(view!=='config') render(); });
+
+/* =========================================================
+   Mesclagem de orientações
+   ========================================================= */
+function treino(id){ return db.treinamentos.find(t=>t.id===id); }
+function alvoAtual(){
+  if(!atual) return null;
+  if(atual.tipo==='nr'){
+    const t = treino(atual.id);
+    return t ? {nome:t.nome, ids:[t.id]} : null;
+  }
+  const c = db.combos.find(x=>x.id===atual.id);
+  return c ? {nome:c.nome, ids:c.ids.filter(i=>treino(i))} : null;
+}
+function normaliza(s){ return String(s).toLowerCase().replace(/\s+/g,' ').trim(); }
+
+/* Retorna {comuns:[textos], blocos:[{nome, itens:[textos]}]}
+   - item com "chave" preenchida: dedup pela chave
+   - item sem chave: dedup pelo texto normalizado
+   - item que aparece em 2+ NRs vai para "comuns" e some dos blocos */
+function mesclar(ids){
+  const mapa = new Map();       // assinatura -> {texto, nrs:Set}
+  ids.forEach(id=>{
+    const t = treino(id); if(!t) return;
+    t.itens.forEach(it=>{
+      const sig = it.chave ? 'k:'+it.chave : 'x:'+normaliza(it.texto);
+      if(!mapa.has(sig)) mapa.set(sig,{texto:it.texto,nrs:new Set(),ordem:mapa.size});
+      mapa.get(sig).nrs.add(id);
+    });
+  });
+  const comuns=[];
+  const porNr={}; ids.forEach(i=>porNr[i]=[]);
+  [...mapa.values()].sort((a,b)=>a.ordem-b.ordem).forEach(v=>{
+    if(ids.length>1 && v.nrs.size>1) comuns.push(v.texto);
+    else porNr[[...v.nrs][0]].push(v.texto);
+  });
+  const blocos = ids.map(id=>({nome:treino(id).nome, itens:porNr[id]})).filter(b=>b.itens.length);
+  return {comuns, blocos};
+}
+
+function nomesTreinos(ids){ return ids.map(i=>treino(i)?treino(i).nome:'').filter(Boolean); }
+function juntar(arr){
+  if(arr.length===0) return '';
+  if(arr.length===1) return arr[0];
+  return arr.slice(0,-1).join(', ')+' e '+arr[arr.length-1];
+}
+
+function textoOrientacao(ids){
+  const {comuns,blocos} = mescladoCache(ids);
+  const nomes = juntar(nomesTreinos(ids));
+  let out = db.email.cabecalho.replace(/\{\{treinamentos\}\}/g, nomes) + '\n\n';
+  if(comuns.length){
+    out += (db.email.tituloComuns||'Padrão a todos:')+'\n';
+    comuns.forEach(x=> out += '- '+x+'\n');
+    out += '\n';
+  }
+  blocos.forEach(b=>{
+    out += (blocos.length>1 || comuns.length ? b.nome+':\n' : '');
+    b.itens.forEach(x=> out += '- '+x+'\n');
+    out += '\n';
+  });
+  out += db.email.rodape.replace(/\{\{treinamentos\}\}/g, nomes);
+  return out.trim();
+}
+let _mc = {k:'',v:null};
+function mescladoCache(ids){
+  const k = ids.join('|');
+  if(_mc.k!==k){ _mc = {k, v:mesclar(ids)}; }
+  return _mc.v;
+}
+
+/* =========================================================
+   Texto de registro (GT0100 / INSOFT)
+   ========================================================= */
+function dataBR(iso){
+  if(!iso) return '';
+  const [a,m,d] = iso.split('-');
+  return d+'/'+m+'/'+a;
+}
+function contatoTexto(){
+  if(form.contato==='Outros') return (form.contatoOutro||'').trim() || 'outros';
+  return form.contato || '';
+}
+function textoRegistro(){
+  const alvo = alvoAtual(); if(!alvo) return '';
+  if(!form.acao || !form.origem) return '';
+  const nomes = juntar(nomesTreinos(alvo.ids));
+  let modelo = db.modelos[form.origem] || '';
+  const precisaContato = form.origem==='contratante' || form.origem==='empresa';
+  if(precisaContato && !form.contato) return '';
+  if(form.origem==='contratante' && !form.contratante) return '';
+  if(form.contato==='Outros' && !(form.contatoOutro||'').trim()) return '';
+
+  return modelo
+    .replace(/\{\{data\}\}/g, dataBR(form.data))
+    .replace(/\{\{acao\}\}/g, db.acoes[form.acao]||'')
+    .replace(/\{\{treinamentos\}\}/g, nomes)
+    .replace(/\{\{contratante\}\}/g, form.contratante||'')
+    .replace(/\{\{contato\}\}/g, contatoTexto())
+    .replace(/\{\{usuario\}\}/g, db.usuario.nomeCompleto||'')
+    .replace(/\s{2,}/g,' ')
+    .trim();
+}
+
+/* =========================================================
+   Cópia
+   ========================================================= */
+function copiar(txt, el){
+  const done = ()=>{
+    if(el){ el.classList.add('copied'); const f=el.querySelector('.copy-flag'); if(f) f.textContent='Copiado';
+      setTimeout(()=>{ el.classList.remove('copied'); if(f) f.textContent='Clique para copiar'; },1600); }
+    toast('Texto copiado');
+  };
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>fallback(txt,done));
+  } else fallback(txt,done);
+}
+function fallback(txt,done){
+  const ta=document.createElement('textarea');
+  ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); done(); }catch(e){ toast('Copie manualmente (Ctrl+C).'); }
+  document.body.removeChild(ta);
+}
+let toastT;
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+/* =========================================================
+   Render
+   ========================================================= */
+function render(){
+  document.querySelectorAll('.tab').forEach(b=>{
+    b.classList.toggle('active', b.dataset.go===view || (view==='detalhe'&&b.dataset.go==='home'));
+  });
+  if(view==='home') renderHome();
+  else if(view==='detalhe') renderDetalhe();
+  else if(view==='historico') renderHistorico();
+  else renderConfig();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+
+function renderHome(){
+  const q = normaliza(busca);
+  const nrs = db.treinamentos.filter(t=>t.ativo!==false && (!q||normaliza(t.nome+' '+t.desc).includes(q)));
+  const cbs = db.combos.filter(c=>!q||normaliza(c.nome).includes(q));
+
+  const cardNR = t=>`
+    <button class="nr-card" data-open="nr:${t.id}">
+      <div class="nome">${esc(t.nome)}</div>
+      <div class="desc">${esc(t.desc||'')}</div>
+      <div class="meta">${t.itens.length} exigências</div>
+    </button>`;
+  const cardCB = c=>{
+    const nomes = nomesTreinos(c.ids);
+    const m = mesclar(c.ids);
+    return `<button class="nr-card combo" data-open="combo:${c.id}">
+      <div class="nome">${esc(c.nome)}</div>
+      <div class="desc">${esc(nomes.join(' · '))}</div>
+      <div class="meta">${m.comuns.length} itens em comum</div>
+    </button>`;
+  };
+
+  $('#app').innerHTML = `
+    <h1 class="page-title">Retornos de NR</h1>
+    <p class="page-sub">Escolha o treinamento ou a combinação para copiar a orientação ao prestador e gerar o registro do GT0100.</p>
+    <div class="searchbar">
+      <input type="text" id="busca" placeholder="Buscar NR ou combinação..." value="${esc(busca)}">
+      <button class="btn ghost sm" data-go="config" data-cfg="combos">Nova combinação</button>
+      <button class="btn ghost sm" data-go="config" data-cfg="treinamentos">Novo treinamento</button>
+    </div>
+    ${cbs.length?`<div class="section-label">Combinações prontas</div><div class="cards">${cbs.map(cardCB).join('')}</div>`:''}
+    <div class="section-label">Treinamentos</div>
+    ${nrs.length?`<div class="cards">${nrs.map(cardNR).join('')}</div>`
+      :`<div class="empty">Nenhum treinamento encontrado para essa busca.</div>`}
+  `;
+  const b=$('#busca');
+  b.addEventListener('input',e=>{
+    busca=e.target.value;
+    const pos=e.target.selectionStart;
+    renderHome();
+    const nb=$('#busca'); nb.focus(); nb.setSelectionRange(pos,pos);
+  });
+}
+
+function renderDetalhe(){
+  const alvo = alvoAtual();
+  if(!alvo){ view='home'; return render(); }
+  const orientacao = textoOrientacao(alvo.ids);
+  const registro = textoRegistro();
+  const nomes = nomesTreinos(alvo.ids);
+  const contratantes = listaContratantes();
+  const precisaContato = form.origem==='contratante' || form.origem==='empresa';
+
+  $('#app').innerHTML = `
+    <button class="back" data-go="home">&larr; Voltar aos cards</button>
+    <div class="detail-head">
+      <div>
+        <h2>${esc(alvo.nome)}</h2>
+        <div class="chips">${nomes.map(n=>`<span class="chip">${esc(n)}</span>`).join('')}
+          ${alvo.ids.length>1?`<span class="chip gold">${mesclar(alvo.ids).comuns.length} itens mesclados</span>`:''}</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head">
+          <h3>1. Orientação ao prestador</h3>
+          <button class="btn ghost sm" style="margin-left:auto" data-go="config" data-cfg="treinamentos">Editar textos</button>
+        </div>
+        <div class="panel-body">
+          <button class="copybox" id="boxOrientacao">
+            <span class="copy-flag">Clique para copiar</span>${esc(orientacao)}
+          </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>2. Registro no GT0100 (INSOFT)</h3>
+          <button class="btn ghost sm" style="margin-left:auto" data-go="config" data-cfg="modelos">Editar modelo</button>
+        </div>
+        <div class="panel-body">
+          <div class="step">
+            <span class="lab">Ação</span>
+            <div class="radio-row">
+              <button class="opt ${form.acao==='inclusao'?'on':''}" data-set="acao" data-val="inclusao">${esc(db.rotulos.inclusao)}</button>
+              <button class="opt ${form.acao==='remocao'?'on':''}" data-set="acao" data-val="remocao">${esc(db.rotulos.remocao)}</button>
+            </div>
+          </div>
+
+          <div class="step">
+            <span class="lab">Origem da solicitação</span>
+            <div class="radio-row">
+              <button class="opt ${form.origem==='contratante'?'on':''}" data-set="origem" data-val="contratante">Contratante</button>
+              <button class="opt ${form.origem==='empresa'?'on':''}" data-set="origem" data-val="empresa">Empresa</button>
+              <button class="opt ${form.origem==='atividade'?'on':''}" data-set="origem" data-val="atividade">Atividade</button>
+            </div>
+          </div>
+
+          ${form.origem==='contratante'?`
+          <div class="step">
+            <span class="lab">Qual contratante</span>
+            ${contratantes.length?`
+              <select id="selContratante">
+                <option value="">Selecione...</option>
+                ${contratantes.map(c=>`<option ${form.contratante===c?'selected':''}>${esc(c)}</option>`).join('')}
+              </select>
+              <div class="hint">${db.contratantes.modo==='auto'
+                ? 'Lista sincronizada do cadastro de contratantes ('+esc(db.contratantes.chave||'—')+').'
+                : 'Lista manual — editável nas configurações.'}</div>`
+            :`<div class="callout" style="margin:0">Nenhum contratante encontrado. Conecte a lista em Configurações &rsaquo; Contratantes.</div>`}
+          </div>`:''}
+
+          ${precisaContato?`
+          <div class="step">
+            <span class="lab">Forma de contato</span>
+            <div class="radio-row">
+              ${db.formasContato.map(f=>`<button class="opt ${form.contato===f?'on gold':''}" data-set="contato" data-val="${esc(f)}">${esc(f)}</button>`).join('')}
+            </div>
+            ${form.contato==='Outros'?`<input type="text" id="contatoOutro" placeholder="Qual?" value="${esc(form.contatoOutro||'')}" style="margin-top:9px">`:''}
+          </div>`:''}
+
+          <div class="step">
+            <span class="lab">Data</span>
+            <input type="date" id="dataInp" value="${esc(form.data||'')}">
+          </div>
+
+          <div class="divider"></div>
+
+          <label class="fld"><span>Observação gerada</span></label>
+          ${registro?`
+            <button class="copybox" id="boxRegistro">
+              <span class="copy-flag">Clique para copiar</span>${esc(registro)}
+            </button>
+            <button class="btn gold sm" id="btnHist" style="margin-top:12px">Salvar no histórico</button>`
+          :`<div class="empty" style="padding:20px">Preencha ação, origem e demais campos para gerar o texto.</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+
+  $('#boxOrientacao').onclick = e=>copiar(orientacao, e.currentTarget);
+  if($('#boxRegistro')) $('#boxRegistro').onclick = e=>copiar(registro, e.currentTarget);
+  if($('#selContratante')) $('#selContratante').onchange = e=>{ form.contratante=e.target.value; renderDetalhe(); };
+  if($('#contatoOutro')) $('#contatoOutro').oninput = e=>{ form.contatoOutro=e.target.value; atualizaRegistroInline(); };
+  if($('#dataInp')) $('#dataInp').onchange = e=>{ form.data=e.target.value; renderDetalhe(); };
+  if($('#btnHist')) $('#btnHist').onclick = ()=>{
+    db.historico.unshift({
+      id:uid(), quando:new Date().toISOString(), data:form.data,
+      alvo:alvo.nome, acao:db.acoes[form.acao], origem:form.origem,
+      contratante:form.contratante||'', contato:contatoTexto(), texto:registro
+    });
+    save(); toast('Registro salvo no histórico');
+  };
+}
+function atualizaRegistroInline(){
+  const t = textoRegistro(); const box = $('#boxRegistro');
+  if(box){
+    const flag = box.querySelector('.copy-flag').outerHTML;
+    box.innerHTML = flag + esc(t);
+    box.onclick = e=>copiar(t, e.currentTarget);
+  } else renderDetalhe();
+}
+
+/* ---------- Histórico ---------- */
+function renderHistorico(){
+  const h = db.historico||[];
+  $('#app').innerHTML = `
+    <h1 class="page-title">Histórico de registros</h1>
+    <p class="page-sub">Tudo o que você já lançou no GT0100 a partir deste módulo.</p>
+    <div class="panel"><div class="panel-body">
+      ${h.length?`
+      <div style="display:flex;gap:9px;margin-bottom:14px">
+        <button class="btn ghost sm" id="expCsv">Exportar CSV</button>
+        <button class="btn danger sm" id="limpaHist">Limpar histórico</button>
+      </div>
+      <table>
+        <thead><tr><th style="width:96px">Data</th><th style="width:180px">Treinamentos</th><th style="width:96px">Ação</th><th>Texto</th><th style="width:80px"></th></tr></thead>
+        <tbody>${h.map(r=>`<tr>
+          <td>${esc(dataBR(r.data))}</td>
+          <td>${esc(r.alvo)}</td>
+          <td>${esc(r.acao)}</td>
+          <td>${esc(r.texto)}</td>
+          <td><button class="btn ghost sm" data-copyhist="${r.id}">Copiar</button></td>
+        </tr>`).join('')}</tbody>
+      </table>`
+      :`<div class="empty">Nenhum registro salvo ainda. Gere uma observação em um card e clique em "Salvar no histórico".</div>`}
+    </div></div>`;
+  if($('#limpaHist')) $('#limpaHist').onclick = ()=>{ if(confirm('Apagar todo o histórico?')){ db.historico=[]; save(); render(); } };
+  if($('#expCsv')) $('#expCsv').onclick = ()=>{
+    const linhas = [['Data','Treinamentos','Acao','Origem','Contratante','Contato','Texto']];
+    h.forEach(r=>linhas.push([dataBR(r.data),r.alvo,r.acao,r.origem,r.contratante,r.contato,r.texto]));
+    const csv = linhas.map(l=>l.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(';')).join('\n');
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));
+    a.download='retorno-nr-historico.csv'; a.click();
+  };
+}
+
+/* ---------- Configurações ---------- */
+function renderConfig(){
+  const abas = [
+    ['treinamentos','Treinamentos e textos'],
+    ['combos','Combinações'],
+    ['modelos','Modelos de registro'],
+    ['email','E-mail padrão'],
+    ['contratantes','Contratantes'],
+    ['geral','Geral e backup']
+  ];
+  $('#app').innerHTML = `
+    <h1 class="page-title">Configurações</h1>
+    <p class="page-sub">Tudo que aparece nos cards é definido aqui.</p>
+    <div class="subtabs">${abas.map(([k,l])=>`<button class="subtab ${cfgTab===k?'active':''}" data-cfgtab="${k}">${l}</button>`).join('')}</div>
+    <div id="cfgBody"></div>`;
+  const b = $('#cfgBody');
+  if(cfgTab==='treinamentos') cfgTreinamentos(b);
+  else if(cfgTab==='combos') cfgCombos(b);
+  else if(cfgTab==='modelos') cfgModelos(b);
+  else if(cfgTab==='email') cfgEmail(b);
+  else if(cfgTab==='contratantes') cfgContratantes(b);
+  else cfgGeral(b);
+}
+
+function cfgTreinamentos(b){
+  if(editandoTreino){
+    const t = treino(editandoTreino);
+    if(!t){ editandoTreino=null; return cfgTreinamentos(b); }
+    b.innerHTML = `
+      <div class="panel"><div class="panel-head"><h3>Editando ${esc(t.nome)}</h3>
+        <button class="btn ghost sm" style="margin-left:auto" id="voltarLista">Voltar à lista</button></div>
+        <div class="panel-body">
+          <div class="grid2">
+            <label class="fld"><span>Nome do treinamento</span><input type="text" id="tNome" value="${esc(t.nome)}"></label>
+            <label class="fld"><span>Descrição curta (aparece no card)</span><input type="text" id="tDesc" value="${esc(t.desc||'')}"></label>
+          </div>
+          <div class="callout">Itens com a mesma <b>chave de item comum</b> em NRs diferentes aparecem uma única vez quando você mescla. Deixe a chave vazia para exigências exclusivas desta NR.</div>
+          <span class="lab" style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">Exigências enviadas ao prestador</span>
+          <div id="itens">
+            ${t.itens.map(it=>`
+              <div class="item-row" data-item="${it.id}">
+                <input class="key" type="text" placeholder="chave comum" value="${esc(it.chave||'')}" data-f="chave">
+                <textarea data-f="texto">${esc(it.texto)}</textarea>
+                <button class="btn danger sm" data-delitem="${it.id}">Excluir</button>
+              </div>`).join('')}
+          </div>
+          <button class="btn ghost sm" id="addItem">+ Adicionar exigência</button>
+          <div class="divider"></div>
+          <button class="btn" id="salvarTreino">Salvar treinamento</button>
+          <button class="btn danger" id="excluirTreino" style="margin-left:8px">Excluir treinamento</button>
+        </div></div>`;
+    $('#voltarLista').onclick = ()=>{ editandoTreino=null; renderConfig(); };
+    $('#addItem').onclick = ()=>{ t.itens.push({id:uid(),chave:'',texto:''}); save(); cfgTreinamentos(b); };
+    b.querySelectorAll('[data-delitem]').forEach(btn=>btn.onclick=()=>{
+      t.itens = t.itens.filter(i=>i.id!==btn.dataset.delitem); save(); cfgTreinamentos(b);
+    });
+    $('#salvarTreino').onclick = ()=>{
+      t.nome = $('#tNome').value.trim() || t.nome;
+      t.desc = $('#tDesc').value.trim();
+      b.querySelectorAll('[data-item]').forEach(row=>{
+        const it = t.itens.find(i=>i.id===row.dataset.item);
+        if(it){ it.chave = row.querySelector('[data-f=chave]').value.trim(); it.texto = row.querySelector('[data-f=texto]').value.trim(); }
+      });
+      t.itens = t.itens.filter(i=>i.texto);
+      _mc.k=''; save(); toast('Treinamento salvo'); editandoTreino=null; renderConfig();
+    };
+    $('#excluirTreino').onclick = ()=>{
+      if(!confirm('Excluir "'+t.nome+'"? As combinações que o usam também serão ajustadas.')) return;
+      db.treinamentos = db.treinamentos.filter(x=>x.id!==t.id);
+      db.combos = db.combos.map(c=>({...c, ids:c.ids.filter(i=>i!==t.id)})).filter(c=>c.ids.length>1);
+      _mc.k=''; save(); editandoTreino=null; renderConfig();
+    };
+    return;
+  }
+
+  b.innerHTML = `
+    <div class="panel"><div class="panel-head"><h3>Treinamentos cadastrados</h3>
+      <button class="btn sm" style="margin-left:auto" id="novoTreino">+ Novo treinamento</button></div>
+      <div class="panel-body">
+        ${db.treinamentos.map(t=>`
+          <div class="list-item">
+            <div class="grow">
+              <div class="nm">${esc(t.nome)}</div>
+              <div class="sb">${esc(t.desc||'sem descrição')} · ${t.itens.length} exigências</div>
+            </div>
+            <button class="btn ghost sm" data-edit="${t.id}">Editar textos</button>
+          </div>`).join('')}
+      </div></div>`;
+  $('#novoTreino').onclick = ()=>{
+    const nome = prompt('Nome do treinamento (ex.: NR 06):'); if(!nome) return;
+    const novo = {id:uid(),nome:nome.trim(),desc:'',ativo:true,itens:[
+      {id:uid(),chave:'envio',texto:COMUNS.envio},
+      {id:uid(),chave:'ead',texto:COMUNS.ead}
+    ]};
+    db.treinamentos.push(novo); save(); editandoTreino=novo.id; cfgTreinamentos(b);
+  };
+  b.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>{ editandoTreino=x.dataset.edit; cfgTreinamentos(b); });
+}
+
+function cfgCombos(b){
+  b.innerHTML = `
+    <div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>Nova combinação</h3></div>
+      <div class="panel-body">
+        <label class="fld"><span>Nome (aparece no card)</span><input type="text" id="cbNome" placeholder="Ex.: NR 11 Empilhadeira + NR 35"></label>
+        <span class="lab" style="font-size:13px;font-weight:600;display:block;margin-bottom:7px">Treinamentos incluídos</span>
+        <div class="radio-row" id="cbSel">
+          ${db.treinamentos.map(t=>`<button class="opt" data-pick="${t.id}">${esc(t.nome)}</button>`).join('')}
+        </div>
+        <div class="hint">Exigências repetidas entre as NRs escolhidas aparecem uma única vez.</div>
+        <div id="cbPrev"></div>
+        <button class="btn" id="cbSalvar" style="margin-top:14px">Criar combinação</button>
+      </div></div>
+    <div class="panel"><div class="panel-head"><h3>Combinações existentes</h3></div>
+      <div class="panel-body">
+        ${db.combos.length?db.combos.map(c=>`
+          <div class="list-item">
+            <div class="grow"><div class="nm">${esc(c.nome)}</div>
+              <div class="sb">${esc(nomesTreinos(c.ids).join(' + '))} · ${mesclar(c.ids).comuns.length} itens em comum</div></div>
+            <button class="btn danger sm" data-delcombo="${c.id}">Excluir</button>
+          </div>`).join(''):'<div class="empty">Nenhuma combinação criada.</div>'}
+      </div></div>`;
+  let sel=[];
+  const prev = ()=>{
+    const p=$('#cbPrev');
+    if(sel.length<2){ p.innerHTML=''; return; }
+    const m=mesclar(sel);
+    p.innerHTML = `<div class="callout" style="margin-top:14px">${m.comuns.length} exigência(s) em comum serão exibidas uma vez; ${m.blocos.reduce((a,x)=>a+x.itens.length,0)} exigência(s) permanecem específicas.</div>`;
+  };
+  b.querySelectorAll('[data-pick]').forEach(x=>x.onclick=()=>{
+    const id=x.dataset.pick;
+    if(sel.includes(id)){ sel=sel.filter(i=>i!==id); x.classList.remove('on'); }
+    else { sel.push(id); x.classList.add('on'); }
+    prev();
+    if(!$('#cbNome').value.trim() || $('#cbNome').dataset.auto==='1'){
+      $('#cbNome').value = nomesTreinos(sel).join(' + '); $('#cbNome').dataset.auto='1';
+    }
+  });
+  $('#cbNome').oninput = ()=>{ $('#cbNome').dataset.auto='0'; };
+  $('#cbSalvar').onclick = ()=>{
+    if(sel.length<2) return toast('Selecione ao menos dois treinamentos.');
+    const nome = $('#cbNome').value.trim() || nomesTreinos(sel).join(' + ');
+    db.combos.push({id:uid(),nome,ids:[...sel]}); save(); toast('Combinação criada'); cfgCombos(b);
+  };
+  b.querySelectorAll('[data-delcombo]').forEach(x=>x.onclick=()=>{
+    db.combos = db.combos.filter(c=>c.id!==x.dataset.delcombo); save(); cfgCombos(b);
+  });
+}
+
+function cfgModelos(b){
+  b.innerHTML = `
+    <div class="panel"><div class="panel-head"><h3>Texto do registro no GT0100</h3></div>
+      <div class="panel-body">
+        <div class="callout">Marcadores disponíveis: <span class="mono">{{data}}</span> <span class="mono">{{acao}}</span> <span class="mono">{{treinamentos}}</span> <span class="mono">{{contratante}}</span> <span class="mono">{{contato}}</span> <span class="mono">{{usuario}}</span></div>
+        <label class="fld"><span>Quando a origem for Contratante</span><textarea id="mC">${esc(db.modelos.contratante)}</textarea></label>
+        <label class="fld"><span>Quando a origem for Empresa</span><textarea id="mE">${esc(db.modelos.empresa)}</textarea></label>
+        <label class="fld"><span>Quando a origem for Atividade</span><textarea id="mA">${esc(db.modelos.atividade)}</textarea></label>
+        <div class="divider"></div>
+        <div class="grid2">
+          <label class="fld"><span>Palavra usada na inclusão</span><input type="text" id="aI" value="${esc(db.acoes.inclusao)}"></label>
+          <label class="fld"><span>Palavra usada na remoção</span><input type="text" id="aR" value="${esc(db.acoes.remocao)}"></label>
+          <label class="fld"><span>Rótulo do botão de inclusão</span><input type="text" id="rI" value="${esc(db.rotulos.inclusao)}"></label>
+          <label class="fld"><span>Rótulo do botão de remoção</span><input type="text" id="rR" value="${esc(db.rotulos.remocao)}"></label>
+        </div>
+        <div class="divider"></div>
+        <span class="lab" style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">Formas de contato</span>
+        <div id="formas">${db.formasContato.map((f,i)=>`
+          <div class="list-item"><div class="grow nm">${esc(f)}</div>
+          <button class="btn danger sm" data-delforma="${i}">Excluir</button></div>`).join('')}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input type="text" id="novaForma" placeholder="Nova forma de contato">
+          <button class="btn ghost sm" id="addForma">Adicionar</button>
+        </div>
+        <div class="divider"></div>
+        <button class="btn" id="salvarModelos">Salvar modelos</button>
+      </div></div>`;
+  $('#salvarModelos').onclick = ()=>{
+    db.modelos.contratante=$('#mC').value; db.modelos.empresa=$('#mE').value; db.modelos.atividade=$('#mA').value;
+    db.acoes.inclusao=$('#aI').value.trim(); db.acoes.remocao=$('#aR').value.trim();
+    db.rotulos.inclusao=$('#rI').value.trim(); db.rotulos.remocao=$('#rR').value.trim();
+    save(); toast('Modelos salvos');
+  };
+  $('#addForma').onclick = ()=>{
+    const v=$('#novaForma').value.trim(); if(!v) return;
+    db.formasContato.push(v); save(); cfgModelos(b);
+  };
+  b.querySelectorAll('[data-delforma]').forEach(x=>x.onclick=()=>{
+    db.formasContato.splice(+x.dataset.delforma,1); save(); cfgModelos(b);
+  });
+}
+
+function cfgEmail(b){
+  b.innerHTML = `
+    <div class="panel"><div class="panel-head"><h3>E-mail enviado ao prestador</h3></div>
+      <div class="panel-body">
+        <div class="callout">Use <span class="mono">{{treinamentos}}</span> para inserir o nome das NRs do card. A lista de exigências é montada automaticamente entre o cabeçalho e o rodapé.</div>
+        <label class="fld"><span>Título do bloco de itens comuns</span><input type="text" id="eA" value="${esc(db.email.tituloComuns||'')}"></label>
+        <label class="fld"><span>Cabeçalho</span><textarea id="eC" style="min-height:110px">${esc(db.email.cabecalho)}</textarea></label>
+        <label class="fld"><span>Rodapé</span><textarea id="eR" style="min-height:110px">${esc(db.email.rodape)}</textarea></label>
+        <button class="btn" id="salvarEmail">Salvar e-mail padrão</button>
+      </div></div>`;
+  $('#salvarEmail').onclick = ()=>{
+    db.email.tituloComuns=$('#eA').value; db.email.cabecalho=$('#eC').value; db.email.rodape=$('#eR').value;
+    save(); toast('E-mail padrão salvo');
+  };
+}
+
+function cfgContratantes(b){
+  const cands = chavesCandidatas();
+  const auto = db.contratantes.modo==='auto';
+  b.innerHTML = `
+    <div class="panel"><div class="panel-head"><h3>Lista de contratantes</h3></div>
+      <div class="panel-body">
+        <div class="radio-row" style="margin-bottom:16px">
+          <button class="opt ${auto?'on':''}" data-modo="auto">Sincronizar com o cadastro</button>
+          <button class="opt ${!auto?'on':''}" data-modo="manual">Lista manual</button>
+        </div>
+        ${auto?`
+          <label class="fld"><span>Origem dos dados no navegador</span>
+            <select id="selChave">
+              <option value="">— nenhuma —</option>
+              ${cands.map(k=>`<option ${db.contratantes.chave===k?'selected':''}>${esc(k)}</option>`).join('')}
+            </select>
+            <div class="hint">O módulo procura sozinho as chaves do cadastro de contratantes. Ao migrar para o Next.js, isso vira uma consulta direta à tabela no Supabase.</div>
+          </label>
+          <button class="btn ghost sm" id="ressync">Atualizar agora</button>
+          <div class="divider"></div>
+          <div class="sb" style="font-size:13px;color:var(--muted);margin-bottom:8px">${db.contratantes.cache.length} contratante(s) sincronizado(s)</div>
+          ${db.contratantes.cache.length?`<div>${db.contratantes.cache.map(c=>`<div class="list-item"><div class="grow nm">${esc(c)}</div></div>`).join('')}</div>`
+            :`<div class="empty">Nada encontrado. Abra o módulo de contratantes neste mesmo navegador ou use a lista manual.</div>`}
+        `:`
+          <div style="display:flex;gap:8px;margin-bottom:14px">
+            <input type="text" id="novoContr" placeholder="Nome do contratante">
+            <button class="btn ghost sm" id="addContr">Adicionar</button>
+          </div>
+          ${db.contratantes.manual.length?db.contratantes.manual.map((c,i)=>`
+            <div class="list-item"><div class="grow nm">${esc(c)}</div>
+            <button class="btn danger sm" data-delcontr="${i}">Excluir</button></div>`).join('')
+            :'<div class="empty">Nenhum contratante na lista manual.</div>'}
+        `}
+      </div></div>`;
+  b.querySelectorAll('[data-modo]').forEach(x=>x.onclick=()=>{
+    db.contratantes.modo=x.dataset.modo; syncContratantes(); save(); cfgContratantes(b);
+  });
+  if($('#selChave')) $('#selChave').onchange = e=>{
+    db.contratantes.chave=e.target.value; syncContratantes(); save(); cfgContratantes(b);
+  };
+  if($('#ressync')) $('#ressync').onclick = ()=>{ db.contratantes.chave=''; syncContratantes(); save(); toast('Lista atualizada'); cfgContratantes(b); };
+  if($('#addContr')) $('#addContr').onclick = ()=>{
+    const v=$('#novoContr').value.trim(); if(!v) return;
+    db.contratantes.manual.push(v); db.contratantes.manual.sort((a,b2)=>a.localeCompare(b2,'pt-BR'));
+    save(); cfgContratantes(b);
+  };
+  b.querySelectorAll('[data-delcontr]').forEach(x=>x.onclick=()=>{
+    db.contratantes.manual.splice(+x.dataset.delcontr,1); save(); cfgContratantes(b);
+  });
+}
+
+function cfgGeral(b){
+  b.innerHTML = `
+    <div class="panel" style="margin-bottom:18px"><div class="panel-head"><h3>Identificação de quem registra</h3></div>
+      <div class="panel-body">
+        <label class="fld"><span>Nome completo do usuário</span>
+          <input type="text" id="uNome" value="${esc(db.usuario.nomeCompleto)}" placeholder="Ex.: Rodrigo Balem">
+          <div class="hint">Preenche o marcador {{usuario}}. No GT3 Sistema virá direto do login.</div>
+        </label>
+        <button class="btn" id="salvarUser">Salvar</button>
+      </div></div>
+    <div class="panel"><div class="panel-head"><h3>Backup</h3></div>
+      <div class="panel-body">
+        <div style="display:flex;gap:9px;flex-wrap:wrap">
+          <button class="btn ghost" id="expJson">Exportar configurações</button>
+          <button class="btn ghost" id="impJson">Importar configurações</button>
+          <button class="btn danger" id="reset">Restaurar padrão de fábrica</button>
+        </div>
+        <div class="hint" style="margin-top:10px">O arquivo exportado guarda treinamentos, textos, combinações, modelos e histórico.</div>
+        <input type="file" id="fileJson" accept="application/json" style="display:none">
+      </div></div>`;
+  $('#salvarUser').onclick = ()=>{ db.usuario.nomeCompleto=$('#uNome').value.trim(); save(); toast('Salvo'); };
+  $('#expJson').onclick = ()=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));
+    a.download='retorno-nr-config.json'; a.click();
+  };
+  $('#impJson').onclick = ()=>$('#fileJson').click();
+  $('#fileJson').onchange = e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload = ()=>{ try{ db=JSON.parse(r.result); _mc.k=''; save(); toast('Configurações importadas'); render(); }
+                     catch(err){ toast('Arquivo inválido.'); } };
+    r.readAsText(f);
+  };
+  $('#reset').onclick = ()=>{ if(confirm('Restaurar todos os textos padrão? O histórico será apagado.')){ db=seed(); _mc.k=''; save(); render(); } };
+}
+
+/* =========================================================
+   Eventos globais
+   ========================================================= */
+document.addEventListener('click', e=>{
+  const open = e.target.closest('[data-open]');
+  if(open){
+    const [tipo,id] = open.dataset.open.split(':');
+    atual={tipo,id};
+    form={acao:null,origem:null,contratante:'',contato:null,contatoOutro:'',data:new Date().toISOString().slice(0,10)};
+    view='detalhe'; return render();
+  }
+  const go = e.target.closest('[data-go]');
+  if(go){
+    view = go.dataset.go;
+    if(go.dataset.cfg) cfgTab = go.dataset.cfg;
+    return render();
+  }
+  const st = e.target.closest('[data-set]');
+  if(st){
+    const campo=st.dataset.set, val=st.dataset.val;
+    form[campo] = (form[campo]===val && campo!=='acao') ? null : val;
+    if(campo==='origem'){ form.contratante=''; form.contato=null; form.contatoOutro=''; }
+    if(campo==='contato' && val!=='Outros') form.contatoOutro='';
+    return renderDetalhe();
+  }
+  const ct = e.target.closest('[data-cfgtab]');
+  if(ct){ cfgTab=ct.dataset.cfgtab; editandoTreino=null; return renderConfig(); }
+  const ch = e.target.closest('[data-copyhist]');
+  if(ch){ const r=db.historico.find(x=>x.id===ch.dataset.copyhist); if(r) copiar(r.texto); }
+});
+$('#gearBtn').addEventListener('click', ()=>{
+  $('#gearBtn').classList.add('spin');
+  setTimeout(()=>$('#gearBtn').classList.remove('spin'),320);
+  view='config'; render();
+});
+
+load(); render();
+</script>
+</body>
+</html>

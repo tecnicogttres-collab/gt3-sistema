@@ -55,21 +55,21 @@ export function renderAtaHtml(
           ${t.responsavel ? `<span><strong>Responsável:</strong> ${escapeHtml(t.responsavel)}</span>` : ''}
           ${t.status && statusColors[t.status] ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;${statusColors[t.status]}">${statusLabel[t.status]}</span>` : ''}</div>` : ''
     const histHtml = hist.length > 0
-      ? `<details${forPrint ? ' open' : ''} style="border-top:1px solid #eee;padding-top:8px;margin-top:8px">
-          <summary style="font-size:11px;font-weight:700;color:${cor};border:1px solid ${cor}44;border-radius:6px;padding:3px 10px;display:inline-block">📋 Histórico (${hist.length})</summary>
-          <div style="margin-top:8px">
-            ${hist.map(h => `<div style="margin-bottom:8px;padding:8px 12px;background:#F0F4FF;border-radius:8px;border-left:2px solid ${cor}">
-              <div style="font-size:11px;font-weight:700;color:${cor};margin-bottom:2px">${new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-              <div style="font-size:12px;color:#334155;line-height:1.55">${h.texto}</div>
+      ? `<details${forPrint ? ' open' : ''} style="border-top:1px dashed #e2e8f0;padding-top:6px;margin-top:10px">
+          <summary style="font-size:10px;font-weight:600;color:#94A3B8;display:inline-block">Histórico (${hist.length})</summary>
+          <div style="margin-top:6px">
+            ${hist.map(h => `<div style="margin-bottom:6px;padding:4px 0 4px 10px;border-left:2px solid #E2E8F0">
+              <div style="font-size:10px;font-weight:600;color:#94A3B8;margin-bottom:1px">${new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+              <div style="font-size:11px;color:#94A3B8;line-height:1.5">${h.texto}</div>
             </div>`).join('')}
           </div></details>` : ''
     return `<div class="topico" style="margin-bottom:18px;padding:14px 16px;border:1px solid #e0e5ef;border-left:3px solid ${cor};border-radius:6px${t.finalizado ? ';opacity:.75' : ''}">
-      <div style="font-weight:700;font-size:14px;color:${cor};margin-bottom:6px;display:flex;align-items:center;gap:8px">
+      <div style="font-weight:700;font-size:14px;color:${cor};margin-bottom:8px;display:flex;align-items:center;gap:8px">
         <span>${idx + 1}. ${escapeHtml(t.titulo || '(Sem título)')}</span>
         ${t.finalizado ? `<span style="font-size:10px;font-weight:700;color:#10B981;background:#D1FAE5;padding:2px 8px;border-radius:999px">✓ Finalizado</span>` : ''}
       </div>
-      ${t.andamentoGeral ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:#6B7A99;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Até aqui:</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.andamentoGeral}</div></div>` : ''}
-      ${t.descricao ? `<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Na data desta reunião (${dateDisplay}), definiu-se:</div><div style="font-size:13px;line-height:1.7;color:#334155">${t.descricao}</div></div>` : ''}
+      ${t.andamentoGeral ? `<div style="margin-bottom:10px;padding:10px 12px;background:#F8FAFC;border-left:3px solid #94A3B8;border-radius:6px"><div style="font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">📌 Até aqui</div><div style="font-size:14px;line-height:1.75;color:#1E293B;font-weight:500">${t.andamentoGeral}</div></div>` : ''}
+      ${t.descricao ? `<div style="margin-bottom:10px;padding:12px 14px;background:${cor}12;border-left:4px solid ${cor};border-radius:6px"><div style="font-size:11px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">🗓️ Na data desta reunião (${dateDisplay}), definiu-se</div><div style="font-size:14px;line-height:1.75;color:#1E293B;font-weight:600">${t.descricao}</div></div>` : ''}
       ${metaHtml}${histHtml}</div>`
   }).join('')
 

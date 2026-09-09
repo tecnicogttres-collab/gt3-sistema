@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pendências SST — GT3 Consultoria</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #F4F6FA;
+    color: #1a2340;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .header-left h1 {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #2A4F96;
+    letter-spacing: -0.3px;
+  }
+
+  .header-left p {
+    font-size: 0.78rem;
+    color: #7a8aaa;
+    margin-top: 3px;
+  }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .toolbar input[type="text"] {
+    border: 1.5px solid #d6dce8;
+    border-radius: 7px;
+    padding: 7px 13px;
+    font-size: 0.82rem;
+    width: 200px;
+    background: #fff;
+    color: #1a2340;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .toolbar input[type="text"]:focus { border-color: #2A4F96; }
+  .toolbar input[type="text"]::placeholder { color: #aab2c2; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 7px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background .15s, transform .08s;
+    white-space: nowrap;
+  }
+  .btn:active { transform: scale(.97); }
+
+  .btn-primary {
+    background: #2A4F96;
+    color: #fff;
+  }
+  .btn-primary:hover { background: #1f3c75; }
+
+  .btn-secondary {
+    background: #fff;
+    color: #2A4F96;
+    border: 1.5px solid #c2cedf;
+  }
+  .btn-secondary:hover { background: #f0f4fb; }
+
+  .btn-danger {
+    background: #fff;
+    color: #c0392b;
+    border: 1.5px solid #f1c2be;
+  }
+  .btn-danger:hover { background: #fdf3f2; }
+
+  /* ── Counter badges ── */
+  .stats-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .stat-chip {
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 0.76rem;
+    color: #556;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stat-chip strong { color: #2A4F96; font-size: 0.9rem; }
+  .stat-chip.warn strong { color: #c47a00; }
+
+  /* ── Table wrapper ── */
+  .table-wrap {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(42,79,150,.07);
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+
+  thead th {
+    background: #2A4F96;
+    color: #fff;
+    font-weight: 600;
+    padding: 13px 16px;
+    text-align: left;
+    font-size: 0.78rem;
+    letter-spacing: 0.3px;
+    user-select: none;
+  }
+
+  thead th:first-child { border-radius: 0; }
+
+  th.col-check {
+    text-align: center;
+    width: 160px;
+    font-size: 0.74rem;
+    line-height: 1.3;
+    padding: 10px 8px;
+  }
+
+  th.col-num {
+    width: 40px;
+    color: rgba(255,255,255,.6);
+    font-size: 0.72rem;
+    text-align: center;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid #f0f3f8;
+    transition: background .1s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #f7f9fd; }
+  tbody tr.row-marked { background: #fff8f0; }
+
+  td {
+    padding: 11px 16px;
+    vertical-align: middle;
+  }
+
+  td.col-num {
+    text-align: center;
+    color: #aab2c2;
+    font-size: 0.75rem;
+  }
+
+  td.col-nome {
+    font-weight: 600;
+    color: #1a2340;
+  }
+
+  td.col-empresa {
+    color: #4a5568;
+  }
+
+  /* ── Toggle cells ── */
+  td.col-toggle {
+    text-align: center;
+    cursor: pointer;
+    padding: 8px;
+    position: relative;
+    transition: background .12s;
+    user-select: none;
+  }
+
+  td.col-toggle:hover .toggle-inner {
+    border-color: #2A4F96;
+    background: #f0f4fb;
+  }
+
+  .toggle-inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    border: 2px solid #dce3ef;
+    background: #f9fafc;
+    transition: all .15s;
+    margin: auto;
+  }
+
+  .toggle-inner svg {
+    display: none;
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Marcado */
+  td.col-toggle.marked .toggle-inner {
+    background: #c0392b;
+    border-color: #c0392b;
+  }
+  td.col-toggle.marked .toggle-inner svg {
+    display: block;
+    stroke: #fff;
+  }
+  td.col-toggle.marked:hover .toggle-inner {
+    background: #a93226;
+    border-color: #a93226;
+  }
+
+  /* ── Add row form ── */
+  .add-row-bar {
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px;
+    background: #f7f9fd;
+    border-top: 1px solid #e8edf5;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .add-row-bar input {
+    border: 1.5px solid #d6dce8;
+    border-radius: 7px;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    background: #fff;
+    color: #1a2340;
+    outline: none;
+    flex: 1;
+    min-width: 140px;
+    transition: border-color .15s;
+  }
+  .add-row-bar input:focus { border-color: #2A4F96; }
+  .add-row-bar input::placeholder { color: #aab2c2; }
+
+  /* ── Delete row ── */
+  .btn-del-row {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 5px;
+    transition: color .12s;
+    display: flex;
+    align-items: center;
+  }
+  .btn-del-row:hover { color: #c0392b; }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #aab2c2;
+    font-size: 0.85rem;
+  }
+
+  /* ── Legenda ── */
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 14px;
+    font-size: 0.75rem;
+    color: #7a8aaa;
+    flex-wrap: wrap;
+  }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .legend-dot.red { background: #c0392b; }
+  .legend-dot.empty { background: #dce3ef; border: 1.5px solid #ccc; }
+
+  @media (max-width: 600px) {
+    body { padding: 16px 12px; }
+    header { flex-direction: column; align-items: flex-start; }
+    th.col-check { width: 120px; font-size: 0.68rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>Pendências SST</h1>
+    <p>Clique nas células de ASO e EPI para marcar pendências · Clique novamente para desmarcar</p>
+  </div>
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="🔍  Filtrar por nome ou empresa…" oninput="filterRows()">
+    <button class="btn btn-secondary" onclick="clearAll()">Limpar marcações</button>
+    <button class="btn btn-primary" onclick="gerarPDF()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      Gerar relatório PDF
+    </button>
+  </div>
+</header>
+
+<div class="stats-bar" id="statsBar"></div>
+
+<div class="table-wrap">
+  <table id="mainTable">
+    <thead>
+      <tr>
+        <th class="col-num">#</th>
+        <th>Nome</th>
+        <th>Empresa</th>
+        <th class="col-check">ASO<br><span style="font-weight:400;opacity:.75">S/ Aptidão</span></th>
+        <th class="col-check">EPI para Altura<br><span style="font-weight:400;opacity:.75">S/ Entrega</span></th>
+        <th style="width:40px"></th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <div class="add-row-bar">
+    <input type="text" id="inputNome" placeholder="Nome da pessoa" onkeydown="enterAdd(event)">
+    <input type="text" id="inputEmpresa" placeholder="Empresa" onkeydown="enterAdd(event)">
+    <button class="btn btn-primary" onclick="addRow()">+ Adicionar</button>
+  </div>
+</div>
+
+<div class="legend">
+  <span><span class="legend-dot red"></span> Pendência marcada</span>
+  <span><span class="legend-dot empty"></span> Sem pendência</span>
+</div>
+
+<script>
+  // ── Dados iniciais (exemplo) ──
+  let rows = [
+    { id: 1, nome: "Ana Paula Ferreira",    empresa: "Metalúrgica Brasil",   aso: false, epi: false },
+    { id: 2, nome: "Carlos Souza",          empresa: "Construtora RS",       aso: false, epi: false },
+    { id: 3, nome: "Fernanda Lima",         empresa: "Marcopolo S.A.",       aso: false, epi: false },
+    { id: 4, nome: "João Mendes",           empresa: "Volare Veículos",      aso: false, epi: false },
+    { id: 5, nome: "Patrícia Alves",        empresa: "Metalúrgica Brasil",   aso: false, epi: false },
+  ];
+
+  let nextId = 6;
+  let filterText = "";
+
+  function save() {
+    try { localStorage.setItem("pendencias_sst", JSON.stringify(rows)); } catch(e){}
+  }
+
+  function load() {
+    try {
+      const d = localStorage.getItem("pendencias_sst");
+      if (d) {
+        rows = JSON.parse(d);
+        nextId = Math.max(...rows.map(r => r.id)) + 1;
+      }
+    } catch(e){}
+  }
+
+  function toggle(id, field) {
+    const row = rows.find(r => r.id === id);
+    if (row) { row[field] = !row[field]; save(); renderTable(); }
+  }
+
+  function addRow() {
+    const nome = document.getElementById("inputNome").value.trim();
+    const empresa = document.getElementById("inputEmpresa").value.trim();
+    if (!nome) { document.getElementById("inputNome").focus(); return; }
+    rows.push({ id: nextId++, nome, empresa, aso: false, epi: false });
+    document.getElementById("inputNome").value = "";
+    document.getElementById("inputEmpresa").value = "";
+    document.getElementById("inputNome").focus();
+    save();
+    renderTable();
+  }
+
+  function deleteRow(id) {
+    rows = rows.filter(r => r.id !== id);
+    save();
+    renderTable();
+  }
+
+  function clearAll() {
+    if (!confirm("Limpar todas as marcações de ASO e EPI?")) return;
+    rows.forEach(r => { r.aso = false; r.epi = false; });
+    save();
+    renderTable();
+  }
+
+  function filterRows() {
+    filterText = document.getElementById("search").value.toLowerCase();
+    renderTable();
+  }
+
+  function enterAdd(e) {
+    if (e.key === "Enter") addRow();
+  }
+
+  const checkIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+  function renderTable() {
+    const tbody = document.getElementById("tableBody");
+    const filtered = rows.filter(r =>
+      r.nome.toLowerCase().includes(filterText) ||
+      r.empresa.toLowerCase().includes(filterText)
+    );
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">Nenhum registro encontrado.</div></td></tr>`;
+      updateStats();
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((r, idx) => `
+      <tr class="${r.aso || r.epi ? 'row-marked' : ''}" id="tr-${r.id}">
+        <td class="col-num">${idx + 1}</td>
+        <td class="col-nome">${escHtml(r.nome)}</td>
+        <td class="col-empresa">${escHtml(r.empresa)}</td>
+        <td class="col-toggle ${r.aso ? 'marked' : ''}" onclick="toggle(${r.id}, 'aso')" title="${r.aso ? 'Clique para desmarcar' : 'Clique para marcar pendência'}">
+          <div class="toggle-inner">${checkIcon}</div>
+        </td>
+        <td class="col-toggle ${r.epi ? 'marked' : ''}" onclick="toggle(${r.id}, 'epi')" title="${r.epi ? 'Clique para desmarcar' : 'Clique para marcar pendência'}">
+          <div class="toggle-inner">${checkIcon}</div>
+        </td>
+        <td style="text-align:center">
+          <button class="btn-del-row" onclick="deleteRow(${r.id})" title="Remover linha">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </td>
+      </tr>
+    `).join("");
+
+    updateStats();
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function updateStats() {
+    const total = rows.length;
+    const asoCount = rows.filter(r => r.aso).length;
+    const epiCount = rows.filter(r => r.epi).length;
+    const pendentes = rows.filter(r => r.aso || r.epi).length;
+
+    document.getElementById("statsBar").innerHTML = `
+      <div class="stat-chip"><strong>${total}</strong> registros</div>
+      <div class="stat-chip warn"><strong>${pendentes}</strong> com pendência</div>
+      <div class="stat-chip"><strong>${asoCount}</strong> ASO s/ aptidão</div>
+      <div class="stat-chip"><strong>${epiCount}</strong> EPI s/ entrega</div>
+    `;
+  }
+
+  // ── PDF ──
+  function gerarPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    const blue = [42, 79, 150];
+    const red  = [192, 57, 43];
+    const gray = [100, 110, 130];
+
+    // Cabeçalho
+    doc.setFillColor(...blue);
+    doc.rect(0, 0, 210, 28, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("Relatório de Pendências SST", 14, 13);
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(200, 210, 235);
+    const now = new Date();
+    doc.text(`Gerado em ${now.toLocaleDateString("pt-BR")} às ${now.toLocaleTimeString("pt-BR", {hour:"2-digit",minute:"2-digit"})}`, 14, 21);
+
+    // Resumo
+    const total    = rows.length;
+    const pendentes = rows.filter(r => r.aso || r.epi).length;
+    const asoCount = rows.filter(r => r.aso).length;
+    const epiCount = rows.filter(r => r.epi).length;
+
+    doc.setTextColor(...gray);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Total de registros: ${total}   |   Com pendência: ${pendentes}   |   ASO s/ aptidão: ${asoCount}   |   EPI s/ entrega: ${epiCount}`, 14, 35);
+
+    // Tabela
+    const tableRows = rows.map((r, i) => [
+      i + 1,
+      r.nome,
+      r.empresa,
+      r.aso ? "PENDENTE" : "—",
+      r.epi ? "PENDENTE" : "—"
+    ]);
+
+    doc.autoTable({
+      startY: 40,
+      head: [["#", "Nome", "Empresa", "ASO S/ Aptidão", "EPI S/ Entrega p/ Altura"]],
+      body: tableRows,
+      styles: {
+        fontSize: 9,
+        cellPadding: 4,
+        lineColor: [220, 226, 236],
+        lineWidth: 0.3,
+        textColor: [26, 35, 64],
+      },
+      headStyles: {
+        fillColor: blue,
+        textColor: 255,
+        fontStyle: "bold",
+        fontSize: 8.5,
+      },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 10 },
+        3: { halign: "center", cellWidth: 32 },
+        4: { halign: "center", cellWidth: 42 },
+      },
+      alternateRowStyles: { fillColor: [247, 249, 253] },
+      didParseCell(data) {
+        if (data.section === "body" && (data.column.index === 3 || data.column.index === 4)) {
+          if (data.cell.raw === "PENDENTE") {
+            data.cell.styles.textColor = red;
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    // Rodapé
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(7.5);
+      doc.setTextColor(170);
+      doc.text("GT3 Consultoria — Documento interno", 14, 290);
+      doc.text(`Página ${i} de ${pageCount}`, 196, 290, { align: "right" });
+    }
+
+    const fname = `pendencias-sst-${now.toISOString().slice(0,10)}.pdf`;
+    doc.save(fname);
+  }
+
+  // ── Init ──
+  load();
+  renderTable();
+</script>
+</body>
+</html>

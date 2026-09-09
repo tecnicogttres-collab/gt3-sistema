@@ -735,7 +735,7 @@ export default function AtasContratantesClient() {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <button onClick={() => printAtaPdf(selected, parseTopicos(selected.conteudo ?? ''), partsList)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }} title="Gerar PDF (use 'Salvar como PDF' na impressão)">
+                  <button onClick={() => printAtaPdf(selected, parseTopicos(selected.conteudo ?? ''), partsList)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }} title="Gerar PDF (use 'Salvar como PDF' na impressão). Em 'Mais configurações', desmarque 'Cabeçalhos e rodapés' para o PDF sair sem o link do sistema.">
                     🖨 PDF
                   </button>
                   {isGestorOrAdmin && (

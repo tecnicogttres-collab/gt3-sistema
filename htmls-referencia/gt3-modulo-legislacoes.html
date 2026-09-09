@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Legislações · GT3 Sistema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#2A4F96;
+    --primary-dark:#1F3A73;
+    --primary-soft:#E8EEF9;
+    --accent:#D1AE6E;
+    --accent-dark:#B68F4D;
+    --bg:#F4F6FA;
+    --card:#FFFFFF;
+    --border:#E2E8F0;
+    --text:#1F2937;
+    --text-muted:#6B7280;
+    --radius:12px;
+    --radius-sm:8px;
+    --shadow:0 1px 3px rgba(20,30,60,0.06), 0 1px 2px rgba(20,30,60,0.04);
+    --shadow-md:0 8px 24px rgba(20,30,60,0.12);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  .topbar{
+    background:var(--card);
+    border-bottom:1px solid var(--border);
+    padding:14px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    position:sticky;
+    top:0;
+    z-index:20;
+  }
+  .topbar-left{display:flex;align-items:center;gap:12px;}
+  .logo-chip{
+    width:36px;height:36px;border-radius:9px;
+    background:var(--primary);
+    color:#fff;font-weight:700;font-size:14px;
+    display:flex;align-items:center;justify-content:center;
+    letter-spacing:0.5px;
+  }
+  .topbar-title{font-size:15px;font-weight:600;color:var(--text);}
+  .topbar-sub{font-size:12px;color:var(--text-muted);margin-top:1px;}
+  .user-switch{
+    display:flex;align-items:center;gap:8px;
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:5px 6px 5px 14px;
+    cursor:pointer;
+  }
+  .user-switch span.label{font-size:12px;color:var(--text-muted);}
+  .user-switch select{
+    border:none;background:transparent;font-family:inherit;
+    font-size:13px;font-weight:600;color:var(--text);
+    padding:4px 6px;border-radius:999px;cursor:pointer;
+  }
+  .avatar{
+    width:26px;height:26px;border-radius:50%;
+    background:var(--accent);color:#5a4421;
+    font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  .container{max-width:760px;margin:0 auto;padding:28px 20px 80px;}
+
+  .stats-row{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+  .stat-pill{
+    background:var(--card);border:1px solid var(--border);
+    border-radius:999px;padding:7px 14px;font-size:12.5px;color:var(--text-muted);
+    display:flex;align-items:center;gap:6px;
+  }
+  .stat-pill b{color:var(--primary);font-weight:700;}
+  .stat-pill.novas b{color:var(--accent-dark);}
+
+  .toolbar{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px;
+    margin-bottom:20px;
+  }
+  .toolbar-row1{display:flex;gap:10px;margin-bottom:10px;}
+  .search-input{
+    flex:1;
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    padding:9px 12px;
+    font-size:13.5px;
+    font-family:inherit;
+    background:var(--bg);
+  }
+  .search-input:focus{outline:2px solid var(--primary-soft);border-color:var(--primary);}
+  .btn-nova{
+    background:var(--primary);
+    color:#fff;border:none;
+    border-radius:var(--radius-sm);
+    padding:9px 16px;
+    font-size:13.5px;font-weight:600;
+    cursor:pointer;white-space:nowrap;
+    display:flex;align-items:center;gap:6px;
+  }
+  .btn-nova:hover{background:var(--primary-dark);}
+
+  .toolbar-row2{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{
+    border:1px solid var(--border);
+    background:var(--bg);
+    color:var(--text-muted);
+    border-radius:999px;
+    padding:6px 12px;
+    font-size:12px;font-weight:500;
+    cursor:pointer;
+    transition:all .15s;
+  }
+  .chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+
+  .toggle-mine{
+    display:flex;align-items:center;gap:8px;
+    font-size:12.5px;color:var(--text-muted);
+  }
+  .switch{
+    position:relative;width:36px;height:20px;
+    background:var(--border);border-radius:999px;
+    cursor:pointer;transition:background .15s;flex-shrink:0;
+  }
+  .switch.on{background:var(--primary);}
+  .switch .knob{
+    position:absolute;top:2px;left:2px;width:16px;height:16px;
+    border-radius:50%;background:#fff;transition:left .15s;
+    box-shadow:0 1px 2px rgba(0,0,0,0.2);
+  }
+  .switch.on .knob{left:18px;}
+
+  .feed{display:flex;flex-direction:column;gap:12px;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px 18px;
+    box-shadow:var(--shadow);
+    position:relative;
+  }
+  .card.nova{border-color:var(--accent);}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .badge{
+    font-size:11px;font-weight:700;
+    padding:3px 9px;border-radius:999px;
+    text-transform:uppercase;letter-spacing:0.3px;
+  }
+  .badge-nova{background:var(--accent);color:#5a4421;}
+  .cat-sst{background:#E5EEFB;color:#2A4F96;}
+  .cat-esocial{background:#F1E9FB;color:#6B46C1;}
+  .cat-trabalhista{background:#FDEDD3;color:#9C6B16;}
+  .cat-fiscal{background:#E2F5EA;color:#2F855A;}
+  .cat-previdenciaria{background:#E0F7FA;color:#00838F;}
+  .cat-ambiental{background:#E8F5E9;color:#2E7D32;}
+  .cat-outra{background:#EDF2F7;color:#4A5568;}
+
+  .card-date{font-size:11.5px;color:var(--text-muted);white-space:nowrap;}
+
+  .card-title{font-size:15.5px;font-weight:700;color:var(--text);margin:0 0 6px;line-height:1.35;}
+  .card-desc{font-size:13.5px;color:var(--text-muted);line-height:1.55;margin:0 0 12px;}
+
+  .card-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .card-meta{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .dest-chip{
+    background:var(--bg);border:1px solid var(--border);
+    border-radius:999px;padding:2px 9px;font-size:11px;color:var(--text-muted);
+  }
+  .btn-link{
+    background:var(--primary-soft);
+    color:var(--primary);
+    border:none;border-radius:var(--radius-sm);
+    padding:8px 14px;font-size:13px;font-weight:600;
+    cursor:pointer;display:flex;align-items:center;gap:6px;
+    text-decoration:none;white-space:nowrap;
+  }
+  .btn-link:hover{background:var(--primary);color:#fff;}
+
+  .empty-state{
+    text-align:center;padding:60px 20px;color:var(--text-muted);
+  }
+  .empty-state .ico{font-size:34px;margin-bottom:10px;}
+  .empty-state p{font-size:13.5px;margin:4px 0;}
+
+  /* Drawer */
+  .overlay{
+    position:fixed;inset:0;background:rgba(15,23,42,0.45);
+    opacity:0;visibility:hidden;transition:opacity .2s;z-index:30;
+  }
+  .overlay.show{opacity:1;visibility:visible;}
+  .drawer{
+    position:fixed;top:0;right:0;height:100%;width:420px;max-width:92vw;
+    background:var(--card);box-shadow:var(--shadow-md);
+    transform:translateX(100%);transition:transform .25s ease;
+    z-index:31;display:flex;flex-direction:column;
+  }
+  .drawer.show{transform:translateX(0);}
+  .drawer-head{
+    padding:18px 22px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .drawer-head h3{margin:0;font-size:16px;}
+  .drawer-close{border:none;background:var(--bg);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;color:var(--text-muted);}
+  .drawer-body{padding:20px 22px;overflow-y:auto;flex:1;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:6px;}
+  .field .hint{font-size:11.5px;color:var(--text-muted);margin-top:4px;}
+  .field input[type=text],.field input[type=url],.field textarea,.field select{
+    width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:9px 11px;font-size:13.5px;font-family:inherit;background:var(--bg);
+    color:var(--text);
+  }
+  .field textarea{resize:vertical;min-height:64px;}
+  .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--primary);background:#fff;}
+
+  .seg-control{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;margin-bottom:10px;}
+  .seg-btn{flex:1;text-align:center;padding:7px 4px;font-size:12.5px;font-weight:600;color:var(--text-muted);border-radius:6px;cursor:pointer;}
+  .seg-btn.active{background:var(--card);color:var(--primary);box-shadow:var(--shadow);}
+
+  .check-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .check-item{
+    display:flex;align-items:center;gap:8px;
+    border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:8px 10px;font-size:13px;cursor:pointer;background:var(--bg);
+  }
+  .check-item input{margin:0;}
+  .check-item.checked{border-color:var(--primary);background:var(--primary-soft);color:var(--primary);font-weight:600;}
+
+  .todos-box{
+    display:flex;align-items:center;gap:10px;
+    border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:11px;background:var(--bg);margin-bottom:12px;cursor:pointer;
+  }
+  .todos-box.checked{border-color:var(--accent);background:#FBF4E8;}
+  .todos-box input{margin:0;}
+  .todos-box .t{font-size:13px;font-weight:600;}
+  .todos-box .s{font-size:11.5px;color:var(--text-muted);}
+
+  .drawer-foot{
+    padding:16px 22px;border-top:1px solid var(--border);
+    display:flex;gap:10px;justify-content:flex-end;
+  }
+  .btn-secondary{
+    background:var(--bg);border:1px solid var(--border);
+    color:var(--text);border-radius:var(--radius-sm);
+    padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer;
+  }
+  .btn-primary{
+    background:var(--primary);border:none;color:#fff;
+    border-radius:var(--radius-sm);padding:9px 18px;
+    font-size:13.5px;font-weight:600;cursor:pointer;
+  }
+  .btn-primary:hover{background:var(--primary-dark);}
+  .error-msg{color:#C53030;font-size:12px;margin-top:6px;display:none;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--text);color:#fff;padding:11px 20px;border-radius:999px;
+    font-size:13px;font-weight:500;box-shadow:var(--shadow-md);
+    opacity:0;transition:all .25s;z-index:50;display:flex;align-items:center;gap:8px;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast .dot{width:7px;height:7px;border-radius:50%;background:#4ADE80;}
+
+  @media (max-width:640px){
+    .topbar{padding:12px 16px;}
+    .container{padding:18px 14px 70px;}
+    .check-grid{grid-template-columns:1fr;}
+    .toolbar-row1{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-chip">GT3</div>
+    <div>
+      <div class="topbar-title">Legislações</div>
+      <div class="topbar-sub">Atualizações normativas para a equipe</div>
+    </div>
+  </div>
+  <div class="user-switch">
+    <span class="label">Visualizando como</span>
+    <select id="userSelect"></select>
+    <div class="avatar" id="userAvatar">RB</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="stats-row">
+    <div class="stat-pill">Visíveis para você: <b id="statVisiveis">0</b></div>
+    <div class="stat-pill novas">Novas: <b id="statNovas">0</b></div>
+    <div class="stat-pill">Total no sistema: <b id="statTotal">0</b></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-row1">
+      <input type="text" class="search-input" id="searchInput" placeholder="Buscar por título...">
+      <button class="btn-nova" id="btnNova">+ Nova legislação</button>
+    </div>
+    <div class="toolbar-row2">
+      <div class="chips" id="catChips"></div>
+      <div class="toggle-mine">
+        <span id="toggleLabel">Apenas direcionadas a mim</span>
+        <div class="switch on" id="toggleMine"><div class="knob"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="feed" id="feed"></div>
+
+</div>
+
+<div class="overlay" id="overlay"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h3>Nova legislação</h3>
+    <button class="drawer-close" id="drawerClose">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="field">
+      <label>Título</label>
+      <input type="text" id="fTitulo" placeholder="Ex: NR-12 — atualização sobre máquinas e equipamentos">
+    </div>
+    <div class="field">
+      <label>Descrição breve</label>
+      <textarea id="fDescricao" maxlength="220" placeholder="Resuma em 1-2 frases o que mudou e por que importa."></textarea>
+      <div class="hint">O sistema não consulta o link automaticamente — apenas o disponibiliza para os usuários direcionados.</div>
+    </div>
+    <div class="field">
+      <label>Link da fonte oficial</label>
+      <input type="url" id="fLink" placeholder="https://...">
+    </div>
+    <div class="field">
+      <label>Categoria</label>
+      <select id="fCategoria">
+        <option value="sst">SST</option>
+        <option value="esocial">eSocial</option>
+        <option value="trabalhista">Trabalhista</option>
+        <option value="fiscal">Fiscal</option>
+        <option value="previdenciaria">Previdenciária</option>
+        <option value="ambiental">Ambiental</option>
+        <option value="outra">Outra</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Direcionar para</label>
+      <div class="todos-box" id="todosBox">
+        <input type="checkbox" id="fTodos">
+        <div>
+          <div class="t">Todos os usuários</div>
+          <div class="s">Visível para qualquer pessoa no sistema</div>
+        </div>
+      </div>
+
+      <div id="destinoEspecifico">
+        <div class="hint" style="margin:0 0 8px;">Por perfil</div>
+        <div class="check-grid" id="perfilGrid"></div>
+        <div class="hint" style="margin:14px 0 8px;">Por pessoa</div>
+        <div class="check-grid" id="pessoaGrid"></div>
+      </div>
+      <div class="error-msg" id="errDestino">Selecione pelo menos um destinatário.</div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn-secondary" id="btnCancelar">Cancelar</button>
+    <button class="btn-primary" id="btnSalvar">Publicar legislação</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"><div class="dot"></div><span id="toastMsg"></span></div>
+
+<script>
+// ---------- Dados base ----------
+const usuarios = [
+  {id:'rodrigo',   nome:'Rodrigo Balem', iniciais:'RB', perfil:'admin'},
+  {id:'marcio',    nome:'Márcio Zim',    iniciais:'MZ', perfil:'gestor'},
+  {id:'alexandra', nome:'Alexandra',     iniciais:'AL', perfil:'colaborador'},
+  {id:'camila',    nome:'Camila',        iniciais:'CA', perfil:'colaborador'},
+  {id:'daiana',    nome:'Daiana',        iniciais:'DA', perfil:'colaborador'},
+  {id:'luciane',   nome:'Luciane',       iniciais:'LU', perfil:'colaborador'},
+  {id:'mariane',   nome:'Mariane',       iniciais:'MA', perfil:'colaborador'},
+  {id:'marina',    nome:'Marina',        iniciais:'MN', perfil:'colaborador'},
+];
+const perfis = [
+  {id:'admin', label:'Admin'},
+  {id:'gestor', label:'Gestor'},
+  {id:'colaborador', label:'Colaborador'},
+  {id:'trainee', label:'Trainee'},
+];
+const categorias = [
+  {id:'sst', label:'SST'},
+  {id:'esocial', label:'eSocial'},
+  {id:'trabalhista', label:'Trabalhista'},
+  {id:'fiscal', label:'Fiscal'},
+  {id:'previdenciaria', label:'Previdenciária'},
+  {id:'ambiental', label:'Ambiental'},
+  {id:'outra', label:'Outra'},
+];
+
+// destinatarios: array contendo 'todos', e/ou ids de perfil, e/ou ids de usuário
+let legislacoes = [
+  {
+    id:1, titulo:'NR-01 — Atualização sobre Gerenciamento de Riscos Ocupacionais',
+    descricao:'Revisão dos critérios de elaboração do PGR e integração com o eSocial. Necessário revisar modelos em uso pelos contratantes.',
+    link:'https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho/seguranca-e-saude-no-trabalho/normas-regulamentadoras/nr-01-atualizada-2022.pdf',
+    categoria:'sst', autor:'Rodrigo Balem', data:'2026-06-10',
+    destinatarios:['todos'], lida:{rodrigo:true}
+  },
+  {
+    id:2, titulo:'eSocial — novo leiaute de eventos periódicos',
+    descricao:'Mudança no formato de envio dos eventos de folha. Pode impactar a rotina de fechamento mensal dos contratantes.',
+    link:'https://www.gov.br/esocial/pt-br',
+    categoria:'esocial', autor:'Márcio Zim', data:'2026-06-12',
+    destinatarios:['admin','gestor'], lida:{marcio:true}
+  },
+  {
+    id:3, titulo:'NR-12 — atualização sobre proteção de máquinas',
+    descricao:'Novos critérios de inspeção para equipamentos com partes móveis. Relevante para emissão de laudos e ASOs vinculados.',
+    link:'https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho/seguranca-e-saude-no-trabalho/normas-regulamentadoras/nr-12.pdf',
+    categoria:'sst', autor:'Rodrigo Balem', data:'2026-06-14',
+    destinatarios:['daiana','luciane'], lida:{}
+  },
+  {
+    id:4, titulo:'LGPD — orientação sobre dados de saúde ocupacional',
+    descricao:'Nova orientação da ANPD sobre tratamento de dados sensíveis em ASOs e prontuários de saúde ocupacional.',
+    link:'https://www.gov.br/anpd/pt-br',
+    categoria:'outra', autor:'Rodrigo Balem', data:'2026-06-16',
+    destinatarios:['todos'], lida:{}
+  },
+  {
+    id:5, titulo:'Lei 14.457/2022 — saúde mental no PGR/PCMSO',
+    descricao:'Reforço da obrigatoriedade de medidas de prevenção a riscos psicossociais nos programas de SST.',
+    link:'https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/lei/l14457.htm',
+    categoria:'trabalhista', autor:'Márcio Zim', data:'2026-06-17',
+    destinatarios:['todos'], lida:{}
+  },
+];
+let nextId = 6;
+
+let currentUserId = 'rodrigo';
+let filtroCategoria = 'todas';
+let apenasMinhas = true;
+let busca = '';
+
+// ---------- Helpers ----------
+function getUser(id){ return usuarios.find(u=>u.id===id); }
+function catInfo(id){ return categorias.find(c=>c.id===id); }
+function formatData(iso){
+  const [y,m,d]=iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+function isVisivelPara(leg, user){
+  if(leg.destinatarios.includes('todos')) return true;
+  if(leg.destinatarios.includes(user.perfil)) return true;
+  if(leg.destinatarios.includes(user.id)) return true;
+  return false;
+}
+function destinatarioLabel(leg){
+  if(leg.destinatarios.includes('todos')) return ['Todos'];
+  return leg.destinatarios.map(d=>{
+    const p = perfis.find(pf=>pf.id===d);
+    if(p) return p.label;
+    const u = getUser(d);
+    if(u) return u.nome;
+    return d;
+  });
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+// ---------- Render: seletor de usuário ----------
+function renderUserSelect(){
+  const sel = document.getElementById('userSelect');
+  sel.innerHTML = usuarios.map(u=>`<option value="${u.id}" ${u.id===currentUserId?'selected':''}>${u.nome} · ${u.perfil}</option>`).join('');
+  document.getElementById('userAvatar').textContent = getUser(currentUserId).iniciais;
+}
+
+// ---------- Render: chips de categoria ----------
+function renderChips(){
+  const wrap = document.getElementById('catChips');
+  const all = [{id:'todas',label:'Todas'}, ...categorias];
+  wrap.innerHTML = all.map(c=>`<div class="chip ${filtroCategoria===c.id?'active':''}" data-cat="${c.id}">${c.label}</div>`).join('');
+  wrap.querySelectorAll('.chip').forEach(el=>{
+    el.addEventListener('click', ()=>{ filtroCategoria = el.dataset.cat; renderFeed(); renderChips(); });
+  });
+}
+
+// ---------- Render: feed ----------
+function renderFeed(){
+  const user = getUser(currentUserId);
+  let lista = legislacoes.slice().sort((a,b)=> b.data.localeCompare(a.data));
+
+  if(apenasMinhas) lista = lista.filter(l=>isVisivelPara(l,user));
+  if(filtroCategoria!=='todas') lista = lista.filter(l=>l.categoria===filtroCategoria);
+  if(busca.trim()) lista = lista.filter(l=>l.titulo.toLowerCase().includes(busca.toLowerCase()));
+
+  const feed = document.getElementById('feed');
+
+  if(lista.length===0){
+    feed.innerHTML = `<div class="empty-state"><div class="ico">📋</div><p><strong>Nenhuma legislação encontrada.</strong></p><p>Ajuste os filtros ou publique uma nova atualização.</p></div>`;
+  } else {
+    feed.innerHTML = lista.map(l=>{
+      const cat = catInfo(l.categoria);
+      const nova = isVisivelPara(l,user) && !l.lida[user.id];
+      const chips = destinatarioLabel(l).map(d=>`<span class="dest-chip">${d}</span>`).join('');
+      return `
+      <div class="card ${nova?'nova':''}" data-id="${l.id}">
+        <div class="card-top">
+          <div class="badges">
+            <span class="badge cat-${l.categoria}">${cat.label}</span>
+            ${nova?'<span class="badge badge-nova">Nova</span>':''}
+          </div>
+          <span class="card-date">${formatData(l.data)}</span>
+        </div>
+        <h4 class="card-title">${l.titulo}</h4>
+        <p class="card-desc">${l.descricao}</p>
+        <div class="card-bottom">
+          <div class="card-meta">Publicado por ${l.autor} · ${chips}</div>
+          <button class="btn-link" data-open="${l.id}">Abrir link ↗</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  feed.querySelectorAll('[data-open]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const leg = legislacoes.find(x=>x.id===Number(btn.dataset.open));
+      leg.lida[user.id] = true;
+      window.open(leg.link, '_blank');
+      renderFeed();
+      renderStats();
+    });
+  });
+
+  document.getElementById('toggleLabel').textContent = apenasMinhas ? 'Apenas direcionadas a mim' : 'Mostrando todas (modo verificação)';
+}
+
+// ---------- Render: estatísticas ----------
+function renderStats(){
+  const user = getUser(currentUserId);
+  const visiveis = legislacoes.filter(l=>isVisivelPara(l,user));
+  const novas = visiveis.filter(l=>!l.lida[user.id]);
+  document.getElementById('statVisiveis').textContent = visiveis.length;
+  document.getElementById('statNovas').textContent = novas.length;
+  document.getElementById('statTotal').textContent = legislacoes.length;
+}
+
+// ---------- Drawer: montar checkboxes ----------
+function renderDrawerOptions(){
+  document.getElementById('perfilGrid').innerHTML = perfis.map(p=>
+    `<label class="check-item" data-perfil="${p.id}"><input type="checkbox" value="${p.id}">${p.label}</label>`
+  ).join('');
+  document.getElementById('pessoaGrid').innerHTML = usuarios.map(u=>
+    `<label class="check-item" data-user="${u.id}"><input type="checkbox" value="${u.id}">${u.nome}</label>`
+  ).join('');
+
+  document.querySelectorAll('#perfilGrid .check-item, #pessoaGrid .check-item').forEach(item=>{
+    const input = item.querySelector('input');
+    item.addEventListener('click', (e)=>{
+      if(e.target.tagName!=='INPUT') input.checked = !input.checked;
+      item.classList.toggle('checked', input.checked);
+    });
+  });
+}
+
+// ---------- Drawer: abrir / fechar ----------
+function openDrawer(){
+  document.getElementById('drawer').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+  resetForm();
+}
+function resetForm(){
+  document.getElementById('fTitulo').value='';
+  document.getElementById('fDescricao').value='';
+  document.getElementById('fLink').value='';
+  document.getElementById('fCategoria').value='sst';
+  document.getElementById('fTodos').checked=false;
+  document.getElementById('todosBox').classList.remove('checked');
+  document.getElementById('destinoEspecifico').style.display='block';
+  document.querySelectorAll('#perfilGrid .check-item, #pessoaGrid .check-item').forEach(i=>{
+    i.classList.remove('checked'); i.querySelector('input').checked=false;
+  });
+  document.getElementById('errDestino').style.display='none';
+}
+
+// ---------- Salvar nova legislação ----------
+function salvarLegislacao(){
+  const titulo = document.getElementById('fTitulo').value.trim();
+  const descricao = document.getElementById('fDescricao').value.trim();
+  const link = document.getElementById('fLink').value.trim();
+  const categoria = document.getElementById('fCategoria').value;
+  const todos = document.getElementById('fTodos').checked;
+
+  if(!titulo || !link){
+    showToast('Preencha título e link antes de publicar.');
+    return;
+  }
+
+  let destinatarios = [];
+  if(todos){
+    destinatarios = ['todos'];
+  } else {
+    document.querySelectorAll('#perfilGrid input:checked').forEach(i=>destinatarios.push(i.value));
+    document.querySelectorAll('#pessoaGrid input:checked').forEach(i=>destinatarios.push(i.value));
+  }
+  if(destinatarios.length===0){
+    document.getElementById('errDestino').style.display='block';
+    return;
+  }
+  document.getElementById('errDestino').style.display='none';
+
+  const autor = getUser(currentUserId).nome;
+  const hoje = new Date().toISOString().slice(0,10);
+
+  legislacoes.push({
+    id:nextId++, titulo, descricao: descricao || 'Sem descrição adicional.',
+    link, categoria, autor, data:hoje, destinatarios, lida:{[currentUserId]:true}
+  });
+
+  closeDrawer();
+  renderFeed();
+  renderStats();
+  showToast('Legislação publicada com sucesso.');
+}
+
+// ---------- Eventos ----------
+document.getElementById('userSelect').addEventListener('change', e=>{
+  currentUserId = e.target.value;
+  renderUserSelect();
+  renderFeed();
+  renderStats();
+});
+document.getElementById('searchInput').addEventListener('input', e=>{
+  busca = e.target.value; renderFeed();
+});
+document.getElementById('toggleMine').addEventListener('click', ()=>{
+  apenasMinhas = !apenasMinhas;
+  document.getElementById('toggleMine').classList.toggle('on', apenasMinhas);
+  renderFeed();
+});
+document.getElementById('btnNova').addEventListener('click', openDrawer);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+document.getElementById('btnCancelar').addEventListener('click', closeDrawer);
+document.getElementById('overlay').addEventListener('click', closeDrawer);
+document.getElementById('btnSalvar').addEventListener('click', salvarLegislacao);
+document.getElementById('todosBox').addEventListener('click', ()=>{
+  const chk = document.getElementById('fTodos');
+  chk.checked = !chk.checked;
+  document.getElementById('todosBox').classList.toggle('checked', chk.checked);
+  document.getElementById('destinoEspecifico').style.display = chk.checked ? 'none' : 'block';
+});
+
+// ---------- Init ----------
+renderUserSelect();
+renderChips();
+renderDrawerOptions();
+renderFeed();
+renderStats();
+</script>
+
+</body>
+</html>

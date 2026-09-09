@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anotações CIC — GT3 Consultoria</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --gt3-primary: #2A4F96;
+    --gt3-accent: #D1AE6E;
+    --bg-page: #F4F6FA;
+    --bg-surface: #ffffff;
+    --bg-secondary: #f0f2f7;
+    --text-primary: #1a1f2e;
+    --text-secondary: #5a6178;
+    --text-tertiary: #9399ae;
+    --border-light: rgba(42,79,150,0.10);
+    --border-medium: rgba(42,79,150,0.22);
+    --shadow-sm: 0 1px 4px rgba(42,79,150,0.07);
+    --shadow-md: 0 4px 20px rgba(42,79,150,0.10);
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+  }
+  html, body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-page); height: 100%; color: var(--text-primary); font-size: 14px; }
+  .app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  /* TOPBAR */
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 8px 18px; background: var(--bg-surface); border-bottom: 1px solid var(--border-light); flex-shrink: 0; box-shadow: var(--shadow-sm); z-index: 100; flex-wrap: wrap; }
+  .topbar-brand { display: flex; align-items: center; gap: 8px; padding-right: 14px; border-right: 1px solid var(--border-light); flex-shrink: 0; }
+  .brand-dot { width: 28px; height: 28px; border-radius: var(--r-sm); background: var(--gt3-primary); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 700; flex-shrink:0; }
+  .brand-name { font-size: 12px; font-weight: 600; color: var(--gt3-primary); white-space:nowrap; }
+  .crumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); flex: 1; min-width:0; }
+  .crumb b { color: var(--gt3-primary); cursor: pointer; font-weight: 600; }
+  .crumb b:hover { text-decoration: underline; }
+  .crumb-sep { color: var(--text-tertiary); }
+  .crumb-cur { color: var(--text-primary); font-weight: 600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .btn { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--r-sm); font-size: 12.5px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; white-space: nowrap; }
+  .btn i { font-size: 14px; }
+  .btn-primary { background: var(--gt3-primary); color: #fff; }
+  .btn-primary:hover { background: #1d3a74; }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-medium); }
+  .btn-ghost:hover { background: var(--bg-secondary); color: var(--text-primary); }
+
+  /* CONTENT */
+  .content-area { flex: 1; overflow-y: auto; padding: 28px 32px 60px; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .view-inner { max-width: 1080px; margin: 0 auto; }
+  .page-title { font-size: 19px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+  .page-sub { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 22px; }
+
+  /* PASTAS GRID */
+  .pastas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px,1fr)); gap: 16px; }
+  .pasta-card { background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: var(--r-lg); padding: 18px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 10px; transition: box-shadow .15s, transform .15s; }
+  .pasta-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .pasta-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .pasta-icon { width: 40px; height: 40px; border-radius: var(--r-md); background: #e8f0fc; color: var(--gt3-primary); display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+  .pasta-del { background: none; border: none; color: var(--text-tertiary); cursor: pointer; width: 26px; height: 26px; border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; flex-shrink:0; }
+  .pasta-del:hover { background: #fef2f2; color: #dc2626; }
+  .pasta-nome { font-size: 14.5px; font-weight: 700; color: var(--text-primary); line-height:1.3; }
+  .pasta-periodo { font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; }
+  .pasta-stats { display: flex; gap: 16px; margin-top: 2px; }
+  .pasta-stat { font-size: 10.5px; color: var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em; }
+  .pasta-stat b { font-size: 15px; color: var(--text-primary); display: block; font-weight:700; text-transform:none; }
+  .pasta-stat.warn b { color: #b45309; }
+  .pasta-open { margin-top: 4px; align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--gt3-primary); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .pasta-open:hover { text-decoration: underline; }
+
+  .new-pasta-card { border: 2px dashed var(--border-medium); background: transparent; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--text-tertiary); cursor: pointer; min-height: 148px; transition: all .15s; }
+  .new-pasta-card:hover { border-color: var(--gt3-primary); color: var(--gt3-primary); background: #e8f0fc; }
+  .new-pasta-card i { font-size: 26px; }
+  .new-pasta-card span { font-size: 12.5px; font-weight: 600; }
+
+  /* DETAIL HEADER */
+  .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .detail-title-in { font-size: 21px; font-weight: 700; color: var(--gt3-primary); border: none; background: transparent; outline: none; font-family: inherit; min-width: 200px; }
+  .detail-fields { display: flex; gap: 22px; margin-top: 8px; flex-wrap: wrap; }
+  .detail-field { display: flex; flex-direction: column; gap: 2px; }
+  .detail-field label { font-size: 10px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: .06em; }
+  .detail-field input { font-size: 13px; border: none; border-bottom: 1px solid var(--border-light); background: transparent; outline: none; padding: 2px 0; font-family: inherit; color: var(--text-primary); min-width:140px; }
+  .detail-field input:focus { border-bottom-color: var(--gt3-primary); }
+
+  .detail-summary { display: flex; gap: 26px; margin: 18px 0 24px; padding: 14px 18px; background: var(--bg-surface); border-radius: var(--r-md); border: 1px solid var(--border-light); box-shadow: var(--shadow-sm); flex-wrap: wrap; }
+  .summary-item { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+  .summary-item b { font-size: 18px; color: var(--text-primary); display: block; font-weight: 700; text-transform: none; margin-top:2px; }
+  .summary-item.warn b { color: #b45309; }
+  .summary-item.ok b { color: #2e7d32; }
+
+  /* CATEGORIA */
+  .cat-section { margin-bottom: 18px; border: 1px solid var(--border-light); border-radius: var(--r-lg); background: var(--bg-surface); box-shadow: var(--shadow-sm); overflow: hidden; }
+  .cat-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: var(--bg-secondary); }
+  .cat-section:not(.collapsed) .cat-head { border-bottom: 1px solid var(--border-light); }
+  .cat-head i.chev { transition: transform .15s; color: var(--text-tertiary); font-size: 13px; }
+  .cat-section.collapsed .cat-head i.chev { transform: rotate(-90deg); }
+  .cat-title { font-size: 11.5px; font-weight: 700; color: var(--gt3-primary); text-transform: uppercase; letter-spacing: .07em; flex: 1; border: none; background: transparent; outline: none; font-family: inherit; }
+  .cat-count { font-size: 11px; color: var(--text-secondary); background: var(--bg-surface); border: 1px solid var(--border-light); padding: 1px 9px; border-radius: 20px; flex-shrink:0; }
+  .cat-del { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 14px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); flex-shrink:0; }
+  .cat-del:hover { background: #fef2f2; color: #dc2626; }
+  .cat-body { padding: 8px 10px 10px; }
+  .cat-section.collapsed .cat-body { display: none; }
+  .cat-empty { font-size: 12px; color: var(--text-tertiary); padding: 10px 8px; font-style: italic; }
+  .cat-addbtn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--gt3-primary); background: transparent; border: 1px dashed var(--border-medium); border-radius: var(--r-sm); padding: 7px 12px; cursor: pointer; margin: 4px 4px 0; width: calc(100% - 8px); justify-content: center; }
+  .cat-addbtn:hover { background: #e8f0fc; }
+  .add-cat-row { text-align: center; margin: 4px 0 30px; }
+  .add-cat-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); background: var(--bg-surface); border: 1px dashed var(--border-medium); border-radius: 20px; padding: 8px 16px; cursor: pointer; }
+  .add-cat-btn:hover { border-color: var(--gt3-primary); color: var(--gt3-primary); }
+
+  /* EMPRESA */
+  .empresa-block { border: 1px solid var(--border-light); border-radius: var(--r-md); margin: 6px 2px; background: var(--bg-surface); overflow: hidden; }
+  .empresa-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; }
+  .empresa-chev { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 13px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; transition: transform .15s; flex-shrink: 0; }
+  .empresa-block.open .empresa-chev { transform: rotate(90deg); }
+  .empresa-nome { flex: 1.4; min-width: 150px; font-size: 13.5px; font-weight: 600; color: var(--text-primary); border: none; background: transparent; outline: none; font-family: inherit; }
+  .empresa-obs { flex: 2; min-width: 160px; font-size: 12.5px; color: var(--text-secondary); border: none; background: transparent; outline: none; font-family: inherit; border-bottom: 1px dashed transparent; }
+  .empresa-obs:focus { border-bottom-color: var(--border-medium); }
+  .empresa-obs::placeholder { color: var(--text-tertiary); }
+  .empresa-del { background: none; border: none; color: var(--text-tertiary); cursor: pointer; width: 24px; height: 24px; border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .empresa-del:hover { background: #fef2f2; color: #dc2626; }
+
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap; flex-shrink: 0; border:none; }
+  .status-badge i { font-size: 8px; }
+  .st-sem       { background: #f0f2f7; color: #5a6178; }
+  .st-reativada { background: #e8f0fc; color: #1d3a74; }
+  .st-ok        { background: #e8f5e9; color: #2e7d32; }
+  .st-pendente  { background: #fef3e2; color: #b45309; }
+
+  .empresa-detail { display: none; padding: 4px 14px 16px 46px; border-top: 1px solid var(--border-light); background: var(--bg-secondary); }
+  .empresa-block.open .empresa-detail { display: block; }
+  .anot-table-wrap { overflow-x: auto; margin-top: 6px; }
+  .anot-table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--bg-surface); border-radius: var(--r-sm); overflow: hidden; }
+  .anot-table th, .anot-table td { border: 1px solid var(--border-light); padding: 6px 9px; text-align: left; }
+  .anot-table th { background: var(--gt3-primary); color: #fff; font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; }
+  .anot-table tr:nth-child(even) td { background: var(--bg-secondary); }
+  .anot-table input { width: 100%; border: none; background: transparent; outline: none; font: inherit; color: var(--text-primary); }
+  .anot-table input:focus { background: #e8f0fc; }
+  .anot-num { text-align: center; color: var(--text-tertiary); font-size: 11.5px; width: 28px; }
+  .anot-del { background: none; border: none; color: var(--text-tertiary); cursor: pointer; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
+  .anot-del:hover { background: #fef2f2; color: #dc2626; }
+  .anot-add { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--gt3-primary); background: transparent; border: none; cursor: pointer; margin-top: 9px; padding: 4px 2px; font-weight: 600; }
+  .anot-add:hover { text-decoration: underline; }
+  .anot-empty { font-size: 11.5px; color: var(--text-tertiary); font-style: italic; padding: 8px 2px; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(26,31,46,.5); z-index: 9999; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: var(--bg-surface); border-radius: var(--r-lg); padding: 24px 26px; width: 380px; box-shadow: var(--shadow-md); }
+  .modal-title { font-size: 15px; font-weight: 700; color: var(--gt3-primary); margin-bottom: 16px; display:flex; align-items:center; gap:8px; }
+  .modal-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+  .modal-field label { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: .05em; }
+  .modal-field input { height: 34px; border: 1px solid var(--border-light); border-radius: var(--r-sm); padding: 0 10px; font-size: 13px; outline: none; font-family: inherit; }
+  .modal-field input:focus { border-color: var(--gt3-primary); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+  .exp-overlay { display: none; position: fixed; inset: 0; background: rgba(26,31,46,.65); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+  .exp-overlay.show { display: flex; }
+  .exp-spin { width: 38px; height: 38px; border: 3px solid rgba(255,255,255,.2); border-top-color: #fff; border-radius: 50%; animation: spin .75s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .exp-msg { color: #fff; font-size: 14px; font-weight: 500; }
+
+  @media (max-width: 700px) {
+    .content-area { padding: 16px 10px 50px; }
+    .crumb-cur { display:none; }
+    .empresa-row { flex-wrap: wrap; }
+    .empresa-detail { padding-left: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-dot">GT3</div>
+      <span class="brand-name">Anotações CIC</span>
+    </div>
+    <div class="crumb" id="crumb">
+      <b onclick="showPastasView()">Pastas</b>
+    </div>
+    <div class="topbar-actions" id="topActions"></div>
+  </div>
+
+  <div class="content-area">
+
+    <!-- VIEW: LISTA DE PASTAS -->
+    <div class="view active" id="viewPastas">
+      <div class="view-inner">
+        <div class="page-title">Anotações CIC</div>
+        <div class="page-sub">Registros de exceções, concessões e pendências de contratantes, organizados por feira.</div>
+        <div class="pastas-grid" id="pastasGrid"></div>
+      </div>
+    </div>
+
+    <!-- VIEW: DETALHE DA PASTA -->
+    <div class="view" id="viewDetalhe">
+      <div class="view-inner">
+        <div class="detail-head">
+          <div>
+            <input class="detail-title-in" id="pastaNomeIn" placeholder="Nome da feira..." oninput="updatePastaField('nome', this.value)">
+            <div class="detail-fields">
+              <div class="detail-field">
+                <label>Período</label>
+                <input id="pastaPeriodoIn" placeholder="Ex.: Maio/2026" oninput="updatePastaField('periodo', this.value)">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-summary" id="detailSummary"></div>
+
+        <div id="categoriasContainer"></div>
+
+        <div class="add-cat-row">
+          <button class="add-cat-btn" onclick="addCategoria()"><i class="ti ti-plus"></i> Nova categoria</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL NOVA PASTA -->
+<div class="modal-overlay" id="modalNovaPasta">
+  <div class="modal-box">
+    <div class="modal-title"><i class="ti ti-folder-plus"></i> Nova pasta (feira)</div>
+    <div class="modal-field">
+      <label>Nome da feira</label>
+      <input id="novaPastaNome" placeholder="Ex.: MOVsul 2026">
+    </div>
+    <div class="modal-field">
+      <label>Período</label>
+      <input id="novaPastaPeriodo" placeholder="Ex.: Julho/2026">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmNovaPasta()"><i class="ti ti-check"></i> Criar pasta</button>
+    </div>
+  </div>
+</div>
+
+<div class="exp-overlay" id="expOverlay">
+  <div class="exp-spin"></div>
+  <div class="exp-msg">Gerando PDF...</div>
+</div>
+
+<script>
+/* ---------- ESTADO ---------- */
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+const STATUS_ORDER = ['sem','reativada','ok','pendente'];
+const STATUS_CFG = {
+  sem:       { label:'Sem cadastro', cls:'st-sem' },
+  reativada: { label:'Reativada',    cls:'st-reativada' },
+  ok:        { label:'OK',           cls:'st-ok' },
+  pendente:  { label:'Pendente',     cls:'st-pendente' }
+};
+const DEFAULT_CATEGORIAS = ['INDUSTRIAL','SERVIÇOS','EVENTOS','COMUNICAÇÃO'];
+
+function novaAnotacao(p){ return { id: uid(), pessoa:p.pessoa||'', doc:p.doc||'', obs:p.obs||'', responsavel:p.responsavel||'' }; }
+function novaEmpresa(p){ return { id: uid(), nome:p.nome||'', status:p.status||'sem', obs:p.obs||'', expanded:false, anotacoes:(p.anotacoes||[]).map(novaAnotacao) }; }
+function novaCategoria(nome, empresas){ return { id: uid(), nome, empresas:(empresas||[]).map(novaEmpresa) }; }
+function novaPasta(nome, periodo, categorias){ return { id: uid(), nome, periodo, categorias: categorias || DEFAULT_CATEGORIAS.map(c=>novaCategoria(c)) }; }
+
+let state = {
+  pastas: [
+    novaPasta('Expobento 2026', 'Maio/2026', [
+      novaCategoria('INDUSTRIAL', [
+        novaEmpresa({ nome:'Totale Eventos LTDA', status:'reativada', obs:'MEIs cadastrados como autônomos dentro da própria empresa; apenas contrato anexado.',
+          anotacoes:[ novaAnotacao({ pessoa:'32 autônomos cadastrados dentro da Totale', doc:'Contrato de prestação de serviços' }) ] }),
+        novaEmpresa({ nome:'Valdelirio Agustinho de Bairros', status:'reativada', obs:'Não concluiu atualização de documentos na feira anterior.',
+          anotacoes:[
+            novaAnotacao({ pessoa:'Altemio A. dos Reis', doc:'Recibo RPA', obs:'Faltou PGR e PCMSO', responsavel:'Renato' }),
+            novaAnotacao({ pessoa:'Edemilso e Valdelirio', doc:'NR12 — somente assinatura SST' })
+          ] })
+      ]),
+      novaCategoria('SERVIÇOS', [
+        novaEmpresa({ nome:'JR Assessoria em Seg. do Trabalho LTDA', status:'reativada', obs:'Empresa não possui documentos para funcionário.',
+          anotacoes:[ novaAnotacao({ pessoa:'José Luiz Rocha', doc:'Contrato de prestação de serviço', responsavel:'Renato' }) ] }),
+        novaEmpresa({ nome:'Schen Automação de Eventos LTDA', status:'reativada', obs:'MEIs cadastrados como autônomos dentro da empresa; CCMEI anexado.',
+          anotacoes:[
+            novaAnotacao({ pessoa:'28 pessoas', doc:'Contrato de trabalho temporário', obs:'Faltaram certidões' }),
+            novaAnotacao({ pessoa:'—', doc:'Contratos aprovados sem assinatura' })
+          ] }),
+        novaEmpresa({ nome:'Zortea Feiras e Eventos LTDA', status:'sem', obs:'Contato: (54) 99139-2951',
+          anotacoes:[ novaAnotacao({ pessoa:'José Carlos', obs:'Isentado ASO e Ficha EPI' }) ] })
+      ]),
+      novaCategoria('EVENTOS', [
+        novaEmpresa({ nome:'Andreia Pilão Eventos LTDA', status:'reativada', obs:'Cadastro autorizado pelo Renato.',
+          anotacoes:[ novaAnotacao({ pessoa:'Taise de Melo', doc:'Contrato de prestação de serviço' }) ] }),
+        novaEmpresa({ nome:'Evaristo Pizzi Cursos Agenciamento e Eventos LTDA', status:'pendente', obs:'Necessário atualizar autorização judicial para menores que irão desfilar.',
+          anotacoes:[ novaAnotacao({ obs:'Não atualizou documentos de empresa e funcionários' }) ] })
+      ]),
+      novaCategoria('COMUNICAÇÃO', [
+        novaEmpresa({ nome:'Mídia Sul Comunicação Visual LTDA', status:'reativada', obs:'Não concluiu atualização dos documentos no portal.' }),
+        novaEmpresa({ nome:'Fabrício Finatto Cenci LTDA — Paese', status:'ok', obs:'Cadastro realizado em 18/05/26.',
+          anotacoes:[
+            novaAnotacao({ pessoa:'Fabrício Finatto Cenci e MEIs vinculados', doc:'Ficha EPI', obs:'Aprovado com restrição de assinatura' }),
+            novaAnotacao({ pessoa:'Fabrício Finatto Cenci e MEIs vinculados', doc:'ASO', obs:'Isenção aprovada' })
+          ] })
+      ])
+    ]),
+    novaPasta('MOVsul 2026', 'Julho/2026')
+  ]
+};
+
+let currentPastaId = null;
+
+/* ---------- HELPERS ---------- */
+function getPasta(id){ return state.pastas.find(p=>p.id===id); }
+function getCategoria(pasta, catId){ return pasta.categorias.find(c=>c.id===catId); }
+function findEmpresa(pasta, empId){
+  for(const cat of pasta.categorias){ const e = cat.empresas.find(x=>x.id===empId); if(e) return {cat,emp:e}; }
+  return null;
+}
+
+function pastaStats(pasta){
+  let total=0, pend=0, ok=0;
+  pasta.categorias.forEach(c=>c.empresas.forEach(e=>{
+    total++;
+    if(e.status==='ok') ok++;
+    if(e.status==='sem'||e.status==='pendente') pend++;
+  }));
+  return {total,pend,ok};
+}
+
+/* ---------- VIEWS ---------- */
+function showPastasView(){
+  currentPastaId = null;
+  document.getElementById('viewPastas').classList.add('active');
+  document.getElementById('viewDetalhe').classList.remove('active');
+  document.getElementById('crumb').innerHTML = '<b onclick="showPastasView()">Pastas</b>';
+  document.getElementById('topActions').innerHTML = `
+    <button class="btn btn-primary" onclick="openModalNovaPasta()"><i class="ti ti-plus"></i> Nova pasta</button>`;
+  renderPastas();
+}
+
+function openPasta(id){
+  currentPastaId = id;
+  document.getElementById('viewPastas').classList.remove('active');
+  document.getElementById('viewDetalhe').classList.add('active');
+  const pasta = getPasta(id);
+  document.getElementById('crumb').innerHTML = `
+    <b onclick="showPastasView()">Pastas</b>
+    <span class="crumb-sep">/</span>
+    <span class="crumb-cur">${escapeHtml(pasta.nome||'Sem nome')}</span>`;
+  document.getElementById('topActions').innerHTML = `
+    <button class="btn btn-ghost" onclick="showPastasView()"><i class="ti ti-arrow-left"></i> Voltar</button>
+    <button class="btn btn-primary" onclick="exportPDF()"><i class="ti ti-file-type-pdf"></i> Exportar PDF</button>`;
+  renderDetalhe();
+}
+
+/* ---------- RENDER: LISTA DE PASTAS ---------- */
+function renderPastas(){
+  const grid = document.getElementById('pastasGrid');
+  grid.innerHTML = '';
+  state.pastas.forEach(p=>{
+    const s = pastaStats(p);
+    const card = document.createElement('div');
+    card.className = 'pasta-card';
+    card.innerHTML = `
+      <div class="pasta-top">
+        <div class="pasta-icon"><i class="ti ti-folder"></i></div>
+        <button class="pasta-del" title="Excluir pasta" onclick="deletePasta('${p.id}')"><i class="ti ti-trash"></i></button>
+      </div>
+      <div class="pasta-nome">${escapeHtml(p.nome||'Sem nome')}</div>
+      <div class="pasta-periodo"><i class="ti ti-calendar"></i> ${escapeHtml(p.periodo||'Período não definido')}</div>
+      <div class="pasta-stats">
+        <div class="pasta-stat">Empresas<b>${s.total}</b></div>
+        <div class="pasta-stat warn">Pendências<b>${s.pend}</b></div>
+        <div class="pasta-stat">OK<b>${s.ok}</b></div>
+      </div>
+      <div class="pasta-open" onclick="openPasta('${p.id}')">Abrir pasta <i class="ti ti-arrow-right"></i></div>`;
+    grid.appendChild(card);
+  });
+  const novo = document.createElement('div');
+  novo.className = 'new-pasta-card';
+  novo.onclick = openModalNovaPasta;
+  novo.innerHTML = `<i class="ti ti-folder-plus"></i><span>Nova pasta</span>`;
+  grid.appendChild(novo);
+}
+
+/* ---------- RENDER: DETALHE DA PASTA ---------- */
+function renderDetalhe(){
+  const pasta = getPasta(currentPastaId);
+  if(!pasta) return;
+  document.getElementById('pastaNomeIn').value = pasta.nome || '';
+  document.getElementById('pastaPeriodoIn').value = pasta.periodo || '';
+
+  const s = pastaStats(pasta);
+  document.getElementById('detailSummary').innerHTML = `
+    <div class="summary-item">Empresas registradas<b>${s.total}</b></div>
+    <div class="summary-item warn">Pendências abertas<b>${s.pend}</b></div>
+    <div class="summary-item ok">Regularizadas (OK)<b>${s.ok}</b></div>`;
+
+  const cont = document.getElementById('categoriasContainer');
+  cont.innerHTML = '';
+  pasta.categorias.forEach(cat=>{
+    const sec = document.createElement('div');
+    sec.className = 'cat-section';
+    sec.dataset.catId = cat.id;
+
+    const head = document.createElement('div');
+    head.className = 'cat-head';
+    head.innerHTML = `
+      <i class="ti ti-chevron-down chev"></i>
+      <input class="cat-title" value="${escapeHtml(cat.nome)}" onclick="event.stopPropagation()" oninput="updateCategoriaNome('${cat.id}', this.value)">
+      <span class="cat-count">${cat.empresas.length}</span>
+      <button class="cat-del" title="Excluir categoria" onclick="event.stopPropagation(); deleteCategoria('${cat.id}')"><i class="ti ti-trash"></i></button>`;
+    head.addEventListener('click', (e)=>{ if(e.target.closest('input')||e.target.closest('button')) return; sec.classList.toggle('collapsed'); });
+    sec.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'cat-body';
+
+    if(cat.empresas.length===0){
+      const empty = document.createElement('div');
+      empty.className = 'cat-empty';
+      empty.textContent = 'Nenhuma empresa registrada nesta categoria.';
+      body.appendChild(empty);
+    }
+
+    cat.empresas.forEach(emp=> body.appendChild(renderEmpresaBlock(pasta, cat, emp)));
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'cat-addbtn';
+    addBtn.innerHTML = '<i class="ti ti-plus"></i> Adicionar empresa';
+    addBtn.onclick = ()=> addEmpresa(cat.id);
+    body.appendChild(addBtn);
+
+    sec.appendChild(body);
+    cont.appendChild(sec);
+  });
+}
+
+function renderEmpresaBlock(pasta, cat, emp){
+  const block = document.createElement('div');
+  block.className = 'empresa-block' + (emp.expanded ? ' open' : '');
+  block.dataset.empId = emp.id;
+
+  const cfg = STATUS_CFG[emp.status] || STATUS_CFG.sem;
+  const row = document.createElement('div');
+  row.className = 'empresa-row';
+  row.innerHTML = `
+    <button class="empresa-chev" onclick="toggleEmpresa('${emp.id}')"><i class="ti ti-chevron-right"></i></button>
+    <input class="empresa-nome" value="${escapeHtml(emp.nome)}" placeholder="Nome do contratante..." oninput="updateEmpresaField('${emp.id}','nome',this.value)">
+    <span class="status-badge ${cfg.cls}" onclick="cycleStatus('${emp.id}')" title="Clique para alterar o status"><i class="ti ti-circle-filled"></i> ${cfg.label}</span>
+    <input class="empresa-obs" value="${escapeHtml(emp.obs)}" placeholder="Observação rápida..." oninput="updateEmpresaField('${emp.id}','obs',this.value)">
+    <button class="empresa-del" title="Excluir empresa" onclick="deleteEmpresa('${emp.id}')"><i class="ti ti-trash"></i></button>`;
+  block.appendChild(row);
+
+  const detail = document.createElement('div');
+  detail.className = 'empresa-detail';
+  detail.appendChild(renderAnotacoesTable(emp));
+  const addAnotBtn = document.createElement('button');
+  addAnotBtn.className = 'anot-add';
+  addAnotBtn.innerHTML = '<i class="ti ti-plus"></i> Nova anotação';
+  addAnotBtn.onclick = ()=> addAnotacao(emp.id);
+  detail.appendChild(addAnotBtn);
+  block.appendChild(detail);
+
+  return block;
+}
+
+function renderAnotacoesTable(emp){
+  if(emp.anotacoes.length===0){
+    const d = document.createElement('div');
+    d.className = 'anot-empty';
+    d.textContent = 'Nenhuma anotação registrada ainda para este contratante.';
+    return d;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'anot-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'anot-table';
+  table.innerHTML = `
+    <tr><th style="width:32px">Nº</th><th>Pessoa / Situação</th><th>Documentação da empresa</th><th>Observação</th><th>Responsável</th><th style="width:30px"></th></tr>`;
+  emp.anotacoes.forEach((a, idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="anot-num">${idx+1}</td>
+      <td><input value="${escapeHtml(a.pessoa)}" placeholder="—" oninput="updateAnotacaoField('${emp.id}','${a.id}','pessoa',this.value)"></td>
+      <td><input value="${escapeHtml(a.doc)}" placeholder="—" oninput="updateAnotacaoField('${emp.id}','${a.id}','doc',this.value)"></td>
+      <td><input value="${escapeHtml(a.obs)}" placeholder="—" oninput="updateAnotacaoField('${emp.id}','${a.id}','obs',this.value)"></td>
+      <td><input value="${escapeHtml(a.responsavel)}" placeholder="—" oninput="updateAnotacaoField('${emp.id}','${a.id}','responsavel',this.value)"></td>
+      <td><button class="anot-del" onclick="deleteAnotacao('${emp.id}','${a.id}')"><i class="ti ti-x"></i></button></td>`;
+    table.appendChild(tr);
+  });
+  wrap.appendChild(table);
+  return wrap;
+}
+
+/* ---------- AÇÕES: PASTA ---------- */
+function openModalNovaPasta(){
+  document.getElementById('novaPastaNome').value = '';
+  document.getElementById('novaPastaPeriodo').value = '';
+  document.getElementById('modalNovaPasta').classList.add('show');
+  setTimeout(()=>document.getElementById('novaPastaNome').focus(), 50);
+}
+function closeModal(){ document.getElementById('modalNovaPasta').classList.remove('show'); }
+function confirmNovaPasta(){
+  const nome = document.getElementById('novaPastaNome').value.trim();
+  const periodo = document.getElementById('novaPastaPeriodo').value.trim();
+  if(!nome){ document.getElementById('novaPastaNome').focus(); return; }
+  state.pastas.push(novaPasta(nome, periodo));
+  closeModal();
+  renderPastas();
+}
+function deletePasta(id){
+  if(!confirm('Excluir esta pasta e todos os registros dentro dela?')) return;
+  state.pastas = state.pastas.filter(p=>p.id!==id);
+  renderPastas();
+}
+function updatePastaField(field, value){
+  const pasta = getPasta(currentPastaId);
+  if(pasta) pasta[field] = value;
+}
+
+/* ---------- AÇÕES: CATEGORIA ---------- */
+function addCategoria(){
+  const nome = prompt('Nome da nova categoria (ex.: Industrial, Serviços, Eventos):');
+  if(!nome) return;
+  const pasta = getPasta(currentPastaId);
+  pasta.categorias.push(novaCategoria(nome.toUpperCase()));
+  renderDetalhe();
+}
+function deleteCategoria(catId){
+  if(!confirm('Excluir esta categoria e todas as empresas registradas nela?')) return;
+  const pasta = getPasta(currentPastaId);
+  pasta.categorias = pasta.categorias.filter(c=>c.id!==catId);
+  renderDetalhe();
+}
+function updateCategoriaNome(catId, value){
+  const pasta = getPasta(currentPastaId);
+  const cat = getCategoria(pasta, catId);
+  if(cat) cat.nome = value;
+}
+
+/* ---------- AÇÕES: EMPRESA ---------- */
+function addEmpresa(catId){
+  const pasta = getPasta(currentPastaId);
+  const cat = getCategoria(pasta, catId);
+  const emp = novaEmpresa({});
+  emp.expanded = true;
+  cat.empresas.push(emp);
+  renderDetalhe();
+}
+function deleteEmpresa(empId){
+  if(!confirm('Excluir esta empresa e todas as anotações registradas?')) return;
+  const pasta = getPasta(currentPastaId);
+  pasta.categorias.forEach(c=>{ c.empresas = c.empresas.filter(e=>e.id!==empId); });
+  renderDetalhe();
+}
+function updateEmpresaField(empId, field, value){
+  const pasta = getPasta(currentPastaId);
+  const found = findEmpresa(pasta, empId);
+  if(found) found.emp[field] = value;
+}
+function cycleStatus(empId){
+  const pasta = getPasta(currentPastaId);
+  const found = findEmpresa(pasta, empId);
+  if(!found) return;
+  const i = STATUS_ORDER.indexOf(found.emp.status);
+  found.emp.status = STATUS_ORDER[(i+1) % STATUS_ORDER.length];
+  renderDetalhe();
+}
+function toggleEmpresa(empId){
+  const pasta = getPasta(currentPastaId);
+  const found = findEmpresa(pasta, empId);
+  if(!found) return;
+  found.emp.expanded = !found.emp.expanded;
+  renderDetalhe();
+}
+
+/* ---------- AÇÕES: ANOTAÇÃO ---------- */
+function addAnotacao(empId){
+  const pasta = getPasta(currentPastaId);
+  const found = findEmpresa(pasta, empId);
+  if(!found) return;
+  found.emp.anotacoes.push(novaAnotacao({}));
+  found.emp.expanded = true;
+  renderDetalhe();
+}
+function deleteAnotacao(empId, anotId){
+  const pasta = getPasta(currentPastaId);
+  const found = findEmpresa(pasta, empId);
+  if(!found) return;
+  found.emp.anotacoes = found.emp.anotacoes.filter(a=>a.id!==anotId);
+  renderDetalhe();
+}
+function updateAnotacaoField(empId, anotId, field, value){
+  const pasta = getPasta(currentPastaId);
+  const found = findEmpresa(pasta, empId);
+  if(!found) return;
+  const a = found.emp.anotacoes.find(x=>x.id===anotId);
+  if(a) a[field] = value;
+}
+
+/* ---------- EXPORT PDF ---------- */
+function exportPDF(){
+  const pasta = getPasta(currentPastaId);
+  const ov = document.getElementById('expOverlay');
+  ov.classList.add('show');
+  setTimeout(()=>{
+    const target = document.querySelector('#viewDetalhe .view-inner');
+    html2canvas(target, {scale:2, useCORS:true, logging:false, backgroundColor:'#ffffff'}).then(canvas=>{
+      const {jsPDF} = window.jspdf;
+      const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+      const pW=210, pH=297, ratio=canvas.width/canvas.height;
+      const imgH = pW/ratio;
+      let y=0, rem=imgH;
+      const imgData = canvas.toDataURL('image/jpeg',0.92);
+      while(rem>0){
+        pdf.addImage(imgData,'JPEG',0,y,pW,imgH);
+        rem -= pH; y -= pH;
+        if(rem>0) pdf.addPage();
+      }
+      const title = (pasta.nome||'anotacoes_cic').replace(/\s+/g,'_');
+      pdf.save(title+'.pdf');
+      ov.classList.remove('show');
+    });
+  }, 100);
+}
+
+/* ---------- UTIL ---------- */
+function escapeHtml(str){
+  return String(str==null?'':str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ---------- INIT ---------- */
+showPastasView();
+</script>
+</body>
+</html>

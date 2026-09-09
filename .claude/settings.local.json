@@ -151,7 +151,24 @@
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 12)",
       "Bash(npx eslint *)",
       "Bash(ls app/revisoes-trainee)",
-      "Bash(find app/api -iname \"*revis*trainee*\" -o -ipath \"*revisoes-trainee*\")"
+      "Bash(find app/api -iname \"*revis*trainee*\" -o -ipath \"*revisoes-trainee*\")",
+      "Bash([ -d \"$d/.claude/skills\" ])",
+      "Bash(grep -Hm1 ^description: 'C:\\\\Users\\\\rodri\\\\gt3-sistema/.claude/skills/*/SKILL.md')",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(npx tsx *)",
+      "Bash(mkdir -p \"/c/Users/rodri/AppData/Local/Temp/claude/C--Users-rodri-gt3-sistema/2d76f7fb-7964-4cf2-b4b8-70dd9ffe48d1/scratchpad\")",
+      "Bash(cp \"scratchpad/migration-anotacoes-cic.sql\" \"/c/Users/rodri/AppData/Local/Temp/claude/C--Users-rodri-gt3-sistema/2d76f7fb-7964-4cf2-b4b8-70dd9ffe48d1/scratchpad/\")",
+      "Bash(cp \"scratchpad/inspect-cic.ts\" \"/c/Users/rodri/AppData/Local/Temp/claude/C--Users-rodri-gt3-sistema/2d76f7fb-7964-4cf2-b4b8-70dd9ffe48d1/scratchpad/\")",
+      "Bash(/c/Users/rodri/AppData/Local/Programs/Microsoft VS Code/bin/code *)",
+      "Bash(grep -n \"<VAnalise$\" app/workflow-programas/WorkflowProgramasClient.tsx)",
+      "Bash(grep -n \"const \\\\[analises, setAnalises\\\\]\\\\|async function load\\(\\)\\\\|useEffect\\(\\(\\) => {\" app/workflow-programas/WorkflowProgramasClient.tsx)",
+      "Bash(grep -n \"Regerar<\\\\/Btn>\" app/workflow-programas/WorkflowProgramasClient.tsx)",
+      "Bash(grep -n \"return { catalog: { ...raw, itens, textosReprovacao }\" app/workflow-programas/WorkflowProgramasClient.tsx)",
+      "Bash(grep -n \"// ─── View: Textos de e-mail\" app/workflow-programas/WorkflowProgramasClient.tsx)",
+      "Bash(grep -n \"return { catalog: { ...raw, itens, textos, textosReprovacao }\" app/workflow-programas/WorkflowProgramasClient.tsx)",
+      "Bash(code \"C:\\\\Users\\\\rodri\\\\gt3-sistema\\\\supabase-aniversario-login-migration.sql\")",
+      "Bash(awk -F: '$1 > 2100 && $1 < 2150')"
     ]
   }
 }

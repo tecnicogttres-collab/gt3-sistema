@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT3 — Construtor de E-mails</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#2A4F96;--primary-hover:#1e3d7a;--primary-light:#eef2fb;--primary-mid:#c4d0ee;
+  --accent:#D1AE6E;--accent-light:#faf4e8;
+  --bg:#F4F6FA;--surface:#fff;--border:#d8dde8;--border-light:#eaecf3;
+  --text:#1a1f2e;--muted:#6b7490;--hint:#9ba3bc;
+  --success-bg:#e6f4ec;--success:#1a6b3a;
+  --warn-bg:#fff8e6;--warn:#7d5a00;
+  --r:10px;--rs:6px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* HEADER */
+header{background:var(--primary);padding:.85rem 2rem;display:flex;align-items:center;justify-content:space-between}
+.logo-row{display:flex;align-items:center;gap:12px}
+.logo-mark{width:34px;height:34px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0}
+header h1{font-size:14px;font-weight:600;color:#fff}
+header p{font-size:11px;color:rgba(255,255,255,.5);margin-top:1px}
+.edit-toggle{display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:var(--rs);border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s}
+.edit-toggle:hover{background:rgba(255,255,255,.15)}
+.edit-toggle svg{width:14px;height:14px;opacity:.8}
+.edit-toggle.active{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.5)}
+
+/* MAIN */
+main{max-width:720px;margin:0 auto;padding:2rem 1.5rem 4rem}
+
+/* SECTION TITLE */
+.section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem;margin-top:1.75rem}
+.section-title:first-of-type{margin-top:0}
+
+/* SELECT FIELD */
+.select-field{position:relative;width:100%}
+.select-trigger{
+  width:100%;padding:10px 14px;
+  border:1px solid var(--border);border-radius:var(--r);
+  background:var(--surface);font-size:14px;color:var(--text);
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  transition:border-color .15s,box-shadow .15s;user-select:none;
+}
+.select-trigger:hover{border-color:var(--primary-mid)}
+.select-trigger.open{border-color:var(--primary);box-shadow:0 0 0 3px rgba(42,79,150,.1)}
+.trigger-label{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trigger-label.placeholder{color:var(--hint)}
+.trigger-chevron{width:16px;height:16px;color:var(--muted);flex-shrink:0;transition:transform .2s}
+.select-trigger.open .trigger-chevron{transform:rotate(180deg)}
+
+.dropdown{
+  position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:100;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  box-shadow:0 8px 24px rgba(0,0,0,.1);display:none;overflow:hidden;
+}
+.dropdown.open{display:block}
+.dropdown-search{
+  padding:8px 10px;border-bottom:1px solid var(--border-light);
+  display:flex;align-items:center;gap:8px;
+}
+.dropdown-search svg{width:14px;height:14px;color:var(--hint);flex-shrink:0}
+.dropdown-search input{
+  border:none;outline:none;font-size:13px;color:var(--text);background:transparent;width:100%;
+}
+.dropdown-search input::placeholder{color:var(--hint)}
+.dropdown-list{max-height:220px;overflow-y:auto}
+.dropdown-item{
+  padding:9px 14px;font-size:13.5px;color:var(--text);cursor:pointer;
+  display:flex;align-items:center;gap:8px;transition:background .1s;
+}
+.dropdown-item:hover{background:var(--primary-light)}
+.dropdown-item.selected{background:var(--primary-light);color:var(--primary);font-weight:500}
+.dropdown-item .check{width:14px;height:14px;color:var(--primary);flex-shrink:0;opacity:0}
+.dropdown-item.selected .check{opacity:1}
+.dropdown-empty{padding:12px 14px;font-size:13px;color:var(--hint);text-align:center}
+
+/* MULTI SELECT (restrições) */
+.multi-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:.25rem}
+.mchip{
+  padding:6px 13px;border-radius:20px;border:1px solid var(--border);
+  font-size:12.5px;cursor:pointer;background:var(--surface);color:var(--muted);
+  user-select:none;transition:all .15s;
+}
+.mchip:hover{border-color:var(--primary-mid);color:var(--primary)}
+.mchip.active{background:var(--primary);border-color:var(--primary);color:#fff}
+
+/* TEXT INPUT */
+.text-input{
+  width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);
+  background:var(--surface);font-size:14px;color:var(--text);outline:none;transition:border-color .15s;
+}
+.text-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(42,79,150,.08)}
+.text-input::placeholder{color:var(--hint)}
+
+/* CONDITIONAL BLOCK */
+.cond{display:none;margin-top:1rem;padding:1rem 1.25rem;background:var(--primary-light);border:1px solid var(--primary-mid);border-radius:var(--r)}
+.cond.show{display:block}
+.cond-label{font-size:11px;font-weight:600;color:var(--primary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem}
+
+/* EDIT PANEL */
+.edit-panel{display:none;background:var(--warn-bg);border:1px solid #e8d49a;border-radius:var(--r);padding:1.25rem;margin-bottom:1.5rem}
+.edit-panel.show{display:block}
+.edit-panel h3{font-size:13px;font-weight:600;color:var(--warn);margin-bottom:.35rem}
+.edit-panel p{font-size:12px;color:#9b7a1a;margin-bottom:1rem;line-height:1.5}
+.edit-accordion{border:1px solid #e8d49a;border-radius:var(--rs);overflow:hidden}
+.edit-acc-item{border-bottom:1px solid #e8d49a}
+.edit-acc-item:last-child{border-bottom:none}
+.edit-acc-header{
+  padding:10px 14px;font-size:13px;font-weight:500;color:var(--warn);
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.5);transition:background .15s;user-select:none;
+}
+.edit-acc-header:hover{background:rgba(255,255,255,.8)}
+.edit-acc-header svg{width:14px;height:14px;transition:transform .2s}
+.edit-acc-header.open svg{transform:rotate(180deg)}
+.edit-acc-body{display:none;padding:12px 14px;background:#fff}
+.edit-acc-body.open{display:block}
+.edit-acc-body textarea{
+  width:100%;min-height:100px;padding:9px 12px;border:1px solid var(--border);
+  border-radius:var(--rs);font-size:12.5px;color:var(--text);line-height:1.6;
+  resize:vertical;outline:none;font-family:inherit;
+}
+.edit-acc-body textarea:focus{border-color:var(--primary)}
+.restore-btn{margin-top:6px;font-size:11.5px;color:var(--primary);cursor:pointer;background:none;border:none;padding:0;text-decoration:underline}
+
+/* PREVIEW */
+.preview-wrap{margin-top:2rem}
+.preview-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r);overflow:hidden;margin-bottom:1rem}
+.preview-card-hd{padding:.7rem 1.25rem;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between}
+.preview-card-hd span{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.copy-btn{
+  display:flex;align-items:center;gap:5px;padding:5px 12px;
+  border:1px solid var(--border);border-radius:var(--rs);background:var(--bg);
+  font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;
+}
+.copy-btn:hover{border-color:var(--primary);color:var(--primary)}
+.copy-btn.ok{background:var(--success-bg);color:var(--success);border-color:#a3d4b5}
+.copy-btn svg{width:13px;height:13px}
+.preview-subject{padding:.9rem 1.25rem;font-size:14px;font-weight:500;border-bottom:1px solid var(--border-light);word-break:break-word}
+.preview-subject.ph{color:var(--hint);font-weight:400;font-style:italic}
+.preview-body{padding:1.25rem;font-size:13.5px;line-height:1.8;white-space:pre-wrap;word-break:break-word;min-height:200px}
+.preview-body.ph{color:var(--hint);font-style:italic}
+
+/* DIVIDER */
+.divider{height:1px;background:var(--border-light);margin:1.5rem 0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <div class="logo-mark">GT3</div>
+    <div>
+      <h1>Construtor de E-mails — Pareceres SSO</h1>
+      <p>Preencha os campos abaixo e copie o resultado</p>
+    </div>
+  </div>
+  <button class="edit-toggle" id="btn-edit" onclick="toggleEdit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Editar textos padrão
+  </button>
+</header>
+
+<main>
+
+  <!-- EDIT PANEL -->
+  <div class="edit-panel" id="edit-panel">
+    <h3>Modo de edição de textos padrão</h3>
+    <p>Altere os blocos de texto que compõem os e-mails. As mudanças ficam salvas enquanto a página estiver aberta.</p>
+    <div class="edit-accordion" id="edit-accordion"></div>
+  </div>
+
+  <!-- CAMPO 1: EMPRESA -->
+  <div class="section-title">Empresa destinatária</div>
+  <input type="text" class="text-input" id="empresa" placeholder="Nome da empresa contratada..." oninput="render()">
+
+  <!-- CAMPO 2: CONTRATANTE -->
+  <div class="section-title">Contratante</div>
+  <div class="select-field" id="sf-contratante">
+    <div class="select-trigger" id="st-contratante" onclick="toggleDropdown('contratante')">
+      <span class="trigger-label" id="tl-contratante">Marcopolo Ana Rech</span>
+      <svg class="trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="dropdown" id="dd-contratante">
+      <div class="dropdown-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Buscar contratante..." oninput="filterDropdown('contratante',this.value)" id="search-contratante">
+      </div>
+      <div class="dropdown-list" id="list-contratante"></div>
+    </div>
+  </div>
+
+  <!-- CAMPO 3: DOCUMENTOS -->
+  <div class="section-title">Documentos avaliados</div>
+  <div class="select-field" id="sf-docs">
+    <div class="select-trigger" id="st-docs" onclick="toggleDropdown('docs')">
+      <span class="trigger-label" id="tl-docs">PGR + PCMSO</span>
+      <svg class="trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="dropdown" id="dd-docs">
+      <div class="dropdown-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Buscar..." oninput="filterDropdown('docs',this.value)" id="search-docs">
+      </div>
+      <div class="dropdown-list" id="list-docs"></div>
+    </div>
+  </div>
+
+  <!-- CAMPO 4: RESULTADO -->
+  <div class="section-title">Resultado do parecer</div>
+  <div class="select-field" id="sf-resultado">
+    <div class="select-trigger" id="st-resultado" onclick="toggleDropdown('resultado')">
+      <span class="trigger-label" id="tl-resultado">✅ Aprovado</span>
+      <svg class="trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="dropdown" id="dd-resultado">
+      <div class="dropdown-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Buscar..." oninput="filterDropdown('resultado',this.value)" id="search-resultado">
+      </div>
+      <div class="dropdown-list" id="list-resultado"></div>
+    </div>
+  </div>
+
+  <!-- BLOCO CONDICIONAL: APROVADO -->
+  <div class="cond show" id="bloco-aprovado">
+    <div class="cond-label">Aprovação — opções adicionais</div>
+
+    <div class="section-title" style="margin-top:.5rem">Periodicidade do PCMSO</div>
+    <div class="select-field" id="sf-period">
+      <div class="select-trigger" id="st-period" onclick="toggleDropdown('period')">
+        <span class="trigger-label" id="tl-period">Anual</span>
+        <svg class="trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="dropdown" id="dd-period">
+        <div class="dropdown-list" id="list-period"></div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:1rem">Bloco de treinamentos NR</div>
+    <div class="select-field" id="sf-trein">
+      <div class="select-trigger" id="st-trein" onclick="toggleDropdown('trein')">
+        <span class="trigger-label" id="tl-trein">Sim, incluir</span>
+        <svg class="trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="dropdown" id="dd-trein">
+        <div class="dropdown-list" id="list-trein"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOCO CONDICIONAL: 60 DIAS -->
+  <div class="cond" id="bloco-60dias">
+    <div class="cond-label">Motivos complementares da restrição</div>
+    <p style="font-size:12px;color:var(--primary);margin-bottom:.6rem">Frente de trabalho sempre inclusa. Marque os adicionais:</p>
+    <div class="multi-chips">
+      <div class="mchip" data-key="assinatura" onclick="toggleRestricao(this)">+ Assinatura</div>
+      <div class="mchip" data-key="portal" onclick="toggleRestricao(this)">+ Outros itens do portal</div>
+      <div class="mchip" data-key="treinamentos" onclick="toggleRestricao(this)">+ Treinamentos NR</div>
+    </div>
+  </div>
+
+  <!-- CAMPO 5: SAUDAÇÃO -->
+  <div class="section-title">Saudação</div>
+  <div class="select-field" id="sf-saudacao">
+    <div class="select-trigger" id="st-saudacao" onclick="toggleDropdown('saudacao')">
+      <span class="trigger-label" id="tl-saudacao">Bom dia!</span>
+      <svg class="trigger-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="dropdown" id="dd-saudacao">
+      <div class="dropdown-list" id="list-saudacao"></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- PREVIEW -->
+  <div class="preview-wrap">
+    <div class="preview-card">
+      <div class="preview-card-hd">
+        <span>Assunto</span>
+        <button class="copy-btn" id="cbtn-assunto" onclick="copiar('assunto')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar
+        </button>
+      </div>
+      <div class="preview-subject ph" id="preview-assunto">Preencha a empresa para gerar o assunto</div>
+    </div>
+
+    <div class="preview-card">
+      <div class="preview-card-hd">
+        <span>Corpo do e-mail</span>
+        <button class="copy-btn" id="cbtn-corpo" onclick="copiar('corpo')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar
+        </button>
+      </div>
+      <div class="preview-body ph" id="preview-corpo">Preencha os campos acima para gerar o e-mail.</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────
+const S = {
+  empresa: '',
+  contratante: 'Marcopolo Ana Rech',
+  docs: 'pgr_pcmso',
+  resultado: 'aprovado',
+  periodicidade: 'anual',
+  treinamentos: 'sim',
+  restricoes: new Set(),
+  saudacao: 'Bom dia!'
+};
+
+// ─── OPTIONS ─────────────────────────────────────────────────
+const OPTIONS = {
+  contratante: [
+    'Marcopolo Ana Rech',
+    'Marcopolo São Cristóvão',
+    'Volare',
+    'Marcopolo Ana Rech e Marcopolo São Cristóvão',
+    'Marcopolo Ana Rech, Marcopolo São Cristóvão e Volare'
+  ],
+  docs: [
+    {val:'pgr_pcmso', label:'PGR + PCMSO'},
+    {val:'pgr',       label:'PGR'},
+    {val:'pcmso',     label:'PCMSO'},
+    {val:'ltcat',     label:'LTCAT'},
+    {val:'pgr_ltcat', label:'PGR + LTCAT'},
+    {val:'todos',     label:'PGR + PCMSO + LTCAT'}
+  ],
+  resultado: [
+    {val:'aprovado', label:'✅ Aprovado'},
+    {val:'60dias',   label:'⏳ Aprovado com restrição — 60 dias'}
+  ],
+  period: [
+    {val:'anual',  label:'Anual'},
+    {val:'bienal', label:'Bienal'},
+    {val:'na',     label:'N/A (sem PCMSO)'}
+  ],
+  trein: [
+    {val:'sim', label:'Sim, incluir'},
+    {val:'nao', label:'Não incluir'}
+  ],
+  saudacao: [
+    {val:'Bom dia!',  label:'Bom dia!'},
+    {val:'Boa tarde!',label:'Boa tarde!'},
+    {val:'Olá!',      label:'Olá!'}
+  ]
+};
+
+// ─── DEFAULT TEXTS (editáveis) ────────────────────────────────
+const DEFAULTS = {
+  trein_aprovado: `Caso tenha previsão de realizar trabalho em altura (NR 35), operação de PEMT (NR 18), atividades com elétrica (NR 10), operação/manutenção de equipamentos com partes móveis (NR 12) ou atividades em espaço confinado (NR 33), ou outros aplicáveis, por favor nos indicar, a fim de regularizar os requisitos de treinamentos específicos e auxiliar na liberação operacional da atividade no cliente.`,
+  trein_restricao: `• Comunicar (se aplicável) os treinamentos necessários para cada funcionário conforme a atividade prevista, ou seja, qual(is) funcionário(s) irá(ão) realizar atividades em altura (NR 35), eletricidade (NR 10), operação de máquinas e equipamentos com partes móveis (NR 12), operação de PEMT (NR 18), espaço confinado (NR 33), manuseio de inflamáveis (NR 20), ou outros aplicáveis.`,
+  consideracoes: `Considerações:\n\n• O aditivo ao PGR deve estar assinado e com identificação/registro do elaborador do PGR de referência;\n\n• Ao cadastrar pessoas no Portal, a função indicada no sistema deve ser a mais próxima ao ASO e ficha registro (estes dois precisam conter a mesma função). Havendo dúvida neste ou outro processo no Portal, a pasta à sua esquerda irá lhe auxiliar;`,
+  assinatura: `Quanto à assinatura: não é necessário escanear todo o documento. Você pode pegar apenas a página indicada, coletar a assinatura e anexar junto ao documento novamente. Ou, se preferir, pode assinar digitalmente.`,
+  frente_intro: `Na indicação da frente de trabalho devem estar descritos os riscos que os funcionários da empresa estão expostos ao realizar as atividades dentro da contratante, a atividade, dados da contratante, os ambientes/setores onde habitualmente as atividades da sua empresa ocorrerão e as medidas preventivas para esses riscos.`,
+  frente_inventario: `Para facilitar a verificação dos riscos, o Grupo Marcopolo disponibilizou o Inventário de Riscos para os terceiros (em anexo), que você encontra dentro do Portal no caminho: Pasta Contratantes > Download Documentos > {portal} > Inventário de Riscos-PGR.\n\nAlém do inventário, também em anexo, você encontrará uma sugestão de modelo, onde pode preencher as informações e anexar junto ao seu PGR, bem como o(s) CNPJ de sua(s) contratante(s), para facilitar o preenchimento dos dados no campo "Dados da contratante".`,
+  fechamento_aprovado: `Se necessário atualizá-los antes do prazo do portal, por favor nos contate.`,
+  fechamento_restricao: `Dúvidas, estamos à disposição.`
+};
+
+const texts = {...DEFAULTS};
+
+const EDIT_LABELS = {
+  trein_aprovado:      'Bloco de treinamentos NR (aprovação)',
+  trein_restricao:     'Bloco de treinamentos NR (restrição 60 dias)',
+  consideracoes:       'Considerações (restrição 60 dias)',
+  assinatura:          'Texto de assinatura do documento',
+  frente_intro:        'Introdução — frente de trabalho',
+  frente_inventario:   'Inventário de riscos — caminho do portal',
+  fechamento_aprovado: 'Fechamento — aprovação',
+  fechamento_restricao:'Fechamento — restrição 60 dias'
+};
+
+// ─── INIT DROPDOWNS ──────────────────────────────────────────
+function buildList(key, items) {
+  const list = document.getElementById('list-'+key);
+  list.innerHTML = '';
+  const isStr = typeof items[0] === 'string';
+  items.forEach(item => {
+    const val = isStr ? item : item.val;
+    const label = isStr ? item : item.label;
+    const curVal = S[key==='period'?'periodicidade':key==='trein'?'treinamentos':key];
+    const sel = curVal === val;
+    const div = document.createElement('div');
+    div.className = 'dropdown-item' + (sel?' selected':'');
+    div.dataset.val = val;
+    div.innerHTML = `<svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>${label}`;
+    div.onclick = () => selectOption(key, val, label);
+    list.appendChild(div);
+  });
+}
+
+function filterDropdown(key, q) {
+  const list = document.getElementById('list-'+key);
+  const items = list.querySelectorAll('.dropdown-item');
+  const empty = list.querySelector('.dropdown-empty');
+  let vis = 0;
+  items.forEach(it => {
+    const match = it.textContent.toLowerCase().includes(q.toLowerCase());
+    it.style.display = match ? '' : 'none';
+    if(match) vis++;
+  });
+  if(empty){ empty.style.display = vis===0?'':'none'; }
+  else if(vis===0){
+    const d = document.createElement('div');
+    d.className='dropdown-empty';d.textContent='Nenhum resultado';
+    list.appendChild(d);
+  }
+}
+
+function selectOption(key, val, label) {
+  const stateKey = key==='period'?'periodicidade':key==='trein'?'treinamentos':key;
+  S[stateKey] = val;
+  document.getElementById('tl-'+key).textContent = label;
+  document.getElementById('tl-'+key).classList.remove('placeholder');
+  closeDropdown(key);
+  if(key==='resultado'){
+    document.getElementById('bloco-aprovado').classList.toggle('show', val==='aprovado');
+    document.getElementById('bloco-60dias').classList.toggle('show', val==='60dias');
+  }
+  buildList(key, OPTIONS[key]);
+  render();
+}
+
+// ─── DROPDOWN OPEN/CLOSE ──────────────────────────────────────
+let openDD = null;
+function toggleDropdown(key) {
+  if(openDD && openDD!==key) closeDropdown(openDD);
+  const dd = document.getElementById('dd-'+key);
+  const tr = document.getElementById('st-'+key);
+  const isOpen = dd.classList.contains('open');
+  if(isOpen){ closeDropdown(key); }
+  else {
+    dd.classList.add('open'); tr.classList.add('open');
+    openDD = key;
+    const si = document.getElementById('search-'+key);
+    if(si){ si.value=''; filterDropdown(key,''); setTimeout(()=>si.focus(),50); }
+  }
+}
+function closeDropdown(key) {
+  document.getElementById('dd-'+key).classList.remove('open');
+  document.getElementById('st-'+key).classList.remove('open');
+  if(openDD===key) openDD=null;
+}
+document.addEventListener('click', e => {
+  if(openDD && !document.getElementById('sf-'+openDD).contains(e.target)) closeDropdown(openDD);
+});
+
+// ─── MULTI CHIPS ─────────────────────────────────────────────
+function toggleRestricao(el) {
+  const k = el.dataset.key;
+  if(S.restricoes.has(k)){ S.restricoes.delete(k); el.classList.remove('active'); }
+  else { S.restricoes.add(k); el.classList.add('active'); }
+  render();
+}
+
+// ─── EDIT PANEL ──────────────────────────────────────────────
+function buildEditPanel() {
+  const acc = document.getElementById('edit-accordion');
+  acc.innerHTML = '';
+  Object.keys(EDIT_LABELS).forEach(key => {
+    const item = document.createElement('div');
+    item.className = 'edit-acc-item';
+    item.innerHTML = `
+      <div class="edit-acc-header" onclick="toggleAcc(this)">
+        ${EDIT_LABELS[key]}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="edit-acc-body">
+        <textarea id="edit-${key}" oninput="updateText('${key}',this.value)">${texts[key]}</textarea>
+        <button class="restore-btn" onclick="restoreText('${key}')">Restaurar padrão</button>
+      </div>`;
+    acc.appendChild(item);
+  });
+}
+function toggleAcc(hd) {
+  hd.classList.toggle('open');
+  hd.nextElementSibling.classList.toggle('open');
+}
+function updateText(key, val) { texts[key]=val; render(); }
+function restoreText(key) {
+  texts[key]=DEFAULTS[key];
+  document.getElementById('edit-'+key).value=DEFAULTS[key];
+  render();
+}
+function toggleEdit() {
+  const panel = document.getElementById('edit-panel');
+  const btn = document.getElementById('btn-edit');
+  const show = !panel.classList.contains('show');
+  panel.classList.toggle('show', show);
+  btn.classList.toggle('active', show);
+  if(show && !document.getElementById('edit-accordion').children.length) buildEditPanel();
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────
+const DOC_LABEL  = {pgr_pcmso:'PGR e PCMSO',pgr:'PGR',pcmso:'PCMSO',ltcat:'LTCAT',pgr_ltcat:'PGR e LTCAT',todos:'PGR, PCMSO e LTCAT'};
+const DOC_PLURAL = {pgr_pcmso:'os programas',pgr:'o programa',pcmso:'o programa',ltcat:'o programa',pgr_ltcat:'os programas',todos:'os programas'};
+const DOC_AMBOS  = {pgr_pcmso:'ambos aprovados',pgr:'aprovado',pcmso:'aprovado',ltcat:'aprovado',pgr_ltcat:'ambos aprovados',todos:'todos aprovados'};
+
+function hasPcmso(d){ return ['pgr_pcmso','pcmso','todos'].includes(d); }
+function hasPgr(d)  { return ['pgr_pcmso','pgr','pgr_ltcat','todos'].includes(d); }
+function hasLtcat(d){ return ['ltcat','pgr_ltcat','todos'].includes(d); }
+
+function portalLabel(cont){
+  return cont.includes('Volare') ? 'Marcopolo e Volare' : 'Marcopolo';
+}
+
+// ─── BUILD EMAIL ─────────────────────────────────────────────
+function buildAssunto() {
+  const emp = S.empresa || '[Empresa]';
+  return `Portal GT3 - Parecer ${DOC_LABEL[S.docs]} - ${emp}`;
+}
+
+function buildCorpo() {
+  const s = S.saudacao;
+  const plural = DOC_PLURAL[S.docs];
+  const ambos  = DOC_AMBOS[S.docs];
+  const cont   = S.contratante;
+
+  if (S.resultado === 'aprovado') {
+    let periLine = '';
+    if (hasPcmso(S.docs) && S.periodicidade !== 'na') {
+      const per = S.periodicidade;
+      if (S.docs === 'pgr_pcmso') {
+        periLine = ` (PGR com periodicidade bienal e PCMSO com periodicidade ${per}, podendo ambos ser bienais conforme NR 1, a critério do elaborador)`;
+      } else {
+        periLine = ` (PCMSO com periodicidade ${per})`;
+      }
+    }
+    let body = `${s}\n\nFinalizamos a verificação ${plural} de SSO, ${ambos}${periLine}. ${texts.fechamento_aprovado}`;
+    if (S.treinamentos === 'sim') body += `\n\n${texts.trein_aprovado}`;
+    body += `\n\nAtenciosamente,`;
+    return body;
+  }
+
+  if (S.resultado === '60dias') {
+    const r = S.restricoes;
+    const sufixo = r.has('portal') ? ', bem como demais itens informados no portal' : '';
+    let body = `${s}\n\nFinalizamos a verificação ${plural} de SSO enviados ao portal de terceiros, ${ambos} com restrição por 60 dias para que sejam atualizados com a indicação da frente de trabalho ${cont}${sufixo}:\n`;
+    if (hasPgr(S.docs))   body += `\nPGR:\n`;
+    if (hasPcmso(S.docs)) body += `\nPCMSO:\n`;
+    if (hasLtcat(S.docs)) body += `\nLTCAT:\n`;
+    body += `\n${texts.frente_intro}\n\n`;
+    body += texts.frente_inventario.replace('{portal}', portalLabel(cont));
+    if (r.has('assinatura')) body += `\n\n${texts.assinatura}`;
+    body += `\n\n${texts.consideracoes}`;
+    if (r.has('treinamentos')) body += `\n\n${texts.trein_restricao}`;
+    body += `\n\n${texts.fechamento_restricao}\n\nAtenciosamente,`;
+    return body;
+  }
+
+  return '';
+}
+
+// ─── RENDER ──────────────────────────────────────────────────
+function render() {
+  const assunto = buildAssunto();
+  const corpo   = buildCorpo();
+  const aEl = document.getElementById('preview-assunto');
+  const cEl = document.getElementById('preview-corpo');
+  aEl.textContent = assunto;
+  aEl.classList.toggle('ph', !S.empresa);
+  cEl.textContent = corpo;
+  cEl.classList.remove('ph');
+}
+
+// ─── COPY ────────────────────────────────────────────────────
+function copiar(tipo) {
+  const txt = document.getElementById('preview-'+tipo).textContent;
+  const btn = document.getElementById('cbtn-'+tipo);
+  navigator.clipboard.writeText(txt).then(() => {
+    btn.classList.add('ok');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copiado!`;
+    setTimeout(() => {
+      btn.classList.remove('ok');
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copiar`;
+    }, 2500);
+  });
+}
+
+// ─── INIT ────────────────────────────────────────────────────
+Object.keys(OPTIONS).forEach(k => buildList(k, OPTIONS[k]));
+render();
+</script>
+</body>
+</html>
