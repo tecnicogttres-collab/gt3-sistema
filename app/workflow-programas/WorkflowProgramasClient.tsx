@@ -34,6 +34,9 @@ type ChecklistItem = {
   opcoes: ChecklistOpcao[]
   /** Nome da variável {{...}} preenchida com o texto das opções marcadas (só tipo "opcoes") */
   variavel: string
+  /** Só vale com multiplaEscolha: "ul" = lista com marcadores (padrão, ex.: Treinamentos);
+   *  "linha" = opções juntadas em uma frase só, no formato "A", "A e B", "A, B e C". */
+  formatoLista: 'ul' | 'linha'
 }
 /** `segmentos` só é usado quando categoria === 'segmento' — quais setores de atuação disparam este texto no parecer. */
 type TextoEmail = { id: string; titulo: string; categoria: CategoriaTexto; corpo: string; segmentos?: string[] }
@@ -292,7 +295,7 @@ function seedCatalog(): Catalog {
 
   const I = (id: string, titulo: string, documento: DocKey, descricao: string, escopo: Escopo, textoId: string, critico: boolean, textoReprovacaoId = ''): ChecklistItem => ({
     id, titulo, documento, descricao, escopo, textoId, critico, textoReprovacaoId, statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '',
-    condicaoItemId: '', condicaoValor: '', tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
+    condicaoItemId: '', condicaoValor: '', tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '', formatoLista: 'ul',
   })
   const itens: ChecklistItem[] = [
     I('i_pgr_val', 'PGR dentro da validade', 'PGR', 'Revisão em até 2 anos (ou 3 com sistema de gestão certificado).', 'base', 't_pgr_val', true, 'r_pgr_validade'),
@@ -394,6 +397,8 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || !raw.config.textosHtmlMigrados
     || !raw.itens.some(i => i.id === 'i_reg_pgr')
     || raw.itens.some(i => (i.opcoes ?? []).some(o => ['op_2sg6d08', 'op_uuofk76', 'op_6rqa6iy'].includes(o.id) && !o.corpo?.trim()))
+    || !raw.itens.some(i => i.id === 'i_ger_cadastro')
+    || raw.itens.some(i => typeof i.formatoLista !== 'string')
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
@@ -449,6 +454,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
         corpo: jaMigrado ? o.corpo : textoParaHtml(o.corpo),
       })),
       variavel: typeof i.variavel === 'string' ? i.variavel : '',
+      formatoLista: i.formatoLista === 'linha' ? 'linha' as const : 'ul' as const,
     }
   })
   // Remove o prefixo "Favor rever:" de cada texto individual — `buildReprovacao` já antepõe
@@ -489,13 +495,13 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
         descricao: 'Tipo de registro profissional de quem elaborou o documento — define se pede ART (CREA) ou certificado de especialização médica (CRM).',
         escopo: 'especifico', textoId: '', critico: false,
         textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '',
-        condicaoItemId: '', condicaoValor: '', tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
+        condicaoItemId: '', condicaoValor: '', tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '', formatoLista: 'ul',
       })
       novos.push({
         id: r.opcoesId, titulo: 'Tipo de registro do elaborador', documento: r.doc, descricao: '',
         escopo: 'especifico', textoId: '', critico: false,
         textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '',
-        condicaoItemId: r.regId, condicaoValor: 'ok', tipo: 'opcoes', multiplaEscolha: false, variavel: 'registrodoelaborador',
+        condicaoItemId: r.regId, condicaoValor: 'ok', tipo: 'opcoes', multiplaEscolha: false, variavel: 'registrodoelaborador', formatoLista: 'ul',
         opcoes: [
           { id: r.creaOp, label: 'CREA', corpo: 'CREA', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
           { id: r.crmOp, label: 'CRM', corpo: 'CRM', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
@@ -518,7 +524,47 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
       return { ...c, itens: [...c.itens, ...extras.filter(e => !c.itens.some(l => l.itemId === e.itemId))] }
     })
   }
-  return { catalog: { ...raw, itens: itensFinal, contratantes: contratantesFinal, textos, textosReprovacao, config }, changed: true }
+  // "Visão geral do cadastro da empresa" — item informativo dentro de "Geral": quando marcado
+  // "não conforme", libera a escolha (múltipla) de qual(is) frente(s) do cadastro da empresa
+  // está(ão) pendente(s) — Pessoas / Empresas / Cadastro de Pessoas — e a observação do
+  // parecer se adapta sozinha à escolha via {{itemescolhido}} (ver ctxDe). Diferente do
+  // "Registro do elaborador", entra automaticamente em TODA contratante (existente e futura),
+  // já que não é uma exigência específica de nenhuma delas — por isso `escopo: 'base'`.
+  let itensComCadastro = itensFinal
+  let contratantesComCadastro = contratantesFinal
+  if (!itensComCadastro.some(i => i.id === 'i_ger_cadastro')) {
+    const textoObsId = 't_ger_cadastro_pendente'
+    if (!textos.some(t => t.id === textoObsId)) {
+      textos = [...textos, {
+        id: textoObsId, titulo: 'Visão geral do cadastro — pendência', categoria: 'apontamento' as const,
+        corpo: textoParaHtml('Analisando o atual contexto geral do cadastro da empresa, foi identificado que há documento(s) de {{itemescolhido}} pendente(s) de envio.'),
+      }]
+    }
+    const itemStatus: ChecklistItem = {
+      id: 'i_ger_cadastro', titulo: 'Visão geral do cadastro da empresa', documento: 'GERAL',
+      descricao: 'Situação do cadastro da própria empresa prestadora (à parte do PGR/PCMSO/LTCAT).',
+      escopo: 'base', textoId: textoObsId, critico: false,
+      textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '',
+      condicaoItemId: '', condicaoValor: '', tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '', formatoLista: 'ul',
+    }
+    const itemOpcoes: ChecklistItem = {
+      id: 'i_ger_cadastro_opcoes', titulo: 'Frente(s) do cadastro pendente(s)', documento: 'GERAL', descricao: '',
+      escopo: 'base', textoId: '', critico: false,
+      textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '',
+      condicaoItemId: 'i_ger_cadastro', condicaoValor: 'nao', tipo: 'opcoes', multiplaEscolha: true, variavel: 'itemescolhido', formatoLista: 'linha',
+      opcoes: [
+        { id: 'op_cad_pessoas', label: 'Pessoas', corpo: 'Pessoas', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
+        { id: 'op_cad_empresas', label: 'Empresas', corpo: 'Empresas', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
+        { id: 'op_cad_pessoascad', label: 'Cadastro de Pessoas', corpo: 'Cadastro de Pessoas', pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false },
+      ],
+    }
+    itensComCadastro = [...itensComCadastro, itemStatus, itemOpcoes]
+    contratantesComCadastro = contratantesFinal.map(c => {
+      const extras: ItemLink[] = [{ itemId: itemStatus.id, textoId: null }, { itemId: itemOpcoes.id, textoId: null }]
+      return { ...c, itens: [...c.itens, ...extras.filter(e => !c.itens.some(l => l.itemId === e.itemId))] }
+    })
+  }
+  return { catalog: { ...raw, itens: itensComCadastro, contratantes: contratantesComCadastro, textos, textosReprovacao, config }, changed: true }
 }
 
 // ─── Small UI atoms ─────────────────────────────────────────────────────────────
@@ -729,6 +775,21 @@ export default function WorkflowProgramasClient() {
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
+  // Altura real do cabeçalho congelado (título + sub-nav) — medida ao vivo (não um número fixo)
+  // porque a sub-nav quebra linha em telas estreitas. VAnalise usa isso pra empilhar sua própria
+  // barra de ações e o painel do parecer logo abaixo, sem sobrepor o cabeçalho.
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [headerH, setHeaderH] = useState(0)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const medir = () => setHeaderH(el.offsetHeight)
+    medir()
+    const ro = new ResizeObserver(medir)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   // draft análise
   const [draftId, setDraftId] = useState<string | null>(null)
   const [draft, setDraft] = useState<AnaliseDados | null>(null)
@@ -755,6 +816,8 @@ export default function WorkflowProgramasClient() {
   const [modalTextoNovo, setModalTextoNovo] = useState(false)
   const [modalReprovacaoEdit, setModalReprovacaoEdit] = useState<TextoReprovacao | null>(null)
   const [modalReprovacaoNovo, setModalReprovacaoNovo] = useState(false)
+  const [modalRelatorio, setModalRelatorio] = useState(false)
+  const [relatorioItensSel, setRelatorioItensSel] = useState<Set<string>>(new Set())
 
   // inspetor de texto (painel lateral aberto a partir de "Itens de checklist")
   const [inspecionar, setInspecionar] = useState<{ item: ChecklistItem; campo: InspectorCampo } | null>(null)
@@ -900,11 +963,15 @@ export default function WorkflowProgramasClient() {
           return aplicaVars(o.corpo, varsDetalhe)
         })
         .filter(Boolean)
-      // Múltipla escolha (ex.: treinamentos) entra como lista de tópicos; escolha única
-      // (ex.: local de assinatura) entra inline, já que costuma ser usado no meio de uma frase.
-      vars[i.variavel] = i.multiplaEscolha
-        ? '<ul>' + partesOpcoes.map(p => `<li>${p}</li>`).join('') + '</ul>'
-        : partesOpcoes.join(', ')
+      // Múltipla escolha (ex.: treinamentos) entra como lista de tópicos por padrão; com
+      // formatoLista "linha" (ex.: frentes do cadastro pendentes) entra numa frase só, no
+      // formato "A", "A e B", "A, B e C" — pensado para observações tipo "há pendência de
+      // {{itemescolhido}}". Escolha única (ex.: local de assinatura) sempre entra inline.
+      vars[i.variavel] = !i.multiplaEscolha
+        ? partesOpcoes.join(', ')
+        : i.formatoLista === 'linha'
+          ? joinDocs(partesOpcoes)
+          : '<ul>' + partesOpcoes.map(p => `<li>${p}</li>`).join('') + '</ul>'
     })
     return {
       empresa: a.empresa || '[EMPRESA]', cnpj: a.cnpj || '[CNPJ]',
@@ -1503,6 +1570,185 @@ export default function WorkflowProgramasClient() {
     showToast('CSV exportado')
   }
 
+  // ── Relatórios (PDF / Excel / HTML) sobre itens específicos ──
+  // Mesmas colunas de exportarCsv, mas só para os itens marcados no modal "Gerar relatórios"
+  // (em vez de todos os itens de cada análise) — usa o mesmo filtro do Banco (bancoFiltrado).
+  const RELATORIO_COLS = ['Empresa', 'CNPJ', 'Contratante', 'Documentos', 'Data análise', 'Finalizada em', 'Item', 'Documento', 'Resultado', 'Observação'] as const
+
+  function linhasRelatorio(lista: AnaliseRow[], itemIds: Set<string>): string[][] {
+    const linhas: string[][] = []
+    lista.forEach(a => {
+      const nomesC = nomesContratantes(a.dados.contratanteIds)
+      itensDaAnalise(a.dados).filter(i => itemIds.has(i.id)).forEach(i => {
+        const r = a.dados.respostas[i.id]
+        linhas.push([
+          a.empresa, a.cnpj, nomesC, (a.dados.documentos || []).join(' '), fmtD(a.dados.data), fmtD(a.data_final || a.dados.data),
+          i.titulo, i.documento, resultadoItem(i, r).label, r?.obs ? htmlToPlainText(r.obs) : '',
+        ])
+      })
+    })
+    return linhas
+  }
+
+  function abrirRelatorioModal() {
+    setRelatorioItensSel(new Set())
+    setModalRelatorio(true)
+  }
+
+  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>) {
+    const linhas = linhasRelatorio(lista, itemIds)
+    if (!linhas.length) { showToast('Nenhum dado para os itens selecionados'); return }
+    const linhasHtml = linhas.map(l => '<tr>' + l.map(v => `<td>${escapeHtml(v)}</td>`).join('') + '</tr>').join('')
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório GT3 · Workflow Programas</title><style>
+      @page { size: landscape; margin: 14mm; }
+      body{ font-family: Arial, Helvetica, sans-serif; color: #1B2432; }
+      h1{ font-size: 15px; margin: 0 0 2px; }
+      p.sub{ font-size: 11px; color: #6B7A90; margin: 0 0 14px; }
+      table{ width: 100%; border-collapse: collapse; font-size: 10px; }
+      th, td{ border: 1px solid #B9C2D0; padding: 4px 6px; text-align: left; vertical-align: top; }
+      th{ background: #E8EEF9; font-weight: 700; }
+      tr:nth-child(even) td{ background: #FAFBFD; }
+    </style></head><body>
+      <h1>GT3 · Workflow Programas — Relatório</h1>
+      <p class="sub">${linhas.length} linha(s) · ${itemIds.size} item(ns) selecionado(s) · gerado em ${new Date().toLocaleString('pt-BR')}</p>
+      <table><thead><tr>${RELATORIO_COLS.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhasHtml}</tbody></table>
+    </body></html>`
+    // Impressão via iframe isolado (mesmo padrão de app/atas-contratantes/AtasContratantesClient.tsx
+    // printAtaPdf) — sai limpo, sem a interface do app, sem depender de bloqueador de pop-up.
+    const iframe = document.createElement('iframe')
+    iframe.setAttribute('aria-hidden', 'true')
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+    document.body.appendChild(iframe)
+    const doc = iframe.contentWindow?.document
+    if (!doc) { document.body.removeChild(iframe); return }
+    doc.open(); doc.write(html); doc.close()
+    const trigger = () => {
+      const win = iframe.contentWindow
+      if (!win) return
+      win.focus(); win.print()
+      setTimeout(() => { if (iframe.parentNode) document.body.removeChild(iframe) }, 1500)
+    }
+    if (doc.readyState === 'complete') setTimeout(trigger, 150)
+    else iframe.onload = () => setTimeout(trigger, 150)
+  }
+
+  async function exportarRelatorioExcel(lista: AnaliseRow[], itemIds: Set<string>) {
+    const linhas = linhasRelatorio(lista, itemIds)
+    if (!linhas.length) { showToast('Nenhum dado para os itens selecionados'); return }
+    const { Workbook } = await import('exceljs')
+    const wb = new Workbook()
+    wb.creator = 'GT3 Sistema'
+    wb.created = new Date()
+    const ws = wb.addWorksheet('Relatório', { views: [{ state: 'frozen', ySplit: 1 }] })
+    ws.columns = RELATORIO_COLS.map(c => ({ header: c, key: c, width: c === 'Observação' ? 46 : c === 'Item' ? 32 : 18 }))
+    linhas.forEach(l => ws.addRow(l))
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: RELATORIO_COLS.length } }
+    const bordaFina = { style: 'thin' as const, color: { argb: 'FFB9C2D0' } }
+    ws.eachRow((row, rowNum) => {
+      row.eachCell(cell => {
+        cell.border = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
+        cell.alignment = { vertical: 'top', wrapText: true }
+        if (rowNum === 1) {
+          cell.font = { bold: true, color: { argb: 'FF1E3A70' } }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
+        }
+      })
+    })
+    const buf = await wb.xlsx.writeBuffer()
+    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const el = document.createElement('a')
+    el.href = url; el.download = 'gt3-relatorio-workflow-programas.xlsx'; el.click(); URL.revokeObjectURL(url)
+    showToast('Excel exportado')
+  }
+
+  function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>) {
+    const linhas = linhasRelatorio(lista, itemIds)
+    if (!linhas.length) { showToast('Nenhum dado para os itens selecionados'); return }
+    // Escapa "</script" — sem isso, uma observação com esse trecho literal fecharia a tag
+    // <script> mais cedo e quebraria o HTML gerado.
+    const dados = JSON.stringify(linhas).replace(/<\/script/gi, '<\\/script')
+    const cols = JSON.stringify(RELATORIO_COLS).replace(/<\/script/gi, '<\\/script')
+    // Arquivo HTML autocontido (sem dependências externas) com tabela filtrável — cada coluna
+    // tem uma busca de texto própria, aplicada via JS puro no próprio navegador de quem abrir.
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Relatório GT3 · Workflow Programas</title><style>
+      *{box-sizing:border-box} body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#F4F6FA;color:#1B2432;padding:24px}
+      h1{font-size:19px;margin:0 0 4px} p.sub{color:#6B7A90;font-size:13px;margin:0 0 18px}
+      .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+      .toolbar button{border:1px solid #E2E8F2;background:#fff;border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13px}
+      .toolbar button:hover{background:#E8EEF9}
+      .contador{font-size:12.5px;color:#6B7A90;margin-left:auto}
+      table{width:100%;border-collapse:collapse;background:#fff;font-size:12.5px;box-shadow:0 1px 3px rgba(27,36,50,.08)}
+      th,td{border:1px solid #E2E8F2;padding:7px 9px;text-align:left;vertical-align:top}
+      th{background:#E8EEF9;color:#1E3A70;position:sticky;top:0;z-index:2}
+      thead tr.filtros th{background:#fff;padding:4px 6px}
+      thead tr.filtros input{width:100%;padding:5px 6px;border:1px solid #E2E8F2;border-radius:6px;font-size:12px;font-family:inherit}
+      tbody tr:nth-child(even){background:#FAFBFD}
+      tbody tr.oculta{display:none}
+      .vazio{padding:30px;text-align:center;color:#6B7A90}
+      @media print{ .toolbar{display:none} }
+      </style></head><body>
+      <h1>GT3 · Workflow Programas — Relatório interativo</h1>
+      <p class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · use os campos abaixo do cabeçalho para filtrar por coluna.</p>
+      <div class="toolbar">
+        <button id="btnLimpar">Limpar filtros</button>
+        <button id="btnImprimir">Imprimir / salvar PDF</button>
+        <span class="contador" id="contador"></span>
+      </div>
+      <table id="tbl">
+        <thead>
+          <tr id="cabecalho"></tr>
+          <tr class="filtros" id="linhaFiltros"></tr>
+        </thead>
+        <tbody id="corpo"></tbody>
+      </table>
+      <div class="vazio" id="vazio" hidden>Nenhuma linha corresponde aos filtros.</div>
+      <script>
+        var COLS = ${cols};
+        var DADOS = ${dados};
+        var cab = document.getElementById('cabecalho');
+        var filtrosRow = document.getElementById('linhaFiltros');
+        var corpo = document.getElementById('corpo');
+        var contador = document.getElementById('contador');
+        var filtros = COLS.map(function(){ return ''; });
+        COLS.forEach(function(c){ var th=document.createElement('th'); th.textContent=c; cab.appendChild(th); });
+        COLS.forEach(function(_, idx){
+          var th=document.createElement('th');
+          var inp=document.createElement('input');
+          inp.placeholder='Filtrar…';
+          inp.addEventListener('input', function(){ filtros[idx]=inp.value.toLowerCase(); render(); });
+          th.appendChild(inp); filtrosRow.appendChild(th);
+        });
+        function render(){
+          corpo.innerHTML = '';
+          var visiveis = 0;
+          DADOS.forEach(function(linha){
+            var ok = filtros.every(function(f, idx){ return !f || String(linha[idx]).toLowerCase().indexOf(f) !== -1; });
+            if(!ok) return;
+            visiveis++;
+            var tr = document.createElement('tr');
+            linha.forEach(function(v){ var td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+            corpo.appendChild(tr);
+          });
+          contador.textContent = visiveis + ' de ' + DADOS.length + ' linha(s)';
+          document.getElementById('vazio').hidden = visiveis > 0;
+          document.getElementById('tbl').style.display = visiveis > 0 ? '' : 'none';
+        }
+        document.getElementById('btnLimpar').addEventListener('click', function(){
+          filtros = COLS.map(function(){ return ''; });
+          Array.prototype.forEach.call(filtrosRow.querySelectorAll('input'), function(i){ i.value=''; });
+          render();
+        });
+        document.getElementById('btnImprimir').addEventListener('click', function(){ window.print(); });
+        render();
+      </script>
+    </body></html>`
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+    const el = document.createElement('a')
+    el.href = url; el.download = 'gt3-relatorio-workflow-programas.html'; el.click(); URL.revokeObjectURL(url)
+    showToast('HTML interativo exportado')
+  }
+
   // ── catálogo: contratantes ──
   function novaContratanteModal() {
     if (!catalog) return
@@ -1537,7 +1783,7 @@ export default function WorkflowProgramasClient() {
     const novo: ChecklistItem = {
       id: uid('i'), titulo, documento, descricao: 'Exigência específica da contratante.', escopo: 'especifico', textoId, critico: false,
       textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '', condicaoItemId: '', condicaoValor: '',
-      tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
+      tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '', formatoLista: 'ul',
     }
     const nextCatalog = { ...catalog, itens: [...catalog.itens, novo] }
     setCatalog(nextCatalog)
@@ -1552,7 +1798,7 @@ export default function WorkflowProgramasClient() {
     setModalItemEdit({
       id: uid('i'), titulo: '', documento: 'PGR', descricao: '', escopo: 'base', textoId: '', critico: false,
       textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '', condicaoItemId: '', condicaoValor: '',
-      tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '',
+      tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '', formatoLista: 'ul',
     })
   }
   function editarItemModal(i: ChecklistItem) { setModalItemNovo(false); setModalItemEdit({ ...i }) }
@@ -1762,24 +2008,28 @@ export default function WorkflowProgramasClient() {
         </div>
       )}
 
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{ margin: '0 0 3px', fontSize: 21, fontWeight: 700 }}>Workflow Programas</h1>
-        <p style={{ margin: 0, color: MU, fontSize: 13 }}>Acompanhamento de análise documental PGR / PCMSO / LTCAT por contratante.</p>
-      </div>
+      {/* Cabeçalho + sub-nav congelados no topo enquanto o conteúdo do módulo rola por baixo —
+          `main` (AppShell) é quem tem overflow:auto; aqui só travamos no topo dele. */}
+      <div ref={headerRef} style={{ position: 'sticky', top: 0, zIndex: 30, background: '#F4F6FA', paddingBottom: 4, borderBottom: `1px solid ${LINE}` }}>
+        <div style={{ marginBottom: 18 }}>
+          <h1 style={{ margin: '0 0 3px', fontSize: 21, fontWeight: 700 }}>Workflow Programas</h1>
+          <p style={{ margin: 0, color: MU, fontSize: 13 }}>Acompanhamento de análise documental PGR / PCMSO / LTCAT por contratante.</p>
+        </div>
 
-      {/* sub-nav */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20, alignItems: 'center' }}>
-        {MENU.map((m, idx) => m.g ? (
-          <span key={idx} style={{ fontSize: 10.5, letterSpacing: '.1em', color: MU, textTransform: 'uppercase', padding: '0 8px', marginLeft: idx ? 8 : 0 }}>{m.g}</span>
-        ) : (
-          <button key={idx} onClick={() => go(m.k as View)} style={{
-            border: 'none', cursor: 'pointer', padding: '7px 13px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
-            background: view === m.k ? P : '#fff', color: view === m.k ? '#fff' : TX,
-            fontWeight: view === m.k ? 600 : 400, boxShadow: view === m.k ? 'none' : `inset 0 0 0 1px ${LINE}`,
-          }}>
-            <span style={{ marginRight: 6 }}>{m.i}</span>{m.t}
-          </button>
-        ))}
+        {/* sub-nav */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16, alignItems: 'center' }}>
+          {MENU.map((m, idx) => m.g ? (
+            <span key={idx} style={{ fontSize: 10.5, letterSpacing: '.1em', color: MU, textTransform: 'uppercase', padding: '0 8px', marginLeft: idx ? 8 : 0 }}>{m.g}</span>
+          ) : (
+            <button key={idx} onClick={() => go(m.k as View)} style={{
+              border: 'none', cursor: 'pointer', padding: '7px 13px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
+              background: view === m.k ? P : '#fff', color: view === m.k ? '#fff' : TX,
+              fontWeight: view === m.k ? 600 : 400, boxShadow: view === m.k ? 'none' : `inset 0 0 0 1px ${LINE}`,
+            }}>
+              <span style={{ marginRight: 6 }}>{m.i}</span>{m.t}
+            </button>
+          ))}
+        </div>
       </div>
 
       {view === 'analises' && (
@@ -1788,6 +2038,7 @@ export default function WorkflowProgramasClient() {
 
       {view === 'nova' && draft && (
         <VAnalise
+          topoFixo={headerH}
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos} empresasBanco={empresasBanco}
           onField={setDraftField} onEmpresaBlur={verificarEmpresaDuplicada} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
@@ -1810,7 +2061,7 @@ export default function WorkflowProgramasClient() {
           lista={bancoFiltrado} catalog={catalog} nomeC={nomeC} nomesContratantes={nomesContratantes} itensDaAnalise={itensDaAnalise}
           statusAnalise={statusAnalise} relatorioItens={relatorioItens}
           onLimparFiltros={() => { setBancoQ(''); setBancoContratante(''); setBancoStatus(''); setBancoDe(''); setBancoAte('') }}
-          onDelFiltro={bDelFiltro} onExportCsv={exportarCsv} onDel={bDel} onReabrir={bReabrir}
+          onDelFiltro={bDelFiltro} onExportCsv={exportarCsv} onGerarRelatorio={abrirRelatorioModal} onDel={bDel} onReabrir={bReabrir}
         />
       )}
 
@@ -1935,6 +2186,18 @@ export default function WorkflowProgramasClient() {
           onAbrir={abrirDoInspector} onClose={() => setInspecionar(null)}
         />
       )}
+
+      {/* ── Modal: Gerar relatórios (PDF/Excel/HTML) sobre itens selecionados ── */}
+      {modalRelatorio && catalog && (
+        <RelatorioModal
+          catalog={catalog} selecionados={relatorioItensSel} onChange={setRelatorioItensSel}
+          totalNaLista={bancoFiltrado.length}
+          onClose={() => setModalRelatorio(false)}
+          onPdf={() => exportarRelatorioPdf(bancoFiltrado, relatorioItensSel)}
+          onExcel={() => exportarRelatorioExcel(bancoFiltrado, relatorioItensSel)}
+          onHtml={() => exportarRelatorioHtml(bancoFiltrado, relatorioItensSel)}
+        />
+      )}
     </div>
   )
 }
@@ -2023,7 +2286,10 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ topoFixo, draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+  /** Altura do cabeçalho do módulo (título + sub-nav), já congelado por fora — a barra de ações
+   *  daqui e o painel do parecer empilham logo abaixo dele, sem sobrepor. */
+  topoFixo: number
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
@@ -2043,6 +2309,21 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   onEmailChange: (v: string) => void; onCopiar: () => void; onCopiarAssunto: () => void; onEml: () => void; onMailto: () => void; onRegerar: () => void
   onBaixarAnexo: (id: string) => void
 }) {
+  // Mede a própria barra de ações (também congelada) pra empilhar o painel do parecer
+  // logo abaixo dela — sem isso o painel (sticky com offset fixo) ficaria por baixo do
+  // cabeçalho do módulo + desta barra, cortado, quando as duas travam no topo do scroll.
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const [toolbarH, setToolbarH] = useState(0)
+  useEffect(() => {
+    const el = toolbarRef.current
+    if (!el) return
+    const medir = () => setToolbarH(el.offsetHeight)
+    medir()
+    const ro = new ResizeObserver(medir)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const itens = itensDaAnalise(draft)
   const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
@@ -2066,7 +2347,11 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div ref={toolbarRef} style={{
+        position: 'sticky', top: topoFixo, zIndex: 25, background: '#F4F6FA',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12,
+        paddingTop: 4, paddingBottom: 14, flexWrap: 'wrap',
+      }}>
         <div style={{ fontSize: 13, color: MU }}>Marque cada item — item crítico marcado como reprovação já reprova o cadastro; os demais entram como orientativo ou restrição no parecer.</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Btn variant="gho" onClick={onLimpar}>Limpar respostas</Btn>
@@ -2378,7 +2663,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
           })}
         </div>
 
-        <div style={{ position: 'sticky', top: 16 }}>
+        <div style={{ position: 'sticky', top: topoFixo + toolbarH + 16 }}>
         {!draft.contratanteIds.length ? (
           <Card style={{ padding: '32px 20px', textAlign: 'center', color: MU }}>
             <b style={{ display: 'block', color: TX, marginBottom: 4, fontSize: 15 }}>E-mail bloqueado</b>
@@ -2465,7 +2750,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
 
 // ─── View: Banco de dados ───────────────────────────────────────────────────
 
-function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, nomeC, nomesContratantes, itensDaAnalise, statusAnalise, relatorioItens, onLimparFiltros, onDelFiltro, onExportCsv, onDel, onReabrir }: {
+function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, nomeC, nomesContratantes, itensDaAnalise, statusAnalise, relatorioItens, onLimparFiltros, onDelFiltro, onExportCsv, onGerarRelatorio, onDel, onReabrir }: {
   aba: 'empresas' | 'relatorio'; setAba: (v: 'empresas' | 'relatorio') => void
   q: string; setQ: (v: string) => void; contratante: string; setContratante: (v: string) => void
   status: string; setStatus: (v: string) => void; de: string; setDe: (v: string) => void; ate: string; setAte: (v: string) => void
@@ -2474,7 +2759,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
   statusAnalise: (r: AnaliseRow) => { t: string; c: 'ok' | 'no' | 'na' | 'acc' | 'default'; k: string }
   relatorioItens: (l: AnaliseRow[]) => { i: ChecklistItem; ok: number; nao: number; na: number; restr: number; tot: number; empresasNao: string[]; empresasOk: string[] }[]
-  onLimparFiltros: () => void; onDelFiltro: () => void; onExportCsv: () => void; onDel: (id: string, nome: string) => void; onReabrir: (r: AnaliseRow) => void
+  onLimparFiltros: () => void; onDelFiltro: () => void; onExportCsv: () => void; onGerarRelatorio: () => void; onDel: (id: string, nome: string) => void; onReabrir: (r: AnaliseRow) => void
 }) {
   const tot = lista.length
   const apr = lista.filter(a => statusAnalise(a).k === 'aprovada').length
@@ -2513,7 +2798,10 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
           </Field>
           <Btn onClick={onLimparFiltros}>Limpar filtros</Btn>
           <Btn variant="gho" onClick={onDelFiltro}>🗑 Excluir os {lista.length} registros filtrados</Btn>
-          <div style={{ textAlign: 'right' }}><Btn onClick={onExportCsv}>⬇️ Exportar CSV</Btn></div>
+          <div style={{ textAlign: 'right', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Btn onClick={onExportCsv}>⬇️ Exportar CSV</Btn>
+            <Btn variant="acc" onClick={onGerarRelatorio}>📑 Gerar relatórios</Btn>
+          </div>
         </div>
       </Card>
 
@@ -2706,6 +2994,71 @@ function VContratantes({ catalog, getI, onNovo, onEditar, onDel }: {
           </div>
         </Card>
       )}
+    </div>
+  )
+}
+
+// ─── Modal: Gerar relatórios (PDF / Excel / HTML) ──────────────────────────────
+// Não usa ModalShell porque o rodapé precisa de 3 ações de exportação além de Cancelar,
+// em vez do padrão Cancelar/Salvar — mesma linguagem visual (overlay, cantos, sombra).
+
+function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, onClose, onPdf, onExcel, onHtml }: {
+  catalog: Catalog; selecionados: Set<string>; onChange: (s: Set<string>) => void; totalNaLista: number
+  onClose: () => void; onPdf: () => void; onExcel: () => void; onHtml: () => void
+}) {
+  const itens = ordenarPorDocumento(catalog.itens)
+  const todosMarcados = itens.length > 0 && itens.every(i => selecionados.has(i.id))
+
+  function toggleTodos() {
+    onChange(todosMarcados ? new Set() : new Set(itens.map(i => i.id)))
+  }
+  function toggleItem(id: string) {
+    const next = new Set(selecionados)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    onChange(next)
+  }
+  const nada = selecionados.size === 0
+
+  return (
+    <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(20,28,42,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto', zIndex: 9999 }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 720, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <b style={{ fontSize: 16 }}>Gerar relatórios</b>
+          <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: MU, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ padding: '18px 20px', maxHeight: '60vh', overflow: 'auto' }}>
+          <div style={{ fontSize: 13, color: MU, marginBottom: 14 }}>
+            Selecione os itens do checklist que devem entrar no relatório. Os dados vêm das <b>{totalNaLista}</b> análise(s)
+            finalizada(s) que estão no filtro atual do Banco de dados — ajuste os filtros por lá antes de gerar, se precisar.
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: PS, borderRadius: 8, marginBottom: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+            <input type="checkbox" checked={todosMarcados} onChange={toggleTodos} />
+            Selecionar / desmarcar todos ({itens.length} itens)
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {itens.map(i => (
+              <label key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input type="checkbox" checked={selecionados.has(i.id)} onChange={() => toggleItem(i.id)} />
+                <Tag>{i.documento}</Tag>
+                <span style={{ flex: 1 }}>{i.titulo}</span>
+                {i.escopo === 'especifico' && <Tag tone="acc">específico</Tag>}
+              </label>
+            ))}
+            {!itens.length && <span style={{ color: MU, fontSize: 13 }}>Nenhum item de checklist cadastrado.</span>}
+          </div>
+        </div>
+        <div style={{ padding: '14px 20px', borderTop: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12.5, color: MU }}>{selecionados.size} item(ns) selecionado(s)</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Btn onClick={onClose}>Cancelar</Btn>
+            <Btn variant="gho" disabled={nada} onClick={onHtml} title="Baixa um .html autocontido com filtro por coluna">🌐 HTML interativo</Btn>
+            <Btn variant="gho" disabled={nada} onClick={onExcel} title="Baixa uma planilha .xlsx com bordas e cabeçalho fixo">📊 Excel</Btn>
+            <Btn variant="pri" disabled={nada} onClick={onPdf} title="Abre a impressão para salvar como PDF">🖨 PDF</Btn>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -3076,6 +3429,12 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
             <input type="checkbox" checked={draft.multiplaEscolha} onChange={e => set('multiplaEscolha', e.target.checked)} />
             <span>Permitir marcar mais de uma opção</span>
           </div>
+          {draft.multiplaEscolha && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+              <input type="checkbox" checked={draft.formatoLista === 'linha'} onChange={e => set('formatoLista', e.target.checked ? 'linha' : 'ul')} />
+              <span>Juntar as opções marcadas numa frase só ({'"A, B e C"'}) em vez de lista com marcadores</span>
+            </div>
+          )}
           <Field label={'Nome da variável — vira {{' + (draft.variavel || 'nome') + '}} para usar em outros textos'}>
             <input style={inputStyle} value={draft.variavel} onChange={e => set('variavel', slugifyVar(e.target.value))} placeholder="ex.: treinamentos" />
           </Field>
