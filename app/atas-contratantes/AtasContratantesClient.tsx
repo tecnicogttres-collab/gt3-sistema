@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import AtasEditor, { StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
-import { renderAtaHtml } from '../lib/ata-html'
+import { renderAtaHtml, nomeArquivoAta } from '../lib/ata-html'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,12 +94,21 @@ function printAtaPdf(ata: Ata, topicos: Topico[], partes: Participante[]) {
   doc.write(html)
   doc.close()
 
+  // O nome sugerido em "Salvar como PDF" vem do <title> da ABA principal, não do <title>
+  // de dentro do iframe — por isso trocamos o título da página de verdade por um instante,
+  // só durante a impressão, e devolvemos o original em seguida.
+  const tituloOriginal = document.title
+  document.title = nomeArquivoAta(ata)
+
   const trigger = () => {
     const win = iframe.contentWindow
     if (!win) return
     win.focus()
     win.print()
-    setTimeout(() => { if (iframe.parentNode) document.body.removeChild(iframe) }, 1500)
+    setTimeout(() => {
+      document.title = tituloOriginal
+      if (iframe.parentNode) document.body.removeChild(iframe)
+    }, 1500)
   }
   if (doc.readyState === 'complete') setTimeout(trigger, 150)
   else iframe.onload = () => setTimeout(trigger, 150)

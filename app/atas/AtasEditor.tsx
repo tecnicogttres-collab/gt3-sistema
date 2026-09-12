@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { renderAtaHtml } from '../lib/ata-html'
+import { renderAtaHtml, nomeArquivoAta } from '../lib/ata-html'
 
 // ─── Rich Text Editor ─────────────────────────────────────────────────────────
 
@@ -403,12 +403,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   // hidden e recortava o resto) e já sai com o título/nome de arquivo correto.
 
   function handlePrint() {
-    const html = renderAtaHtml(
-      { titulo, data: dataVal, cliente: clientes.join(' / '), local_reuniao: local, numero_ata: numAta, status },
-      topicos,
-      participantes,
-      true,
-    )
+    const ataParaNome = { titulo, data: dataVal, cliente: clientes.join(' / '), local_reuniao: local, numero_ata: numAta, status }
+    const html = renderAtaHtml(ataParaNome, topicos, participantes, true)
     const iframe = document.createElement('iframe')
     iframe.setAttribute('aria-hidden', 'true')
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
@@ -420,12 +416,21 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
     doc.write(html)
     doc.close()
 
+    // O nome sugerido em "Salvar como PDF" vem do <title> da ABA principal, não do <title>
+    // de dentro do iframe — por isso trocamos o título da página de verdade por um instante,
+    // só durante a impressão, e devolvemos o original em seguida.
+    const tituloOriginal = document.title
+    document.title = nomeArquivoAta(ataParaNome)
+
     const trigger = () => {
       const win = iframe.contentWindow
       if (!win) return
       win.focus()
       win.print()
-      setTimeout(() => { if (iframe.parentNode) document.body.removeChild(iframe) }, 1500)
+      setTimeout(() => {
+        document.title = tituloOriginal
+        if (iframe.parentNode) document.body.removeChild(iframe)
+      }, 1500)
     }
     if (doc.readyState === 'complete') setTimeout(trigger, 150)
     else iframe.onload = () => setTimeout(trigger, 150)
