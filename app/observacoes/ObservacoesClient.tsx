@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { CATEGORIES, type Category, type Card } from './data'
-import { useUser } from '../components/UserContext'
+import { useUser, displayName } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
@@ -24,6 +24,34 @@ function isImageOnlyColuna(coluna: string): boolean {
   const ascii = _ascii(coluna)
   return IMAGE_ONLY_NAMES.some(n => _ascii(n) === ascii)
     || CATEGORIES.some(cat => cat.subtabs.some(s => s.columns.some(c => c.imageOnly && (c.title.toLowerCase().trim() === lower || _ascii(c.title) === ascii))))
+}
+
+// ─── Modelo de texto ao copiar (data + observação + nome) ─────────────────────
+
+const TEMPLATE_COPIA_PADRAO = '{{data}} - {{observacao}} - {{nome}}'
+const TEMPLATE_COPIA_MARCADORES = ['data', 'observacao', 'nome'] as const
+
+function formatarDataHoje(): string {
+  const d = new Date()
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+}
+
+/** Nome usado para assinar o texto copiado: primeiro nome, ou "Primeiro Último" quando
+ *  esse primeiro nome é de mais de uma pessoa no sistema (ex.: dois "Rodrigo", dois "Marcio") —
+ *  aí o sobrenome entra pra desambiguar quem copiou. */
+function nomeParaAssinatura(nomeCompleto: string, todosNomes: string[]): string {
+  const partes = nomeCompleto.trim().split(/\s+/).filter(Boolean)
+  const primeiro = partes[0] ?? nomeCompleto.trim()
+  if (partes.length < 2) return primeiro
+  const repetido = todosNomes.filter(n => (n.trim().split(/\s+/)[0] ?? '').toLowerCase() === primeiro.toLowerCase()).length > 1
+  return repetido ? `${primeiro} ${partes[partes.length - 1]}` : primeiro
+}
+
+function aplicarTemplateCopia(template: string, observacao: string, nome: string): string {
+  return (template || TEMPLATE_COPIA_PADRAO)
+    .replace(/\{\{data\}\}/g, formatarDataHoje())
+    .replace(/\{\{observacao\}\}/g, observacao)
+    .replace(/\{\{nome\}\}/g, nome)
 }
 
 const PRIMARY = '#2A4F96'
@@ -251,6 +279,40 @@ export default function ObservacoesClient() {
   const [colorPicker, setColorPicker] = useState<ColorPickerState>({ open: false })
   const [colWidthMap, setColWidthMap] = useState<Record<string, number>>({})
   const resizeDragging = useRef<{ key: string; startX: number; startW: number } | null>(null)
+
+  // ── Modelo de texto ao copiar ────────────────────────────────────────────────
+  const [copyTemplate, setCopyTemplate] = useState(TEMPLATE_COPIA_PADRAO)
+  const [todosNomes, setTodosNomes] = useState<string[]>([])
+  const [configCopiaOpen, setConfigCopiaOpen] = useState(false)
+  const [templateDraft, setTemplateDraft] = useState(TEMPLATE_COPIA_PADRAO)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/observacoes/copy-config').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.template) setCopyTemplate(d.template)
+    }).catch(() => {})
+    fetch('/api/observacoes/usuarios').then(r => r.ok ? r.json() : []).then((data: { nome: string | null }[]) => {
+      setTodosNomes((Array.isArray(data) ? data : []).map(u => u.nome).filter((n): n is string => !!n))
+    }).catch(() => {})
+  }, [])
+
+  const meuNomeAssinatura = useMemo(
+    () => nomeParaAssinatura(displayName(profile, ''), todosNomes),
+    [profile, todosNomes]
+  )
+
+  async function salvarTemplateCopia() {
+    if (!templateDraft.trim()) return
+    setSavingTemplate(true)
+    try {
+      const res = await fetch('/api/observacoes/copy-config', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template: templateDraft.trim() }),
+      })
+      if (!res.ok) throw new Error()
+      setCopyTemplate(templateDraft.trim())
+      setConfigCopiaOpen(false)
+    } finally { setSavingTemplate(false) }
+  }
 
   useEffect(() => {
     if (!activeCatKey) return
@@ -537,9 +599,13 @@ export default function ObservacoesClient() {
   }, [])
 
   const handleCopy = useCallback((id: string, text: string) => {
-    navigator.clipboard.writeText(text).catch(() => {
+    // Todo card copiado sai com data do dia + nome de quem copiou, no formato configurado
+    // em Configurações > Modelo de cópia — vale pra observações já existentes e futuras,
+    // já que a formatação é aplicada na hora de copiar, não gravada no card.
+    const textoFinal = aplicarTemplateCopia(copyTemplate, text, meuNomeAssinatura)
+    navigator.clipboard.writeText(textoFinal).catch(() => {
       const ta = document.createElement('textarea')
-      ta.value = text
+      ta.value = textoFinal
       ta.style.position = 'fixed'
       ta.style.opacity = '0'
       document.body.appendChild(ta)
@@ -550,7 +616,7 @@ export default function ObservacoesClient() {
     setCopiedId(id)
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
     copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 1600)
-  }, [])
+  }, [copyTemplate, meuNomeAssinatura])
 
   useEffect(() => {
     return () => { if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current) }
@@ -1227,6 +1293,89 @@ export default function ObservacoesClient() {
         </Backdrop>
       )}
 
+      {configCopiaOpen && (
+        <Backdrop>
+          <div style={{
+            background: '#fff', borderRadius: 12, width: '100%', maxWidth: 480,
+            boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
+          }}>
+            <div style={{
+              background: `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`,
+              padding: '16px 20px',
+            }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
+                ⚙ Modelo de cópia
+              </h3>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
+                Como o texto sai formatado ao clicar num card para copiar
+              </p>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                  Estrutura do texto
+                </label>
+                <input
+                  type="text"
+                  value={templateDraft}
+                  onChange={e => setTemplateDraft(e.target.value)}
+                  placeholder={TEMPLATE_COPIA_PADRAO}
+                  autoFocus
+                  style={{
+                    width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 13,
+                    border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
+                    fontFamily: 'Consolas, "Courier New", monospace', color: INK,
+                  }}
+                />
+                <p style={{ margin: '8px 0 0', fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
+                  Marcadores disponíveis: {TEMPLATE_COPIA_MARCADORES.map(m => (
+                    <code key={m} style={{ background: '#F0F4FA', borderRadius: 4, padding: '1px 6px', marginRight: 4, color: PRIMARY, fontWeight: 600 }}>{`{{${m}}}`}</code>
+                  ))}
+                  — monte na ordem que quiser, com o texto fixo que preferir entre eles.
+                </p>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                  Pré-visualização
+                </label>
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8, background: '#F8FAFC', border: `1px solid ${BORDER}`,
+                  fontSize: 13, color: INK, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {aplicarTemplateCopia(templateDraft, 'Texto da observação copiada aqui.', meuNomeAssinatura || 'Seu Nome')}
+                </div>
+              </div>
+            </div>
+            <div style={{
+              padding: '12px 20px', borderTop: `1px solid ${BORDER}`,
+              display: 'flex', justifyContent: 'flex-end', gap: 8,
+            }}>
+              <button
+                onClick={() => setConfigCopiaOpen(false)}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                  background: '#fff', color: INK, fontSize: 13, cursor: 'pointer', fontWeight: 500,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarTemplateCopia}
+                disabled={savingTemplate || !templateDraft.trim()}
+                style={{
+                  padding: '8px 20px', borderRadius: 8, border: 'none',
+                  background: savingTemplate ? MUTED : PRIMARY, color: '#fff',
+                  fontSize: 13, cursor: savingTemplate ? 'not-allowed' : 'pointer', fontWeight: 700,
+                  opacity: !templateDraft.trim() ? 0.5 : 1,
+                }}
+              >
+                {savingTemplate ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </Backdrop>
+      )}
+
       <div style={{
         display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0,
         height: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'clip',
@@ -1417,20 +1566,33 @@ export default function ObservacoesClient() {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => setLayoutMode(true)}
-                  title="Personalizar layout: reordenar colunas e guias, alterar cores"
-                  style={{
-                    padding: '7px 14px', borderRadius: 8,
-                    border: `1.5px solid ${BORDER}`,
-                    background: '#fff', color: MUTED, fontSize: 12,
-                    cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
-                    flexShrink: 0, marginLeft: 'auto',
-                    display: 'flex', alignItems: 'center', gap: 5,
-                  }}
-                >
-                  ⚙ Layout
-                </button>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 'auto' }}>
+                  <button
+                    onClick={() => { setTemplateDraft(copyTemplate); setConfigCopiaOpen(true) }}
+                    title="Definir como o texto sai formatado ao copiar um card (data, observação, nome)"
+                    style={{
+                      padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                      background: '#fff', color: MUTED, fontSize: 12,
+                      cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    ⚙ Modelo de cópia
+                  </button>
+                  <button
+                    onClick={() => setLayoutMode(true)}
+                    title="Personalizar layout: reordenar colunas e guias, alterar cores"
+                    style={{
+                      padding: '7px 14px', borderRadius: 8,
+                      border: `1.5px solid ${BORDER}`,
+                      background: '#fff', color: MUTED, fontSize: 12,
+                      cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    ⚙ Layout
+                  </button>
+                </div>
               )
             )}
           </div>
