@@ -74,6 +74,7 @@ function formatEditDate(iso: string | null | undefined): string {
 function ObsCard({
   card, id, isCopied, onCopy, search, canManage, onEdit, onDelete, isFixed,
   onInlineSave, onValidate, canValidate, onInlineCreate, imageOnly,
+  multiMode, multiOrder, onToggleMulti,
 }: {
   card: CardUI
   id: string
@@ -89,6 +90,11 @@ function ObsCard({
   canValidate?: boolean
   onInlineCreate?: (motivo: string, parecer: string) => Promise<void>
   imageOnly?: boolean
+  /** Modo "dupla reprovação" da coluna — enquanto ativo, clicar no card marca/desmarca
+   *  em vez de copiar na hora. `multiOrder` é a posição (1, 2, 3…) se já selecionado. */
+  multiMode?: boolean
+  multiOrder?: number | null
+  onToggleMulti?: (id: string, texto: string) => void
 }) {
   const [editingInline, setEditingInline] = useState(false)
   const [inlineText, setInlineText] = useState('')
@@ -158,7 +164,8 @@ function ObsCard({
   const isPendente = card._status_edicao === 'pendente_validacao'
   const accentColor = isFixed ? ACCENT : PRIMARY
   const tagBg = isFixed ? 'rgba(209,174,110,0.15)' : 'rgba(42,79,150,0.08)'
-  const borderColor = isCopied ? '#22C55E' : accentColor
+  const isMultiSelected = !!multiOrder
+  const borderColor = isCopied ? '#22C55E' : isMultiSelected ? '#B45309' : accentColor
 
   function startInlineEdit() {
     setInlineText(card.parecer)
@@ -183,14 +190,19 @@ function ObsCard({
     }
   }
 
+  function handleCardClick() {
+    if (multiMode) onToggleMulti?.(id, card.parecer)
+    else onCopy(id, card.parecer)
+  }
+
   return (
     <div
       role={editingInline ? undefined : 'button'}
       tabIndex={editingInline ? undefined : 0}
-      onClick={editingInline ? undefined : () => onCopy(id, card.parecer)}
-      onKeyDown={editingInline ? undefined : e => (e.key === 'Enter' || e.key === ' ') && onCopy(id, card.parecer)}
+      onClick={editingInline ? undefined : handleCardClick}
+      onKeyDown={editingInline ? undefined : e => (e.key === 'Enter' || e.key === ' ') && handleCardClick()}
       style={{
-        background: isPendente ? '#EFF6FF' : BG_CARD,
+        background: isPendente ? '#EFF6FF' : isMultiSelected ? '#FFFBEB' : BG_CARD,
         borderTop: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
         borderRight: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
         borderBottom: isPendente ? '1px solid #BFDBFE' : `1.5px solid ${borderColor}`,
@@ -201,21 +213,36 @@ function ObsCard({
         transition: 'border-color 0.2s, box-shadow 0.15s, transform 0.1s',
         boxShadow: isCopied
           ? '0 0 0 3px rgba(34,197,94,0.15)'
-          : isFixed
-            ? '0 1px 3px rgba(209,174,110,0.12)'
-            : '0 1px 3px rgba(42,79,150,0.08)',
+          : isMultiSelected
+            ? '0 0 0 3px rgba(180,83,9,0.15)'
+            : isFixed
+              ? '0 1px 3px rgba(209,174,110,0.12)'
+              : '0 1px 3px rgba(42,79,150,0.08)',
         transform: isCopied ? 'scale(0.99)' : undefined,
         position: 'relative',
         userSelect: editingInline ? 'text' : 'none',
       }}
     >
       {!editingInline && (
-        <div style={{
-          position: 'absolute', top: 8, right: 10, fontSize: 11, fontWeight: 600,
-          color: isCopied ? '#16A34A' : MUTED, transition: 'color 0.2s', letterSpacing: 0.3,
-        }}>
-          {isCopied ? '✓ Copiado' : '⧉'}
-        </div>
+        multiMode ? (
+          <div style={{
+            position: 'absolute', top: 8, right: 10, width: 20, height: 20, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 700, transition: 'all 0.15s',
+            background: isMultiSelected ? '#B45309' : '#fff',
+            color: isMultiSelected ? '#fff' : MUTED,
+            border: `1.5px solid ${isMultiSelected ? '#B45309' : '#CBD5E1'}`,
+          }}>
+            {isMultiSelected ? multiOrder : ''}
+          </div>
+        ) : (
+          <div style={{
+            position: 'absolute', top: 8, right: 10, fontSize: 11, fontWeight: 600,
+            color: isCopied ? '#16A34A' : MUTED, transition: 'color 0.2s', letterSpacing: 0.3,
+          }}>
+            {isCopied ? '✓ Copiado' : '⧉'}
+          </div>
+        )
       )}
 
       <div style={{
@@ -437,6 +464,7 @@ export function ObsColumn({
   col, catKey, subtabKey, search, copiedId, onCopy,
   papel, onAdd, onEdit, onDelete, onInlineSave, onValidate, onInlineCreate,
   layoutMode, columnColor, onColorChangeRequest, isColumnCopied,
+  multiMode, multiSelecionados, onToggleMultiMode, onToggleMultiCard, onCancelarMulti, onFinalizarMulti,
 }: {
   col: ColumnUI
   catKey: string
@@ -455,7 +483,21 @@ export function ObsColumn({
   columnColor?: string
   onColorChangeRequest?: () => void
   isColumnCopied?: boolean
+  /** "Dupla reprovação" — flag por coluna que liga o modo de combinar 2+ observações
+   *  num único "Favor rever:" numerado (ver combinarReprovacoes em ObservacoesClient). */
+  multiMode?: boolean
+  multiSelecionados?: { id: string; texto: string }[]
+  onToggleMultiMode?: () => void
+  onToggleMultiCard?: (id: string, texto: string) => void
+  onCancelarMulti?: () => void
+  onFinalizarMulti?: () => void
 }) {
+  const multiOrderMap = useMemo(() => {
+    const m = new Map<string, number>()
+    ;(multiSelecionados ?? []).forEach((s, i) => m.set(s.id, i + 1))
+    return m
+  }, [multiSelecionados])
+  const multiCount = multiSelecionados?.length ?? 0
   const { ungrouped, groups } = useMemo(() => {
     const ungrouped: { card: CardUI; idx: number }[] = []
     const groups: Map<string, { card: CardUI; idx: number }[]> = new Map()
@@ -594,8 +636,56 @@ export function ObsColumn({
               ＋
             </button>
           )}
+          {!layoutMode && !col.imageOnly && onToggleMultiMode && (
+            <button
+              onClick={e => { e.stopPropagation(); onToggleMultiMode() }}
+              title={multiMode ? 'Sair do modo de dupla reprovação' : 'Combinar 2 ou mais observações num único "Favor rever:" numerado'}
+              style={{
+                fontSize: 12, lineHeight: 1,
+                color: multiMode ? '#B45309' : 'rgba(255,255,255,0.9)',
+                background: multiMode ? '#fff' : 'rgba(255,255,255,0.18)',
+                border: '1px solid rgba(255,255,255,0.35)', borderRadius: 6,
+                width: 24, height: 24, cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}
+            >
+              🚩
+            </button>
+          )}
         </div>
       </div>
+
+      {multiMode && (
+        <div style={{
+          padding: '8px 12px', background: '#FFFBEB', borderBottom: '1px solid #FDE68A',
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: '#92400E', flex: 1, minWidth: 120 }}>
+            🚩 {multiCount === 0 ? 'Selecione 2 ou mais observações' : `${multiCount} selecionada${multiCount !== 1 ? 's' : ''}`}
+          </span>
+          <button
+            onClick={onCancelarMulti}
+            style={{
+              fontSize: 11, padding: '3px 9px', borderRadius: 6, border: '1px solid #FDE68A',
+              background: '#fff', color: '#92400E', cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            ✕ Cancelar
+          </button>
+          <button
+            onClick={onFinalizarMulti}
+            disabled={multiCount < 2}
+            title={multiCount < 2 ? 'Selecione ao menos 2 observações' : undefined}
+            style={{
+              fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none',
+              background: multiCount < 2 ? '#E5D8B8' : '#B45309', color: '#fff',
+              cursor: multiCount < 2 ? 'not-allowed' : 'pointer', fontWeight: 700,
+            }}
+          >
+            ✓ Finalizar e copiar
+          </button>
+        </div>
+      )}
 
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto' }}>
         {ungrouped.map(({ card, idx }) => {
@@ -617,6 +707,9 @@ export function ObsColumn({
               onValidate={onValidate}
               canValidate={canManage}
               onInlineCreate={async (motivo, parecer) => onInlineCreate(catKey, subtabKey, col.title, motivo, parecer)}
+              multiMode={multiMode}
+              multiOrder={multiOrderMap.get(id) ?? null}
+              onToggleMulti={onToggleMultiCard}
             />
           )
         })}
@@ -649,6 +742,9 @@ export function ObsColumn({
                   onValidate={onValidate}
                   canValidate={canManage}
                   onInlineCreate={async (motivo, parecer) => onInlineCreate(catKey, subtabKey, col.title, motivo, parecer)}
+                  multiMode={multiMode}
+                  multiOrder={multiOrderMap.get(id) ?? null}
+                  onToggleMulti={onToggleMultiCard}
                 />
               )
             })}

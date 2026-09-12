@@ -54,6 +54,30 @@ function aplicarTemplateCopia(template: string, observacao: string, nome: string
     .replace(/\{\{nome\}\}/g, nome)
 }
 
+/** Combina 2+ textos de reprovação num único bloco — tira o "Favor rever:" repetido de
+ *  cada item (a maioria já começa assim) e organiza como lista numerada com um só cabeçalho. */
+function combinarReprovacoes(textos: string[]): string {
+  const limpos = textos.map(t => t.replace(/^\s*favor rever:?\s*/i, '').trim())
+  return 'Favor rever:\n' + limpos.map((t, i) => `${i + 1} - ${t}`).join('\n')
+}
+
+function colKeyOf(catKey: string, subtabKey: string, colTitle: string) {
+  return `${catKey}|${subtabKey}|${colTitle}`
+}
+
+function escreverClipboard(texto: string) {
+  navigator.clipboard.writeText(texto).catch(() => {
+    const ta = document.createElement('textarea')
+    ta.value = texto
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  })
+}
+
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
 const ACCENT = '#D1AE6E'
@@ -602,21 +626,49 @@ export default function ObservacoesClient() {
     // Todo card copiado sai com data do dia + nome de quem copiou, no formato configurado
     // em Configurações > Modelo de cópia — vale pra observações já existentes e futuras,
     // já que a formatação é aplicada na hora de copiar, não gravada no card.
-    const textoFinal = aplicarTemplateCopia(copyTemplate, text, meuNomeAssinatura)
-    navigator.clipboard.writeText(textoFinal).catch(() => {
-      const ta = document.createElement('textarea')
-      ta.value = textoFinal
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-    })
+    escreverClipboard(aplicarTemplateCopia(copyTemplate, text, meuNomeAssinatura))
     setCopiedId(id)
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
     copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 1600)
   }, [copyTemplate, meuNomeAssinatura])
+
+  // ── Dupla reprovação (combinar 2+ observações da mesma coluna) ───────────────
+  const [multiModeCols, setMultiModeCols] = useState<Set<string>>(new Set())
+  const [multiSelecionados, setMultiSelecionados] = useState<Record<string, { id: string; texto: string }[]>>({})
+
+  const toggleMultiMode = useCallback((key: string) => {
+    setMultiModeCols(prev => {
+      const s = new Set(prev)
+      if (s.has(key)) s.delete(key)
+      else s.add(key)
+      return s
+    })
+    setMultiSelecionados(prev => { const n = { ...prev }; delete n[key]; return n })
+  }, [])
+
+  const toggleMultiCard = useCallback((key: string, id: string, texto: string) => {
+    setMultiSelecionados(prev => {
+      const atual = prev[key] ?? []
+      const existe = atual.some(x => x.id === id)
+      return { ...prev, [key]: existe ? atual.filter(x => x.id !== id) : [...atual, { id, texto }] }
+    })
+  }, [])
+
+  const cancelarMulti = useCallback((key: string) => {
+    setMultiModeCols(prev => { const s = new Set(prev); s.delete(key); return s })
+    setMultiSelecionados(prev => { const n = { ...prev }; delete n[key]; return n })
+  }, [])
+
+  const finalizarMulti = useCallback((key: string) => {
+    const selecionados = multiSelecionados[key] ?? []
+    if (selecionados.length < 2) return
+    const combinado = combinarReprovacoes(selecionados.map(s => s.texto))
+    escreverClipboard(aplicarTemplateCopia(copyTemplate, combinado, meuNomeAssinatura))
+    setCopiedId(selecionados[selecionados.length - 1].id)
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 1600)
+    cancelarMulti(key)
+  }, [multiSelecionados, copyTemplate, meuNomeAssinatura, cancelarMulti])
 
   useEffect(() => {
     return () => { if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current) }
@@ -1611,6 +1663,7 @@ export default function ObservacoesClient() {
                   {displayMainCols.map((col, idx) => {
                     const isColDragging = layoutMode && dragColIdx === idx
                     const isColDropTarget = layoutMode && hoverColIdx === idx && dragColIdx !== null && dragColIdx !== idx
+                    const mColKey = colKeyOf(activeCatKey, activeSubtab.key, col.title)
                     return (
                       <div
                         key={`${activeSubtab.key}|${col.title}`}
@@ -1637,6 +1690,12 @@ export default function ObservacoesClient() {
                           columnColor={colColors[`${activeCatKey}||${activeSubtab.key}||${col.title}`]}
                           onColorChangeRequest={() => handleColorRequest(activeCatKey, activeSubtab.key, col.title)}
                           isColumnCopied={copiedColTitle === col.title}
+                          multiMode={multiModeCols.has(mColKey)}
+                          multiSelecionados={multiSelecionados[mColKey]}
+                          onToggleMultiMode={() => toggleMultiMode(mColKey)}
+                          onToggleMultiCard={(id, texto) => toggleMultiCard(mColKey, id, texto)}
+                          onCancelarMulti={() => cancelarMulti(mColKey)}
+                          onFinalizarMulti={() => finalizarMulti(mColKey)}
                         />
                       </div>
                     )
@@ -1645,7 +1704,9 @@ export default function ObservacoesClient() {
 
                 {funcFixedMergedCol && <div style={{ flexShrink: 0, width: 12 }} />}
 
-                {funcFixedMergedCol && (
+                {funcFixedMergedCol && (() => {
+                  const fColKey = colKeyOf(activeCatKey, activeSubtab.key, funcFixedMergedCol.title)
+                  return (
                   <div style={{ flexShrink: 0, width: 280, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <ObsColumn
                       col={funcFixedMergedCol} catKey={activeCatKey} subtabKey={activeSubtab.key}
@@ -1656,9 +1717,16 @@ export default function ObservacoesClient() {
                       columnColor={colColors[`${activeCatKey}||${activeSubtab.key}||${funcFixedMergedCol.title}`]}
                       onColorChangeRequest={() => handleColorRequest(activeCatKey, activeSubtab.key, funcFixedMergedCol.title)}
                       isColumnCopied={copiedColTitle === funcFixedMergedCol.title}
+                      multiMode={multiModeCols.has(fColKey)}
+                      multiSelecionados={multiSelecionados[fColKey]}
+                      onToggleMultiMode={() => toggleMultiMode(fColKey)}
+                      onToggleMultiCard={(id, texto) => toggleMultiCard(fColKey, id, texto)}
+                      onCancelarMulti={() => cancelarMulti(fColKey)}
+                      onFinalizarMulti={() => finalizarMulti(fColKey)}
                     />
                   </div>
-                )}
+                  )
+                })()}
               </div>
             ) : (
               <div style={{
@@ -1680,6 +1748,7 @@ export default function ObservacoesClient() {
                       const isColDropTarget = layoutMode && hoverColIdx === idx && dragColIdx !== null && dragColIdx !== idx
                       const colKey = `${activeCatKey}||${activeSubtab.key}||${col.title}`
                       const colW = colWidthMap[colKey] ?? colWidth
+                      const mColKey = colKeyOf(activeCatKey, activeSubtab.key, col.title)
                       return (
                         <div
                           key={`${activeSubtab.key}|${col.title}`}
@@ -1707,6 +1776,12 @@ export default function ObservacoesClient() {
                             columnColor={colColors[colKey]}
                             onColorChangeRequest={() => handleColorRequest(activeCatKey, activeSubtab.key, col.title)}
                             isColumnCopied={copiedColTitle === col.title}
+                            multiMode={multiModeCols.has(mColKey)}
+                            multiSelecionados={multiSelecionados[mColKey]}
+                            onToggleMultiMode={() => toggleMultiMode(mColKey)}
+                            onToggleMultiCard={(id, texto) => toggleMultiCard(mColKey, id, texto)}
+                            onCancelarMulti={() => cancelarMulti(mColKey)}
+                            onFinalizarMulti={() => finalizarMulti(mColKey)}
                           />
                           {layoutMode && (
                             <div
