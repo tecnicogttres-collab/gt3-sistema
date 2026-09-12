@@ -214,14 +214,8 @@ export default function AtasContratantesClient() {
       if (!res.ok) return
       const data: Ata[] = await res.json()
       setAtas(data)
-      if (data.length > 0) {
-        const first = data[0]
-        const c = first.cliente?.trim() || '(Sem cliente)'
-        const [y, m] = first.data.split('-').map(Number)
-        setOpenClientes(new Set([c]))
-        setOpenYears(new Set([`${c}|${y}`]))
-        setOpenMonths(new Set([`${c}|${y}-${m}`]))
-      }
+      // Pastas (contratante/ano/mês) começam todas fechadas — nada é pré-aberto aqui;
+      // abrem só quando o próprio usuário clica (ver toggle em cada nível e selectAta).
     } finally {
       setLoading(false)
     }
