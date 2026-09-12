@@ -114,8 +114,13 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
         const to = prev.indexOf(id)
         if (from === -1 || to === -1 || from === to) return prev
         const next = [...prev]
-        next.splice(from, 1)
-        next.splice(to, 0, dragId)
+        const [moved] = next.splice(from, 1)
+        // Depois de remover o item arrastado, tudo que estava depois dele desliza uma
+        // posição pra trás — sem esse ajuste, o índice de destino calculado sobre o array
+        // ORIGINAL fica sempre uma casa adiante quando from < to, fazendo o item pular
+        // pra frente e pra trás sem parar a cada dragover (é o "trava" ao arrastar).
+        const adjustedTo = from < to ? to - 1 : to
+        next.splice(adjustedTo, 0, moved)
         return next
       })
     }
