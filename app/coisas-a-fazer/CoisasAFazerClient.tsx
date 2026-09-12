@@ -168,7 +168,10 @@ export default function CoisasAFazerClient() {
   const [viewMap, setViewMap] = useState<Record<string, 'ativos' | 'historico'>>({})
   const [autorFiltro, setAutorFiltro] = useState<'todos' | 'meus'>('todos')
   const [buscaModulo, setBuscaModulo] = useState('')
-  const [ordemModulo, setOrdemModulo] = useState<'asc' | 'desc'>('asc')
+  // 'recente' = módulo com a melhoria escrita mais recentemente aparece primeiro (padrão).
+  const [ordemModulo, setOrdemModulo] = useState<'recente' | 'asc' | 'desc'>('recente')
+  // Padrão: esconde módulos sem nenhum item ativo — reduz a lista ao que ainda precisa de atenção.
+  const [apenasAtivos, setApenasAtivos] = useState(true)
 
   // Modals
   const [modalModulo, setModalModulo]     = useState(false)
@@ -406,11 +409,23 @@ export default function CoisasAFazerClient() {
       && (autorFiltro === 'todos' || i.autor === meuNome)).length
   }
 
+  /** Timestamp do item mais recentemente escrito no módulo (ativo ou já finalizado) —
+   *  usado pela ordenação "Recentes primeiro". Módulo sem nenhum item vai para o fim. */
+  function ultimoMexidoEm(moduloId: string): number {
+    const relevantes = itens.filter(i => i.modulo_id === moduloId && (autorFiltro === 'todos' || i.autor === meuNome))
+    if (!relevantes.length) return 0
+    return Math.max(...relevantes.map(i => new Date(i.criado_em).getTime()))
+  }
+
   const arquivandoModulo = modulos.find(m => m.id === arquivarId)
 
   const modulosFiltrados = modulos
     .filter(m => !buscaModulo.trim() || m.nome.toLowerCase().includes(buscaModulo.trim().toLowerCase()))
-    .sort((a, b) => ordemModulo === 'asc' ? a.nome.localeCompare(b.nome, 'pt-BR') : b.nome.localeCompare(a.nome, 'pt-BR'))
+    .filter(m => !apenasAtivos || countAtivos(m.id) > 0)
+    .sort((a, b) => {
+      if (ordemModulo === 'recente') return ultimoMexidoEm(b.id) - ultimoMexidoEm(a.id)
+      return ordemModulo === 'asc' ? a.nome.localeCompare(b.nome, 'pt-BR') : b.nome.localeCompare(a.nome, 'pt-BR')
+    })
 
   // ── Styles ─────────────────────────────────────────────────────────────────
 
@@ -473,23 +488,56 @@ export default function CoisasAFazerClient() {
         </div>
       </div>
 
-      {/* Busca de módulo */}
+      {/* Busca, filtro e ordenação de módulo */}
       {modulos.length > 0 && (
-        <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
+        <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"
             placeholder="🔎 Buscar módulo..."
             value={buscaModulo}
             onChange={e => setBuscaModulo(e.target.value)}
-            style={{ width: '100%', maxWidth: 320, padding: '9px 14px', border: '1px solid #D1D7E3', borderRadius: 8, fontSize: 14, color: '#1F2937', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+            style={{ flex: 1, minWidth: 200, maxWidth: 320, padding: '9px 14px', border: '1px solid #D1D7E3', borderRadius: 8, fontSize: 14, color: '#1F2937', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
           />
+
           <button
-            onClick={() => setOrdemModulo(v => v === 'asc' ? 'desc' : 'asc')}
-            title={ordemModulo === 'asc' ? 'Ordenando A-Z — clique para Z-A' : 'Ordenando Z-A — clique para A-Z'}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', border: '1px solid #D1D7E3', borderRadius: 8, background: '#fff', color: '#1F2937', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+            onClick={() => setApenasAtivos(v => !v)}
+            title="Mostra só módulos com pelo menos um item ativo"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 8,
+              border: `1px solid ${apenasAtivos ? '#2A4F96' : '#D1D7E3'}`,
+              background: apenasAtivos ? '#EEF2FB' : '#fff',
+              color: apenasAtivos ? '#2A4F96' : '#6B7280',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+            }}
           >
-            {ordemModulo === 'asc' ? 'A → Z' : 'Z → A'}
+            <span style={{
+              width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${apenasAtivos ? '#2A4F96' : '#CBD5E1'}`,
+              background: apenasAtivos ? '#2A4F96' : '#fff', color: '#fff', fontSize: 10, lineHeight: '13px', textAlign: 'center', flexShrink: 0,
+            }}>{apenasAtivos ? '✓' : ''}</span>
+            Só com melhorias ativas
           </button>
+
+          <div style={{ display: 'inline-flex', background: '#fff', border: '1px solid #D1D7E3', borderRadius: 8, padding: 3 }}>
+            {([
+              ['recente', 'Recentes primeiro'],
+              ['asc', 'A → Z'],
+              ['desc', 'Z → A'],
+            ] as const).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setOrdemModulo(v)}
+                title={v === 'recente' ? 'Módulo com a melhoria mais recente escrita aparece no topo' : undefined}
+                style={{
+                  border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12.5, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                  background: ordemModulo === v ? '#2A4F96' : 'transparent',
+                  color: ordemModulo === v ? '#fff' : '#6B7280',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -505,7 +553,9 @@ export default function CoisasAFazerClient() {
 
       {!loading && modulos.length > 0 && modulosFiltrados.length === 0 && (
         <div style={{ background: '#fff', border: '1px solid #E5E9F0', borderRadius: 14, padding: '28px 20px', textAlign: 'center', color: '#9CA3AF', fontSize: 13.5 }}>
-          Nenhum módulo encontrado para &quot;{buscaModulo}&quot;.
+          {buscaModulo.trim()
+            ? <>Nenhum módulo encontrado para &quot;{buscaModulo}&quot;.</>
+            : <>Nenhum módulo com melhorias ativas no momento. <button onClick={() => setApenasAtivos(false)} style={{ border: 'none', background: 'transparent', color: '#2A4F96', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, padding: 0 }}>Mostrar todos</button></>}
         </div>
       )}
 
