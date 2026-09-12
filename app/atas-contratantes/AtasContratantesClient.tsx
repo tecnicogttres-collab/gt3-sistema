@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import AtasEditor, { StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
@@ -154,7 +154,6 @@ function buildTree(atas: Ata[]): Tree {
 
 export default function AtasContratantesClient() {
   const { profile } = useUser()
-  const searchParams = useSearchParams()
   const router = useRouter()
 
   const [atas, setAtas] = useState<Ata[]>([])
@@ -245,14 +244,6 @@ export default function AtasContratantesClient() {
       .then((data: string[]) => setArquivados(new Set(data)))
       .catch(() => {})
   }, [isGestorOrAdmin])
-
-  // ── Deep-link via ?ata= ─────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const ataId = searchParams.get('ata')
-    if (ataId) selectAta(ataId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
 
   // ── Search ──────────────────────────────────────────────────────────────────
 
