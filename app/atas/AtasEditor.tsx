@@ -299,6 +299,16 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
     setTopicos(prev => prev.filter(t => t.id !== id))
   }
 
+  /** Move o tópico pra seção "Tópicos finalizados nesta reunião" (some da lista ativa
+   *  daqui pra frente) — usa a data da própria reunião, não a data de hoje, como
+   *  finalizado_em. Só entra no banco quando a ata for salva, como qualquer outra edição. */
+  function finalizarTopico(id: string) {
+    setTopicos(prev => prev.map(t => t.id === id
+      ? { ...t, finalizado: true, finalizado_em: dataVal || new Date().toISOString().slice(0, 10) }
+      : t
+    ))
+  }
+
   function arquivarDescricao(topicId: string) {
     const topico = topicos.find(t => t.id === topicId)
     if (!topico?.descricao.trim()) return
@@ -796,6 +806,13 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                         <button onClick={() => moveTopico(t.id, -1)} disabled={idx === 0} title="Mover acima" style={{ height: 26, padding: '0 10px', borderRadius: 5, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', cursor: idx === 0 ? 'not-allowed' : 'pointer', fontSize: 12, color: '#6B7A99', opacity: idx === 0 ? 0.35 : 1 }}>↑ Subir</button>
                         <button onClick={() => moveTopico(t.id, 1)} disabled={idx === topicos.filter(x => !x.finalizado).length - 1} title="Mover abaixo" style={{ height: 26, padding: '0 10px', borderRadius: 5, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', cursor: idx === topicos.filter(x => !x.finalizado).length - 1 ? 'not-allowed' : 'pointer', fontSize: 12, color: '#6B7A99', opacity: idx === topicos.filter(x => !x.finalizado).length - 1 ? 0.35 : 1 }}>↓ Descer</button>
                         <div style={{ flex: 1 }} />
+                        <button
+                          onClick={() => finalizarTopico(t.id)}
+                          title="Move para 'Tópicos finalizados nesta reunião' — só grava ao salvar a ata"
+                          style={{ height: 26, padding: '0 12px', borderRadius: 5, border: '1px solid rgba(16,185,129,0.30)', background: '#fff', cursor: 'pointer', fontSize: 12, color: '#10B981', fontWeight: 600 }}
+                          onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#ECFDF5' }}
+                          onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fff' }}
+                        >✓ Finalizar</button>
                         <button
                           onClick={() => removeTopico(t.id)}
                           style={{ height: 26, padding: '0 12px', borderRadius: 5, border: '1px solid rgba(42,79,150,0.18)', background: '#fff', cursor: 'pointer', fontSize: 12, color: '#9399ae' }}

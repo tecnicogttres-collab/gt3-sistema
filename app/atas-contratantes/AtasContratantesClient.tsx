@@ -166,7 +166,6 @@ export default function AtasContratantesClient() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [allUsers, setAllUsers] = useState<{ id: string; nome: string }[]>([])
   const [openHistorico, setOpenHistorico] = useState<Set<string>>(new Set())
-  const [finalizeState, setFinalizeState] = useState<Map<string, number>>(new Map())
   const [statusNotifModal, setStatusNotifModal] = useState(false)
   const [statusNotifOption, setStatusNotifOption] = useState<'none' | 'all' | 'select'>('none')
   const [statusNotifSelected, setStatusNotifSelected] = useState<Set<string>>(new Set())
@@ -259,7 +258,6 @@ export default function AtasContratantesClient() {
     setLeituras(null)
     setLeiturasOpen(false)
     setOpenHistorico(new Set())
-    setFinalizeState(new Map())
     setLoadingAta(true)
     try {
       const res = await fetch(`/api/atas-contratantes/${id}`)
@@ -399,26 +397,6 @@ export default function AtasContratantesClient() {
     }
   }
 
-  async function handleFinalizarTopico(topicId: string) {
-    if (!selected) return
-    const allTopicos = parseTopicos(selected.conteudo ?? '')
-    const updated = allTopicos.map(t => t.id === topicId
-      ? { ...t, finalizado: true, finalizado_em: new Date().toISOString().slice(0, 10) }
-      : t
-    )
-    const res = await fetch(`/api/atas-contratantes/${selected.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conteudo: JSON.stringify(updated) }),
-    })
-    if (!res.ok) return
-    const updatedAta: Ata = await res.json()
-    setSelected(updatedAta)
-    setAtas(prev => prev.map(a => a.id === updatedAta.id ? updatedAta : a))
-    setFinalizeState(new Map())
-    setOpenHistorico(new Set())
-  }
-
   async function applyStatusChange(newStatus: string, notifyUserIds?: string[]) {
     if (!selected) return
     const res = await fetch(`/api/atas-contratantes/${selected.id}`, {
@@ -494,6 +472,68 @@ export default function AtasContratantesClient() {
   const partsList = selected ? parseParticipantes(selected.participantes ?? '') : []
   const topicosList = selected ? parseTopicos(selected.conteudo ?? '') : []
   const isLegacyContent = topicosList.length === 0 && !!selected?.conteudo?.trim()
+  const topicosAtivos = topicosList.filter(t => !t.finalizado)
+  const topicosFinalizados = topicosList.filter(t => t.finalizado)
+
+  /** Card de um tópico na tela de consulta — só leitura (histórico incluso). Usado tanto
+   *  para os tópicos ativos quanto para a seção "Tópicos finalizados nesta reunião". */
+  function renderTopicoCard(t: Topico, idx: number) {
+    const cor = t.cor ?? '#2A4F96'
+    const hist: TopicoHistorico[] = t.historico ?? []
+    const histOpen = openHistorico.has(t.id)
+    return (
+      <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: `3px solid ${cor}` }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: (t.andamentoGeral || t.descricao) ? 6 : 0 }}>
+          {idx + 1}. {t.titulo || '(Sem título)'}
+        </div>
+        {t.andamentoGeral && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>Até aqui:</div>
+            <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />
+          </div>
+        )}
+        {t.descricao && (
+          <div style={{ marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: cor, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>
+              Na data desta reunião{selected?.data ? ` (${new Date(selected.data + 'T12:00').toLocaleDateString('pt-BR')})` : ''}, definiu-se:
+            </div>
+            <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
+          </div>
+        )}
+        {(t.contratante || t.prazo || t.responsavel || t.status) && (
+          <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: hist.length > 0 ? 10 : 0, alignItems: 'center' }}>
+            {t.contratante && <span><span style={{ color: '#94A3B8' }}>Contratante:</span> {t.contratante}</span>}
+            {t.prazo && <span><span style={{ color: '#94A3B8' }}>Prazo:</span> {new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>}
+            {t.responsavel && <span><span style={{ color: '#94A3B8' }}>Responsável:</span> {t.responsavel}</span>}
+            {t.status && <StatusBadge status={t.status} />}
+          </div>
+        )}
+
+        {hist.length > 0 && (
+          <div style={{ borderTop: '1px solid rgba(42,79,150,0.08)', paddingTop: 8 }}>
+            <button
+              onClick={() => setOpenHistorico(prev => { const s = new Set(prev); s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s })}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, border: `1px solid ${cor}33`, background: histOpen ? `${cor}14` : '#fff', color: cor, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+            >
+              {histOpen ? '▼' : '▶'} Histórico ({hist.length})
+            </button>
+            {histOpen && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {hist.map((h, i) => (
+                  <div key={i} style={{ padding: '8px 12px', background: '#F0F4FF', borderRadius: 8, borderLeft: `2px solid ${cor}` }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 3 }}>
+                      {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: h.texto }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const rowStyle = (id: string): React.CSSProperties => ({
     width: '100%', textAlign: 'left', padding: '6px 16px 6px 40px',
@@ -612,7 +652,17 @@ export default function AtasContratantesClient() {
                   {/* ── Cliente folder ── */}
                   <div style={{ display: 'flex', alignItems: 'center', background: openClientes.has(cliente) ? '#F0F4FA' : 'none', borderBottom: '1px solid #F0F4FA', opacity: isArquivada ? 0.65 : 1 }}>
                     <button
-                      onClick={() => setOpenClientes(prev => { const s = new Set(prev); s.has(cliente) ? s.delete(cliente) : s.add(cliente); return s })}
+                      onClick={() => {
+                        const jaAberta = openClientes.has(cliente)
+                        setOpenClientes(prev => { const s = new Set(prev); jaAberta ? s.delete(cliente) : s.add(cliente); return s })
+                        // Ao abrir a pasta (não ao fechar), já mostra a última ata da contratante
+                        // à direita — economiza os cliques de também abrir ano → mês → ata.
+                        const ultima = years[0]?.months[0]?.atas[0]
+                        if (!jaAberta && ultima) {
+                          selectAta(ultima.id)
+                          router.replace(`/atas-contratantes?ata=${ultima.id}`)
+                        }
+                      }}
                       style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: '7px 8px 7px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#1A2340', display: 'flex', alignItems: 'center', gap: 6 }}
                     >
                       <span style={{ fontSize: 9 }}>{openClientes.has(cliente) ? '▼' : '▶'}</span>
@@ -803,105 +853,27 @@ export default function AtasContratantesClient() {
                     </div>
                   )}
 
-                  {/* Tópicos */}
+                  {/* Tópicos — somente leitura aqui; finalizar um tópico é feito editando a
+                      ata (botão "Editar"), não a partir desta tela de consulta. */}
                   {topicosList.length > 0 ? (
                     <div>
                       <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(42,79,150,0.10)' }}>
                         Pontos discutidos
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-                        {topicosList.filter(t => !t.finalizado).map((t, idx) => {
-                          const cor = t.cor ?? '#2A4F96'
-                          const hist: TopicoHistorico[] = t.historico ?? []
-                          const histOpen = openHistorico.has(t.id)
-                          const finStep = finalizeState.get(t.id) ?? 0
-                          return (
-                            <div key={t.id || idx} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid rgba(42,79,150,0.10)', borderLeft: `3px solid ${cor}` }}>
-                              <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: (t.andamentoGeral || t.descricao) ? 6 : 0 }}>
-                                {idx + 1}. {t.titulo || '(Sem título)'}
-                              </div>
-                              {t.andamentoGeral && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>Até aqui:</div>
-                                  <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />
-                                </div>
-                              )}
-                              {t.descricao && (
-                                <div style={{ marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0 }}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: cor, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>
-                                    Na data desta reunião{selected?.data ? ` (${new Date(selected.data + 'T12:00').toLocaleDateString('pt-BR')})` : ''}, definiu-se:
-                                  </div>
-                                  <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
-                                </div>
-                              )}
-                              {(t.contratante || t.prazo || t.responsavel || t.status) && (
-                                <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#6B7A99', paddingTop: 8, borderTop: '1px solid rgba(42,79,150,0.08)', flexWrap: 'wrap' as const, marginBottom: (hist.length > 0 || isGestorOrAdmin) ? 10 : 0, alignItems: 'center' }}>
-                                  {t.contratante && <span><span style={{ color: '#94A3B8' }}>Contratante:</span> {t.contratante}</span>}
-                                  {t.prazo && <span><span style={{ color: '#94A3B8' }}>Prazo:</span> {new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>}
-                                  {t.responsavel && <span><span style={{ color: '#94A3B8' }}>Responsável:</span> {t.responsavel}</span>}
-                                  {t.status && <StatusBadge status={t.status} />}
-                                </div>
-                              )}
-
-                              {/* Histórico + Finalizar row */}
-                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, borderTop: (hist.length > 0 || isGestorOrAdmin) ? '1px solid rgba(42,79,150,0.08)' : 'none', paddingTop: (hist.length > 0 || isGestorOrAdmin) ? 8 : 0 }}>
-                                <div style={{ flex: 1 }}>
-                                  {hist.length > 0 && (
-                                    <>
-                                      <button
-                                        onClick={() => setOpenHistorico(prev => { const s = new Set(prev); s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s })}
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, border: `1px solid ${cor}33`, background: histOpen ? `${cor}14` : '#fff', color: cor, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                                      >
-                                        {histOpen ? '▼' : '▶'} Histórico ({hist.length})
-                                      </button>
-                                      {histOpen && (
-                                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                          {hist.map((h, i) => (
-                                            <div key={i} style={{ padding: '8px 12px', background: '#F0F4FF', borderRadius: 8, borderLeft: `2px solid ${cor}` }}>
-                                              <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 3 }}>
-                                                {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                              </div>
-                                              <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: h.texto }} />
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-
-                                {/* Finalizar tópico (gestor/admin only) */}
-                                {isGestorOrAdmin && (
-                                  <div style={{ flexShrink: 0 }}>
-                                    {finStep === 0 && (
-                                      <button
-                                        onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.set(t.id, 1); return m })}
-                                        style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.30)', background: '#fff', color: '#10B981', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                                      >
-                                        ✓ Finalizar tópico
-                                      </button>
-                                    )}
-                                    {finStep === 1 && (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FCD34D' }}>
-                                        <span style={{ fontSize: 12, color: '#92400E', fontWeight: 600 }}>Tem certeza?</span>
-                                        <button onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.set(t.id, 2); return m })} style={{ padding: '3px 10px', borderRadius: 5, border: 'none', background: '#F59E0B', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Sim</button>
-                                        <button onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.delete(t.id); return m })} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid #E5E7EB', background: '#fff', color: '#6B7280', fontSize: 11, cursor: 'pointer' }}>Não</button>
-                                      </div>
-                                    )}
-                                    {finStep === 2 && (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FCA5A5' }}>
-                                        <span style={{ fontSize: 11, color: '#991B1B', fontWeight: 600 }}>Tópico some da ata ativa.</span>
-                                        <button onClick={() => handleFinalizarTopico(t.id)} style={{ padding: '3px 10px', borderRadius: 5, border: 'none', background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Confirmar</button>
-                                        <button onClick={() => setFinalizeState(prev => { const m = new Map(prev); m.delete(t.id); return m })} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid #E5E7EB', background: '#fff', color: '#6B7280', fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
+                        {topicosAtivos.map((t, idx) => renderTopicoCard(t, idx))}
                       </div>
+
+                      {topicosFinalizados.length > 0 && (
+                        <div style={{ marginTop: 24 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#10B981', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(16,185,129,0.20)' }}>
+                            ✓ Tópicos finalizados nesta reunião
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
+                            {topicosFinalizados.map((t, idx) => renderTopicoCard(t, idx))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : isLegacyContent ? (
                     <div dangerouslySetInnerHTML={{ __html: selected.conteudo }} style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} />
