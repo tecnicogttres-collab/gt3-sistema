@@ -113,6 +113,7 @@ export type Topico = {
   titulo: string
   andamentoGeral?: string   // andamento persistente do tópico (não vira histórico)
   descricao: string         // preenchimento do dia ("ATÉ AQUI:") — vira histórico na nova reunião
+  descricaoSalva?: boolean  // true = campo travado (exibição + Editar/Atualizar); false/ausente = campo aberto pra digitar
   contratante: string
   prazo: string
   responsavel: string
@@ -310,15 +311,28 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
     ))
   }
 
+  /** "Atualizar como novo item": arquiva o que está no campo como uma entrada de histórico
+   *  e reabre o campo vazio, pronto pra um novo registro. */
   function arquivarDescricao(topicId: string) {
     const topico = topicos.find(t => t.id === topicId)
     if (!topico?.descricao.trim()) return
     const entry: TopicoHistorico = { data: dataVal || new Date().toISOString().slice(0, 10), texto: topico.descricao }
     setTopicos(prev => prev.map(t => t.id === topicId
-      ? { ...t, descricao: '', historico: [entry, ...(t.historico ?? [])] }
+      ? { ...t, descricao: '', descricaoSalva: false, historico: [entry, ...(t.historico ?? [])] }
       : t
     ))
     setHistoryOpenId(topicId)
+  }
+
+  /** Trava o campo "Na data desta reunião, definiu-se" — vira exibição com Editar/Atualizar
+   *  em vez do editor de texto aberto. */
+  function salvarDescricao(topicId: string) {
+    setTopicos(prev => prev.map(t => (t.id === topicId && t.descricao.trim()) ? { ...t, descricaoSalva: true } : t))
+  }
+
+  /** Reabre o campo travado pra continuar editando o mesmo texto (sem arquivar nada). */
+  function editarDescricao(topicId: string) {
+    setTopicos(prev => prev.map(t => t.id === topicId ? { ...t, descricaoSalva: false } : t))
   }
 
   function addHistoricoEntry(topicId: string, data: string, texto: string) {
@@ -679,13 +693,48 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           <span style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Na data desta reunião, definiu-se:</span>
                           {dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
                         </div>
-                        <RichTextEditor
-                          value={t.descricao}
-                          onChange={html => updateTopico(t.id, 'descricao', html)}
-                          placeholder="O que foi discutido / decidido nesta reunião…"
-                          minRows={3}
-                          resizable
-                        />
+                        {(t.descricaoSalva ?? !!t.descricao.trim()) && t.descricao.trim() ? (
+                          <div>
+                            <div
+                              style={{ padding: '10px 12px', background: '#F8FAFC', borderRadius: 8, border: `1px solid ${cor}33`, fontSize: 13.5, color: '#334155', lineHeight: 1.65 }}
+                              dangerouslySetInnerHTML={{ __html: t.descricao }}
+                            />
+                            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                              <button
+                                onClick={() => editarDescricao(t.id)}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5a6178', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                              >
+                                ✎ Editar
+                              </button>
+                              <button
+                                onClick={() => arquivarDescricao(t.id)}
+                                title="Arquiva esta observação no histórico e abre o campo para um novo item"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5B8DEF', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                              >
+                                🔁 Atualizar como novo item
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <RichTextEditor
+                              value={t.descricao}
+                              onChange={html => updateTopico(t.id, 'descricao', html)}
+                              placeholder="O que foi discutido / decidido nesta reunião…"
+                              minRows={3}
+                              resizable
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                              <button
+                                onClick={() => salvarDescricao(t.id)}
+                                disabled={!t.descricao.trim()}
+                                style={{ padding: '5px 14px', borderRadius: 6, border: 'none', background: cor, color: '#fff', fontSize: 12, fontWeight: 600, cursor: t.descricao.trim() ? 'pointer' : 'not-allowed', opacity: t.descricao.trim() ? 1 : 0.5 }}
+                              >
+                                💾 Salvar
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Meta: contratante (só com 2+ contratantes), prazo, responsável, status */}
@@ -748,21 +797,12 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           >
                             📋 Histórico{(t.historico?.length ?? 0) > 0 ? ` (${t.historico!.length})` : ''}
                           </button>
-                          {t.descricao.trim() && (
-                            <button
-                              onClick={() => arquivarDescricao(t.id)}
-                              title="Arquiva a observação atual no histórico e abre campo para nova"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5B8DEF', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              ⬆ Atualizar
-                            </button>
-                          )}
                         </div>
 
                         {historyOpenId === t.id && (
                           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                             {(t.historico ?? []).length === 0 && addHistForm?.topicId !== t.id && (
-                              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Nenhuma entrada ainda. Clique em "Atualizar" para arquivar a observação atual, ou adicione uma entrada manual.</p>
+                              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Nenhuma entrada ainda. Use &quot;Atualizar como novo item&quot; acima para arquivar a observação atual, ou adicione uma entrada manual.</p>
                             )}
                             {(t.historico ?? []).map((h, i) => (
                               <div key={i} style={{ padding: '10px 12px', background: '#F0F4FF', borderRadius: 8, border: '1px solid rgba(42,79,150,0.12)', position: 'relative' }}>

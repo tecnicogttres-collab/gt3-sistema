@@ -76,15 +76,18 @@ function renderTopicoCard(t: Topico, numero: number, dateDisplay: string): strin
         ${t.prazo ? `<span><strong>Prazo:</strong> ${new Date(t.prazo + 'T12:00').toLocaleDateString('pt-BR')}</span>` : ''}
         ${t.responsavel ? `<span><strong>Responsável:</strong> ${escapeHtml(t.responsavel)}</span>` : ''}
         ${t.status && statusColors[t.status] ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;${statusColors[t.status]}">${statusLabel[t.status]}</span>` : ''}</div>` : ''
-  const histHtml = hist.length > 0
-    ? `<details open style="border-top:1px dashed #e2e8f0;padding-top:6px;margin-top:10px">
-        <summary style="font-size:10px;font-weight:600;color:#94A3B8;display:inline-block">Histórico (${hist.length})</summary>
-        <div style="margin-top:6px">
-          ${hist.map(h => `<div style="margin-bottom:6px;padding:4px 0 4px 10px;border-left:2px solid #E2E8F0">
-            <div style="font-size:10px;font-weight:600;color:#94A3B8;margin-bottom:1px">${new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-            <div style="font-size:11px;color:#94A3B8;line-height:1.5">${h.texto}</div>
-          </div>`).join('')}
-        </div></details>` : ''
+  // No relatório (HTML/PDF) só o registro mais recente do histórico aparece, não a lista
+  // inteira — mantém o documento enxuto; o histórico completo continua disponível na tela
+  // de edição.
+  const ultimoHist = hist.length > 0 ? hist.reduce((a, b) => (b.data > a.data ? b : a)) : null
+  const histHtml = ultimoHist
+    ? `<div style="border-top:1px dashed #e2e8f0;padding-top:6px;margin-top:10px">
+        <div style="font-size:10px;font-weight:600;color:#94A3B8;margin-bottom:4px">Última atualização anterior${hist.length > 1 ? ` &middot; +${hist.length - 1} mais antiga${hist.length - 1 > 1 ? 's' : ''} no histórico` : ''}</div>
+        <div style="padding:4px 0 4px 10px;border-left:2px solid #E2E8F0">
+          <div style="font-size:10px;font-weight:600;color:#94A3B8;margin-bottom:1px">${new Date(ultimoHist.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+          <div style="font-size:11px;color:#94A3B8;line-height:1.5">${ultimoHist.texto}</div>
+        </div>
+      </div>` : ''
   return `<div class="topico" style="margin-bottom:18px;padding:14px 16px;border:1px solid #e0e5ef;border-left:3px solid ${cor};border-radius:6px">
     <div style="font-weight:700;font-size:14px;color:${cor};margin-bottom:8px">${numero}. ${escapeHtml(t.titulo || '(Sem título)')}</div>
     ${t.andamentoGeral ? `<div style="margin-bottom:10px;padding:10px 12px;background:#F8FAFC;border-left:3px solid #94A3B8;border-radius:6px"><div style="font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">📌 Até aqui</div><div style="font-size:14px;line-height:1.75;color:#1E293B;font-weight:500">${t.andamentoGeral}</div></div>` : ''}

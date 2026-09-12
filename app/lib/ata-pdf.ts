@@ -185,12 +185,14 @@ function topicoCard(t: Topico, numero: number, dateDisplay: string): PdfNode {
   if (metaParts.length) {
     stack.push({ text: metaParts.join('   ·   '), fontSize: 9, color: t.status ? (STATUS_COLORS[t.status] ?? '#6B7A99') : '#6B7A99', margin: [0, 6, 0, 0] })
   }
+  // Só o registro mais recente do histórico entra no relatório, não a lista inteira —
+  // mantém o PDF enxuto; o histórico completo continua disponível na tela de edição.
   if (hist.length > 0) {
-    stack.push({ text: `Histórico (${hist.length})`, bold: true, fontSize: 8, color: '#94A3B8', margin: [0, 8, 0, 4] })
-    for (const h of hist) {
-      stack.push({ text: new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }), bold: true, fontSize: 8, color: '#94A3B8', margin: [0, 2, 0, 1] })
-      stack.push(...richHtmlToContent(h.texto).map(c => ({ ...c, color: '#94A3B8' })))
-    }
+    const ultimoHist = hist.reduce((a, b) => (b.data > a.data ? b : a))
+    const rotulo = hist.length > 1 ? `Última atualização anterior · +${hist.length - 1} mais antiga${hist.length - 1 > 1 ? 's' : ''} no histórico` : 'Última atualização anterior'
+    stack.push({ text: rotulo, bold: true, fontSize: 8, color: '#94A3B8', margin: [0, 8, 0, 4] })
+    stack.push({ text: new Date(ultimoHist.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }), bold: true, fontSize: 8, color: '#94A3B8', margin: [0, 2, 0, 1] })
+    stack.push(...richHtmlToContent(ultimoHist.texto).map(c => ({ ...c, color: '#94A3B8' })))
   }
 
   return {
