@@ -29,6 +29,9 @@ type Ata = {
 
 type Leitura = { user_id: string; nome: string; lido_em?: string }
 
+type DiretorioPessoa = { nome: string; email: string }
+type EmailPreview = { resolvidos: DiretorioPessoa[]; semEmail: string[]; assunto: string; corpoPreview: string }
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -184,6 +187,22 @@ export default function AtasContratantesClient() {
   const [arquivados, setArquivados] = useState<Set<string>>(new Set())
   const [showArquivados, setShowArquivados] = useState(false)
   const [clienteMenuOpen, setClienteMenuOpen] = useState<string | null>(null)
+
+  // ── Gerar e-mail (destinatários + PDF anexado) ──
+  const [emailConfigOpen, setEmailConfigOpen] = useState(false)
+  const [emailDirDraft, setEmailDirDraft] = useState<DiretorioPessoa[]>([])
+  const [emailAssuntoDraft, setEmailAssuntoDraft] = useState('')
+  const [emailCorpoDraft, setEmailCorpoDraft] = useState('')
+  const [emailConfigLoading, setEmailConfigLoading] = useState(false)
+  const [emailConfigSaving, setEmailConfigSaving] = useState(false)
+
+  const [emailModalOpen, setEmailModalOpen] = useState(false)
+  const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null)
+  const [emailPreviewLoading, setEmailPreviewLoading] = useState(false)
+  const [emailChecked, setEmailChecked] = useState<Set<string>>(new Set())
+  const [emailExtras, setEmailExtras] = useState<string[]>([])
+  const [emailExtraInput, setEmailExtraInput] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
 
   const papel = profile?.papel ?? ''
   const isGestorOrAdmin = papel === 'gestor' || papel === 'admin'
@@ -472,6 +491,110 @@ export default function AtasContratantesClient() {
     } catch { /* navegador sem clipboard: o usuário copia manualmente */ }
   }
 
+  // ── Gerar e-mail: configurações (diretório + modelo) ──────────────────────────
+
+  function nomesParticipantesConhecidos(): string[] {
+    const set = new Set<string>()
+    for (const a of atas) {
+      for (const p of parseParticipantes(a.participantes ?? '')) {
+        if (p.nome?.trim()) set.add(p.nome.trim())
+      }
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }
+
+  async function openEmailConfig() {
+    setEmailConfigOpen(true)
+    setEmailConfigLoading(true)
+    try {
+      const res = await fetch('/api/atas-contratantes/email-config')
+      if (res.ok) {
+        const d = await res.json()
+        setEmailDirDraft(d.diretorio ?? [])
+        setEmailAssuntoDraft(d.assunto ?? '')
+        setEmailCorpoDraft(d.corpo ?? '')
+      }
+    } finally {
+      setEmailConfigLoading(false)
+    }
+  }
+
+  function adicionarPessoasSemEmail() {
+    const jaTem = new Set(emailDirDraft.map(d => d.nome.trim().toLowerCase()))
+    const novos = nomesParticipantesConhecidos().filter(n => !jaTem.has(n.toLowerCase()))
+    setEmailDirDraft(prev => [...prev, ...novos.map(nome => ({ nome, email: '' }))])
+  }
+
+  async function salvarEmailConfig() {
+    setEmailConfigSaving(true)
+    try {
+      const diretorio = emailDirDraft.map(d => ({ nome: d.nome.trim(), email: d.email.trim() })).filter(d => d.nome && d.email)
+      const res = await fetch('/api/atas-contratantes/email-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diretorio, assunto: emailAssuntoDraft, corpo: emailCorpoDraft }),
+      })
+      if (!res.ok) { alert('Erro ao salvar'); return }
+      setEmailConfigOpen(false)
+    } finally {
+      setEmailConfigSaving(false)
+    }
+  }
+
+  // ── Gerar e-mail: por ata (destinatários + PDF anexado) ───────────────────────
+
+  async function openEmailModal() {
+    if (!selected) return
+    setEmailModalOpen(true)
+    setEmailPreview(null)
+    setEmailExtras([])
+    setEmailExtraInput('')
+    setEmailPreviewLoading(true)
+    try {
+      const res = await fetch(`/api/atas-contratantes/${selected.id}/email-preview`)
+      if (!res.ok) { alert('Erro ao preparar o e-mail'); setEmailModalOpen(false); return }
+      const data: EmailPreview = await res.json()
+      setEmailPreview(data)
+      setEmailChecked(new Set(data.resolvidos.map(r => r.email)))
+    } finally {
+      setEmailPreviewLoading(false)
+    }
+  }
+
+  function adicionarEmailExtra() {
+    const email = emailExtraInput.trim()
+    if (!email) return
+    if (!emailExtras.includes(email)) setEmailExtras(prev => [...prev, email])
+    setEmailExtraInput('')
+  }
+
+  async function baixarEmailAta() {
+    if (!selected || !emailPreview) return
+    const destinatarios = [
+      ...emailPreview.resolvidos.filter(r => emailChecked.has(r.email)).map(r => r.email),
+      ...emailExtras,
+    ]
+    setEmailSending(true)
+    try {
+      const res = await fetch(`/api/atas-contratantes/${selected.id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinatarios }),
+      })
+      if (!res.ok) { alert('Erro ao gerar o e-mail'); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const el = document.createElement('a')
+      el.href = url
+      el.download = `${nomeArquivoAta(selected)}.eml`
+      el.click()
+      URL.revokeObjectURL(url)
+      setEmailModalOpen(false)
+    } finally {
+      setEmailSending(false)
+    }
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const tree = buildTree(atas)
@@ -565,12 +688,21 @@ export default function AtasContratantesClient() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontWeight: 700, fontSize: 15, color: '#1A2340' }}>Atas Contratantes</span>
             {isGestorOrAdmin && (
-              <button
-                onClick={() => setShowEditor(true)}
-                style={{ padding: '4px 12px', borderRadius: 8, border: 'none', background: '#5B8DEF', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              >
-                + Nova
-              </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={openEmailConfig}
+                  title="Configurar diretório de e-mails e modelo do 'Gerar e-mail'"
+                  style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}
+                >
+                  ⚙
+                </button>
+                <button
+                  onClick={() => setShowEditor(true)}
+                  style={{ padding: '4px 12px', borderRadius: 8, border: 'none', background: '#5B8DEF', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + Nova
+                </button>
+              </div>
             )}
           </div>
           {/* Search input */}
@@ -799,6 +931,13 @@ export default function AtasContratantesClient() {
                   </button>
                   {isGestorOrAdmin && (
                     <>
+                      <button
+                        onClick={openEmailModal}
+                        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}
+                        title="Gerar e-mail com a ata em PDF anexada, já com os participantes cadastrados como destinatários"
+                      >
+                        ✉ E-mail
+                      </button>
                       <button
                         onClick={() => { setShareCopied(false); setShareOpen(true) }}
                         style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${selected.share_enabled ? '#10B981' : '#CBD5E0'}`, background: selected.share_enabled ? '#ECFDF5' : '#fff', color: selected.share_enabled ? '#047857' : '#5a6178', fontSize: 13, cursor: 'pointer' }}
@@ -1109,6 +1248,168 @@ export default function AtasContratantesClient() {
           </div>
         )
       })()}
+
+      {/* ── Modal: configurações do "Gerar e-mail" (diretório + modelo) ── */}
+      {emailConfigOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEmailConfigOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 560, maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>⚙ Configurar &quot;Gerar e-mail&quot;</div>
+            <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 20, lineHeight: 1.5 }}>
+              Cadastre o e-mail de cada pessoa (o nome precisa bater com o nome usado nos participantes da ata) e o modelo de assunto/corpo do e-mail gerado.
+            </p>
+
+            {emailConfigLoading ? (
+              <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando…</p>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e' }}>Diretório de pessoas</label>
+                  <button onClick={adicionarPessoasSemEmail} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #CBD5E0', background: '#fff', color: '#5B8DEF', fontSize: 11.5, cursor: 'pointer' }}>
+                    + Adicionar participantes já cadastrados
+                  </button>
+                </div>
+                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid rgba(42,79,150,0.15)', borderRadius: 8, marginBottom: 8 }}>
+                  {emailDirDraft.length === 0 && (
+                    <p style={{ fontSize: 12.5, color: '#94A3B8', padding: '14px', margin: 0 }}>Nenhuma pessoa cadastrada ainda.</p>
+                  )}
+                  {emailDirDraft.map((d, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid rgba(42,79,150,0.07)' }}>
+                      <input
+                        value={d.nome}
+                        onChange={e => setEmailDirDraft(prev => prev.map((p, idx) => idx === i ? { ...p, nome: e.target.value } : p))}
+                        placeholder="Nome"
+                        style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12.5 }}
+                      />
+                      <input
+                        value={d.email}
+                        onChange={e => setEmailDirDraft(prev => prev.map((p, idx) => idx === i ? { ...p, email: e.target.value } : p))}
+                        placeholder="e-mail@exemplo.com"
+                        style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12.5 }}
+                      />
+                      <button onClick={() => setEmailDirDraft(prev => prev.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 4px' }}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setEmailDirDraft(prev => [...prev, { nome: '', email: '' }])}
+                  style={{ marginBottom: 20, padding: '4px 10px', borderRadius: 6, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 11.5, cursor: 'pointer' }}
+                >
+                  + Adicionar linha
+                </button>
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Assunto</label>
+                <input
+                  value={emailAssuntoDraft}
+                  onChange={e => setEmailAssuntoDraft(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
+                />
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Corpo do e-mail</label>
+                <textarea
+                  value={emailCorpoDraft}
+                  onChange={e => setEmailCorpoDraft(e.target.value)}
+                  rows={7}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 13, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
+                />
+                <p style={{ fontSize: 11, color: '#94A3B8', margin: '6px 0 0' }}>
+                  Variáveis disponíveis: <code>{'{{contratante}}'}</code> <code>{'{{numero_ata}}'}</code> <code>{'{{data}}'}</code> <code>{'{{local}}'}</code> <code>{'{{titulo}}'}</code> <code>{'{{nome_arquivo}}'}</code>
+                </p>
+              </>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
+              <button onClick={() => setEmailConfigOpen(false)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button disabled={emailConfigSaving} onClick={salvarEmailConfig} style={{ padding: '8px 22px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: emailConfigSaving ? 'default' : 'pointer' }}>
+                {emailConfigSaving ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: gerar e-mail de uma ata (destinatários + PDF anexado) ── */}
+      {emailModalOpen && selected && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEmailModalOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 500, maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>✉ Gerar e-mail</div>
+            <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 18, lineHeight: 1.5 }}>
+              Baixa um e-mail (.eml) já com destinatários, assunto e a ata em PDF anexada. Abra o arquivo pra revisar e enviar pelo seu cliente de e-mail.
+            </p>
+
+            {emailPreviewLoading && <p style={{ fontSize: 13, color: '#94A3B8' }}>Preparando…</p>}
+
+            {emailPreview && (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 4 }}>Assunto</label>
+                  <div style={{ fontSize: 13, color: '#334155', padding: '7px 10px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>{emailPreview.assunto}</div>
+                </div>
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Destinatários encontrados</label>
+                {emailPreview.resolvidos.length === 0 ? (
+                  <p style={{ fontSize: 12.5, color: '#94A3B8', margin: '0 0 12px' }}>Nenhum participante desta ata tem e-mail cadastrado no diretório.</p>
+                ) : (
+                  <div style={{ marginBottom: 12, border: '1px solid rgba(42,79,150,0.15)', borderRadius: 8, overflow: 'hidden' }}>
+                    {emailPreview.resolvidos.map(r => (
+                      <label key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(42,79,150,0.07)' }}>
+                        <input
+                          type="checkbox"
+                          checked={emailChecked.has(r.email)}
+                          onChange={() => setEmailChecked(prev => { const s = new Set(prev); s.has(r.email) ? s.delete(r.email) : s.add(r.email); return s })}
+                          style={{ accentColor: '#2A4F96' }}
+                        />
+                        <span style={{ fontSize: 13, color: '#1a1f2e' }}>{r.nome} <span style={{ color: '#94A3B8' }}>— {r.email}</span></span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {emailPreview.semEmail.length > 0 && (
+                  <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                    Sem e-mail cadastrado: <strong>{emailPreview.semEmail.join(', ')}</strong>.{' '}
+                    <button onClick={() => { setEmailModalOpen(false); openEmailConfig() }} style={{ border: 'none', background: 'none', color: '#2A4F96', fontWeight: 700, cursor: 'pointer', fontSize: 12, padding: 0, textDecoration: 'underline' }}>
+                      Configurar
+                    </button>
+                  </div>
+                )}
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Adicionar e-mail manualmente</label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={emailExtraInput}
+                    onChange={e => setEmailExtraInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarEmailExtra() } }}
+                    placeholder="e-mail@exemplo.com"
+                    style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 13 }}
+                  />
+                  <button onClick={adicionarEmailExtra} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>+ Adicionar</button>
+                </div>
+                {emailExtras.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {emailExtras.map(email => (
+                      <span key={email} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 999, background: '#EEF2FB', color: '#2A4F96', fontSize: 12 }}>
+                        {email}
+                        <button onClick={() => setEmailExtras(prev => prev.filter(e => e !== email))} style={{ border: 'none', background: 'none', color: '#2A4F96', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button onClick={() => setEmailModalOpen(false)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button
+                disabled={!emailPreview || emailSending}
+                onClick={baixarEmailAta}
+                style={{ padding: '8px 22px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: (!emailPreview || emailSending) ? 'default' : 'pointer', opacity: (!emailPreview || emailSending) ? 0.6 : 1 }}
+              >
+                {emailSending ? 'Gerando…' : '⬇ Baixar e-mail (.eml)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
