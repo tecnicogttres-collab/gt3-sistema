@@ -51,7 +51,7 @@ export function TabContentCache({
   return (
     <main style={mainStyle}>
       {allPaths.map(path => (
-        <div key={path} style={{ display: path === pathname ? 'block' : 'none' }}>
+        <div key={path} style={{ display: path === pathname ? 'block' : 'none', height: '100%' }}>
           {contentCache.current.get(path)}
         </div>
       ))}

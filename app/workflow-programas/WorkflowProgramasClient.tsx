@@ -775,21 +775,6 @@ export default function WorkflowProgramasClient() {
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  // Altura real do cabeçalho congelado (título + sub-nav) — medida ao vivo (não um número fixo)
-  // porque a sub-nav quebra linha em telas estreitas. VAnalise usa isso pra empilhar sua própria
-  // barra de ações e o painel do parecer logo abaixo, sem sobrepor o cabeçalho.
-  const headerRef = useRef<HTMLDivElement>(null)
-  const [headerH, setHeaderH] = useState(0)
-  useEffect(() => {
-    const el = headerRef.current
-    if (!el) return
-    const medir = () => setHeaderH(el.offsetHeight)
-    medir()
-    const ro = new ResizeObserver(medir)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
   // draft análise
   const [draftId, setDraftId] = useState<string | null>(null)
   const [draft, setDraft] = useState<AnaliseDados | null>(null)
@@ -1996,7 +1981,7 @@ export default function WorkflowProgramasClient() {
   ]
 
   return (
-    <div style={{ padding: '24px 28px 60px', maxWidth: 1400, margin: '0 auto', fontFamily: 'inherit', color: TX }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'inherit', color: TX }}>
       <style>{`
         [contenteditable]:empty:before { content: attr(data-placeholder); color: #adb5bd; pointer-events: none; display: block; }
         [contenteditable] ul { margin: 4px 0; padding-left: 20px; }
@@ -2008,37 +1993,43 @@ export default function WorkflowProgramasClient() {
         </div>
       )}
 
-      {/* Cabeçalho + sub-nav congelados no topo enquanto o conteúdo do módulo rola por baixo —
-          `main` (AppShell) é quem tem overflow:auto; aqui só travamos no topo dele. */}
-      <div ref={headerRef} style={{ position: 'sticky', top: 0, zIndex: 30, background: '#F4F6FA', paddingBottom: 4, borderBottom: `1px solid ${LINE}` }}>
-        <div style={{ marginBottom: 18 }}>
-          <h1 style={{ margin: '0 0 3px', fontSize: 21, fontWeight: 700 }}>Workflow Programas</h1>
-          <p style={{ margin: 0, color: MU, fontSize: 13 }}>Acompanhamento de análise documental PGR / PCMSO / LTCAT por contratante.</p>
-        </div>
+      {/* Cabeçalho + sub-nav: fora da área que rola — em vez de tentar "grudar" no topo de um
+          scroll que pertence a outro componente (main, do AppShell/TabContentCache), o próprio
+          módulo passa a ter sua área de rolagem interna (o div logo abaixo, flex:1+overflow:auto).
+          Isso tira qualquer ambiguidade sobre "sticky relativo a quê". */}
+      <div style={{ flexShrink: 0, background: '#F4F6FA', borderBottom: `1px solid ${LINE}` }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 28px 18px' }}>
+          <div style={{ marginBottom: 18 }}>
+            <h1 style={{ margin: '0 0 3px', fontSize: 21, fontWeight: 700 }}>Workflow Programas</h1>
+            <p style={{ margin: 0, color: MU, fontSize: 13 }}>Acompanhamento de análise documental PGR / PCMSO / LTCAT por contratante.</p>
+          </div>
 
-        {/* sub-nav */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16, alignItems: 'center' }}>
-          {MENU.map((m, idx) => m.g ? (
-            <span key={idx} style={{ fontSize: 10.5, letterSpacing: '.1em', color: MU, textTransform: 'uppercase', padding: '0 8px', marginLeft: idx ? 8 : 0 }}>{m.g}</span>
-          ) : (
-            <button key={idx} onClick={() => go(m.k as View)} style={{
-              border: 'none', cursor: 'pointer', padding: '7px 13px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
-              background: view === m.k ? P : '#fff', color: view === m.k ? '#fff' : TX,
-              fontWeight: view === m.k ? 600 : 400, boxShadow: view === m.k ? 'none' : `inset 0 0 0 1px ${LINE}`,
-            }}>
-              <span style={{ marginRight: 6 }}>{m.i}</span>{m.t}
-            </button>
-          ))}
+          {/* sub-nav */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            {MENU.map((m, idx) => m.g ? (
+              <span key={idx} style={{ fontSize: 10.5, letterSpacing: '.1em', color: MU, textTransform: 'uppercase', padding: '0 8px', marginLeft: idx ? 8 : 0 }}>{m.g}</span>
+            ) : (
+              <button key={idx} onClick={() => go(m.k as View)} style={{
+                border: 'none', cursor: 'pointer', padding: '7px 13px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
+                background: view === m.k ? P : '#fff', color: view === m.k ? '#fff' : TX,
+                fontWeight: view === m.k ? 600 : 400, boxShadow: view === m.k ? 'none' : `inset 0 0 0 1px ${LINE}`,
+              }}>
+                <span style={{ marginRight: 6 }}>{m.i}</span>{m.t}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
+      {/* Área de rolagem do módulo — tudo que segue rola aqui dentro; o cabeçalho acima fica parado. */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 28px 60px' }}>
       {view === 'analises' && (
         <VAnalises lista={emAndamento} nomesContratantes={nomesContratantes} statusAnalise={statusAnalise} onNova={() => go('nova')} onAbrir={abrirAnalise} onDel={delAnalise} />
       )}
 
       {view === 'nova' && draft && (
         <VAnalise
-          topoFixo={headerH}
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos} empresasBanco={empresasBanco}
           onField={setDraftField} onEmpresaBlur={verificarEmpresaDuplicada} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
@@ -2132,6 +2123,8 @@ export default function WorkflowProgramasClient() {
       {view === 'config' && (
         <VConfig config={catalog.config} textos={catalog.textos} onSalvar={salvarConfig} />
       )}
+      </div>
+      </div>
 
       {/* ── Modal: Empresa duplicada no banco ── */}
       {dupEmpresa && (
@@ -2286,10 +2279,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ topoFixo, draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
-  /** Altura do cabeçalho do módulo (título + sub-nav), já congelado por fora — a barra de ações
-   *  daqui e o painel do parecer empilham logo abaixo dele, sem sobrepor. */
-  topoFixo: number
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
@@ -2348,7 +2338,7 @@ function VAnalise({ topoFixo, draft, catalog, emailCorpo, emailBuilt, modoReprov
   return (
     <div>
       <div ref={toolbarRef} style={{
-        position: 'sticky', top: topoFixo, zIndex: 25, background: '#F4F6FA',
+        position: 'sticky', top: 0, zIndex: 5, background: '#F4F6FA',
         display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12,
         paddingTop: 4, paddingBottom: 14, flexWrap: 'wrap',
       }}>
@@ -2663,7 +2653,7 @@ function VAnalise({ topoFixo, draft, catalog, emailCorpo, emailBuilt, modoReprov
           })}
         </div>
 
-        <div style={{ position: 'sticky', top: topoFixo + toolbarH + 16 }}>
+        <div style={{ position: 'sticky', top: toolbarH + 16, zIndex: 4 }}>
         {!draft.contratanteIds.length ? (
           <Card style={{ padding: '32px 20px', textAlign: 'center', color: MU }}>
             <b style={{ display: 'block', color: TX, marginBottom: 4, fontSize: 15 }}>E-mail bloqueado</b>
