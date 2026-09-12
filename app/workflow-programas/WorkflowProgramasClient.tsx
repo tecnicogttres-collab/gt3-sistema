@@ -187,6 +187,20 @@ const NA = '#94A3B8', NAS = '#EEF1F5'
 const LARANJA = '#D9730D', LARANJAS = '#FDF0E4'
 const DOURADO = '#9C6B0B', DOURADOS = '#FBF0DA'
 
+/** Mesmo esquema de cor do resultado (Tag/ALL_DOTS) reaproveitado nos relatórios
+ *  exportados (PDF/Excel/HTML) — destaca a coluna "Resultado" nas mesmas cores usadas
+ *  em toda a tela, em vez de texto simples. */
+type ResultadoTone = 'ok' | 'no' | 'na' | 'acc'
+const RESULTADO_CORES: Record<ResultadoTone, { bg: string; fg: string }> = {
+  ok: { bg: OKS, fg: OK }, no: { bg: NOS, fg: NO }, na: { bg: NAS, fg: '#54617A' }, acc: { bg: ASO, fg: '#8A6A22' },
+}
+
+/** Como agrupar os relatórios exportados: uma seção por empresa (com seus itens dentro)
+ *  ou uma seção por item de checklist (com as empresas que o têm dentro). */
+type RelatorioModo = 'empresa' | 'requisito'
+type RelatorioLinha = { valores: string[]; tone?: ResultadoTone }
+type RelatorioGrupo = { titulo: string; meta: string[]; colunas: string[]; resultadoColIdx: number; linhas: RelatorioLinha[] }
+
 type DotDef = { val: Exclude<StatusResp, ''>; label: string; symbol: string; on: string; onFg: string }
 const ALL_DOTS: DotDef[] = [
   { val: 'ok', label: 'Conforme', symbol: '✓', on: OK, onFg: '#fff' },
@@ -803,6 +817,7 @@ export default function WorkflowProgramasClient() {
   const [modalReprovacaoNovo, setModalReprovacaoNovo] = useState(false)
   const [modalRelatorio, setModalRelatorio] = useState(false)
   const [relatorioItensSel, setRelatorioItensSel] = useState<Set<string>>(new Set())
+  const [relatorioModo, setRelatorioModo] = useState<RelatorioModo>('empresa')
 
   // inspetor de texto (painel lateral aberto a partir de "Itens de checklist")
   const [inspecionar, setInspecionar] = useState<{ item: ChecklistItem; campo: InspectorCampo } | null>(null)
@@ -1556,23 +1571,67 @@ export default function WorkflowProgramasClient() {
   }
 
   // ── Relatórios (PDF / Excel / HTML) sobre itens específicos ──
-  // Mesmas colunas de exportarCsv, mas só para os itens marcados no modal "Gerar relatórios"
-  // (em vez de todos os itens de cada análise) — usa o mesmo filtro do Banco (bancoFiltrado).
-  const RELATORIO_COLS = ['Empresa', 'CNPJ', 'Contratante', 'Documentos', 'Data análise', 'Finalizada em', 'Item', 'Documento', 'Resultado', 'Observação'] as const
+  // Só os itens marcados no modal "Gerar relatórios", agrupados por empresa ou por
+  // requisito (à escolha, no próprio modal) — usa o mesmo filtro do Banco (bancoFiltrado).
 
-  function linhasRelatorio(lista: AnaliseRow[], itemIds: Set<string>): string[][] {
-    const linhas: string[][] = []
+  function montarGruposPorEmpresa(lista: AnaliseRow[], itemIds: Set<string>): RelatorioGrupo[] {
+    const grupos: RelatorioGrupo[] = []
     lista.forEach(a => {
+      const itens = itensDaAnalise(a.dados).filter(i => itemIds.has(i.id))
+      if (!itens.length) return
       const nomesC = nomesContratantes(a.dados.contratanteIds)
-      itensDaAnalise(a.dados).filter(i => itemIds.has(i.id)).forEach(i => {
-        const r = a.dados.respostas[i.id]
-        linhas.push([
-          a.empresa, a.cnpj, nomesC, (a.dados.documentos || []).join(' '), fmtD(a.dados.data), fmtD(a.data_final || a.dados.data),
-          i.titulo, i.documento, resultadoItem(i, r).label, r?.obs ? htmlToPlainText(r.obs) : '',
-        ])
+      grupos.push({
+        titulo: a.empresa || '(sem nome)',
+        meta: [
+          `CNPJ: ${a.cnpj || '—'}`,
+          `Contratante(s): ${nomesC || '—'}`,
+          `Documentos: ${(a.dados.documentos || []).join(' ') || '—'}`,
+          `Análise: ${fmtD(a.dados.data)}`,
+          `Finalizada em: ${fmtD(a.data_final || a.dados.data)}`,
+        ],
+        colunas: ['Item', 'Documento', 'Resultado', 'Observação'],
+        resultadoColIdx: 2,
+        linhas: itens.map(i => {
+          const r = a.dados.respostas[i.id]
+          const res = resultadoItem(i, r)
+          return { tone: res.tone, valores: [i.titulo, i.documento, res.label, r?.obs ? htmlToPlainText(r.obs) : ''] }
+        }),
       })
     })
-    return linhas
+    return grupos
+  }
+
+  function montarGruposPorRequisito(lista: AnaliseRow[], itemIds: Set<string>): RelatorioGrupo[] {
+    if (!catalog) return []
+    const itensSel = ordenarPorDocumento(catalog.itens.filter(i => itemIds.has(i.id)))
+    const grupos: RelatorioGrupo[] = []
+    itensSel.forEach(item => {
+      const linhas: RelatorioLinha[] = []
+      lista.forEach(a => {
+        const ia = itensDaAnalise(a.dados).find(x => x.id === item.id)
+        if (!ia) return
+        const r = a.dados.respostas[item.id]
+        const res = resultadoItem(ia, r)
+        const nomesC = nomesContratantes(a.dados.contratanteIds)
+        linhas.push({
+          tone: res.tone,
+          valores: [a.empresa, a.cnpj, nomesC, fmtD(a.dados.data), fmtD(a.data_final || a.dados.data), res.label, r?.obs ? htmlToPlainText(r.obs) : ''],
+        })
+      })
+      if (!linhas.length) return
+      grupos.push({
+        titulo: item.titulo,
+        meta: [`Documento: ${item.documento}`, item.escopo === 'especifico' ? 'Exigência específica de contratante' : 'Item base do checklist'],
+        colunas: ['Empresa', 'CNPJ', 'Contratante', 'Data análise', 'Finalizada em', 'Resultado', 'Observação'],
+        resultadoColIdx: 5,
+        linhas,
+      })
+    })
+    return grupos
+  }
+
+  function montarGruposRelatorio(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo): RelatorioGrupo[] {
+    return modo === 'requisito' ? montarGruposPorRequisito(lista, itemIds) : montarGruposPorEmpresa(lista, itemIds)
   }
 
   function abrirRelatorioModal() {
@@ -1580,23 +1639,41 @@ export default function WorkflowProgramasClient() {
     setModalRelatorio(true)
   }
 
-  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>) {
-    const linhas = linhasRelatorio(lista, itemIds)
-    if (!linhas.length) { showToast('Nenhum dado para os itens selecionados'); return }
-    const linhasHtml = linhas.map(l => '<tr>' + l.map(v => `<td>${escapeHtml(v)}</td>`).join('') + '</tr>').join('')
+  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo) {
+    const grupos = montarGruposRelatorio(lista, itemIds, modo)
+    if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
+    const totalLinhas = grupos.reduce((n, g) => n + g.linhas.length, 0)
+    const gruposHtml = grupos.map(g => {
+      const linhasHtml = g.linhas.map(l => '<tr>' + l.valores.map((v, idx) => {
+        if (idx === g.resultadoColIdx && l.tone) {
+          const cor = RESULTADO_CORES[l.tone]
+          return `<td><span class="badge" style="background:${cor.bg};color:${cor.fg}">${escapeHtml(v)}</span></td>`
+        }
+        return `<td>${escapeHtml(v)}</td>`
+      }).join('') + '</tr>').join('')
+      return `<div class="grupo">
+        <div class="grupo-titulo">${escapeHtml(g.titulo)}</div>
+        <div class="grupo-meta">${g.meta.map(escapeHtml).join(' &nbsp;·&nbsp; ')}</div>
+        <table><thead><tr>${g.colunas.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhasHtml}</tbody></table>
+      </div>`
+    }).join('')
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório GT3 · Workflow Programas</title><style>
       @page { size: landscape; margin: 14mm; }
       body{ font-family: Arial, Helvetica, sans-serif; color: #1B2432; }
       h1{ font-size: 15px; margin: 0 0 2px; }
-      p.sub{ font-size: 11px; color: #6B7A90; margin: 0 0 14px; }
-      table{ width: 100%; border-collapse: collapse; font-size: 10px; }
+      p.sub{ font-size: 11px; color: #6B7A90; margin: 0 0 16px; }
+      .grupo{ margin-bottom: 16px; page-break-inside: avoid; }
+      .grupo-titulo{ font-size: 13px; font-weight: 700; color: #1E3A70; background: #E8EEF9; padding: 5px 8px; border-radius: 4px 4px 0 0; }
+      .grupo-meta{ font-size: 10px; color: #6B7A90; padding: 4px 8px; border: 1px solid #E8EEF9; border-top: none; }
+      table{ width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 2px; }
       th, td{ border: 1px solid #B9C2D0; padding: 4px 6px; text-align: left; vertical-align: top; }
-      th{ background: #E8EEF9; font-weight: 700; }
+      th{ background: #F4F6FA; font-weight: 700; }
       tr:nth-child(even) td{ background: #FAFBFD; }
+      .badge{ display: inline-block; padding: 1px 8px; border-radius: 99px; font-weight: 700; }
     </style></head><body>
-      <h1>GT3 · Workflow Programas — Relatório</h1>
-      <p class="sub">${linhas.length} linha(s) · ${itemIds.size} item(ns) selecionado(s) · gerado em ${new Date().toLocaleString('pt-BR')}</p>
-      <table><thead><tr>${RELATORIO_COLS.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhasHtml}</tbody></table>
+      <h1>GT3 · Workflow Programas — Relatório (${modo === 'empresa' ? 'por empresa' : 'por requisito'})</h1>
+      <p class="sub">${totalLinhas} linha(s) em ${grupos.length} grupo(s) · gerado em ${new Date().toLocaleString('pt-BR')}</p>
+      ${gruposHtml}
     </body></html>`
     // Impressão via iframe isolado (mesmo padrão de app/atas-contratantes/AtasContratantesClient.tsx
     // printAtaPdf) — sai limpo, sem a interface do app, sem depender de bloqueador de pop-up.
@@ -1617,111 +1694,180 @@ export default function WorkflowProgramasClient() {
     else iframe.onload = () => setTimeout(trigger, 150)
   }
 
-  async function exportarRelatorioExcel(lista: AnaliseRow[], itemIds: Set<string>) {
-    const linhas = linhasRelatorio(lista, itemIds)
-    if (!linhas.length) { showToast('Nenhum dado para os itens selecionados'); return }
+  async function exportarRelatorioExcel(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo) {
+    const grupos = montarGruposRelatorio(lista, itemIds, modo)
+    if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
     const { Workbook } = await import('exceljs')
     const wb = new Workbook()
     wb.creator = 'GT3 Sistema'
     wb.created = new Date()
-    const ws = wb.addWorksheet('Relatório', { views: [{ state: 'frozen', ySplit: 1 }] })
-    ws.columns = RELATORIO_COLS.map(c => ({ header: c, key: c, width: c === 'Observação' ? 46 : c === 'Item' ? 32 : 18 }))
-    linhas.forEach(l => ws.addRow(l))
-    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: RELATORIO_COLS.length } }
+    const ws = wb.addWorksheet('Relatório')
+    const maxCols = Math.max(...grupos.map(g => g.colunas.length))
+    for (let c = 1; c <= maxCols; c++) ws.getColumn(c).width = c === maxCols ? 46 : 20
     const bordaFina = { style: 'thin' as const, color: { argb: 'FFB9C2D0' } }
-    ws.eachRow((row, rowNum) => {
-      row.eachCell(cell => {
+    const corExcel: Record<ResultadoTone, { bg: string; fg: string }> = {
+      ok: { bg: 'FFE6F6EF', fg: 'FF1E9E6A' }, no: { bg: 'FFFCEBEB', fg: 'FFD64545' },
+      na: { bg: 'FFEEF1F5', fg: 'FF54617A' }, acc: { bg: 'FFFBF4E6', fg: 'FF8A6A22' },
+    }
+    let rowNum = 1
+    grupos.forEach(g => {
+      const numCols = Math.max(g.colunas.length, 1)
+      const tituloCell = ws.getCell(rowNum, 1)
+      tituloCell.value = g.titulo
+      ws.mergeCells(rowNum, 1, rowNum, numCols)
+      tituloCell.font = { bold: true, size: 12, color: { argb: 'FF1E3A70' } }
+      tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
+      rowNum++
+      if (g.meta.length) {
+        const metaCell = ws.getCell(rowNum, 1)
+        metaCell.value = g.meta.join('   ·   ')
+        ws.mergeCells(rowNum, 1, rowNum, numCols)
+        metaCell.font = { italic: true, size: 9, color: { argb: 'FF6B7A90' } }
+        rowNum++
+      }
+      g.colunas.forEach((c, idx) => {
+        const cell = ws.getCell(rowNum, idx + 1)
+        cell.value = c
+        cell.font = { bold: true, color: { argb: 'FF1E3A70' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
         cell.border = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
-        cell.alignment = { vertical: 'top', wrapText: true }
-        if (rowNum === 1) {
-          cell.font = { bold: true, color: { argb: 'FF1E3A70' } }
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
-        }
       })
+      rowNum++
+      g.linhas.forEach(l => {
+        l.valores.forEach((v, idx) => {
+          const cell = ws.getCell(rowNum, idx + 1)
+          cell.value = v
+          cell.alignment = { vertical: 'top', wrapText: true }
+          cell.border = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
+          if (idx === g.resultadoColIdx && l.tone) {
+            const cor = corExcel[l.tone]
+            cell.font = { bold: true, color: { argb: cor.fg } }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } }
+          }
+        })
+        rowNum++
+      })
+      rowNum++ // linha em branco separando o próximo grupo
     })
     const buf = await wb.xlsx.writeBuffer()
     const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const el = document.createElement('a')
-    el.href = url; el.download = 'gt3-relatorio-workflow-programas.xlsx'; el.click(); URL.revokeObjectURL(url)
+    el.href = url; el.download = `gt3-relatorio-workflow-programas-${modo}.xlsx`; el.click(); URL.revokeObjectURL(url)
     showToast('Excel exportado')
   }
 
-  function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>) {
-    const linhas = linhasRelatorio(lista, itemIds)
-    if (!linhas.length) { showToast('Nenhum dado para os itens selecionados'); return }
+  function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo) {
+    const grupos = montarGruposRelatorio(lista, itemIds, modo)
+    if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
+    const cols = grupos[0].colunas
+    const resultadoIdx = grupos[0].resultadoColIdx
+    const totalLinhas = grupos.reduce((n, g) => n + g.linhas.length, 0)
     // Escapa "</script" — sem isso, uma observação com esse trecho literal fecharia a tag
     // <script> mais cedo e quebraria o HTML gerado.
-    const dados = JSON.stringify(linhas).replace(/<\/script/gi, '<\\/script')
-    const cols = JSON.stringify(RELATORIO_COLS).replace(/<\/script/gi, '<\\/script')
-    // Arquivo HTML autocontido (sem dependências externas) com tabela filtrável — cada coluna
-    // tem uma busca de texto própria, aplicada via JS puro no próprio navegador de quem abrir.
+    const dadosGrupos = grupos.map(g => ({ titulo: g.titulo, meta: g.meta, linhas: g.linhas.map(l => ({ v: l.valores, t: l.tone || '' })) }))
+    const gruposJson = JSON.stringify(dadosGrupos).replace(/<\/script/gi, '<\\/script')
+    const colsJson = JSON.stringify(cols).replace(/<\/script/gi, '<\\/script')
+    const totalLinhasJson = JSON.stringify(totalLinhas)
+    // Arquivo HTML autocontido (sem dependências externas), com seções por grupo (empresa ou
+    // requisito, conforme escolhido) e filtro por coluna aplicado dentro de cada grupo — um
+    // grupo some da tela se nenhuma linha dele sobreviver ao filtro.
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Relatório GT3 · Workflow Programas</title><style>
       *{box-sizing:border-box} body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#F4F6FA;color:#1B2432;padding:24px}
       h1{font-size:19px;margin:0 0 4px} p.sub{color:#6B7A90;font-size:13px;margin:0 0 18px}
-      .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+      .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;position:sticky;top:0;background:#F4F6FA;padding:8px 0;z-index:5}
       .toolbar button{border:1px solid #E2E8F2;background:#fff;border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13px}
       .toolbar button:hover{background:#E8EEF9}
+      .filtros{display:flex;gap:6px;flex-wrap:wrap}
+      .filtros input{padding:6px 8px;border:1px solid #E2E8F2;border-radius:6px;font-size:12px;font-family:inherit;width:130px}
       .contador{font-size:12.5px;color:#6B7A90;margin-left:auto}
-      table{width:100%;border-collapse:collapse;background:#fff;font-size:12.5px;box-shadow:0 1px 3px rgba(27,36,50,.08)}
+      .grupo{margin-bottom:20px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(27,36,50,.08)}
+      .grupo-titulo{font-size:14px;font-weight:700;color:#1E3A70;background:#E8EEF9;padding:9px 14px}
+      .grupo-meta{font-size:11.5px;color:#6B7A90;padding:6px 14px;border-bottom:1px solid #E2E8F2}
+      table{width:100%;border-collapse:collapse;font-size:12.5px}
       th,td{border:1px solid #E2E8F2;padding:7px 9px;text-align:left;vertical-align:top}
-      th{background:#E8EEF9;color:#1E3A70;position:sticky;top:0;z-index:2}
-      thead tr.filtros th{background:#fff;padding:4px 6px}
-      thead tr.filtros input{width:100%;padding:5px 6px;border:1px solid #E2E8F2;border-radius:6px;font-size:12px;font-family:inherit}
+      th{background:#F4F6FA;color:#1E3A70}
       tbody tr:nth-child(even){background:#FAFBFD}
-      tbody tr.oculta{display:none}
+      .badge{display:inline-block;padding:2px 9px;border-radius:99px;font-weight:700;font-size:12px}
+      .res-ok{background:${RESULTADO_CORES.ok.bg};color:${RESULTADO_CORES.ok.fg}}
+      .res-no{background:${RESULTADO_CORES.no.bg};color:${RESULTADO_CORES.no.fg}}
+      .res-na{background:${RESULTADO_CORES.na.bg};color:${RESULTADO_CORES.na.fg}}
+      .res-acc{background:${RESULTADO_CORES.acc.bg};color:${RESULTADO_CORES.acc.fg}}
       .vazio{padding:30px;text-align:center;color:#6B7A90}
       @media print{ .toolbar{display:none} }
       </style></head><body>
-      <h1>GT3 · Workflow Programas — Relatório interativo</h1>
-      <p class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · use os campos abaixo do cabeçalho para filtrar por coluna.</p>
+      <h1>GT3 · Workflow Programas — Relatório interativo (${modo === 'empresa' ? 'por empresa' : 'por requisito'})</h1>
+      <p class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · filtre por coluna abaixo — um grupo some se nenhuma linha dele sobrar.</p>
       <div class="toolbar">
+        <div class="filtros" id="filtrosWrap"></div>
         <button id="btnLimpar">Limpar filtros</button>
         <button id="btnImprimir">Imprimir / salvar PDF</button>
         <span class="contador" id="contador"></span>
       </div>
-      <table id="tbl">
-        <thead>
-          <tr id="cabecalho"></tr>
-          <tr class="filtros" id="linhaFiltros"></tr>
-        </thead>
-        <tbody id="corpo"></tbody>
-      </table>
+      <div id="grupos"></div>
       <div class="vazio" id="vazio" hidden>Nenhuma linha corresponde aos filtros.</div>
       <script>
-        var COLS = ${cols};
-        var DADOS = ${dados};
-        var cab = document.getElementById('cabecalho');
-        var filtrosRow = document.getElementById('linhaFiltros');
-        var corpo = document.getElementById('corpo');
-        var contador = document.getElementById('contador');
+        var COLS = ${colsJson};
+        var RESULTADO_IDX = ${resultadoIdx};
+        var GRUPOS = ${gruposJson};
+        var TOTAL_LINHAS = ${totalLinhasJson};
         var filtros = COLS.map(function(){ return ''; });
-        COLS.forEach(function(c){ var th=document.createElement('th'); th.textContent=c; cab.appendChild(th); });
-        COLS.forEach(function(_, idx){
-          var th=document.createElement('th');
-          var inp=document.createElement('input');
-          inp.placeholder='Filtrar…';
-          inp.addEventListener('input', function(){ filtros[idx]=inp.value.toLowerCase(); render(); });
-          th.appendChild(inp); filtrosRow.appendChild(th);
+        var filtrosWrap = document.getElementById('filtrosWrap');
+        var gruposEl = document.getElementById('grupos');
+        var contador = document.getElementById('contador');
+        COLS.forEach(function(c, idx){
+          var inp = document.createElement('input');
+          inp.placeholder = c;
+          inp.addEventListener('input', function(){ filtros[idx] = inp.value.toLowerCase(); render(); });
+          filtrosWrap.appendChild(inp);
         });
         function render(){
-          corpo.innerHTML = '';
-          var visiveis = 0;
-          DADOS.forEach(function(linha){
-            var ok = filtros.every(function(f, idx){ return !f || String(linha[idx]).toLowerCase().indexOf(f) !== -1; });
-            if(!ok) return;
-            visiveis++;
-            var tr = document.createElement('tr');
-            linha.forEach(function(v){ var td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
-            corpo.appendChild(tr);
+          gruposEl.innerHTML = '';
+          var totalVisiveis = 0;
+          var gruposVisiveis = 0;
+          GRUPOS.forEach(function(g){
+            var linhasVisiveis = g.linhas.filter(function(linha){
+              return filtros.every(function(f, idx){ return !f || String(linha.v[idx]).toLowerCase().indexOf(f) !== -1; });
+            });
+            if (!linhasVisiveis.length) return;
+            gruposVisiveis++;
+            totalVisiveis += linhasVisiveis.length;
+            var sec = document.createElement('div');
+            sec.className = 'grupo';
+            var h = document.createElement('div'); h.className = 'grupo-titulo'; h.textContent = g.titulo;
+            var m = document.createElement('div'); m.className = 'grupo-meta'; m.textContent = g.meta.join(' · ');
+            var tbl = document.createElement('table');
+            var thead = document.createElement('thead');
+            var trh = document.createElement('tr');
+            COLS.forEach(function(c){ var th=document.createElement('th'); th.textContent=c; trh.appendChild(th); });
+            thead.appendChild(trh); tbl.appendChild(thead);
+            var tbody = document.createElement('tbody');
+            linhasVisiveis.forEach(function(linha){
+              var tr = document.createElement('tr');
+              linha.v.forEach(function(v, idx){
+                var td = document.createElement('td');
+                if (idx === RESULTADO_IDX && linha.t) {
+                  var span = document.createElement('span');
+                  span.className = 'badge res-' + linha.t;
+                  span.textContent = v;
+                  td.appendChild(span);
+                } else {
+                  td.textContent = v;
+                }
+                tr.appendChild(td);
+              });
+              tbody.appendChild(tr);
+            });
+            tbl.appendChild(tbody);
+            sec.appendChild(h); sec.appendChild(m); sec.appendChild(tbl);
+            gruposEl.appendChild(sec);
           });
-          contador.textContent = visiveis + ' de ' + DADOS.length + ' linha(s)';
-          document.getElementById('vazio').hidden = visiveis > 0;
-          document.getElementById('tbl').style.display = visiveis > 0 ? '' : 'none';
+          contador.textContent = totalVisiveis + ' de ' + TOTAL_LINHAS + ' linha(s) em ' + gruposVisiveis + ' de ' + GRUPOS.length + ' grupo(s)';
+          document.getElementById('vazio').hidden = totalVisiveis > 0;
         }
         document.getElementById('btnLimpar').addEventListener('click', function(){
           filtros = COLS.map(function(){ return ''; });
-          Array.prototype.forEach.call(filtrosRow.querySelectorAll('input'), function(i){ i.value=''; });
+          Array.prototype.forEach.call(filtrosWrap.querySelectorAll('input'), function(i){ i.value=''; });
           render();
         });
         document.getElementById('btnImprimir').addEventListener('click', function(){ window.print(); });
@@ -1730,7 +1876,7 @@ export default function WorkflowProgramasClient() {
     </body></html>`
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
     const el = document.createElement('a')
-    el.href = url; el.download = 'gt3-relatorio-workflow-programas.html'; el.click(); URL.revokeObjectURL(url)
+    el.href = url; el.download = `gt3-relatorio-workflow-programas-${modo}.html`; el.click(); URL.revokeObjectURL(url)
     showToast('HTML interativo exportado')
   }
 
@@ -2185,10 +2331,11 @@ export default function WorkflowProgramasClient() {
         <RelatorioModal
           catalog={catalog} selecionados={relatorioItensSel} onChange={setRelatorioItensSel}
           totalNaLista={bancoFiltrado.length}
+          modo={relatorioModo} onModoChange={setRelatorioModo}
           onClose={() => setModalRelatorio(false)}
-          onPdf={() => exportarRelatorioPdf(bancoFiltrado, relatorioItensSel)}
-          onExcel={() => exportarRelatorioExcel(bancoFiltrado, relatorioItensSel)}
-          onHtml={() => exportarRelatorioHtml(bancoFiltrado, relatorioItensSel)}
+          onPdf={() => exportarRelatorioPdf(bancoFiltrado, relatorioItensSel, relatorioModo)}
+          onExcel={() => exportarRelatorioExcel(bancoFiltrado, relatorioItensSel, relatorioModo)}
+          onHtml={() => exportarRelatorioHtml(bancoFiltrado, relatorioItensSel, relatorioModo)}
         />
       )}
     </div>
@@ -2992,8 +3139,9 @@ function VContratantes({ catalog, getI, onNovo, onEditar, onDel }: {
 // Não usa ModalShell porque o rodapé precisa de 3 ações de exportação além de Cancelar,
 // em vez do padrão Cancelar/Salvar — mesma linguagem visual (overlay, cantos, sombra).
 
-function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, onClose, onPdf, onExcel, onHtml }: {
+function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, modo, onModoChange, onClose, onPdf, onExcel, onHtml }: {
   catalog: Catalog; selecionados: Set<string>; onChange: (s: Set<string>) => void; totalNaLista: number
+  modo: RelatorioModo; onModoChange: (m: RelatorioModo) => void
   onClose: () => void; onPdf: () => void; onExcel: () => void; onHtml: () => void
 }) {
   const itens = ordenarPorDocumento(catalog.itens)
@@ -3023,6 +3171,22 @@ function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, onClose
             Selecione os itens do checklist que devem entrar no relatório. Os dados vêm das <b>{totalNaLista}</b> análise(s)
             finalizada(s) que estão no filtro atual do Banco de dados — ajuste os filtros por lá antes de gerar, se precisar.
           </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, display: 'block', marginBottom: 6 }}>Organizar por</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {([['empresa', 'Empresa', 'uma seção por empresa, com os itens dela dentro'], ['requisito', 'Requisito', 'uma seção por item do checklist, com as empresas dentro']] as const).map(([val, label, hint]) => (
+                <label key={val} title={hint} style={{
+                  flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${modo === val ? P : LINE}`, background: modo === val ? PS : '#fff', color: modo === val ? P : TX,
+                }}>
+                  <input type="radio" name="relatorioModo" checked={modo === val} onChange={() => onModoChange(val)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: PS, borderRadius: 8, marginBottom: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             <input type="checkbox" checked={todosMarcados} onChange={toggleTodos} />
             Selecionar / desmarcar todos ({itens.length} itens)
