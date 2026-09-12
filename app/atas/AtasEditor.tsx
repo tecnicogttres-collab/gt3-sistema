@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { renderAtaHtml } from '../lib/ata-html'
 
 // ─── Rich Text Editor ─────────────────────────────────────────────────────────
 
@@ -396,8 +397,39 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   }
 
   // ── Print ────────────────────────────────────────────────────────────────
+  // Gera o mesmo HTML autocontido usado na tela de consulta (renderAtaHtml) e imprime
+  // num iframe isolado — evita depender de esconder o app inteiro via CSS (que só
+  // mostrava a primeira "página" de conteúdo, porque o modal do editor é fixed+overflow
+  // hidden e recortava o resto) e já sai com o título/nome de arquivo correto.
 
-  function handlePrint() { window.print() }
+  function handlePrint() {
+    const html = renderAtaHtml(
+      { titulo, data: dataVal, cliente: clientes.join(' / '), local_reuniao: local, numero_ata: numAta, status },
+      topicos,
+      participantes,
+      true,
+    )
+    const iframe = document.createElement('iframe')
+    iframe.setAttribute('aria-hidden', 'true')
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
+    document.body.appendChild(iframe)
+
+    const doc = iframe.contentWindow?.document
+    if (!doc) { document.body.removeChild(iframe); return }
+    doc.open()
+    doc.write(html)
+    doc.close()
+
+    const trigger = () => {
+      const win = iframe.contentWindow
+      if (!win) return
+      win.focus()
+      win.print()
+      setTimeout(() => { if (iframe.parentNode) document.body.removeChild(iframe) }, 1500)
+    }
+    if (doc.readyState === 'complete') setTimeout(trigger, 150)
+    else iframe.onload = () => setTimeout(trigger, 150)
+  }
 
   // ── Date display ─────────────────────────────────────────────────────────
 
@@ -412,14 +444,9 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#F0F3F9', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* Print + richtext styles */}
+      {/* richtext styles — impressão agora sai por iframe isolado (ver handlePrint),
+          não precisa mais de CSS de @media print escondendo o resto do app */}
       <style>{`
-        @media screen { #gt3-ata-print { display: none !important; } }
-        @media print {
-          body * { visibility: hidden !important; }
-          #gt3-ata-print { visibility: visible !important; display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
-          #gt3-ata-print * { visibility: visible !important; }
-        }
         [contenteditable]:empty:before { content: attr(data-placeholder); color: #adb5bd; pointer-events: none; display: block; }
         [contenteditable] ul { margin: 4px 0; padding-left: 20px; }
         [contenteditable] li { margin: 2px 0; }
@@ -850,20 +877,6 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
         </div>
       </div>
 
-      {/* ── Print area (hidden on screen, shows on print) ── */}
-      <div id="gt3-ata-print">
-        <PrintView
-          titulo={titulo}
-          dataVal={dataVal}
-          cliente={clientes.join(' / ')}
-          local={local}
-          numAta={numAta}
-          status={status}
-          participantes={participantes}
-          topicos={topicos}
-        />
-      </div>
-
       {/* ── Notification Modal ── */}
       {notifModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -920,106 +933,6 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── Print View ───────────────────────────────────────────────────────────────
-
-export function PrintView({ titulo, dataVal, cliente, local, numAta, status, participantes, topicos }: {
-  titulo: string; dataVal: string; cliente: string; local: string; numAta: string; status: string
-  participantes: Participante[]; topicos: Topico[]
-}) {
-  const dateDisplay = dataVal
-    ? new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-    : '—'
-
-  const prazoFmt = (iso: string) => iso
-    ? new Date(iso + 'T12:00').toLocaleDateString('pt-BR')
-    : '—'
-
-  return (
-    <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', maxWidth: 800, margin: '0 auto', padding: '40px 48px', color: '#1a1f2e', fontSize: 13 }}>
-      {/* Header */}
-      <div style={{ borderBottom: '3px solid #2A4F96', marginBottom: 24, paddingBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#2A4F96', marginBottom: 4 }}>
-            {titulo || `Ata de Reunião — ${cliente}`}
-          </div>
-          <div style={{ fontSize: 13, color: '#5a6178' }}>{dateDisplay}{local ? ` — ${local}` : ''}</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          {numAta && <div style={{ display: 'inline-block', padding: '3px 10px', background: '#D1AE6E', color: '#fff', borderRadius: 20, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>{numAta}</div>}
-          <div style={{ fontSize: 11, color: '#5a6178' }}>{status}</div>
-        </div>
-      </div>
-
-      {/* Meta */}
-      {cliente && <div style={{ marginBottom: 16, fontSize: 13, color: '#334155' }}><strong>Contratante:</strong> {cliente}</div>}
-
-      {/* Participantes */}
-      {participantes.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Participantes</div>
-          {participantes.map((p, i) => (
-            <div key={i} style={{ marginBottom: 4, fontSize: 13 }}>
-              <strong>{p.nome}</strong>{p.empresa ? ` — ${p.empresa}` : ''}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Tópicos */}
-      {topicos.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Pontos discutidos</div>
-          {topicos.map((t, idx) => {
-            const cor = t.cor ?? '#2A4F96'
-            return (
-              <div key={t.id} style={{ marginBottom: 18, padding: '14px 16px', border: '1px solid #e0e5ef', borderLeft: `3px solid ${cor}`, borderRadius: 6 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: cor, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>{idx + 1}. {t.titulo || '(Sem título)'}</span>
-                  {t.finalizado && <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: '#D1FAE5', padding: '2px 8px', borderRadius: 999 }}>✓ Finalizado</span>}
-                  {t.status && <StatusBadge status={t.status} />}
-                </div>
-                {t.andamentoGeral && (
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Até aqui:</div>
-                    <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155' }} dangerouslySetInnerHTML={{ __html: t.andamentoGeral }} />
-                  </div>
-                )}
-                {t.descricao && (
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Na data desta reunião ({dateDisplay}), definiu-se:</div>
-                    <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155' }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
-                  </div>
-                )}
-                {(t.contratante || t.prazo || t.responsavel) && (
-                  <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#5a6178', borderTop: '1px solid #eee', paddingTop: 8, marginBottom: 8 }}>
-                    {t.contratante && <span><strong>Contratante:</strong> {t.contratante}</span>}
-                    {t.prazo && <span><strong>Prazo:</strong> {prazoFmt(t.prazo)}</span>}
-                    {t.responsavel && <span><strong>Responsável:</strong> {t.responsavel}</span>}
-                  </div>
-                )}
-                {(t.historico?.length ?? 0) > 0 && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #eee' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Histórico</div>
-                    {t.historico!.map((h, i) => (
-                      <div key={i} style={{ marginBottom: 8, paddingLeft: 10, borderLeft: `2px solid ${cor}44` }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: cor, marginBottom: 2 }}>
-                          {new Date(h.data + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                        </div>
-                        <div style={{ fontSize: 12, color: '#5a6178', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: h.texto }} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
     </div>
   )
 }
