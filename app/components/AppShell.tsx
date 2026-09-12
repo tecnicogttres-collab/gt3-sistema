@@ -1009,6 +1009,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             router.push('/lembretes')
           }}
           onAdiar={ateIso => { setShowLembreteNotif(false); snoozeLembreteNotifStorage(profile.id, ateIso) }}
+          onDescartar={() => {
+            setShowLembreteNotif(false)
+            snoozeLembreteNotifStorage(profile.id, new Date().toISOString().split('T')[0])
+          }}
         />
       )}
 

@@ -6,6 +6,9 @@ type Props = {
   count: number
   onVerAgora: () => void
   onAdiar: (ateIso: string) => void
+  /** Fecha só este aviso por hoje — o(s) lembrete(s) continuam normalmente no Dashboard/módulo,
+   *  nada é confirmado nem adiado de verdade, é só o pop-up que some por agora. */
+  onDescartar: () => void
 }
 
 function addDaysIso(n: number): string {
@@ -14,7 +17,7 @@ function addDaysIso(n: number): string {
   return d.toISOString().split('T')[0]
 }
 
-export default function LembreteNotificacao({ count, onVerAgora, onAdiar }: Props) {
+export default function LembreteNotificacao({ count, onVerAgora, onAdiar, onDescartar }: Props) {
   const [personalizado, setPersonalizado] = useState(false)
   const [dataCustom, setDataCustom] = useState(addDaysIso(1))
 
@@ -25,10 +28,24 @@ export default function LembreteNotificacao({ count, onVerAgora, onAdiar }: Prop
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        background: '#fff', borderRadius: 16, padding: '36px 40px',
+        position: 'relative', background: '#fff', borderRadius: 16, padding: '36px 40px',
         maxWidth: 420, width: '100%', textAlign: 'center',
         boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
       }}>
+        <button
+          onClick={onDescartar}
+          title="Fechar só este aviso — os lembretes continuam normalmente no Dashboard"
+          aria-label="Fechar aviso"
+          style={{
+            position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: 8,
+            border: 'none', background: 'transparent', color: '#9CA3AF', fontSize: 18, lineHeight: 1,
+            cursor: 'pointer', display: 'grid', placeItems: 'center', fontFamily: 'inherit',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#F3F4F6' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+        >
+          ×
+        </button>
         <div style={{ fontSize: 42, marginBottom: 12, lineHeight: 1 }}>📌</div>
         <div style={{
           fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
