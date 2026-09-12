@@ -180,9 +180,14 @@ function parseTopicos(val?: string): Topico[] {
   if (!val?.trim()) return []
   try {
     const parsed = JSON.parse(val)
-    if (Array.isArray(parsed)) return parsed
+    // Normaliza descricaoSalva só aqui, uma vez, ao carregar — dados salvos antes dessa
+    // trava existir (ou sem o campo por qualquer outro motivo) entram travados quando já
+    // têm texto. Fazer essa mesma checagem no render (em vez de só aqui) foi o bug: ao
+    // digitar o 1º caractere o campo, ainda sem "descricaoSalva" definido, já contava como
+    // "tem texto" e travava sozinho.
+    if (Array.isArray(parsed)) return (parsed as Topico[]).map(t => ({ ...t, descricaoSalva: t.descricaoSalva ?? !!t.descricao?.trim() }))
   } catch { /* legacy HTML */ }
-  return [{ id: uid(), titulo: 'Pontos discutidos', descricao: val ?? '', contratante: '', prazo: '', responsavel: '' }]
+  return [{ id: uid(), titulo: 'Pontos discutidos', descricao: val ?? '', descricaoSalva: !!val?.trim(), contratante: '', prazo: '', responsavel: '' }]
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -285,7 +290,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
 
   function addTopico() {
     setTopicos(prev => [...prev, {
-      id: uid(), titulo: '', andamentoGeral: '', descricao: '',
+      id: uid(), titulo: '', andamentoGeral: '', descricao: '', descricaoSalva: false,
       contratante: '', prazo: '', responsavel: '',
     }])
     setTimeout(() => {
@@ -693,7 +698,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           <span style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Na data desta reunião, definiu-se:</span>
                           {dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
                         </div>
-                        {(t.descricaoSalva ?? !!t.descricao.trim()) && t.descricao.trim() ? (
+                        {t.descricaoSalva && t.descricao.trim() ? (
                           <div>
                             <div
                               style={{ padding: '10px 12px', background: '#F8FAFC', borderRadius: 8, border: `1px solid ${cor}33`, fontSize: 13.5, color: '#334155', lineHeight: 1.65 }}
