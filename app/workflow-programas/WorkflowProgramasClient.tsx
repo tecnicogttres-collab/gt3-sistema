@@ -2626,17 +2626,22 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                   if (i.tipo === 'opcoes') {
                     const respondido = draft.respostas[i.id]?.opcoesSelecionadas
                     const selecionadas = respondido && respondido.length ? respondido : i.opcoes.filter(o => o.padrao).map(o => o.id)
-                    // Segue restrição: item que só aparece quando o item-condição foi marcado
-                    // "Aprovado com restrição" — usa a cor dourada da restrição, em vez do azul
-                    // padrão, para deixar visualmente claro que os dois estão vinculados.
-                    const seguindoRestricao = i.condicaoValor === 'restricao' && catalog.itens.find(x => x.id === i.condicaoItemId)?.tipo !== 'opcoes'
-                    const corSel = seguindoRestricao ? AC : P
+                    // Segue restrição/reprovação: item que só aparece quando o item-condição foi
+                    // marcado "Aprovado com restrição" ou "Reprovação" — usa a mesma cor da
+                    // bolinha que disparou (dourada ou vermelha), em vez do azul padrão, pra
+                    // deixar visualmente claro que os dois estão vinculados.
+                    const condItemPai = catalog.itens.find(x => x.id === i.condicaoItemId)
+                    const seguindoRestricao = i.condicaoValor === 'restricao' && condItemPai?.tipo !== 'opcoes'
+                    const seguindoReprovacao = i.condicaoValor === 'nao' && condItemPai?.tipo !== 'opcoes'
+                    const corSel = seguindoRestricao ? AC : seguindoReprovacao ? NO : P
                     const corTxtSel = seguindoRestricao ? '#3A2E14' : '#fff'
+                    const bgDerivado = seguindoRestricao ? ASO : seguindoReprovacao ? NOS : undefined
                     return (
-                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, background: seguindoRestricao ? ASO : undefined }}>
+                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, background: bgDerivado }}>
                         <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           {i.titulo}
                           {seguindoRestricao && <Tag tone="acc">◐ segue aprovado com restrição</Tag>}
+                          {seguindoReprovacao && <Tag tone="no">✕ segue reprovação</Tag>}
                           {multi && i.contratanteIds.length < draft.contratanteIds.length ? (
                             <Tag tone="acc">{i.contratanteIds.map(cid => nomeC(catalog.contratantes.find(c => c.id === cid))).join(', ')}</Tag>
                           ) : i.escopo === 'especifico' ? (
