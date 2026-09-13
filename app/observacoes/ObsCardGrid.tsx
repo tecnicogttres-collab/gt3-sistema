@@ -641,15 +641,15 @@ export function ObsColumn({
               onClick={e => { e.stopPropagation(); onToggleMultiMode() }}
               title={multiMode ? 'Sair do modo de dupla reprovação' : 'Combinar 2 ou mais observações num único "Favor rever:" numerado'}
               style={{
-                fontSize: 12, lineHeight: 1,
+                fontSize: 10.5, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap',
                 color: multiMode ? '#B45309' : 'rgba(255,255,255,0.9)',
                 background: multiMode ? '#fff' : 'rgba(255,255,255,0.18)',
                 border: '1px solid rgba(255,255,255,0.35)', borderRadius: 6,
-                width: 24, height: 24, cursor: 'pointer', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                padding: '5px 8px', cursor: 'pointer', display: 'flex',
+                alignItems: 'center', gap: 4, justifyContent: 'center', flexShrink: 0,
               }}
             >
-              🚩
+              🔗 {multiMode ? 'Cancelar' : 'Combinar'}
             </button>
           )}
         </div>
