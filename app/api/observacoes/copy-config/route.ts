@@ -3,7 +3,7 @@ import { getAuthUser, getCaller } from '../../../lib/api-helpers'
 import { createAdminClient } from '../../../lib/supabase-admin'
 
 const CONFIG_ID = 1
-const TEMPLATE_PADRAO = '{{data}} - {{observacao}} - {{nome}}'
+const TEMPLATE_PADRAO = '{{data}} {{hora}} - {{observacao}} - {{nome}}'
 
 /** Modelo do texto copiado dos cards de Observações (data + observação + nome de quem
  *  copiou) — qualquer autenticado pode ler, só gestor/admin edita. */

@@ -28,12 +28,17 @@ function isImageOnlyColuna(coluna: string): boolean {
 
 // ─── Modelo de texto ao copiar (data + observação + nome) ─────────────────────
 
-const TEMPLATE_COPIA_PADRAO = '{{data}} - {{observacao}} - {{nome}}'
-const TEMPLATE_COPIA_MARCADORES = ['data', 'observacao', 'nome'] as const
+const TEMPLATE_COPIA_PADRAO = '{{data}} {{hora}} - {{observacao}} - {{nome}}'
+const TEMPLATE_COPIA_MARCADORES = ['data', 'hora', 'observacao', 'nome'] as const
 
 function formatarDataHoje(): string {
   const d = new Date()
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+}
+
+function formatarHoraAgora(): string {
+  const d = new Date()
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 /** Nome usado para assinar o texto copiado: primeiro nome, ou "Primeiro Último" quando
@@ -50,6 +55,7 @@ function nomeParaAssinatura(nomeCompleto: string, todosNomes: string[]): string 
 function aplicarTemplateCopia(template: string, observacao: string, nome: string): string {
   return (template || TEMPLATE_COPIA_PADRAO)
     .replace(/\{\{data\}\}/g, formatarDataHoje())
+    .replace(/\{\{hora\}\}/g, formatarHoraAgora())
     .replace(/\{\{observacao\}\}/g, observacao)
     .replace(/\{\{nome\}\}/g, nome)
 }
