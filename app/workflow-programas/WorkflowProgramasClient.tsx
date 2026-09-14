@@ -68,6 +68,10 @@ type CatalogConfig = {
   ordemBlocos: BlocoParecer[]
   /** true depois que os corpos de texto (plain-text com \n) foram migrados uma única vez para HTML — ver upgradeCatalog. */
   textosHtmlMigrados: boolean
+  /** Setores de atuação disponíveis em "Setor(es) de atuação" (Nova análise) e no vínculo de
+   *  textos de categoria "segmento" — editável em Textos → Segmento → "+ Novo segmento", em vez
+   *  de fixo no código (ver SETORES_ATUACAO, usado só como valor inicial/seed). */
+  segmentos: string[]
 }
 
 /** Cada "bloco" é um trecho do parecer final montado por `buildEmail`; a ordem deles é
@@ -392,6 +396,7 @@ function seedCatalog(): Catalog {
       camposObrigatorios: [],
       ordemBlocos: [...ORDEM_BLOCOS_PADRAO],
       textosHtmlMigrados: true,
+      segmentos: [...SETORES_ATUACAO],
     },
   }
 }
@@ -407,6 +412,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || !raw.config.aprovadoId || !raw.textos.some(t => t.id === raw.config.aprovadoId)
     || !Array.isArray(raw.config.camposObrigatorios)
     || !Array.isArray(raw.config.ordemBlocos)
+    || !Array.isArray(raw.config.segmentos)
     || (raw.textosReprovacao ?? []).some(t => /^favor rever:?\s*/i.test(t.corpo))
     || !raw.config.textosHtmlMigrados
     || !raw.itens.some(i => i.id === 'i_reg_pgr')
@@ -448,6 +454,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
   }
   if (!Array.isArray(config.camposObrigatorios)) config.camposObrigatorios = []
   if (!Array.isArray(config.ordemBlocos)) config.ordemBlocos = [...ORDEM_BLOCOS_PADRAO]
+  if (!Array.isArray(config.segmentos)) config.segmentos = [...SETORES_ATUACAO]
   const defaultLink: Record<string, string> = { i_pgr_val: 'r_pgr_validade', i_pcm_val: 'r_pcm_validade' }
   const itens = raw.itens.map(i => {
     const legado = i as ChecklistItem & { condicaoStatus?: string }
@@ -818,6 +825,12 @@ export default function WorkflowProgramasClient() {
   const [modalRelatorio, setModalRelatorio] = useState(false)
   const [relatorioItensSel, setRelatorioItensSel] = useState<Set<string>>(new Set())
   const [relatorioModo, setRelatorioModo] = useState<RelatorioModo>('empresa')
+
+  // "+ Novo segmento" (Textos → Segmento) — cria o setor de atuação e já pergunta se quer
+  // manter o mesmo texto padrão de outro segmento já existente, ou escrever um texto próprio.
+  const [modalNovoSegmento, setModalNovoSegmento] = useState(false)
+  const [novoSegmentoNome, setNovoSegmentoNome] = useState('')
+  const [novoSegmentoBaseId, setNovoSegmentoBaseId] = useState('')
 
   // inspetor de texto (painel lateral aberto a partir de "Itens de checklist")
   const [inspecionar, setInspecionar] = useState<{ item: ChecklistItem; campo: InspectorCampo } | null>(null)
@@ -1985,6 +1998,39 @@ export default function WorkflowProgramasClient() {
   // ── catálogo: textos ──
   const CATS: Record<CategoriaTexto, string> = { aprovacao: 'Aprovação', abertura: 'Abertura', apontamento: 'Apontamento', fechamento: 'Fechamento', assinatura: 'Assinatura', restricao: 'Restrição', validade: 'Validade', segmento: 'Segmento' }
   function novoTextoModal(categoriaPadrao: CategoriaTexto = 'apontamento') { setModalTextoNovo(true); setModalTextoEdit({ id: uid('t'), titulo: '', categoria: categoriaPadrao, corpo: '' }) }
+
+  /** Abre "+ Novo segmento" já sugerindo, como padrão a manter, o texto de segmento com mais
+   *  setores vinculados (o "padrão da casa") — ex.: hoje é "Considerações - gerais". */
+  function abrirNovoSegmento() {
+    if (!catalog) return
+    const textosSegmento = catalog.textos.filter(t => t.categoria === 'segmento')
+    const maisUsado = [...textosSegmento].sort((a, b) => (b.segmentos?.length ?? 0) - (a.segmentos?.length ?? 0))[0]
+    setNovoSegmentoNome('')
+    setNovoSegmentoBaseId(maisUsado?.id ?? '')
+    setModalNovoSegmento(true)
+  }
+
+  function confirmarNovoSegmento() {
+    if (!catalog) return
+    const nome = novoSegmentoNome.trim()
+    if (!nome) { showToast('Informe o nome do segmento'); return }
+    const segmentosAtuais = catalog.config.segmentos ?? [...SETORES_ATUACAO]
+    if (segmentosAtuais.some(s => s.toLowerCase() === nome.toLowerCase())) { showToast('Já existe um segmento com esse nome'); return }
+    const nextConfig = { ...catalog.config, segmentos: [...segmentosAtuais, nome] }
+    if (novoSegmentoBaseId) {
+      // Mantém o padrão de escrita: só adiciona o novo segmento à lista do texto escolhido.
+      const nextTextos = catalog.textos.map(t => t.id === novoSegmentoBaseId ? { ...t, segmentos: [...(t.segmentos ?? []), nome] } : t)
+      persistCatalog({ ...catalog, config: nextConfig, textos: nextTextos })
+      setModalNovoSegmento(false)
+      showToast(`Segmento "${nome}" criado e vinculado ao texto padrão`)
+    } else {
+      // Texto próprio: cria o segmento e já abre o editor de texto pra escrever do zero.
+      persistCatalog({ ...catalog, config: nextConfig })
+      setModalNovoSegmento(false)
+      setModalTextoNovo(true)
+      setModalTextoEdit({ id: uid('t'), titulo: nome, categoria: 'segmento', corpo: '', segmentos: [nome] })
+    }
+  }
   function editarTextoModal(t: TextoEmail) { setModalTextoNovo(false); setModalTextoEdit({ ...t }) }
   function salvarTextoModal() {
     if (!catalog || !modalTextoEdit) return
@@ -2261,7 +2307,7 @@ export default function WorkflowProgramasClient() {
         <div>
           <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
           <div style={{ marginTop: 10 }}>
-            <VTextos catalog={catalog} CATS={{ segmento: 'Segmento' }} onNovo={() => novoTextoModal('segmento')} onEditar={editarTextoModal} onDel={delTexto} />
+            <VTextos catalog={catalog} CATS={{ segmento: 'Segmento' }} onNovo={abrirNovoSegmento} onEditar={editarTextoModal} onDel={delTexto} novoLabel="✚ Novo segmento" />
           </div>
         </div>
       )}
@@ -2309,10 +2355,39 @@ export default function WorkflowProgramasClient() {
       {/* ── Modal: Texto ── */}
       {modalTextoEdit && (
         <TextoModal
-          draft={modalTextoEdit} novo={modalTextoNovo} CATS={CATS} onChange={setModalTextoEdit} onSave={salvarTextoModal} onClose={() => { setModalTextoEdit(null); setPendingLink(null) }}
+          draft={modalTextoEdit} novo={modalTextoNovo} CATS={CATS} segmentosDisponiveis={catalog.config.segmentos ?? SETORES_ATUACAO}
+          onChange={setModalTextoEdit} onSave={salvarTextoModal} onClose={() => { setModalTextoEdit(null); setPendingLink(null) }}
           anexos={anexos.filter(a => a.texto_id === modalTextoEdit.id)} onUpload={uploadAnexo} onDelAnexo={delAnexo} onBaixarAnexo={baixarAnexo}
         />
       )}
+
+      {modalNovoSegmento && catalog && (() => {
+        const textosSegmento = catalog.textos.filter(t => t.categoria === 'segmento')
+        return (
+          <ModalShell title="Novo segmento" saveLabel="Criar segmento" onClose={() => setModalNovoSegmento(false)} onSave={confirmarNovoSegmento}>
+            <Field label="Nome do segmento">
+              <input style={inputStyle} value={novoSegmentoNome} onChange={e => setNovoSegmentoNome(e.target.value)} placeholder="Ex.: Vinícolas" autoFocus />
+            </Field>
+            <div style={{ marginTop: 14 }}>
+              <label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, display: 'block', marginBottom: 8 }}>
+                Texto do parecer para este segmento
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {textosSegmento.map(t => (
+                  <label key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, cursor: 'pointer' }}>
+                    <input type="radio" name="baseSegmento" checked={novoSegmentoBaseId === t.id} onChange={() => setNovoSegmentoBaseId(t.id)} style={{ marginTop: 3 }} />
+                    <span>Manter o padrão de escrita de <b>{t.titulo}</b> <span style={{ color: MU }}>({(t.segmentos ?? []).length} segmento(s) já usam este texto)</span></span>
+                  </label>
+                ))}
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
+                  <input type="radio" name="baseSegmento" checked={novoSegmentoBaseId === ''} onChange={() => setNovoSegmentoBaseId('')} />
+                  Escrever um texto próprio para este segmento
+                </label>
+              </div>
+            </div>
+          </ModalShell>
+        )
+      })()}
 
       {modalReprovacaoEdit && (
         <ReprovacaoModal draft={modalReprovacaoEdit} novo={modalReprovacaoNovo} onChange={setModalReprovacaoEdit} onSave={salvarReprovacaoModal} onClose={() => { setModalReprovacaoEdit(null); setPendingLink(null) }} />
@@ -2451,6 +2526,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   // cabeçalho do módulo + desta barra, cortado, quando as duas travam no topo do scroll.
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [toolbarH, setToolbarH] = useState(0)
+  const [setoresAbertos, setSetoresAbertos] = useState(false)
   useEffect(() => {
     const el = toolbarRef.current
     if (!el) return
@@ -2464,6 +2540,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   const itens = itensDaAnalise(draft)
   const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
+  const segmentosDisponiveis = catalog.config.segmentos ?? SETORES_ATUACAO
   const camposFaltando = (catalog.config.camposObrigatorios ?? []).filter(key => campoAnaliseVazio(draft, key))
   const campoObrigatorioVazio = (key: string) => (catalog.config.camposObrigatorios ?? []).includes(key) && campoAnaliseVazio(draft, key)
   const redStyle = (vazio: boolean): React.CSSProperties => (vazio ? { border: `1px solid ${NO}`, background: NOS } : {})
@@ -2521,14 +2598,29 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
             </div>
             <div style={{ marginTop: 12 }}>
               <Field label="Setor(es) de atuação">
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', padding: '9px 12px', borderRadius: 8, border: `1px solid ${LINE}`, ...redStyle(campoObrigatorioVazio('setoresAtuacao')) }}>
-                  {SETORES_ATUACAO.map(s => (
-                    <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: TX, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={draft.setoresAtuacao.includes(s)} onChange={() => onToggleSetor(s)} />
-                      {s}
-                    </label>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSetoresAbertos(v => !v)}
+                  style={{
+                    width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                    padding: '9px 12px', borderRadius: 8, border: `1px solid ${LINE}`, background: '#fff', cursor: 'pointer',
+                    fontSize: 12.5, color: draft.setoresAtuacao.length ? TX : MU, fontFamily: 'inherit', textAlign: 'left',
+                    ...redStyle(campoObrigatorioVazio('setoresAtuacao')),
+                  }}
+                >
+                  <span>{draft.setoresAtuacao.length ? draft.setoresAtuacao.join(', ') : 'Nenhum selecionado — clique para escolher'}</span>
+                  <span style={{ color: MU, fontSize: 11, flexShrink: 0 }}>{setoresAbertos ? '▲ recolher' : '▼ expandir'}</span>
+                </button>
+                {setoresAbertos && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', padding: '9px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${LINE}`, background: '#FBFCFE' }}>
+                    {segmentosDisponiveis.map(s => (
+                      <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: TX, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={draft.setoresAtuacao.includes(s)} onChange={() => onToggleSetor(s)} />
+                        {s}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </Field>
             </div>
             <div style={{ marginTop: 12 }}>
@@ -3709,15 +3801,16 @@ function VTextosHub({ catalog, onAbrir }: {
 
 // ─── View: Textos de e-mail ───────────────────────────────────────────────────
 
-function VTextos({ catalog, CATS, onNovo, onEditar, onDel }: {
+function VTextos({ catalog, CATS, onNovo, onEditar, onDel, novoLabel }: {
   catalog: Catalog; CATS: Partial<Record<CategoriaTexto, string>>
   onNovo: () => void; onEditar: (t: TextoEmail) => void; onDel: (id: string) => void
+  novoLabel?: string
 }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ fontSize: 13, color: MU }}>Padronize uma vez e vincule aos itens e contratantes.</div>
-        <Btn variant="pri" onClick={onNovo}>✚ Novo texto</Btn>
+        <Btn variant="pri" onClick={onNovo}>{novoLabel ?? '✚ Novo texto'}</Btn>
       </div>
       {(Object.keys(CATS) as CategoriaTexto[]).map(cat => {
         const g = catalog.textos.filter(t => t.categoria === cat)
@@ -3761,8 +3854,8 @@ function fmtBytes(n: number): string {
   return (n / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-function TextoModal({ draft, novo, CATS, onChange, onSave, onClose, anexos, onUpload, onDelAnexo, onBaixarAnexo }: {
-  draft: TextoEmail; novo: boolean; CATS: Record<CategoriaTexto, string>; onChange: (t: TextoEmail) => void; onSave: () => void; onClose: () => void
+function TextoModal({ draft, novo, CATS, segmentosDisponiveis, onChange, onSave, onClose, anexos, onUpload, onDelAnexo, onBaixarAnexo }: {
+  draft: TextoEmail; novo: boolean; CATS: Record<CategoriaTexto, string>; segmentosDisponiveis: string[]; onChange: (t: TextoEmail) => void; onSave: () => void; onClose: () => void
   anexos: Anexo[]; onUpload: (textoId: string, file: File) => void; onDelAnexo: (id: string) => void; onBaixarAnexo: (id: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -3787,7 +3880,7 @@ function TextoModal({ draft, novo, CATS, onChange, onSave, onClose, anexos, onUp
         <div style={{ marginTop: 12 }}>
           <Field label="Setor(es) que disparam este texto no parecer">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', padding: '9px 12px', border: `1px solid ${LINE}`, borderRadius: 8 }}>
-              {SETORES_ATUACAO.map(s => {
+              {segmentosDisponiveis.map(s => {
                 const sel = (draft.segmentos ?? []).includes(s)
                 return (
                   <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: TX, cursor: 'pointer' }}>
