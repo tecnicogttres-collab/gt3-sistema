@@ -43,6 +43,10 @@ next-env.d.ts
 # maintenance scripts (contain env vars, não versionar exceto backup)
 /scripts/*
 !/scripts/backup-supabase.ts
+!/scripts/restart-server.ps1
 
 # backups — dados sensíveis, nunca versionar
 /backups/
+
+# logs do servidor local (restart-server.ps1)
+/logs/
