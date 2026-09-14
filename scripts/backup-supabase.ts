@@ -38,7 +38,8 @@ function loadEnvLocal() {
 loadEnvLocal()
 
 // ── Lista explícita de todas as tabelas do projeto ────────────────────────────
-// Atualizada em 2026-08-11 a partir de todos os `.from('...')` usados em app/.
+// Atualizada em 2026-09-14 conferindo contra o schema real do Supabase (endpoint
+// REST /rest/v1/ do PostgREST, que lista todas as tabelas expostas).
 // Ao criar uma tabela nova, adicione o nome aqui.
 const TABLES = [
   'aniversarios',
@@ -46,6 +47,7 @@ const TABLES = [
   'atas',
   'atas_contratantes',
   'atas_contratantes_clientes_arquivados',
+  'atas_contratantes_email_config',
   'atas_contratantes_leituras',
   'atas_contratantes_notificacoes',
   'atas_leituras',
@@ -78,10 +80,12 @@ const TABLES = [
   'notificacoes_config',
   'notificacoes_usuario',
   'observacoes',
+  'observacoes_copy_config',
   'observacoes_layout',
   'observacoes_subtabs',
   'pdi_acoes',
   'pdi_ciclos',
+  'pdi_conversa_avisos',
   'pdi_notificacoes',
   'pdi_rascunhos',
   'pdis',
@@ -97,10 +101,17 @@ const TABLES = [
   'revisoes_docs',
   'revisoes_documentos',
   'revisoes_trainee',
+  'rnr_combos',
+  'rnr_config',
+  'rnr_historico',
+  'rnr_treinamentos',
   'sugestoes',
   'terceiras',
   'terceiras_contratantes',
   'terceiras_historico',
+  'workflow_programas_analises',
+  'workflow_programas_anexos',
+  'workflow_programas_config',
 ] as const
 
 type TableName = (typeof TABLES)[number]
