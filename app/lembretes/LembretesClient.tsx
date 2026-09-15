@@ -45,8 +45,6 @@ type HistoricoRow = {
   created_at: string
 }
 
-type Filter = 'pendentes' | 'todos' | 'hoje' | 'atrasados' | 'concluidos'
-
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function todayLocal(): Date {
@@ -95,7 +93,8 @@ export default function LembretesClient() {
   const [lembretes, setLembretes] = useState<Lembrete[]>([])
   const [historico, setHistorico] = useState<HistoricoRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<Filter>('pendentes')
+  const [ativosExpanded, setAtivosExpanded] = useState(false)
+  const [finalizadosExpanded, setFinalizadosExpanded] = useState(false)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -104,7 +103,7 @@ export default function LembretesClient() {
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [calMonth, setCalMonth] = useState(new Date().getMonth())
   const [confirmandoIds, setConfirmandoIds] = useState<Set<string>>(new Set())
-  const [histExpanded, setHistExpanded] = useState(true)
+  const [histExpanded, setHistExpanded] = useState(false)
   const [calHistorico, setCalHistorico] = useState<HistoricoRow[]>([])
   const [calHistoricoLoading, setCalHistoricoLoading] = useState(false)
   const [users, setUsers] = useState<UserOption[]>([])
@@ -228,30 +227,34 @@ export default function LembretesClient() {
   const hoje       = currentMonthLembretes.filter(r => isToday(r)).length
   const concluidos = currentMonthLembretes.filter(r => isDone(r)).length
 
-  // ── Filtered list ──────────────────────────────────────────────────────────
+  // ── Ativos / Finalizados (gavetas) ──────────────────────────────────────────
 
-  const filtered = currentMonthLembretes
-    .filter(r => {
-      if (search) {
-        const q = search.toLowerCase()
-        if (!r.titulo.toLowerCase().includes(q) && !(r.descricao ?? '').toLowerCase().includes(q)) return false
-      }
-      if (filter === 'pendentes')  return !isDone(r)
-      if (filter === 'hoje')       return isToday(r)
-      if (filter === 'atrasados')  return isOverdue(r)
-      if (filter === 'concluidos') return isDone(r)
-      return true
-    })
+  function matchesSearch(r: Lembrete): boolean {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return r.titulo.toLowerCase().includes(q) || (r.descricao ?? '').toLowerCase().includes(q)
+  }
+
+  const ativosList = currentMonthLembretes
+    .filter(r => !isDone(r))
+    .filter(matchesSearch)
     .sort((a, b) => {
       const ao = isOverdue(a), bo = isOverdue(b)
       const at = isToday(a),   bt = isToday(b)
-      const ad = isDone(a),    bd = isDone(b)
       if (ao && !bo) return -1; if (!ao && bo) return 1
       if (at && !bt) return -1; if (!at && bt) return 1
-      if (ad && !bd) return 1;  if (!ad && bd) return -1
       const aOcc = currentMonthOccurrence(a)
       const bOcc = currentMonthOccurrence(b)
       return (aOcc?.getTime() ?? 0) - (bOcc?.getTime() ?? 0)
+    })
+
+  const finalizadosList = currentMonthLembretes
+    .filter(r => isDone(r))
+    .filter(matchesSearch)
+    .sort((a, b) => {
+      const ah = historico.find(h => h.lembrete_id === a.id)
+      const bh = historico.find(h => h.lembrete_id === b.id)
+      return (bh ? new Date(bh.created_at).getTime() : 0) - (ah ? new Date(ah.created_at).getTime() : 0)
     })
 
   // ── CRUD ───────────────────────────────────────────────────────────────────
@@ -320,7 +323,7 @@ export default function LembretesClient() {
         created_at: new Date().toISOString(),
       }
       setHistorico(prev => [novaEntrada, ...prev])
-      setFilter(f => f === 'todos' ? 'pendentes' : f)
+      setFinalizadosExpanded(true)
       setHistExpanded(true)
     } finally {
       setConfirmandoIds(prev => { const n = new Set(prev); n.delete(r.id); return n })
@@ -435,6 +438,124 @@ export default function LembretesClient() {
     return INK
   }
 
+  function renderLembreteCard(r: Lembrete) {
+    const done     = isDone(r)
+    const overdue  = isOverdue(r)
+    const todayFlag = isToday(r)
+    const occDate  = currentMonthOccurrence(r)
+    const occStr   = occDate ? fmtDateStr(occDate) : r.data_inicio
+    const confirmando = confirmandoIds.has(r.id)
+
+    // Quem confirmou (o primeiro registro do histórico para este lembrete)
+    const cnf = historico.find(h => h.lembrete_id === r.id)
+
+    return (
+      <div key={r.id} style={{
+        background: done ? '#F0FDF4' : '#fff',
+        border: `1px solid ${done ? '#86EFAC' : BORDER}`,
+        borderLeft: `3px solid ${cardBorderColor(r)}`,
+        borderRadius: 10,
+        padding: '14px 16px',
+        display: 'flex', alignItems: 'flex-start', gap: 14,
+        transition: 'background 0.2s, border-color 0.2s',
+      }}>
+        {/* Body */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: done ? 2 : 4 }}>
+            {done && <span style={{ fontSize: 16, lineHeight: 1 }}>✅</span>}
+            <span style={{ fontSize: 15, fontWeight: 600, color: TEXT, lineHeight: 1.3 }}>
+              {r.titulo}
+            </span>
+          </div>
+
+          {done && cnf && (
+            <div style={{ fontSize: 11, color: '#4B7C5A', marginBottom: 6, lineHeight: 1.4 }}>
+              Confirmado por <strong>{cnf.usuario_login}</strong> em {formatDatetime(cnf.created_at)}
+            </div>
+          )}
+
+          {r.descricao && (
+            <div style={{ fontSize: 13, color: TEXT_MID, lineHeight: 1.5, marginBottom: 8 }}>
+              {r.descricao}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ padding: '2px 9px', borderRadius: 100, background: '#EBF0FA', color: '#1A3266', fontSize: 11, fontWeight: 500 }}>
+              {PERIOD_LABEL[r.periodo]}
+            </span>
+            {(r.visibilidade === 'proprio') && (
+              <span style={{ padding: '2px 9px', borderRadius: 100, background: '#F5F0FF', color: '#5B21B6', fontSize: 11, fontWeight: 500 }}>
+                Só para mim
+              </span>
+            )}
+            {(r.visibilidade === 'selecionados') && (
+              <span style={{ padding: '2px 9px', borderRadius: 100, background: '#F0F9FF', color: '#0369A1', fontSize: 11, fontWeight: 500 }}>
+                Grupo selecionado
+              </span>
+            )}
+            {done ? (
+              <span style={{ padding: '2px 9px', borderRadius: 100, background: '#DCFCE7', color: '#166534', fontSize: 11, fontWeight: 500 }}>
+                Confirmado
+              </span>
+            ) : overdue ? (
+              <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FBF0E8', color: '#7A3A0E', fontSize: 11, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                Atrasado · {fmtBR(occStr)}{r.hora_inicio ? ` às ${r.hora_inicio}` : ''}
+              </span>
+            ) : todayFlag ? (
+              <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FAF4E8', color: '#7A5A1E', fontSize: 11, fontWeight: 500 }}>
+                {r.hora_inicio ? `Hoje às ${r.hora_inicio}` : 'Hoje'}
+              </span>
+            ) : (
+              <span style={{ padding: '2px 9px', borderRadius: 100, background: SURFACE2, color: TEXT_MID, fontSize: 11, fontWeight: 500 }}>
+                {fmtBR(occStr)}{r.hora_inicio ? ` às ${r.hora_inicio}` : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
+          {!done ? (
+            <button
+              onClick={() => void handleConfirm(r)}
+              disabled={confirmando}
+              style={{
+                padding: '4px 14px', borderRadius: 6,
+                border: `1.5px solid ${OK_GREEN}`,
+                background: '#F0FDF4', color: OK_TEXT,
+                fontSize: 12, fontWeight: 700,
+                cursor: confirmando ? 'default' : 'pointer',
+                opacity: confirmando ? 0.6 : 1,
+                minWidth: 46,
+              }}
+            >
+              {confirmando ? '…' : 'OK'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 11, fontWeight: 700, color: OK_TEXT, padding: '4px 2px', whiteSpace: 'nowrap' }}>
+              Concluído ✓
+            </span>
+          )}
+          <IconBtn onClick={() => openEdit(r)} title="Editar" danger={false}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </IconBtn>
+          <IconBtn onClick={() => void handleDelete(r.id)} title="Excluir" danger>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6M9 6V4h6v2"/>
+            </svg>
+          </IconBtn>
+        </div>
+      </div>
+    )
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -524,178 +645,112 @@ export default function LembretesClient() {
         ))}
       </div>
 
-      {/* ── Filter bar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {(['pendentes','todos','hoje','atrasados','concluidos'] as Filter[]).map(f => {
-          const labels: Record<Filter, string> = { pendentes: 'Pendentes', todos: 'Todos', hoje: 'Hoje', atrasados: 'Atrasados', concluidos: 'Confirmados' }
-          const active = filter === f
-          return (
-            <button key={f} onClick={() => setFilter(f)} style={{
-              padding: '5px 14px', borderRadius: 100,
-              border: `1px solid ${active ? INK : '#C8C5BC'}`,
-              background: active ? INK : '#fff',
-              color: active ? '#fff' : TEXT_MID,
-              fontSize: 12, fontWeight: 500, cursor: 'pointer',
-            }}>
-              {labels[f]}
-            </button>
-          )
-        })}
-        <div style={{ flex: 1 }} />
-        <div style={{ position: 'relative' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TEXT_FAINT} strokeWidth="2" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+      {/* ── Busca ── */}
+      <div style={{ position: 'relative', marginBottom: 20 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TEXT_FAINT} strokeWidth="2" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input
+          type="text"
+          placeholder="Buscar lembrete..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            padding: '8px 12px 8px 32px', border: `1px solid ${BORDER}`, borderRadius: 100,
+            fontSize: 13, background: '#fff', color: TEXT, outline: 'none', width: '100%', maxWidth: 320,
+            boxSizing: 'border-box',
+          }}
+          onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK }}
+          onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER }}
+        />
+      </div>
+
+      {/* ── Gaveta: Lembretes ativos ── */}
+      <div style={{ marginBottom: 20 }}>
+        <button
+          onClick={() => setAtivosExpanded(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            marginBottom: ativosExpanded ? 12 : 0, width: '100%',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+            <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>
           </svg>
-          <input
-            type="text"
-            placeholder="Buscar lembrete..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{
-              padding: '6px 12px 6px 32px', border: `1px solid ${BORDER}`, borderRadius: 100,
-              fontSize: 13, background: '#fff', color: TEXT, outline: 'none', width: 200,
-            }}
-            onFocus={e => { (e.target as HTMLInputElement).style.borderColor = INK }}
-            onBlur={e => { (e.target as HTMLInputElement).style.borderColor = BORDER }}
-          />
-        </div>
-      </div>
+          <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>Lembretes ativos</span>
+          <span style={{
+            minWidth: 22, height: 22, padding: '0 7px', borderRadius: 100,
+            background: atrasados > 0 ? '#FBF0E8' : '#EBF0FA',
+            color: atrasados > 0 ? '#7A3A0E' : INK,
+            fontSize: 12, fontWeight: 800,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {ativosList.length}
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: 14, color: TEXT_FAINT }}>
+            {ativosExpanded ? '▲' : '▼'}
+          </span>
+        </button>
 
-      {/* ── List ── */}
-      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: TEXT_FAINT, marginBottom: 10 }}>
-        {filtered.length} lembrete{filtered.length !== 1 ? 's' : ''}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 32 }}>
-        {filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: TEXT_FAINT, fontSize: 14 }}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C8C5BC" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 12px' }}>
-              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-              <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>
-            </svg>
-            {filter === 'pendentes' && concluidos > 0
-              ? `Todos os ${concluidos} lembrete${concluidos !== 1 ? 's' : ''} deste mês já foram confirmados. ✓`
-              : lembretes.length > 0
-                ? 'Nenhum lembrete programado para este mês.'
-                : 'Nenhum lembrete encontrado.'}
+        {ativosExpanded && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {ativosList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: TEXT_FAINT, fontSize: 14 }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C8C5BC" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 12px' }}>
+                  <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                  <rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>
+                </svg>
+                {search
+                  ? 'Nenhum lembrete ativo corresponde à busca.'
+                  : concluidos > 0
+                    ? `Todos os ${concluidos} lembrete${concluidos !== 1 ? 's' : ''} deste mês já foram confirmados. ✓`
+                    : lembretes.length > 0
+                      ? 'Nenhum lembrete programado para este mês.'
+                      : 'Nenhum lembrete encontrado.'}
+              </div>
+            ) : ativosList.map(renderLembreteCard)}
           </div>
-        ) : filtered.map(r => {
-          const done     = isDone(r)
-          const overdue  = isOverdue(r)
-          const todayFlag = isToday(r)
-          const occDate  = currentMonthOccurrence(r)
-          const occStr   = occDate ? fmtDateStr(occDate) : r.data_inicio
-          const confirmando = confirmandoIds.has(r.id)
+        )}
+      </div>
 
-          // Quem confirmou (o primeiro registro do histórico para este lembrete)
-          const cnf = historico.find(h => h.lembrete_id === r.id)
+      {/* ── Gaveta: Lembretes finalizados ── */}
+      <div style={{ marginBottom: 32 }}>
+        <button
+          onClick={() => setFinalizadosExpanded(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            marginBottom: finalizadosExpanded ? 12 : 0, width: '100%',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={OK_TEXT} strokeWidth="2">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>Lembretes finalizados</span>
+          <span style={{
+            minWidth: 22, height: 22, padding: '0 7px', borderRadius: 100,
+            background: '#DCFCE7', color: '#166534',
+            fontSize: 12, fontWeight: 800,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {finalizadosList.length}
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: 14, color: TEXT_FAINT }}>
+            {finalizadosExpanded ? '▲' : '▼'}
+          </span>
+        </button>
 
-          return (
-            <div key={r.id} style={{
-              background: done ? '#F0FDF4' : '#fff',
-              border: `1px solid ${done ? '#86EFAC' : BORDER}`,
-              borderLeft: `3px solid ${cardBorderColor(r)}`,
-              borderRadius: 10,
-              padding: '14px 16px',
-              display: 'flex', alignItems: 'flex-start', gap: 14,
-              transition: 'background 0.2s, border-color 0.2s',
-            }}>
-              {/* Body */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: done ? 2 : 4 }}>
-                  {done && <span style={{ fontSize: 16, lineHeight: 1 }}>✅</span>}
-                  <span style={{ fontSize: 15, fontWeight: 600, color: TEXT, lineHeight: 1.3 }}>
-                    {r.titulo}
-                  </span>
-                </div>
-
-                {done && cnf && (
-                  <div style={{ fontSize: 11, color: '#4B7C5A', marginBottom: 6, lineHeight: 1.4 }}>
-                    Confirmado por <strong>{cnf.usuario_login}</strong> em {formatDatetime(cnf.created_at)}
-                  </div>
-                )}
-
-                {r.descricao && (
-                  <div style={{ fontSize: 13, color: TEXT_MID, lineHeight: 1.5, marginBottom: 8 }}>
-                    {r.descricao}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ padding: '2px 9px', borderRadius: 100, background: '#EBF0FA', color: '#1A3266', fontSize: 11, fontWeight: 500 }}>
-                    {PERIOD_LABEL[r.periodo]}
-                  </span>
-                  {(r.visibilidade === 'proprio') && (
-                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#F5F0FF', color: '#5B21B6', fontSize: 11, fontWeight: 500 }}>
-                      Só para mim
-                    </span>
-                  )}
-                  {(r.visibilidade === 'selecionados') && (
-                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#F0F9FF', color: '#0369A1', fontSize: 11, fontWeight: 500 }}>
-                      Grupo selecionado
-                    </span>
-                  )}
-                  {done ? (
-                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#DCFCE7', color: '#166534', fontSize: 11, fontWeight: 500 }}>
-                      Confirmado
-                    </span>
-                  ) : overdue ? (
-                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FBF0E8', color: '#7A3A0E', fontSize: 11, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                      Atrasado · {fmtBR(occStr)}{r.hora_inicio ? ` às ${r.hora_inicio}` : ''}
-                    </span>
-                  ) : todayFlag ? (
-                    <span style={{ padding: '2px 9px', borderRadius: 100, background: '#FAF4E8', color: '#7A5A1E', fontSize: 11, fontWeight: 500 }}>
-                      {r.hora_inicio ? `Hoje às ${r.hora_inicio}` : 'Hoje'}
-                    </span>
-                  ) : (
-                    <span style={{ padding: '2px 9px', borderRadius: 100, background: SURFACE2, color: TEXT_MID, fontSize: 11, fontWeight: 500 }}>
-                      {fmtBR(occStr)}{r.hora_inicio ? ` às ${r.hora_inicio}` : ''}
-                    </span>
-                  )}
-                </div>
+        {finalizadosExpanded && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {finalizadosList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem 1rem', color: TEXT_FAINT, fontSize: 13 }}>
+                {search ? 'Nenhum lembrete finalizado corresponde à busca.' : 'Nenhum lembrete confirmado ainda este mês.'}
               </div>
-
-              {/* Actions */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
-                {!done ? (
-                  <button
-                    onClick={() => void handleConfirm(r)}
-                    disabled={confirmando}
-                    style={{
-                      padding: '4px 14px', borderRadius: 6,
-                      border: `1.5px solid ${OK_GREEN}`,
-                      background: '#F0FDF4', color: OK_TEXT,
-                      fontSize: 12, fontWeight: 700,
-                      cursor: confirmando ? 'default' : 'pointer',
-                      opacity: confirmando ? 0.6 : 1,
-                      minWidth: 46,
-                    }}
-                  >
-                    {confirmando ? '…' : 'OK'}
-                  </button>
-                ) : (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: OK_TEXT, padding: '4px 2px', whiteSpace: 'nowrap' }}>
-                    Concluído ✓
-                  </span>
-                )}
-                <IconBtn onClick={() => openEdit(r)} title="Editar" danger={false}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </IconBtn>
-                <IconBtn onClick={() => void handleDelete(r.id)} title="Excluir" danger>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-                    <path d="M10 11v6M14 11v6M9 6V4h6v2"/>
-                  </svg>
-                </IconBtn>
-              </div>
-            </div>
-          )
-        })}
+            ) : finalizadosList.map(renderLembreteCard)}
+          </div>
+        )}
       </div>
 
       {/* ── Histórico deste mês ── */}
@@ -790,7 +845,7 @@ export default function LembretesClient() {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, marginBottom: 4 }}>
           {WEEKDAYS.map(d => (
             <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: TEXT_FAINT, padding: '6px 0' }}>
               {d}
@@ -800,7 +855,7 @@ export default function LembretesClient() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
           {Array.from({ length: calFirstDay }).map((_, i) => (
-            <div key={`e${i}`} style={{ minHeight: 72 }} />
+            <div key={`e${i}`} style={{ minHeight: 72, minWidth: 0 }} />
           ))}
           {Array.from({ length: calTotalDays }, (_, i) => i + 1).map(d => {
             const ds   = calDateStr(d)
@@ -812,7 +867,7 @@ export default function LembretesClient() {
                 onClick={() => openNewOnDate(ds)}
                 title="Clique para criar um lembrete nesta data"
                 style={{
-                  minHeight: 72,
+                  minHeight: 72, minWidth: 0, overflow: 'hidden', boxSizing: 'border-box',
                   background: isT ? '#FFF8EA' : hits.length > 0 ? '#F5F8FF' : '#fff',
                   border: `${isT ? 2 : 1.5}px solid ${isT ? GOLD : hits.length > 0 ? '#4A6DB5' : '#C8C5BC'}`,
                   borderRadius: 6, padding: 6, fontSize: 12, cursor: 'pointer',
