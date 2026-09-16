@@ -43,6 +43,7 @@ const DynAtasContratantes   = dynamic(() => import('../atas-contratantes/AtasCon
 const DynRepositorioModelos = dynamic(() => import('../repositorio-modelos/RepositorioClient'),    { ssr: false })
 const DynRevisaoNR          = dynamic(() => import('../revisao-nr/RevisaoNRClient'),                { ssr: false })
 const DynRetornoNR          = dynamic(() => import('../retorno-de-nr/RetornoNRClient'),             { ssr: false })
+const DynComparativoGuia    = dynamic(() => import('../comparativo-guia-fgts/ComparativoGuiaClient'), { ssr: false })
 function AtasContratantesWithSuspense() {
   return <Suspense fallback={null}><DynAtasContratantes /></Suspense>
 }
@@ -77,4 +78,5 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/repositorio-modelos':   DynRepositorioModelos,
   '/revisao-nr':            DynRevisaoNR,
   '/retorno-de-nr':         DynRetornoNR,
+  '/comparativo-guia-fgts': DynComparativoGuia,
 }

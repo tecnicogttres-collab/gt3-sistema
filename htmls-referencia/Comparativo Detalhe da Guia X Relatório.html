@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conferência de Guia FGTS — GT3</title>
+<style>
+  :root{
+    --azul:#2A4F96; --azul-esc:#1d3a71; --ouro:#D1AE6E; --fundo:#F4F6FA;
+    --linha:#dfe4ee; --texto:#1f2733; --suave:#5d6a7d;
+    --ok:#1f7a4d; --ok-bg:#e8f5ee; --falta:#b3261e; --falta-bg:#fdecea;
+    --neutro:#7a6a3f; --neutro-bg:#fbf3e2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fundo);color:var(--texto);
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5}
+  header{background:var(--azul);color:#fff;padding:22px 28px;border-bottom:4px solid var(--ouro);
+    display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .engrenagem{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.35);
+    border-radius:8px;width:40px;height:40px;font-size:20px;line-height:1;cursor:pointer;flex:0 0 auto}
+  .engrenagem:hover{background:rgba(255,255,255,.26)}
+  .modal{position:fixed;inset:0;background:rgba(20,28,45,.5);display:flex;align-items:flex-start;
+    justify-content:center;padding:40px 16px;z-index:50;overflow:auto}
+  .modalCaixa{background:#fff;border-radius:10px;max-width:820px;width:100%;box-shadow:0 18px 50px rgba(20,28,45,.3)}
+  .modalTopo{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;
+    border-bottom:1px solid var(--linha)}
+  .modalTopo .x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:var(--suave)}
+  .modalCorpo{padding:18px 20px 22px}
+  header h1{margin:0;font-size:20px;font-weight:600}
+  header p{margin:4px 0 0;font-size:13px;opacity:.85}
+  main{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+  .painel{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:20px;margin-bottom:18px}
+  .painel h2{margin:0 0 14px;font-size:15px;font-weight:600;color:var(--azul)}
+  .painel h2 span.num{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;
+    background:var(--azul);color:#fff;border-radius:50%;font-size:12px;margin-right:8px}
+  .drop{border:2px dashed #c3cede;border-radius:8px;padding:30px 18px;text-align:center;
+    background:#fafbfe;cursor:pointer;transition:border-color .15s,background .15s}
+  .drop:hover,.drop.ativo{border-color:var(--azul);background:#eef3fc}
+  .drop strong{display:block;font-size:15px;margin-bottom:4px}
+  .drop small{color:var(--suave)}
+  .docs{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  .doc{display:flex;align-items:center;gap:10px;border:1px solid var(--linha);border-radius:8px;
+    padding:9px 12px;font-size:13.5px;background:#fff}
+  .doc .nome{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc select{padding:5px 8px;border:1px solid var(--linha);border-radius:6px;font-size:13px}
+  .doc .x{cursor:pointer;color:var(--suave);border:0;background:none;font-size:17px;line-height:1}
+  .doc small{color:var(--suave)}
+  textarea{width:100%;padding:10px;border:1px solid var(--linha);border-radius:6px;
+    font-family:Consolas,monospace;font-size:12.5px;resize:vertical}
+  .colar{min-height:100px;margin-top:6px}
+  details{margin-top:14px}
+  summary{cursor:pointer;font-size:13.5px;color:var(--azul)}
+  .config{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+  .campo{display:flex;flex-direction:column;gap:4px}
+  .campo label{font-size:12px;color:var(--suave)}
+  .campo input,.campo select{padding:7px 9px;border:1px solid var(--linha);border-radius:6px;font-size:14px}
+  .regras{display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+  .regras label{display:flex;gap:7px;align-items:flex-start;cursor:pointer}
+  .botao{background:var(--azul);color:#fff;border:0;border-radius:6px;padding:11px 26px;
+    font-size:15px;font-weight:600;cursor:pointer}
+  .botao:hover{background:var(--azul-esc)}
+  .botao:disabled{background:#9aa6bb;cursor:not-allowed}
+  .botao.sec{background:#fff;color:var(--azul);border:1px solid var(--azul);font-weight:500;
+    padding:8px 16px;font-size:13.5px}
+  .botao.limpar{background:var(--ouro);color:#3b2f14;padding:10px 22px;font-size:14px}
+  .botao.grande{padding:20px 54px;font-size:19px;border-radius:8px}
+  .botao.limpar:hover{background:#c09a4f}
+  #acoesDocs{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;
+    padding-top:14px;border-top:1px solid var(--linha);flex-wrap:wrap}
+  #acoesDocs .botao.limpar{margin-left:auto}
+  .apagaNota{font-size:12.5px;color:var(--suave)}
+  .aviso{background:#fff8e6;border:1px solid var(--ouro);border-radius:8px;padding:12px 14px;
+    font-size:13.5px;margin-bottom:18px}
+  .empresa{border-left:4px solid var(--ouro);padding:10px 0 10px 14px;margin-bottom:16px}
+  .empresa strong{font-size:17px;display:block}
+  .empresa span{color:var(--suave);font-size:13.5px}
+  .resumo{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+  .cartao{flex:1 1 150px;border:1px solid var(--linha);border-radius:8px;padding:12px 14px;background:#fff}
+  .cartao b{display:block;font-size:24px;line-height:1.2}
+  .cartao small{color:var(--suave);font-size:12.5px}
+  .cartao.destaque{border:2px solid var(--ouro);background:var(--neutro-bg)}
+  .cartao.destaque small{color:var(--neutro);font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;padding:9px 8px;background:#eef1f7;border-bottom:2px solid var(--linha);
+    font-weight:600;font-size:12.5px;color:var(--azul)}
+  td{padding:8px;border-bottom:1px solid var(--linha);vertical-align:top}
+  tr.falta td{background:var(--falta-bg)}
+  tr.fora td{background:#f7f8fa;color:var(--suave)}
+  td.grifo{background:#fdf1d6;box-shadow:inset 0 0 0 2px var(--ouro);border-radius:4px;
+    font-weight:600;color:var(--neutro)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:11px;font-size:11.5px;font-weight:600;white-space:nowrap}
+  .tag.ok{background:var(--ok-bg);color:var(--ok)}
+  .tag.nao{background:var(--falta-bg);color:var(--falta)}
+  .tag.fora{background:#eceff4;color:var(--suave)}
+  .tag.alerta{background:var(--neutro-bg);color:var(--neutro)}
+  .tag.tipo{background:#e8eefb;color:var(--azul)}
+  .nota{font-size:12px;color:var(--neutro);display:block;margin-top:3px}
+  .copiavel{position:relative;background:#fff;border:1px solid var(--linha);border-left:4px solid var(--ouro);
+    border-radius:8px;padding:16px 18px;white-space:pre-wrap;font-size:13.5px;cursor:pointer;
+    font-family:"Segoe UI",Roboto,Arial,sans-serif}
+  .copiavel:hover{background:#fffdf7}
+  .copiavel:focus{outline:2px solid var(--azul);outline-offset:2px}
+  .dica{position:absolute;top:10px;right:12px;font-size:11.5px;color:var(--suave);
+    background:#f1f4f9;border-radius:11px;padding:2px 10px}
+  .oculto{display:none}
+  .semfalta{background:var(--ok-bg);color:var(--ok);border-radius:8px;padding:16px;
+    font-weight:600;text-align:center}
+  .vazio{color:var(--suave);font-size:14px;padding:12px 0;text-align:center}
+  .filtros{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .filtros button{border:1px solid var(--linha);background:#fff;border-radius:16px;padding:5px 14px;
+    font-size:13px;cursor:pointer}
+  .filtros button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .tokens{font-size:12.5px;color:var(--suave);line-height:1.8;margin-top:8px}
+  .tokens code{background:#eef1f7;color:var(--azul);border-radius:4px;padding:1px 6px;
+    font-family:Consolas,monospace;font-size:12px}
+  .linhaCfg{display:grid;grid-template-columns:230px 1fr;gap:12px;align-items:center;margin-bottom:10px}
+  .linhaCfg label{font-size:13px;color:var(--suave)}
+  .linhaCfg input{width:100%;padding:7px 9px;border:1px solid var(--linha);border-radius:6px;
+    font-family:Consolas,monospace;font-size:12.5px}
+  @media(max-width:700px){.linhaCfg{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Conferência de Guia FGTS</h1>
+    <p>Compara as pessoas cadastradas no Portal GT3 com os trabalhadores que constam no detalhe da guia.</p>
+  </div>
+  <button id="btnCfg" class="engrenagem" title="Modelo da observação" aria-label="Modelo da observação">&#9881;</button>
+</header>
+
+<main>
+
+  <div class="aviso" id="avisoLib">
+    Carregando o leitor de PDF.
+  </div>
+
+  <section class="painel">
+    <h2><span class="num">1</span>Documentos</h2>
+    <div class="drop" id="drop">
+      <strong>Solte aqui os PDFs, em qualquer ordem</strong>
+      <small>O relatório do Portal e o detalhe da guia são identificados pelo conteúdo</small>
+      <input type="file" id="file" accept="application/pdf" multiple class="oculto">
+    </div>
+    <div class="docs" id="docs"></div>
+    <div id="acoesDocs" class="oculto">
+      <span class="apagaNota">Limpa os arquivos e o resultado desta análise</span>
+      <button class="botao limpar" id="btnNova">Remover todos os PDFs</button>
+    </div>
+
+  </section>
+
+  <section class="painel">
+    <h2><span class="num">2</span>Regras da avaliação</h2>
+    <div class="config">
+      <div class="campo">
+        <label for="fmt">Formato das datas do relatório</label>
+        <select id="fmt">
+          <option value="auto">Detectar automaticamente</option>
+          <option value="mdy">MM/DD/AAAA</option>
+          <option value="dmy">DD/MM/AAAA</option>
+        </select>
+      </div>
+      <div class="regras">
+        <label><input type="checkbox" id="rData" checked> Desconsiderar cadastro posterior à competência</label>
+        <label><input type="checkbox" id="rVinculo" checked> Desconsiderar vínculo temporário, associado ou PJ</label>
+        <label><input type="checkbox" id="rCargo" checked> Desconsiderar cargo estagiário, sócio ou diretor</label>
+      </div>
+    </div>
+  </section>
+
+
+  <div style="margin-bottom:18px">
+    <button class="botao grande" id="btn">Comparar</button>
+  </div>
+
+  <div class="modal oculto" id="modalCfg">
+    <div class="modalCaixa">
+      <div class="modalTopo">
+        <h2 style="margin:0;font-size:16px;color:var(--azul)">Modelo da observação</h2>
+        <button class="x" id="fecharCfg" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="modalCorpo">
+<div>
+        <label style="font-size:13px;color:var(--suave)">Texto da observação</label>
+        <textarea id="modelo" style="min-height:230px"></textarea>
+
+        <div style="margin-top:14px">
+          <div class="linhaCfg">
+            <label for="itFalta">Cada pessoa que não consta</label>
+            <input id="itFalta">
+          </div>
+          <div class="linhaCfg">
+            <label for="itDesc">Cada pessoa desconsiderada</label>
+            <input id="itDesc">
+          </div>
+          <div class="linhaCfg">
+            <label for="itDiv">Cada pessoa em CNPJ divergente</label>
+            <input id="itDiv">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
+          <button class="botao sec" id="btnSalvar">Salvar como padrão</button>
+          <button class="botao sec" id="btnRestaurar">Restaurar o modelo original</button>
+          <span id="statusCfg" style="font-size:13px;color:var(--ok);align-self:center"></span>
+        </div>
+
+        <div class="tokens">
+          <strong style="color:var(--texto)">Campos disponíveis</strong><br>
+          <code>{data}</code> <code>{hora}</code> <code>{data_hora}</code>
+          <code>{empresa}</code> <code>{cnpj}</code> <code>{competencia}</code>
+          <code>{avaliadas}</code> <code>{contempladas}</code> <code>{qtd_faltantes}</code>
+          <code>{qtd_desconsiderados}</code> <code>{cnpjs}</code><br>
+          Listas: <code>{faltantes}</code> <code>{desconsiderados}</code> <code>{divergentes}</code> —
+          cada item segue o formato definido acima, onde valem <code>{nome}</code>, <code>{cpf}</code>,
+          <code>{cadastro}</code>, <code>{motivo}</code>, <code>{atividade}</code>,
+          <code>{vinculo}</code>, <code>{cnpj_pessoa}</code>, <code>{tomador}</code>.<br>
+          Trechos condicionais: <code>{#faltantes}…{/faltantes}</code> só aparece se houver quem não conste.
+          Também existem <code>{#sem_faltantes}</code>, <code>{#desconsiderados}</code>,
+          <code>{#divergentes}</code>, <code>{#varios_cnpj}</code> e <code>{#alerta}</code>.
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="painel oculto" id="resultado">
+    <div class="empresa" id="empresa"></div>
+    <div class="aviso oculto" id="avisoOcr"></div>
+    <div class="resumo" id="resumo"></div>
+
+    <div class="filtros" id="filtros">
+      <button data-f="falta" class="on">Não constam</button>
+      <button data-f="ok">Constam</button>
+      <button data-f="fora">Desconsiderados</button>
+      <button data-f="todos">Todos</button>
+    </div>
+
+    <div id="semFalta" class="semfalta oculto">
+      Sem divergências: todas as pessoas avaliadas constam no detalhe da guia.
+    </div>
+
+    <div style="overflow-x:auto" id="caixaTabela">
+      <table id="tabela">
+        <thead>
+          <tr>
+            <th>Situação</th><th>Pessoa</th><th>CPF</th><th>Atividade</th>
+            <th>Vínculo</th><th>Cadastro</th><th>Onde consta na guia</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:26px">Observação para envio</h2>
+    <div class="copiavel" id="obs" tabindex="0" role="button" aria-label="Clique para copiar a observação">
+      <span class="dica" id="dica">clique para copiar</span>
+    </div>
+    <div style="margin-top:12px">
+      <button class="botao sec" id="btnCsv">Baixar resultado em CSV</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+/* ===========================================================================
+   Uso 100% offline: baixe pdf.min.js e pdf.worker.min.js (versão 3.11.174),
+   deixe-os nesta mesma pasta e troque a tag acima por
+   <script src="pdf.min.js"><\/script>, ajustando o workerSrc logo abaixo.
+   =========================================================================== */
+var PDFOK = false;
+(function(){
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    PDFOK = true;
+    document.getElementById('avisoLib').classList.add('oculto');
+  } else {
+    document.getElementById('avisoLib').innerHTML =
+      '<strong>O leitor de PDF não carregou.</strong> Verifique a conexão e recarregue a página. ' +
+      'Para uso sem internet, deixe os arquivos pdf.min.js e pdf.worker.min.js na mesma pasta deste HTML.';
+  }
+})();
+
+/* ---------------------------- utilidades ---------------------------------- */
+
+function semAcento(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normNome(s){ return semAcento(s).toUpperCase().replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim(); }
+function chaveNome(s){
+  return normNome(s).split(' ').filter(function(p){
+    return ['DA','DE','DO','DAS','DOS','E'].indexOf(p) < 0;
+  }).join(' ');
+}
+function soDigitos(s){ return (s||'').replace(/\D/g,''); }
+function normCpf(s){
+  var d = soDigitos(s);
+  if(!d) return '';
+  if(d.length > 11) d = d.slice(-11);
+  return d.padStart(11,'0');
+}
+function fmtCpf(c){
+  return c && c.length === 11 ? c.slice(0,3)+'.'+c.slice(3,6)+'.'+c.slice(6,9)+'-'+c.slice(9) : (c||'');
+}
+function escapar(s){
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function similar(a,b){
+  a = chaveNome(a); b = chaveNome(b);
+  if(!a || !b) return 0;
+  if(a === b) return 1;
+  var m = a.length, n = b.length, prev = [], cur = [], i, j;
+  for(j=0;j<=n;j++) prev[j] = j;
+  for(i=1;i<=m;i++){
+    cur[0] = i;
+    for(j=1;j<=n;j++){
+      cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1]===b[j-1] ? 0 : 1));
+    }
+    prev = cur.slice();
+  }
+  return 1 - prev[n]/Math.max(m,n);
+}
+
+/* --------------------------- leitura dos PDFs ------------------------------ */
+
+function lerPdf(file){
+  return file.arrayBuffer().then(function(buf){
+    return pdfjsLib.getDocument({data:buf}).promise;
+  }).then(function(pdf){
+    var linhas = [], seq = [], vazias = [];
+    var passo = function(n){
+      if(n > pdf.numPages) return Promise.resolve();
+      return pdf.getPage(n).then(function(page){ return page.getTextContent(); })
+        .then(function(tc){
+          if(!tc.items.length) vazias.push(n);
+          var mapa = {};
+          tc.items.forEach(function(it){
+            var y = Math.round(it.transform[5]);
+            if(!mapa[y]) mapa[y] = [];
+            mapa[y].push({x:it.transform[4], s:it.str});
+            seq.push(it.str);
+          });
+          Object.keys(mapa).sort(function(a,b){ return b-a; }).forEach(function(y){
+            var t = mapa[y].sort(function(a,b){ return a.x-b.x; })
+                      .map(function(o){ return o.s; }).join(' ').replace(/\s+/g,' ').trim();
+            if(t) linhas.push(t);
+          });
+          return passo(n+1);
+        });
+    };
+    return passo(1).then(function(){
+      return {
+        texto: linhas.join('\n') + '\n' + seq.join(' ').replace(/\s+/g,' '),
+        arquivo: file.name, paginas: pdf.numPages, vazias: vazias
+      };
+    });
+  });
+}
+
+/* Identifica, pelo conteúdo, se o PDF é a guia do FGTS ou o relatório do Portal */
+function pontuar(t){
+  var g = 0, r = 0;
+  if(/Detalhe da Guia/i.test(t)) g += 4;
+  if(/Rela[çc][aã]o de Trabalhadores/i.test(t)) g += 3;
+  if(/Nome Trabalhador/i.test(t)) g += 3;
+  if(/Comp\.?\s*Apura[çc][aã]o/i.test(t)) g += 2;
+  if(/Total do Tomador|Total FGTS|Total do Estabelecimento/i.test(t)) g += 2;
+  if((t.match(/\d{14,22}\s+\d{3}\.\d{3}\.\d{3}-\d{2}/g) || []).length > 3) g += 4;
+
+  if(/CONFER[EÊ]NCIA GUIA/i.test(t)) r += 4;
+  if(/GT1000|INSOFT/i.test(t)) r += 3;
+  if(/Empresa\s+Pessoa/i.test(t)) r += 4;
+  if(/Admiss[aã]o/i.test(t)) r += 3;
+  if(/V[ií]nculo/i.test(t)) r += 2;
+  if(/\bEFETIVO\b/.test(t)) r += 2;
+  return {guia:g, relatorio:r};
+}
+function classificar(doc){
+  var p = pontuar(doc.texto);
+  doc.pontos = p;
+  doc.tipo = p.guia >= p.relatorio ? 'guia' : 'relatorio';
+  return doc;
+}
+/* Se todos caírem no mesmo lado, o de menor margem migra para o outro */
+function equilibrar(docs){
+  var rel = docs.filter(function(d){ return d.tipo === 'relatorio'; });
+  var gui = docs.filter(function(d){ return d.tipo === 'guia'; });
+  if(docs.length < 2 || docs.some(function(d){ return d.manual; })) return;
+  var margem = function(d){ return d.pontos.guia - d.pontos.relatorio; };
+  if(!rel.length){
+    gui.slice().sort(function(a,b){ return margem(a)-margem(b); })[0].tipo = 'relatorio';
+  } else if(!gui.length){
+    rel.slice().sort(function(a,b){ return margem(b)-margem(a); })[0].tipo = 'guia';
+  }
+}
+
+/* -------------------- relatório do Portal GT3 (documento A) ---------------- */
+
+var VINCULOS = ['EFETIVO','TEMPORARIO','ASSOCIADO','PJ','AUTONOMO','APRENDIZ','ESTAGIARIO','SOCIO','DIRETOR','COOPERADO'];
+
+function lerRelatorio(texto, formato){
+  var linhas = texto.replace(/\t/g,' ').split(/\n+/), brutos = [];
+  var re = /^(.*?)\s(\d{8,11})\s+(.*?)\s*(\d{1,2}\/\d{1,2}\/\d{2,4})(?:\s+(\d{1,2}\/\d{1,2}\/\d{2,4}))?\s*$/;
+
+  linhas.forEach(function(l){
+    l = l.replace(/\s+/g,' ').trim();
+    if(!l || /Empresa\s+Pessoa/i.test(l)) return;
+    var m = re.exec(l);
+    if(!m) return;
+    var antes = m[1].trim();
+    if(!/[A-Za-zÀ-ÿ]{3}/.test(antes)) return;
+    brutos.push({antes:antes, cpf:normCpf(m[2]), meio:(m[3]||'').trim(),
+                 cadastro:m[4], admissao:m[5]||''});
+  });
+
+  var prefixo = '';
+  if(brutos.length > 1){
+    prefixo = brutos[0].antes;
+    brutos.forEach(function(b){
+      var i = 0;
+      while(i < prefixo.length && i < b.antes.length && prefixo[i] === b.antes[i]) i++;
+      prefixo = prefixo.slice(0,i);
+    });
+    prefixo = prefixo.replace(/\S*$/,'').trim();
+  }
+
+  var fmt = formato;
+  if(fmt === 'auto'){
+    fmt = 'mdy';
+    brutos.forEach(function(b){
+      if(parseInt(b.cadastro.split('/')[0],10) > 12) fmt = 'dmy';
+    });
+  }
+
+  var pessoas = brutos.map(function(b){
+    var pessoa = prefixo && b.antes.indexOf(prefixo) === 0 ? b.antes.slice(prefixo.length).trim() : b.antes;
+    var meio = b.meio, vinculo = '', atividade = meio;
+    var tokens = meio.split(' ');
+    var ultimo = semAcento(tokens[tokens.length-1] || '').toUpperCase();
+    if(VINCULOS.indexOf(ultimo) >= 0){
+      vinculo = tokens.pop();
+      atividade = tokens.join(' ').trim();
+    }
+    return {pessoa:pessoa, cpf:b.cpf, atividade:atividade, vinculo:vinculo,
+            cadastro:b.cadastro, admissao:b.admissao, dataCad:paraData(b.cadastro, fmt), repeticoes:1};
+  });
+
+  /* o relatório repete a mesma pessoa em várias linhas: conta uma vez só */
+  var vistos = {}, unicos = [];
+  pessoas.forEach(function(p){
+    var chave = p.cpf || chaveNome(p.pessoa);
+    if(vistos[chave]){
+      var j = vistos[chave];
+      j.repeticoes++;
+      if(!j.atividade && p.atividade) j.atividade = p.atividade;
+      if(!j.vinculo && p.vinculo) j.vinculo = p.vinculo;
+      if(p.dataCad && (!j.dataCad || p.dataCad < j.dataCad)){ j.dataCad = p.dataCad; j.cadastro = p.cadastro; }
+      return;
+    }
+    vistos[chave] = p;
+    unicos.push(p);
+  });
+  return unicos;
+}
+
+function paraData(s, fmt){
+  if(!s) return null;
+  var p = s.split('/').map(function(x){ return parseInt(x,10); });
+  if(p.length < 3 || isNaN(p[0]) || isNaN(p[1]) || isNaN(p[2])) return null;
+  var dia, mes;
+  if(fmt === 'dmy'){ dia = p[0]; mes = p[1]; } else { mes = p[0]; dia = p[1]; }
+  if(mes > 12){ var t = mes; mes = dia; dia = t; }
+  var ano = p[2] < 100 ? 2000 + p[2] : p[2];
+  return new Date(ano, mes-1, dia);
+}
+function dataBr(d){
+  if(!d) return '';
+  var z = function(n){ return ('0'+n).slice(-2); };
+  return z(d.getDate())+'/'+z(d.getMonth()+1)+'/'+d.getFullYear();
+}
+
+/* --------------------- detalhe da guia FGTS (documento B) ------------------ */
+
+var RE_GUIA = new RegExp(
+  'Estabelecimento:\\s*(\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2})' +
+  '|Tomador:\\s*(\\d[\\d.\\/-]{9,}|Sem Tomador)' +
+  '|([A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ\'’.\\- ]{2,70}?)\\s+(\\d{14,22})\\s+(\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2})',
+  'g');
+
+function lerGuia(texto){
+  var pessoas = {}, estab = '', tomador = '', m;
+  RE_GUIA.lastIndex = 0;
+  while((m = RE_GUIA.exec(texto)) !== null){
+    if(m[1]){ estab = m[1]; continue; }
+    if(m[2]){ tomador = m[2]; continue; }
+    var cpf = normCpf(m[5]);
+    var nome = (m[3]||'').replace(/\s+/g,' ').trim();
+    if(!pessoas[cpf]) pessoas[cpf] = {cpf:cpf, nome:nome, estab:estab, tomador:tomador};
+  }
+  var reCpf = /\d{3}\.\d{3}\.\d{3}-\d{2}/g, c;
+  while((c = reCpf.exec(texto)) !== null){
+    var k = normCpf(c[0]);
+    if(!pessoas[k]) pessoas[k] = {cpf:k, nome:'', estab:estab, tomador:''};
+  }
+
+  var comp = '', contagem = {}, reComp = /(?:^|[^\d\/])(\d{2})\/(\d{4})(?![\d\/])/g, x;
+  while((x = reComp.exec(texto)) !== null){
+    var ch = x[1]+'/'+x[2];
+    contagem[ch] = (contagem[ch]||0) + 1;
+  }
+  Object.keys(contagem).forEach(function(k){ if(!comp || contagem[k] > contagem[comp]) comp = k; });
+
+  var cnpj = /Estabelecimento:\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(texto);
+  return {pessoas:pessoas, competencia:comp, razao:acharRazao(texto), cnpj: cnpj ? cnpj[1] : ''};
+}
+
+/* O rótulo nem sempre fica junto do valor no texto extraído: valida e, se não
+   servir, procura o nome empresarial que mais se repete no documento. */
+function acharRazao(texto){
+  var valido = function(v){
+    return /^[A-ZÀ-Ú0-9][A-ZÀ-Ú0-9 .,'\-&\/]{3,}$/.test(v) && /[A-ZÀ-Ú]{3}/.test(v);
+  };
+  var m = /Nome Empregador:\s*([^\n]{4,80}?)(?=\s{2,}|\s+(?:Qtd|Total|Origem|Vencimento|Data|Emitida)\b|\n|$)/i.exec(texto);
+  if(m && valido(m[1].replace(/\s+/g,' ').trim())) return m[1].replace(/\s+/g,' ').trim();
+
+  var re = /(?:^|[^A-ZÀ-Úa-zà-ÿ])([A-ZÀ-Ú][A-ZÀ-Ú0-9 .,'\-&\/]{3,60}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|ME|EPP|MEI|SA))(?![A-ZÀ-Úa-zà-ÿ])/g;
+  var cont = {}, x, melhor = '';
+  while((x = re.exec(texto)) !== null){
+    var k = x[1].replace(/\s+/g,' ').trim();
+    cont[k] = (cont[k]||0) + 1;
+  }
+  Object.keys(cont).forEach(function(k){ if(!melhor || cont[k] > cont[melhor]) melhor = k; });
+  return melhor;
+}
+
+/* ------------------------------ comparação -------------------------------- */
+
+var EXC_VINCULO = ['TEMPORARIO','ASSOCIADO','PJ'];
+var EXC_CARGO   = ['ESTAGIARIO','SOCIO','DIRETOR'];
+
+function ultimoDia(comp){
+  var p = (comp||'').split('/');
+  if(p.length !== 2) return null;
+  return new Date(parseInt(p[1],10), parseInt(p[0],10), 0, 23, 59, 59);
+}
+
+function comparar(listaA, guia, opcoes){
+  var porCpf = guia.pessoas, porNome = {};
+  Object.keys(porCpf).forEach(function(k){
+    if(porCpf[k].nome) porNome[chaveNome(porCpf[k].nome)] = porCpf[k];
+  });
+
+  var limite = opcoes.data ? ultimoDia(opcoes.competencia) : null;
+  var estabs = {}, estabPrincipal = '';
+  Object.keys(porCpf).forEach(function(k){
+    var e = porCpf[k].estab;
+    if(e) estabs[e] = (estabs[e]||0) + 1;
+  });
+  Object.keys(estabs).forEach(function(e){
+    if(!estabPrincipal || estabs[e] > estabs[estabPrincipal]) estabPrincipal = e;
+  });
+
+  return listaA.map(function(p){
+    var r = {dados:p, situacao:'', motivo:'', campo:'', achado:null, nota:''};
+    var vin = semAcento(p.vinculo).toUpperCase();
+    var car = semAcento(p.atividade).toUpperCase();
+
+    if(opcoes.vinculo && EXC_VINCULO.some(function(v){ return vin.indexOf(v) >= 0; })){
+      r.situacao = 'fora'; r.campo = 'vinculo';
+      r.motivo = 'vínculo ' + (p.vinculo||'').toLowerCase();
+    } else if(opcoes.cargo && EXC_CARGO.some(function(c){ return car.indexOf(c) >= 0; })){
+      r.situacao = 'fora'; r.campo = 'atividade';
+      r.motivo = 'cargo ' + (p.atividade||'').toLowerCase();
+    } else if(limite && p.dataCad && p.dataCad > limite){
+      r.situacao = 'fora'; r.campo = 'cadastro';
+      r.motivo = 'cadastro em ' + dataBr(p.dataCad) + ', posterior à competência ' + opcoes.competencia;
+    }
+
+    var achado = (p.cpf && porCpf[p.cpf]) || porNome[chaveNome(p.pessoa)] || null;
+
+    if(!achado && p.pessoa){
+      var melhor = null, score = 0;
+      Object.keys(porCpf).forEach(function(k){
+        if(!porCpf[k].nome) return;
+        var s = similar(p.pessoa, porCpf[k].nome);
+        if(s > score){ score = s; melhor = porCpf[k]; }
+      });
+      if(melhor && score >= 0.86){
+        achado = melhor;
+        r.nota = 'correspondência aproximada com “' + melhor.nome + '” (CPF diferente — conferir)';
+      }
+    } else if(achado && achado.nome && chaveNome(achado.nome) !== chaveNome(p.pessoa)){
+      r.nota = 'mesmo CPF, grafia diferente na guia: “' + achado.nome + '”';
+    }
+
+    r.achado = achado;
+    if(r.situacao !== 'fora') r.situacao = achado ? 'ok' : 'falta';
+    if(achado && achado.estab && estabPrincipal && achado.estab !== estabPrincipal){
+      r.nota = (r.nota ? r.nota + ' · ' : '') + 'CNPJ divergente: ' + achado.estab;
+      r.divergente = true;
+    }
+    return r;
+  });
+}
+
+/* --------------------------- modelo da observação -------------------------- */
+
+var MODELO_PADRAO = [
+  '{#alerta}[CONFERIR ANTES DE ENVIAR — {alerta}. Apague esta linha depois da conferência.]',
+  '{/alerta}{data} {hora} - {#faltantes}Por favor, verificar que o(s) seguinte(s) colaborador(es) cadastrado(s) no Portal não consta(m) no detalhe da guia emitida:',
+  '{faltantes}{/faltantes}{#sem_faltantes}todos os colaboradores cadastrados no Portal constam no detalhe da guia emitida da competência {competencia}.{/sem_faltantes}',
+  '{#divergentes}',
+  'O(s) seguinte(s) colaborador(es) consta(m) em CNPJ diferente dos demais:',
+  '{divergentes}{/divergentes}'
+].join('\n');
+
+var ITEM_FALTA_PADRAO = '{nome}';
+var ITEM_DESC_PADRAO  = '   - {nome} — {motivo}';
+var ITEM_DIV_PADRAO   = '{nome} — {cnpj_pessoa}{tomador}';
+
+function guardar(chave, valor){
+  try{ localStorage.setItem(chave, valor); return true; }catch(e){ return false; }
+}
+function recuperar(chave){
+  try{ return localStorage.getItem(chave); }catch(e){ return null; }
+}
+function carregarConfig(){
+  document.getElementById('modelo').value = recuperar('gt3.fgts.modelo') || MODELO_PADRAO;
+  document.getElementById('itFalta').value = recuperar('gt3.fgts.itFalta') || ITEM_FALTA_PADRAO;
+  document.getElementById('itDesc').value = recuperar('gt3.fgts.itDesc') || ITEM_DESC_PADRAO;
+  document.getElementById('itDiv').value  = recuperar('gt3.fgts.itDiv')  || ITEM_DIV_PADRAO;
+}
+carregarConfig();
+
+var modalCfg = document.getElementById('modalCfg');
+document.getElementById('btnCfg').addEventListener('click', function(){
+  modalCfg.classList.remove('oculto');
+  document.getElementById('modelo').focus();
+});
+document.getElementById('fecharCfg').addEventListener('click', function(){
+  modalCfg.classList.add('oculto');
+});
+modalCfg.addEventListener('click', function(e){
+  if(e.target === modalCfg) modalCfg.classList.add('oculto');
+});
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') modalCfg.classList.add('oculto');
+});
+
+document.getElementById('btnSalvar').addEventListener('click', function(){
+  var ok = guardar('gt3.fgts.modelo', document.getElementById('modelo').value) &&
+           guardar('gt3.fgts.itFalta', document.getElementById('itFalta').value) &&
+           guardar('gt3.fgts.itDesc', document.getElementById('itDesc').value) &&
+           guardar('gt3.fgts.itDiv', document.getElementById('itDiv').value);
+  var st = document.getElementById('statusCfg');
+  st.textContent = ok ? 'Modelo salvo neste navegador.'
+                      : 'Não foi possível salvar aqui; o modelo vale só para esta sessão.';
+  st.style.color = ok ? 'var(--ok)' : 'var(--falta)';
+  if(resultadoAtual.length) processar();
+  setTimeout(function(){ st.textContent = ''; }, 4000);
+});
+document.getElementById('btnRestaurar').addEventListener('click', function(){
+  document.getElementById('modelo').value = MODELO_PADRAO;
+  document.getElementById('itFalta').value = ITEM_FALTA_PADRAO;
+  document.getElementById('itDesc').value = ITEM_DESC_PADRAO;
+  document.getElementById('itDiv').value = ITEM_DIV_PADRAO;
+  if(resultadoAtual.length) processar();
+});
+
+function preencher(modelo, dados){
+  var t = modelo;
+  /* trechos condicionais {#nome} … {/nome} */
+  var secoes = ['alerta','faltantes','sem_faltantes','desconsiderados','divergentes','varios_cnpj'];
+  secoes.forEach(function(s){
+    var re = new RegExp('\\{#'+s+'\\}([\\s\\S]*?)\\{\\/'+s+'\\}','g');
+    t = t.replace(re, function(_, dentro){ return dados['cond_'+s] ? dentro : ''; });
+  });
+  t = t.replace(/\{(\w+)\}/g, function(todo, chave){
+    return dados[chave] !== undefined && dados[chave] !== null ? dados[chave] : '';
+  });
+  return t.replace(/\n{3,}/g,'\n\n').replace(/[ \t]+$/gm,'').trim();
+}
+function item(formato, campos){
+  return formato.replace(/\{(\w+)\}/g, function(todo, chave){
+    return campos[chave] !== undefined && campos[chave] !== null ? campos[chave] : '';
+  });
+}
+
+/* --------------------------------- tela ----------------------------------- */
+
+var docs = [], resultadoAtual = [], paginasVazias = [], filtroAtual = 'falta';
+
+function pintarDocs(){
+  var alvo = document.getElementById('docs');
+  document.getElementById('acoesDocs').classList.toggle('oculto', docs.length === 0);
+  alvo.innerHTML = '';
+  docs.forEach(function(d, i){
+    var el = document.createElement('div');
+    el.className = 'doc';
+    el.innerHTML =
+      '<span class="nome">📄 ' + escapar(d.arquivo) + '</span>' +
+      (d.lendo ? '<small>lendo…</small>' :
+        '<select data-i="' + i + '">' +
+          '<option value="guia"' + (d.tipo==='guia'?' selected':'') + '>detalhe da guia</option>' +
+          '<option value="relatorio"' + (d.tipo==='relatorio'?' selected':'') + '>relatório do Portal</option>' +
+        '</select>') +
+      '<button class="x" data-x="' + i + '" title="remover">×</button>';
+    alvo.appendChild(el);
+  });
+}
+document.getElementById('docs').addEventListener('change', function(e){
+  if(e.target.tagName !== 'SELECT') return;
+  var d = docs[+e.target.dataset.i];
+  d.tipo = e.target.value;
+  d.manual = true;
+});
+document.getElementById('docs').addEventListener('click', function(e){
+  if(!e.target.dataset.x) return;
+  docs.splice(+e.target.dataset.x, 1);
+  pintarDocs();
+});
+
+function receber(lista){
+  lista.filter(function(f){ return /\.pdf$/i.test(f.name); }).forEach(function(f){
+    if(!PDFOK){
+      alert('O leitor de PDF não está disponível. Recarregue a página com internet ou deixe ' +
+            'pdf.min.js e pdf.worker.min.js na mesma pasta deste arquivo.');
+      return;
+    }
+    var d = {arquivo:f.name, lendo:true, texto:'', vazias:[], paginas:0};
+    docs.push(d);
+    pintarDocs();
+    lerPdf(f).then(function(r){
+      d.texto = r.texto; d.vazias = r.vazias; d.paginas = r.paginas; d.lendo = false;
+      classificar(d);
+      equilibrar(docs);
+      pintarDocs();
+    }).catch(function(err){
+      d.lendo = false; d.tipo = 'guia';
+      pintarDocs();
+      alert('Não consegui ler ' + f.name + ': ' + err.message);
+    });
+  });
+}
+
+var drop = document.getElementById('drop'), input = document.getElementById('file');
+drop.addEventListener('click', function(){ input.click(); });
+input.addEventListener('change', function(){ receber(Array.prototype.slice.call(input.files)); input.value=''; });
+['dragover','dragenter'].forEach(function(ev){
+  drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('ativo'); });
+});
+['dragleave','drop'].forEach(function(ev){
+  drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('ativo'); });
+});
+drop.addEventListener('drop', function(e){ receber(Array.prototype.slice.call(e.dataTransfer.files)); });
+
+document.getElementById('btn').addEventListener('click', function(){
+  if(docs.some(function(d){ return d.lendo; })){
+    alert('Ainda estou lendo um dos PDFs. Tente de novo em instantes.');
+    return;
+  }
+  processar();
+});
+
+document.getElementById('btnNova').addEventListener('click', function(){
+  novaAnalise();
+});
+
+/* Apaga da memória o texto de cada PDF, a lista de documentos e tudo o que foi
+   gerado a partir deles. Nada é gravado em disco nem enviado a lugar nenhum:
+   o conteúdo dos PDFs só existe enquanto a página está aberta. */
+function novaAnalise(){
+  docs.forEach(function(d){ d.texto = ''; d.vazias = []; });
+  docs.length = 0;
+  resultadoAtual = [];
+  paginasVazias = [];
+  filtroAtual = 'falta';
+
+  document.getElementById('file').value = '';
+  document.getElementById('resultado').classList.add('oculto');
+  document.getElementById('empresa').innerHTML = '';
+  document.getElementById('resumo').innerHTML = '';
+  document.getElementById('avisoOcr').classList.add('oculto');
+  document.getElementById('avisoOcr').innerHTML = '';
+  document.querySelector('#tabela tbody').innerHTML = '';
+  document.getElementById('semFalta').classList.add('oculto');
+  document.getElementById('obs').textContent = '';
+
+  pintarDocs();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function processar(){
+  var textoRel = '', textoGuia = '';
+  paginasVazias = [];
+
+  docs.forEach(function(d){
+    if(d.tipo === 'relatorio') textoRel += '\n' + d.texto; else textoGuia += '\n' + d.texto;
+    if(d.vazias && d.vazias.length) paginasVazias.push(d);
+  });
+
+  if(!textoRel.trim() || !textoGuia.trim()){
+    alert('Faltou um dos documentos: preciso do relatório do Portal e do detalhe da guia.\n\n' +
+          'Se os dois PDFs já estão na lista, confira o tipo indicado ao lado de cada um.');
+    return;
+  }
+
+  var guia = lerGuia(textoGuia);
+  var competencia = guia.competencia;
+
+  if(!competencia){
+    alert('Não consegui identificar a competência no detalhe da guia. ' +
+          'A regra de cadastro posterior à competência ficará desligada nesta análise.');
+  }
+
+  var lista = lerRelatorio(textoRel, document.getElementById('fmt').value);
+  if(!lista.length){
+    alert('Nenhuma pessoa foi reconhecida no relatório do Portal. Confira se o documento marcado ' +
+          'como “relatório do Portal” é o certo.');
+    return;
+  }
+
+  resultadoAtual = comparar(lista, guia, {
+    competencia: competencia,
+    data: document.getElementById('rData').checked,
+    vinculo: document.getElementById('rVinculo').checked,
+    cargo: document.getElementById('rCargo').checked
+  });
+
+  var ordem = {falta:0, ok:1, fora:2};
+  resultadoAtual.sort(function(a,b){
+    return (ordem[a.situacao] - ordem[b.situacao]) ||
+           a.dados.pessoa.localeCompare(b.dados.pessoa, 'pt-BR');
+  });
+
+  document.getElementById('empresa').innerHTML =
+    '<strong>' + escapar(guia.razao || 'Empresa não identificada no PDF') + '</strong>' +
+    '<span>CNPJ ' + escapar(guia.cnpj || '—') + ' · competência ' + escapar(competencia || '—') +
+    ' · ' + Object.keys(guia.pessoas).length + ' trabalhadores na guia</span>';
+
+  var avisoOcr = document.getElementById('avisoOcr');
+  if(paginasVazias.length){
+    avisoOcr.innerHTML = '<strong>Atenção: há páginas sem texto nos PDFs enviados.</strong><br>' +
+      paginasVazias.map(function(d){
+        return escapar(d.arquivo) + ' — página(s) ' + d.vazias.join(', ') + ' de ' + d.paginas;
+      }).join('<br>') +
+      '<br>São páginas em imagem (digitalizadas) e não puderam ser lidas. Quem aparecer só nelas ' +
+      'será marcado como “não consta”. Confira à mão ou cole o texto dessas páginas.';
+    avisoOcr.classList.remove('oculto');
+  } else {
+    avisoOcr.classList.add('oculto');
+  }
+
+  var falta = resultadoAtual.filter(function(r){ return r.situacao === 'falta'; });
+  var ok    = resultadoAtual.filter(function(r){ return r.situacao === 'ok'; });
+  var fora  = resultadoAtual.filter(function(r){ return r.situacao === 'fora'; });
+  var div   = resultadoAtual.filter(function(r){ return r.divergente; });
+
+  var cnpjs = [];
+  Object.keys(guia.pessoas).forEach(function(k){
+    var e = guia.pessoas[k].estab;
+    if(e && cnpjs.indexOf(e) < 0) cnpjs.push(e);
+  });
+  var varios = cnpjs.length > 1;
+
+  document.getElementById('resumo').innerHTML =
+    cartao(falta.length, 'não constam', falta.length ? 'var(--falta)' : 'var(--ok)') +
+    cartao(ok.length, 'constam na guia', 'var(--ok)') +
+    cartao(resultadoAtual.length, 'pessoas no Portal') +
+    cartao(fora.length, 'desconsideradas') +
+    cartao(div.length, varios ? cnpjs.length + ' CNPJs na guia — verificar' : 'em CNPJ divergente',
+           (div.length || varios) ? 'var(--neutro)' : '', varios);
+
+  filtroAtual = 'falta';
+  Array.prototype.forEach.call(document.getElementById('filtros').children, function(b){
+    b.classList.toggle('on', b.dataset.f === 'falta');
+  });
+  desenharTabela('falta');
+  montarObservacao(guia, competencia, cnpjs, falta, fora, div, ok);
+
+  document.getElementById('resultado').classList.remove('oculto');
+  document.getElementById('resultado').scrollIntoView({behavior:'smooth'});
+}
+
+function cartao(n, rotulo, cor, destaque){
+  return '<div class="cartao' + (destaque ? ' destaque' : '') + '"><b' +
+         (cor ? ' style="color:'+cor+'"' : '') + '>' + n + '</b><small>' + rotulo + '</small></div>';
+}
+
+function desenharTabela(filtro){
+  filtroAtual = filtro;
+  var tb = document.querySelector('#tabela tbody');
+  var lista = resultadoAtual.filter(function(r){ return filtro === 'todos' || r.situacao === filtro; });
+  var semFalta = document.getElementById('semFalta');
+  var caixa = document.getElementById('caixaTabela');
+
+  if(filtro === 'falta' && !lista.length){
+    semFalta.classList.remove('oculto');
+    caixa.classList.add('oculto');
+    return;
+  }
+  semFalta.classList.add('oculto');
+  caixa.classList.remove('oculto');
+
+  tb.innerHTML = '';
+  lista.forEach(function(r){
+    var tr = document.createElement('tr');
+    tr.className = r.situacao;
+    var tag = r.situacao === 'ok'    ? '<span class="tag ok">consta</span>'
+            : r.situacao === 'falta' ? '<span class="tag nao">não consta</span>'
+            : '<span class="tag fora">desconsiderado</span>';
+    if(r.divergente) tag += ' <span class="tag alerta">CNPJ divergente</span>';
+    var onde = r.achado
+      ? escapar(r.achado.estab || '—') +
+        (r.achado.tomador ? '<br><small>tomador ' + escapar(r.achado.tomador) + '</small>' : '')
+      : '—';
+    var g = function(campo){ return r.campo === campo ? ' class="grifo"' : ''; };
+    tr.innerHTML =
+      '<td>' + tag + (r.motivo ? '<span class="nota">' + escapar(r.motivo) + '</span>' : '') + '</td>' +
+      '<td>' + escapar(r.dados.pessoa) +
+        (r.dados.repeticoes > 1 ? '<span class="nota">' + r.dados.repeticoes +
+            ' linhas no relatório, contada uma vez</span>' : '') +
+        (r.nota ? '<span class="nota">' + escapar(r.nota) + '</span>' : '') + '</td>' +
+      '<td>' + fmtCpf(r.dados.cpf) + '</td>' +
+      '<td' + g('atividade') + '>' + escapar(r.dados.atividade || '—') + '</td>' +
+      '<td' + g('vinculo') + '>' + escapar(r.dados.vinculo || '—') + '</td>' +
+      '<td' + g('cadastro') + '>' + (dataBr(r.dados.dataCad) || escapar(r.dados.cadastro)) + '</td>' +
+      '<td>' + onde + '</td>';
+    tb.appendChild(tr);
+  });
+  if(!tb.children.length){
+    tb.innerHTML = '<tr><td colspan="7" class="vazio">Nenhuma pessoa nesta situação.</td></tr>';
+  }
+}
+
+document.getElementById('filtros').addEventListener('click', function(e){
+  if(e.target.tagName !== 'BUTTON') return;
+  Array.prototype.forEach.call(this.children, function(b){ b.classList.remove('on'); });
+  e.target.classList.add('on');
+  desenharTabela(e.target.dataset.f);
+});
+
+function montarObservacao(guia, competencia, cnpjs, falta, fora, div, ok){
+  var fFalta = document.getElementById('itFalta').value || ITEM_FALTA_PADRAO;
+  var fDesc  = document.getElementById('itDesc').value  || ITEM_DESC_PADRAO;
+  var fDiv   = document.getElementById('itDiv').value   || ITEM_DIV_PADRAO;
+
+  var campos = function(r){
+    return {
+      nome: r.dados.pessoa,
+      cpf: fmtCpf(r.dados.cpf),
+      cadastro: dataBr(r.dados.dataCad) || r.dados.cadastro,
+      motivo: r.motivo,
+      atividade: r.dados.atividade,
+      vinculo: r.dados.vinculo,
+      cnpj_pessoa: r.achado ? (r.achado.estab || '') : '',
+      tomador: r.achado && r.achado.tomador ? ' (tomador ' + r.achado.tomador + ')' : ''
+    };
+  };
+
+  var avaliadas = resultadoAtual.length - fora.length;
+  var agora = new Date();
+  var z = function(n){ return ('0'+n).slice(-2); };
+  var dataTexto = z(agora.getDate())+'/'+z(agora.getMonth()+1)+'/'+agora.getFullYear();
+  var horaTexto = z(agora.getHours())+':'+z(agora.getMinutes());
+
+  var dados = {
+    data: dataTexto,
+    hora: horaTexto,
+    data_hora: dataTexto + ' ' + horaTexto,
+    empresa: guia.razao || 'EMPRESA NÃO IDENTIFICADA',
+    cnpj: guia.cnpj || 'não identificado',
+    competencia: competencia || 'não identificada',
+    avaliadas: avaliadas,
+    contempladas: avaliadas - falta.length,
+    qtd_faltantes: falta.length,
+    qtd_desconsiderados: fora.length,
+    cnpjs: cnpjs.join(', '),
+    alerta: paginasVazias.map(function(d){
+      return 'páginas sem texto em ' + d.arquivo + ': ' + d.vazias.join(', ');
+    }).join(' | '),
+    faltantes: falta.map(function(r){ return item(fFalta, campos(r)); }).join('\n'),
+    desconsiderados: fora.map(function(r){ return item(fDesc, campos(r)); }).join('\n'),
+    divergentes: div.map(function(r){ return item(fDiv, campos(r)); }).join('\n'),
+    cond_alerta: paginasVazias.length > 0,
+    cond_faltantes: falta.length > 0,
+    cond_sem_faltantes: falta.length === 0,
+    cond_desconsiderados: fora.length > 0,
+    cond_divergentes: div.length > 0,
+    cond_varios_cnpj: cnpjs.length > 1
+  };
+
+  var caixa = document.getElementById('obs');
+  caixa.textContent = preencher(document.getElementById('modelo').value || MODELO_PADRAO, dados);
+  var dica = document.createElement('span');
+  dica.className = 'dica'; dica.id = 'dica'; dica.textContent = 'clique para copiar';
+  caixa.appendChild(dica);
+}
+
+function copiar(){
+  var caixa = document.getElementById('obs');
+  var dica = document.getElementById('dica');
+  var texto = caixa.textContent.replace('clique para copiar','').replace(/\s+$/,'');
+  var feito = function(){
+    dica.textContent = 'copiado';
+    setTimeout(function(){ dica.textContent = 'clique para copiar'; }, 1600);
+  };
+  function manual(){
+    var ta = document.createElement('textarea');
+    ta.value = texto; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); feito(); }catch(e){ dica.textContent = 'copie manualmente'; }
+    document.body.removeChild(ta);
+  }
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(texto).then(feito, manual);
+  } else { manual(); }
+}
+document.getElementById('obs').addEventListener('click', copiar);
+document.getElementById('obs').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); copiar(); }
+});
+
+document.getElementById('btnCsv').addEventListener('click', function(){
+  var linhas = [['Situacao','Motivo','Pessoa','CPF','Atividade','Vinculo','Cadastro',
+                 'Nome na guia','Estabelecimento','Tomador','Observacao']];
+  resultadoAtual.forEach(function(r){
+    linhas.push([
+      r.situacao === 'ok' ? 'Consta' : r.situacao === 'falta' ? 'Nao consta' : 'Desconsiderado',
+      r.motivo, r.dados.pessoa, fmtCpf(r.dados.cpf), r.dados.atividade, r.dados.vinculo,
+      dataBr(r.dados.dataCad) || r.dados.cadastro,
+      r.achado ? r.achado.nome : '', r.achado ? r.achado.estab : '', r.achado ? r.achado.tomador : '',
+      r.nota
+    ]);
+  });
+  var csv = '\ufeff' + linhas.map(function(l){
+    return l.map(function(c){ return '"' + String(c||'').replace(/"/g,'""') + '"'; }).join(';');
+  }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = 'conferencia-guia-fgts.csv';
+  a.click();
+});
+</script>
+</body>
+</html>

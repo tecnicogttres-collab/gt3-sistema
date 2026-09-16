@@ -130,6 +130,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'comparativo-guia-fgts',
+    label: 'Comparativo Guia x Relatório',
+    color: '#4A90D9',
+    path: '/comparativo-guia-fgts',
+    description: 'Compara o relatório do Portal GT3 com o detalhe da guia do FGTS por PDF',
+    allowedRoles: ['admin'],
+  },
+  {
     id: 'legislacoes',
     label: 'Legislações',
     color: '#4A90D9',
