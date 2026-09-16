@@ -317,6 +317,12 @@ export default function ObservacoesClient() {
   const [templateDraft, setTemplateDraft] = useState(TEMPLATE_COPIA_PADRAO)
   const [savingTemplate, setSavingTemplate] = useState(false)
 
+  // ── Observação avulsa (itens fora da planilha) ───────────────────────────────
+  const [avulsaOpen, setAvulsaOpen] = useState(false)
+  const [avulsaTexto, setAvulsaTexto] = useState('')
+  const [avulsaCopiado, setAvulsaCopiado] = useState(false)
+  const avulsaCopiadoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     fetch('/api/observacoes/copy-config').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.template) setCopyTemplate(d.template)
@@ -343,6 +349,23 @@ export default function ObservacoesClient() {
       setConfigCopiaOpen(false)
     } finally { setSavingTemplate(false) }
   }
+
+  const avulsaFormatada = useMemo(
+    () => aplicarTemplateCopia(copyTemplate, avulsaTexto.trim(), meuNomeAssinatura),
+    [copyTemplate, avulsaTexto, meuNomeAssinatura]
+  )
+
+  function copiarAvulsa() {
+    if (!avulsaTexto.trim()) return
+    escreverClipboard(avulsaFormatada)
+    setAvulsaCopiado(true)
+    if (avulsaCopiadoTimeoutRef.current) clearTimeout(avulsaCopiadoTimeoutRef.current)
+    avulsaCopiadoTimeoutRef.current = setTimeout(() => setAvulsaCopiado(false), 1600)
+  }
+
+  useEffect(() => {
+    return () => { if (avulsaCopiadoTimeoutRef.current) clearTimeout(avulsaCopiadoTimeoutRef.current) }
+  }, [])
 
   useEffect(() => {
     if (!activeCatKey) return
@@ -1434,6 +1457,98 @@ export default function ObservacoesClient() {
         </Backdrop>
       )}
 
+      {avulsaOpen && (
+        <Backdrop>
+          <div style={{
+            background: '#fff', borderRadius: 12, width: '100%', maxWidth: 480,
+            boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
+          }}>
+            <div style={{
+              background: `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`,
+              padding: '16px 20px',
+            }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
+                📝 Observação avulsa
+              </h3>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
+                Para itens fora da planilha — já sai com data, hora e seu nome
+              </p>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                  Texto da observação
+                </label>
+                <textarea
+                  value={avulsaTexto}
+                  onChange={e => setAvulsaTexto(e.target.value)}
+                  placeholder="Ex: Favor rever documento X — motivo Y"
+                  autoFocus
+                  rows={3}
+                  style={{
+                    width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 13,
+                    border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
+                    fontFamily: 'inherit', color: INK, resize: 'vertical',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                  Pré-visualização
+                </label>
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8, background: '#F8FAFC', border: `1px solid ${BORDER}`,
+                  fontSize: 13, color: INK, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {avulsaTexto.trim()
+                    ? avulsaFormatada
+                    : <span style={{ color: MUTED }}>Digite a observação acima para ver como ela sai formatada.</span>}
+                </div>
+              </div>
+            </div>
+            <div style={{
+              padding: '12px 20px', borderTop: `1px solid ${BORDER}`,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+            }}>
+              <button
+                onClick={() => setAvulsaTexto('')}
+                disabled={!avulsaTexto}
+                style={{
+                  padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                  background: '#fff', color: MUTED, fontSize: 13, fontWeight: 500,
+                  cursor: avulsaTexto ? 'pointer' : 'default', opacity: avulsaTexto ? 1 : 0.5,
+                }}
+              >
+                Limpar
+              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setAvulsaOpen(false)}
+                  style={{
+                    padding: '8px 16px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                    background: '#fff', color: INK, fontSize: 13, cursor: 'pointer', fontWeight: 500,
+                  }}
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={copiarAvulsa}
+                  disabled={!avulsaTexto.trim()}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8, border: 'none',
+                    background: !avulsaTexto.trim() ? MUTED : (avulsaCopiado ? '#16A34A' : PRIMARY), color: '#fff',
+                    fontSize: 13, cursor: !avulsaTexto.trim() ? 'not-allowed' : 'pointer', fontWeight: 700,
+                    opacity: !avulsaTexto.trim() ? 0.5 : 1,
+                  }}
+                >
+                  {avulsaCopiado ? '✓ Copiado!' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Backdrop>
+      )}
+
       <div style={{
         display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0,
         height: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'clip',
@@ -1597,62 +1712,76 @@ export default function ObservacoesClient() {
                 <strong style={{ color: PRIMARY }}>{totalResults}</strong> resultado{totalResults !== 1 ? 's' : ''}
               </span>
             )}
-            {canEditLayout && (
-              layoutMode ? (
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 'auto' }}>
-                  <button
-                    onClick={handleDiscardLayout}
-                    style={{
-                      padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
-                      background: '#fff', color: MUTED, fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Descartar
-                  </button>
-                  <button
-                    onClick={handleSaveLayout}
-                    disabled={layoutSaving}
-                    style={{
-                      padding: '7px 16px', borderRadius: 8, border: 'none',
-                      background: layoutSaving ? MUTED : '#16A34A', color: '#fff',
-                      fontSize: 12, cursor: layoutSaving ? 'default' : 'pointer', fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {layoutSaving ? 'Salvando…' : '💾 Salvar Layout'}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 'auto' }}>
-                  <button
-                    onClick={() => { setTemplateDraft(copyTemplate); setConfigCopiaOpen(true) }}
-                    title="Definir como o texto sai formatado ao copiar um card (data, observação, nome)"
-                    style={{
-                      padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
-                      background: '#fff', color: MUTED, fontSize: 12,
-                      cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}
-                  >
-                    ⚙ Modelo de cópia
-                  </button>
-                  <button
-                    onClick={() => setLayoutMode(true)}
-                    title="Personalizar layout: reordenar colunas e guias, alterar cores"
-                    style={{
-                      padding: '7px 14px', borderRadius: 8,
-                      border: `1.5px solid ${BORDER}`,
-                      background: '#fff', color: MUTED, fontSize: 12,
-                      cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}
-                  >
-                    ⚙ Layout
-                  </button>
-                </div>
-              )
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+              <button
+                onClick={() => setAvulsaOpen(true)}
+                title="Gerar uma observação avulsa com data, hora e seu nome — para itens fora da planilha"
+                style={{
+                  padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                  background: '#fff', color: MUTED, fontSize: 12,
+                  cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                📝 Observação avulsa
+              </button>
+              {canEditLayout && (
+                layoutMode ? (
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={handleDiscardLayout}
+                      style={{
+                        padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                        background: '#fff', color: MUTED, fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Descartar
+                    </button>
+                    <button
+                      onClick={handleSaveLayout}
+                      disabled={layoutSaving}
+                      style={{
+                        padding: '7px 16px', borderRadius: 8, border: 'none',
+                        background: layoutSaving ? MUTED : '#16A34A', color: '#fff',
+                        fontSize: 12, cursor: layoutSaving ? 'default' : 'pointer', fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {layoutSaving ? 'Salvando…' : '💾 Salvar Layout'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => { setTemplateDraft(copyTemplate); setConfigCopiaOpen(true) }}
+                      title="Definir como o texto sai formatado ao copiar um card (data, observação, nome)"
+                      style={{
+                        padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
+                        background: '#fff', color: MUTED, fontSize: 12,
+                        cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                        display: 'flex', alignItems: 'center', gap: 5,
+                      }}
+                    >
+                      ⚙ Modelo de cópia
+                    </button>
+                    <button
+                      onClick={() => setLayoutMode(true)}
+                      title="Personalizar layout: reordenar colunas e guias, alterar cores"
+                      style={{
+                        padding: '7px 14px', borderRadius: 8,
+                        border: `1.5px solid ${BORDER}`,
+                        background: '#fff', color: MUTED, fontSize: 12,
+                        cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                        display: 'flex', alignItems: 'center', gap: 5,
+                      }}
+                    >
+                      ⚙ Layout
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
           </div>
 
           {activeSubtab ? (
