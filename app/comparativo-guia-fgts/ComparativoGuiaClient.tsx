@@ -688,6 +688,9 @@ export default function ComparativoGuiaClient() {
   const fora = useMemo(() => analise?.resultado.filter(r => r.situacao === 'fora') ?? [], [analise])
   const div = useMemo(() => analise?.resultado.filter(r => r.divergente) ?? [], [analise])
   const varios = (analise?.cnpjs.length ?? 0) > 1
+  // Só vale gerar observação para copiar quando há algo a reportar — se está tudo ok
+  // (ninguém faltando, sem CNPJ divergente e sem página ilegível), não há o que enviar.
+  const precisaObservacao = falta.length > 0 || div.length > 0 || (analise?.paginasVazias.length ?? 0) > 0
 
   const listaFiltrada = useMemo(() => {
     if (!analise) return []
@@ -822,8 +825,8 @@ export default function ComparativoGuiaClient() {
         </div>
         <button
           onClick={() => setModalCfgAberto(true)}
-          title="Modelo da observação"
-          aria-label="Modelo da observação"
+          title="Configurações"
+          aria-label="Configurações"
           style={{
             background: PRIMARY, color: '#fff', border: `1px solid ${PRIMARY_DARK}`,
             borderRadius: 8, width: 40, height: 40, fontSize: 18, cursor: 'pointer', flex: '0 0 auto',
@@ -864,6 +867,14 @@ export default function ComparativoGuiaClient() {
 
           {docs.length > 0 && (
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: 12 }}>
+                <button
+                  onClick={novaAnalise}
+                  title="Remover todos os PDFs"
+                  aria-label="Remover todos os PDFs"
+                  style={{ cursor: 'pointer', color: FALTA, border: 0, background: 'none', fontSize: 17, lineHeight: 1, fontWeight: 700 }}
+                >×</button>
+              </div>
               {docs.map(d => (
                 <div key={d.id} style={{
                   display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${BORDER}`,
@@ -892,51 +903,16 @@ export default function ComparativoGuiaClient() {
 
           {!semDocs && (
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
               marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap',
             }}>
-              <span style={{ fontSize: 12.5, color: MUTED }}>Limpa os arquivos e o resultado desta análise</span>
               <button
-                onClick={novaAnalise}
-                style={{ background: ACCENT, color: '#3b2f14', padding: '10px 22px', fontSize: 14, border: 0, borderRadius: 6, cursor: 'pointer', marginLeft: 'auto' }}
-              >Remover todos os PDFs</button>
+                onClick={processar}
+                style={{ ...botaoStyle, padding: '11px 28px', fontSize: 15 }}
+              >Comparar</button>
             </div>
           )}
         </section>
-
-        <section style={painelStyle}>
-          <h2 style={h2Style}><span style={numBadge}>2</span>Regras da avaliação</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 12, color: MUTED }} htmlFor="fmt">Formato das datas do relatório</label>
-              <select id="fmt" value={fmt} onChange={e => setFmt(e.target.value as 'auto' | 'mdy' | 'dmy')} style={inputStyle}>
-                <option value="auto">Detectar automaticamente</option>
-                <option value="mdy">MM/DD/AAAA</option>
-                <option value="dmy">DD/MM/AAAA</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13.5 }}>
-              <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', cursor: 'pointer' }}>
-                <input type="checkbox" checked={rData} onChange={e => setRData(e.target.checked)} />
-                Desconsiderar cadastro posterior à competência
-              </label>
-              <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', cursor: 'pointer' }}>
-                <input type="checkbox" checked={rVinculo} onChange={e => setRVinculo(e.target.checked)} />
-                Desconsiderar vínculo temporário, associado ou PJ
-              </label>
-              <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', cursor: 'pointer' }}>
-                <input type="checkbox" checked={rCargo} onChange={e => setRCargo(e.target.checked)} />
-                Desconsiderar cargo estagiário, sócio ou diretor
-              </label>
-            </div>
-          </div>
-        </section>
-
-        <div style={{ marginBottom: 18 }}>
-          <button onClick={processar} style={{ ...botaoStyle, padding: '20px 54px', fontSize: 19, borderRadius: 8 }}>
-            Comparar
-          </button>
-        </div>
 
         {modalCfgAberto && (
           <div
@@ -945,10 +921,39 @@ export default function ComparativoGuiaClient() {
           >
             <div style={{ background: '#fff', borderRadius: 10, maxWidth: 820, width: '100%', boxShadow: '0 18px 50px rgba(20,28,45,.3)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${BORDER}` }}>
-                <h2 style={{ margin: 0, fontSize: 16, color: PRIMARY }}>Modelo da observação</h2>
+                <h2 style={{ margin: 0, fontSize: 16, color: PRIMARY }}>Configurações</h2>
                 <button onClick={() => setModalCfgAberto(false)} aria-label="Fechar" style={{ border: 0, background: 'none', fontSize: 24, lineHeight: 1, cursor: 'pointer', color: MUTED }}>×</button>
               </div>
               <div style={{ padding: '18px 20px 22px' }}>
+                <div style={{ marginBottom: 22, paddingBottom: 20, borderBottom: `1px solid ${BORDER}` }}>
+                  <strong style={{ fontSize: 13.5, color: TEXT, display: 'block', marginBottom: 12 }}>Regras da avaliação</strong>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 12, color: MUTED }} htmlFor="fmt">Formato das datas do relatório</label>
+                      <select id="fmt" value={fmt} onChange={e => setFmt(e.target.value as 'auto' | 'mdy' | 'dmy')} style={inputStyle}>
+                        <option value="auto">Detectar automaticamente</option>
+                        <option value="mdy">MM/DD/AAAA</option>
+                        <option value="dmy">DD/MM/AAAA</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13.5 }}>
+                      <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={rData} onChange={e => setRData(e.target.checked)} />
+                        Desconsiderar cadastro posterior à competência
+                      </label>
+                      <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={rVinculo} onChange={e => setRVinculo(e.target.checked)} />
+                        Desconsiderar vínculo temporário, associado ou PJ
+                      </label>
+                      <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={rCargo} onChange={e => setRCargo(e.target.checked)} />
+                        Desconsiderar cargo estagiário, sócio ou diretor
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <strong style={{ fontSize: 13.5, color: TEXT, display: 'block', marginBottom: 4 }}>Modelo da observação</strong>
                 <label style={{ fontSize: 13, color: MUTED }}>Texto da observação</label>
                 <textarea
                   value={modelo}
@@ -1118,23 +1123,27 @@ export default function ComparativoGuiaClient() {
               </div>
             )}
 
-            <h2 style={{ marginTop: 26, fontSize: 16, color: TEXT }}>Observação para envio</h2>
-            <div
-              onClick={copiarObservacao}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copiarObservacao() } }}
-              tabIndex={0}
-              role="button"
-              aria-label="Clique para copiar a observação"
-              style={{
-                position: 'relative', background: '#fff', border: `1px solid ${BORDER}`, borderLeft: `4px solid ${ACCENT}`,
-                borderRadius: 8, padding: '16px 18px', whiteSpace: 'pre-wrap', fontSize: 13.5, cursor: 'pointer',
-              }}
-            >
-              {observacao}
-              <span style={{ position: 'absolute', top: 10, right: 12, fontSize: 11.5, color: MUTED, background: '#f1f4f9', borderRadius: 11, padding: '2px 10px' }}>
-                {copiado ? 'copiado' : 'clique para copiar'}
-              </span>
-            </div>
+            {precisaObservacao && (
+              <>
+                <h2 style={{ marginTop: 26, fontSize: 16, color: TEXT }}>Observação para envio</h2>
+                <div
+                  onClick={copiarObservacao}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copiarObservacao() } }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label="Clique para copiar a observação"
+                  style={{
+                    position: 'relative', background: '#fff', border: `1px solid ${BORDER}`, borderLeft: `4px solid ${ACCENT}`,
+                    borderRadius: 8, padding: '16px 18px', whiteSpace: 'pre-wrap', fontSize: 13.5, cursor: 'pointer',
+                  }}
+                >
+                  {observacao}
+                  <span style={{ position: 'absolute', top: 10, right: 12, fontSize: 11.5, color: MUTED, background: '#f1f4f9', borderRadius: 11, padding: '2px 10px' }}>
+                    {copiado ? 'copiado' : 'clique para copiar'}
+                  </span>
+                </div>
+              </>
+            )}
 
             <div style={{ marginTop: 12 }}>
               <button onClick={baixarCsv} style={botaoSecStyle}>Baixar resultado em CSV</button>
