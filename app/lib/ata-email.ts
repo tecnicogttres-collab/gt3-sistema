@@ -13,7 +13,7 @@ export function normalizaNome(s: string): string {
  *  Retorna os que têm e-mail cadastrado e a lista (só nomes) dos que não têm. */
 export function resolverDestinatarios(
   participantes: Participante[],
-  diretorio: { nome: string; email: string }[],
+  diretorio: { nome: string; email: string; empresa?: string }[],
 ): { resolvidos: { nome: string; email: string }[]; semEmail: string[] } {
   const porNome = new Map(diretorio.map(d => [normalizaNome(d.nome), d.email]))
   const resolvidos: { nome: string; email: string }[] = []

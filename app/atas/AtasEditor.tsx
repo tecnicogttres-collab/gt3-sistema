@@ -167,6 +167,15 @@ function parseClientes(val: string): string[] {
   return val.split('/').map(s => s.trim()).filter(Boolean)
 }
 
+export type ContatoDiretorio = { nome: string; empresa: string; email: string }
+
+function semAcentoBusca(s: string): string {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+function normalizaNomeBusca(s: string): string {
+  return (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
 function parseParticipantes(val?: string): Participante[] {
   if (!val?.trim()) return []
   try {
@@ -222,12 +231,15 @@ const sectionTitle = (extra?: React.CSSProperties): React.CSSProperties => ({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AtasEditor({ initial, onSave, onClose, enableNotifModal, availableUsers }: {
+export default function AtasEditor({ initial, onSave, onClose, enableNotifModal, availableUsers, diretorioContatos }: {
   initial?: Partial<AtaEditorData>
   onSave: (data: AtaEditorData) => Promise<void>
   onClose: () => void
   enableNotifModal?: boolean
   availableUsers?: { id: string; nome: string }[]
+  /** Diretório de contatos das contratantes (nome/empresa/e-mail) — alimenta a sugestão
+   *  ao digitar um nome em "Participantes" (ver caixaComSugestao mais abaixo). */
+  diretorioContatos?: ContatoDiretorio[]
 }) {
   // Meta fields
   const [titulo,   setTitulo]   = useState(initial?.titulo          ?? '')
@@ -243,6 +255,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   )
   const [addClienteInput, setAddClienteInput] = useState('')
   const [addPartInputs, setAddPartInputs] = useState<Record<string, string>>({})
+  /** Qual caixa de "+ nome…" está com o dropdown de sugestões aberto (chave = empresa do grupo). */
+  const [sugestaoBoxAberta, setSugestaoBoxAberta] = useState<string | null>(null)
 
   // Tópicos
   const [topicos, setTopicos] = useState<Topico[]>(
@@ -284,6 +298,28 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
 
   function removePart(idx: number) {
     setParticipantes(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  /** Sugestões do diretório de contatos para o que está sendo digitado numa caixa de
+   *  "+ nome…" — busca em nome e empresa (sem acento/maiúscula), ignora quem já foi
+   *  adicionado como participante e mostra nome completo + empresa + e-mail. */
+  function sugestoesDiretorio(query: string): ContatoDiretorio[] {
+    const q = semAcentoBusca(query.trim())
+    if (!q || !diretorioContatos?.length) return []
+    const jaAdicionados = new Set(participantes.map(p => normalizaNomeBusca(p.nome)))
+    return diretorioContatos
+      .filter(c => c.nome.trim() && !jaAdicionados.has(normalizaNomeBusca(c.nome)))
+      .filter(c => semAcentoBusca(c.nome).includes(q) || semAcentoBusca(c.empresa).includes(q))
+      .slice(0, 6)
+  }
+
+  /** Adiciona direto do diretório — usa a empresa cadastrada no contato, não
+   *  necessariamente a da caixa onde a pessoa foi digitada (a busca é global, então um
+   *  nome pode "pertencer" a outra empresa da lista). */
+  function addParticipanteDoDiretorio(contato: ContatoDiretorio, boxKey: string) {
+    setParticipantes(prev => [...prev, { nome: contato.nome, empresa: contato.empresa || boxKey }])
+    setAddPartInputs(prev => ({ ...prev, [boxKey]: '' }))
+    setSugestaoBoxAberta(null)
   }
 
   // ── Tópico actions ────────────────────────────────────────────────────────
@@ -600,6 +636,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                         .map((p, idx) => ({ p, idx }))
                         .filter(({ p }) => p.empresa === g.key || (g.key === 'GT3' && p.empresa === 'GT3 Consultoria'))
                       const inputVal = addPartInputs[g.key] ?? ''
+                      const sugestoes = sugestaoBoxAberta === g.key ? sugestoesDiretorio(inputVal) : []
                       return (
                         <div key={g.key} style={{ border: `1px solid ${g.accent}22`, borderLeft: `3px solid ${g.accent}`, borderRadius: 8, background: g.bg, padding: '10px 14px' }}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: g.accent, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{g.label}</div>
@@ -610,13 +647,43 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                                 <button onClick={() => removePart(idx)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', border: 'none', background: `${g.accent}22`, color: g.accent, cursor: 'pointer', fontSize: 11, padding: 0 }}>×</button>
                               </span>
                             ))}
-                            <input
-                              value={inputVal}
-                              onChange={e => setAddPartInputs(prev => ({ ...prev, [g.key]: e.target.value }))}
-                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPartToCompany(g.key) } }}
-                              placeholder="+ nome…"
-                              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', padding: '4px 6px', minWidth: 80 }}
-                            />
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                value={inputVal}
+                                onChange={e => setAddPartInputs(prev => ({ ...prev, [g.key]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPartToCompany(g.key) } }}
+                                onFocus={() => setSugestaoBoxAberta(g.key)}
+                                onBlur={() => setTimeout(() => setSugestaoBoxAberta(prev => prev === g.key ? null : prev), 150)}
+                                placeholder="+ nome…"
+                                style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, fontFamily: 'inherit', color: '#1a1f2e', padding: '4px 6px', minWidth: 80 }}
+                              />
+                              {sugestoes.length > 0 && (
+                                <div style={{
+                                  position: 'absolute', top: '100%', left: 0, zIndex: 50, marginTop: 2,
+                                  background: '#fff', border: '1px solid rgba(42,79,150,0.20)', borderRadius: 8,
+                                  boxShadow: '0 8px 24px rgba(0,0,0,0.14)', minWidth: 260, overflow: 'hidden',
+                                }}>
+                                  {sugestoes.map((c, i) => (
+                                    <button
+                                      key={i}
+                                      onMouseDown={e => { e.preventDefault(); addParticipanteDoDiretorio(c, g.key) }}
+                                      style={{
+                                        display: 'block', width: '100%', textAlign: 'left', border: 'none',
+                                        background: 'transparent', cursor: 'pointer', padding: '7px 12px',
+                                        borderBottom: i < sugestoes.length - 1 ? '1px solid rgba(42,79,150,0.08)' : 'none',
+                                      }}
+                                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F1F5FB' }}
+                                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                                    >
+                                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1f2e' }}>
+                                        {c.nome}{c.empresa && <span style={{ fontWeight: 400, color: '#64748B' }}> — {c.empresa}</span>}
+                                      </div>
+                                      <div style={{ fontSize: 11.5, color: '#5B8DEF' }}>{c.email}</div>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )

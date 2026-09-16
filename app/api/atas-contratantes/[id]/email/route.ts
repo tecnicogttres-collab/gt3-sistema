@@ -4,7 +4,7 @@ import { requireGestorAdmin } from '../../../../lib/api-helpers'
 import { variaveisEmailAta, aplicaVariaveisEmail, corpoParaHtml } from '../../../../lib/ata-email'
 import { nomeArquivoAta, type AtaHtmlData } from '../../../../lib/ata-html'
 import { gerarAtaPdfBuffer } from '../../../../lib/ata-pdf'
-import { ASSUNTO_PADRAO, CORPO_PADRAO, type EmailConfigDados } from '../../email-config/route'
+import { ASSUNTO_PADRAO, CORPO_PADRAO, CC_GT3_PADRAO, type EmailConfigDados } from '../../email-config/route'
 import type { Participante, Topico } from '../../../../atas/AtasEditor'
 
 type Params = { params: Promise<{ id: string }> }
@@ -23,8 +23,10 @@ function parseTopicos(val: string | null): Topico[] {
 
 /** Monta um .eml multipart (corpo em HTML + PDF anexado em base64) — ao abrir no
  *  cliente de e-mail padrão (Outlook etc.), chega como rascunho pronto: destinatários,
- *  assunto, corpo e o PDF da ata já anexado, só faltando revisar e enviar. */
-function montarEml(opts: { to: string; subject: string; htmlBody: string; pdfBuffer: Buffer; pdfFilename: string }): string {
+ *  assunto, corpo e o PDF da ata já anexado, só faltando revisar e enviar. A GT3 nunca
+ *  entra como destinatária — só em cópia (Cc), fixa e automática, configurada em
+ *  "Configurar Gerar e-mail". Quem recebe (To) é sempre a contratante. */
+function montarEml(opts: { to: string; cc?: string; subject: string; htmlBody: string; pdfBuffer: Buffer; pdfFilename: string }): string {
   const boundary = 'gt3_ata_' + Math.random().toString(36).slice(2)
   const subjectB64 = Buffer.from(opts.subject, 'utf-8').toString('base64')
   const pdfB64 = opts.pdfBuffer.toString('base64').replace(/.{76}/g, '$&\r\n')
@@ -32,6 +34,7 @@ function montarEml(opts: { to: string; subject: string; htmlBody: string; pdfBuf
 
   return [
     `To: ${opts.to}`,
+    ...(opts.cc ? [`Cc: ${opts.cc}`] : []),
     `Subject: =?UTF-8?B?${subjectB64}?=`,
     'X-Unsent: 1',
     'MIME-Version: 1.0',
@@ -77,6 +80,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const dados = (configRow?.dados ?? {}) as Partial<EmailConfigDados>
   const assuntoTemplate = dados.assunto?.trim() || ASSUNTO_PADRAO
   const corpoTemplate = dados.corpo?.trim() || CORPO_PADRAO
+  const ccGt3 = dados.ccGt3?.trim() || CC_GT3_PADRAO
 
   const ataHtmlData: AtaHtmlData = ata
   const ctx = variaveisEmailAta(ataHtmlData)
@@ -90,6 +94,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const eml = montarEml({
     to: destinatarios.join(', '),
+    cc: ccGt3,
     subject: assunto,
     htmlBody: `<html><head><meta charset="utf-8"></head><body>${corpoHtml}</body></html>`,
     pdfBuffer,

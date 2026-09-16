@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import AtasEditor, { StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico } from '../atas/AtasEditor'
+import AtasEditor, { StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico, type ContatoDiretorio } from '../atas/AtasEditor'
 import { renderAtaHtml, nomeArquivoAta } from '../lib/ata-html'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,8 +29,8 @@ type Ata = {
 
 type Leitura = { user_id: string; nome: string; lido_em?: string }
 
-type DiretorioPessoa = { nome: string; email: string }
-type EmailPreview = { resolvidos: DiretorioPessoa[]; semEmail: string[]; assunto: string; corpoPreview: string }
+type DiretorioPessoa = { nome: string; empresa: string; email: string }
+type EmailPreview = { resolvidos: { nome: string; email: string }[]; semEmail: string[]; assunto: string; corpoPreview: string; ccGt3: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -192,8 +192,13 @@ export default function AtasContratantesClient() {
   const [emailDirDraft, setEmailDirDraft] = useState<DiretorioPessoa[]>([])
   const [emailAssuntoDraft, setEmailAssuntoDraft] = useState('')
   const [emailCorpoDraft, setEmailCorpoDraft] = useState('')
+  const [emailCcGt3Draft, setEmailCcGt3Draft] = useState('')
   const [emailConfigLoading, setEmailConfigLoading] = useState(false)
   const [emailConfigSaving, setEmailConfigSaving] = useState(false)
+  const [novaEmpresaInput, setNovaEmpresaInput] = useState('')
+  // Diretório de contatos carregado de cara (não só ao abrir a config) — alimenta a
+  // sugestão de nome→e-mail ao digitar um participante em qualquer ata.
+  const [diretorioContatos, setDiretorioContatos] = useState<ContatoDiretorio[]>([])
 
   const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null)
@@ -238,6 +243,13 @@ export default function AtasContratantesClient() {
       .then((data: string[]) => setArquivados(new Set(data)))
       .catch(() => {})
   }, [isGestorOrAdmin])
+
+  useEffect(() => {
+    fetch('/api/atas-contratantes/email-config')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.diretorio) setDiretorioContatos(d.diretorio) })
+      .catch(() => {})
+  }, [])
 
   // ── Search ──────────────────────────────────────────────────────────────────
 
@@ -478,14 +490,17 @@ export default function AtasContratantesClient() {
 
   // ── Gerar e-mail: configurações (diretório + modelo) ──────────────────────────
 
-  function nomesParticipantesConhecidos(): string[] {
-    const set = new Set<string>()
+  function participantesConhecidos(): { nome: string; empresa: string }[] {
+    const porNome = new Map<string, string>()
     for (const a of atas) {
       for (const p of parseParticipantes(a.participantes ?? '')) {
-        if (p.nome?.trim()) set.add(p.nome.trim())
+        if (!p.nome?.trim()) continue
+        if (!porNome.has(p.nome.trim())) porNome.set(p.nome.trim(), p.empresa?.trim() ?? '')
       }
     }
-    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    return [...porNome.entries()]
+      .map(([nome, empresa]) => ({ nome, empresa }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   }
 
   async function openEmailConfig() {
@@ -498,6 +513,7 @@ export default function AtasContratantesClient() {
         setEmailDirDraft(d.diretorio ?? [])
         setEmailAssuntoDraft(d.assunto ?? '')
         setEmailCorpoDraft(d.corpo ?? '')
+        setEmailCcGt3Draft(d.ccGt3 ?? '')
       }
     } finally {
       setEmailConfigLoading(false)
@@ -506,20 +522,28 @@ export default function AtasContratantesClient() {
 
   function adicionarPessoasSemEmail() {
     const jaTem = new Set(emailDirDraft.map(d => d.nome.trim().toLowerCase()))
-    const novos = nomesParticipantesConhecidos().filter(n => !jaTem.has(n.toLowerCase()))
-    setEmailDirDraft(prev => [...prev, ...novos.map(nome => ({ nome, email: '' }))])
+    const novos = participantesConhecidos().filter(p => !jaTem.has(p.nome.toLowerCase()))
+    setEmailDirDraft(prev => [...prev, ...novos.map(({ nome, empresa }) => ({ nome, empresa, email: '' }))])
+  }
+
+  function adicionarEmpresaGrupo() {
+    const empresa = novaEmpresaInput.trim()
+    if (!empresa) return
+    setEmailDirDraft(prev => [...prev, { nome: '', empresa, email: '' }])
+    setNovaEmpresaInput('')
   }
 
   async function salvarEmailConfig() {
     setEmailConfigSaving(true)
     try {
-      const diretorio = emailDirDraft.map(d => ({ nome: d.nome.trim(), email: d.email.trim() })).filter(d => d.nome && d.email)
+      const diretorio = emailDirDraft.map(d => ({ nome: d.nome.trim(), empresa: d.empresa.trim(), email: d.email.trim() })).filter(d => d.nome && d.email)
       const res = await fetch('/api/atas-contratantes/email-config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ diretorio, assunto: emailAssuntoDraft, corpo: emailCorpoDraft }),
+        body: JSON.stringify({ diretorio, assunto: emailAssuntoDraft, corpo: emailCorpoDraft, ccGt3: emailCcGt3Draft }),
       })
       if (!res.ok) { alert('Erro ao salvar'); return }
+      setDiretorioContatos(diretorio)
       setEmailConfigOpen(false)
     } finally {
       setEmailConfigSaving(false)
@@ -1069,6 +1093,7 @@ export default function AtasContratantesClient() {
           onClose={() => setShowEditor(false)}
           enableNotifModal
           availableUsers={allUsers}
+          diretorioContatos={diretorioContatos}
         />
       )}
       {editingAta && (
@@ -1087,6 +1112,7 @@ export default function AtasContratantesClient() {
           onClose={() => setEditingAta(null)}
           enableNotifModal
           availableUsers={allUsers}
+          diretorioContatos={diretorioContatos}
         />
       )}
       {copyingAta && (
@@ -1103,6 +1129,7 @@ export default function AtasContratantesClient() {
           }}
           onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
           onClose={() => setCopyingAta(null)}
+          diretorioContatos={diretorioContatos}
         />
       )}
       {novaReuniaoAta && (
@@ -1131,6 +1158,7 @@ export default function AtasContratantesClient() {
           onClose={() => setNovaReuniaoAta(null)}
           enableNotifModal
           availableUsers={allUsers}
+          diretorioContatos={diretorioContatos}
         />
       )}
 
@@ -1240,47 +1268,102 @@ export default function AtasContratantesClient() {
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 560, maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>⚙ Configurar &quot;Gerar e-mail&quot;</div>
             <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 20, lineHeight: 1.5 }}>
-              Cadastre o e-mail de cada pessoa (o nome precisa bater com o nome usado nos participantes da ata) e o modelo de assunto/corpo do e-mail gerado.
+              Cadastre o e-mail de cada pessoa (o nome precisa bater com o nome usado nos participantes da ata), organizado por empresa —
+              use a extensão do e-mail (@empresa.com.br) pra saber de qual contratante é cada pessoa. Ao digitar um nome numa ata, quem já
+              está aqui aparece como sugestão automaticamente.
             </p>
 
             {emailConfigLoading ? (
               <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando…</p>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e' }}>Diretório de pessoas</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e' }}>Diretório de pessoas, por empresa</label>
                   <button onClick={adicionarPessoasSemEmail} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #CBD5E0', background: '#fff', color: '#5B8DEF', fontSize: 11.5, cursor: 'pointer' }}>
                     + Adicionar participantes já cadastrados
                   </button>
                 </div>
-                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid rgba(42,79,150,0.15)', borderRadius: 8, marginBottom: 8 }}>
+                <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid rgba(42,79,150,0.15)', borderRadius: 8, marginBottom: 8, padding: emailDirDraft.length ? '8px 10px' : 0 }}>
                   {emailDirDraft.length === 0 && (
                     <p style={{ fontSize: 12.5, color: '#94A3B8', padding: '14px', margin: 0 }}>Nenhuma pessoa cadastrada ainda.</p>
                   )}
-                  {emailDirDraft.map((d, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid rgba(42,79,150,0.07)' }}>
-                      <input
-                        value={d.nome}
-                        onChange={e => setEmailDirDraft(prev => prev.map((p, idx) => idx === i ? { ...p, nome: e.target.value } : p))}
-                        placeholder="Nome"
-                        style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12.5 }}
-                      />
-                      <input
-                        value={d.email}
-                        onChange={e => setEmailDirDraft(prev => prev.map((p, idx) => idx === i ? { ...p, email: e.target.value } : p))}
-                        placeholder="e-mail@exemplo.com"
-                        style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12.5 }}
-                      />
-                      <button onClick={() => setEmailDirDraft(prev => prev.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 4px' }}>×</button>
-                    </div>
-                  ))}
+                  {(() => {
+                    const porEmpresa = new Map<string, { d: DiretorioPessoa; i: number }[]>()
+                    emailDirDraft.forEach((d, i) => {
+                      const chave = d.empresa.trim() || 'Sem empresa'
+                      if (!porEmpresa.has(chave)) porEmpresa.set(chave, [])
+                      porEmpresa.get(chave)!.push({ d, i })
+                    })
+                    const empresasOrdenadas = [...porEmpresa.keys()].sort((a, b) => {
+                      if (a === 'Sem empresa') return 1
+                      if (b === 'Sem empresa') return -1
+                      return a.localeCompare(b, 'pt-BR')
+                    })
+                    return empresasOrdenadas.map(empresa => (
+                      <div key={empresa} style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, padding: '0 2px' }}>
+                          {empresa}
+                        </div>
+                        {porEmpresa.get(empresa)!.map(({ d, i }) => (
+                          <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 0' }}>
+                            <input
+                              value={d.nome}
+                              onChange={e => setEmailDirDraft(prev => prev.map((p, idx) => idx === i ? { ...p, nome: e.target.value } : p))}
+                              placeholder="Nome"
+                              style={{ flex: '1 1 0', minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12.5 }}
+                            />
+                            <input
+                              value={d.empresa}
+                              onChange={e => setEmailDirDraft(prev => prev.map((p, idx) => idx === i ? { ...p, empresa: e.target.value } : p))}
+                              placeholder="Empresa"
+                              style={{ flex: '0 1 120px', minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12.5 }}
+                            />
+                            <input
+                              value={d.email}
+                              onChange={e => setEmailDirDraft(prev => prev.map((p, idx) => idx === i ? { ...p, email: e.target.value } : p))}
+                              placeholder="e-mail@exemplo.com"
+                              style={{ flex: '1 1 0', minWidth: 0, padding: '5px 8px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12.5 }}
+                            />
+                            <button onClick={() => setEmailDirDraft(prev => prev.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 4px' }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  })()}
                 </div>
-                <button
-                  onClick={() => setEmailDirDraft(prev => [...prev, { nome: '', email: '' }])}
-                  style={{ marginBottom: 20, padding: '4px 10px', borderRadius: 6, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 11.5, cursor: 'pointer' }}
-                >
-                  + Adicionar linha
-                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setEmailDirDraft(prev => [...prev, { nome: '', empresa: '', email: '' }])}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 11.5, cursor: 'pointer' }}
+                  >
+                    + Adicionar linha
+                  </button>
+                  <input
+                    value={novaEmpresaInput}
+                    onChange={e => setNovaEmpresaInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarEmpresaGrupo() } }}
+                    placeholder="Nova empresa…"
+                    style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #CBD5E0', fontSize: 11.5, width: 140 }}
+                  />
+                  <button
+                    onClick={adicionarEmpresaGrupo}
+                    disabled={!novaEmpresaInput.trim()}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #CBD5E0', background: '#fff', color: novaEmpresaInput.trim() ? '#5B8DEF' : '#CBD5E0', fontSize: 11.5, cursor: novaEmpresaInput.trim() ? 'pointer' : 'default' }}
+                  >
+                    + Nova empresa
+                  </button>
+                </div>
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>E-mail(s) da GT3 em cópia (Cc)</label>
+                <input
+                  value={emailCcGt3Draft}
+                  onChange={e => setEmailCcGt3Draft(e.target.value)}
+                  placeholder="cadastro@gttres.com.br"
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 13, marginBottom: 6, boxSizing: 'border-box' }}
+                />
+                <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 14px' }}>
+                  Entra sempre em cópia (Cc) — nunca como destinatário. Quem recebe (Para) é sempre a contratante. Vários e-mails: separe por vírgula.
+                </p>
 
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Assunto</label>
                 <input
@@ -1330,7 +1413,12 @@ export default function AtasContratantesClient() {
                   <div style={{ fontSize: 13, color: '#334155', padding: '7px 10px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>{emailPreview.assunto}</div>
                 </div>
 
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Destinatários encontrados</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, fontSize: 12, color: '#5a6178' }}>
+                  <span style={{ padding: '2px 8px', borderRadius: 999, background: '#EEF2FB', color: '#2A4F96', fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cc automático</span>
+                  <span>{emailPreview.ccGt3} <span style={{ color: '#94A3B8' }}>(GT3 — nunca como destinatária)</span></span>
+                </div>
+
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Destinatários (Para) — da contratante</label>
                 {emailPreview.resolvidos.length === 0 ? (
                   <p style={{ fontSize: 12.5, color: '#94A3B8', margin: '0 0 12px' }}>Nenhum participante desta ata tem e-mail cadastrado no diretório.</p>
                 ) : (

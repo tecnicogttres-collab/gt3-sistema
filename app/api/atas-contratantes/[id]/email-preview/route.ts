@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { requireGestorAdmin } from '../../../../lib/api-helpers'
 import { resolverDestinatarios, variaveisEmailAta, aplicaVariaveisEmail } from '../../../../lib/ata-email'
-import { ASSUNTO_PADRAO, CORPO_PADRAO, type EmailConfigDados } from '../../email-config/route'
+import { ASSUNTO_PADRAO, CORPO_PADRAO, CC_GT3_PADRAO, type EmailConfigDados } from '../../email-config/route'
 import type { Participante } from '../../../../atas/AtasEditor'
 
 type Params = { params: Promise<{ id: string }> }
@@ -42,5 +42,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
     semEmail,
     assunto: aplicaVariaveisEmail(assuntoTemplate, ctx),
     corpoPreview: aplicaVariaveisEmail(corpoTemplate, ctx),
+    ccGt3: dados.ccGt3?.trim() || CC_GT3_PADRAO,
   })
 }
