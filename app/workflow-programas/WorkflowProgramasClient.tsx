@@ -198,6 +198,28 @@ type ResultadoTone = 'ok' | 'no' | 'na' | 'acc'
 const RESULTADO_CORES: Record<ResultadoTone, { bg: string; fg: string }> = {
   ok: { bg: OKS, fg: OK }, no: { bg: NOS, fg: NO }, na: { bg: NAS, fg: '#54617A' }, acc: { bg: ASO, fg: '#8A6A22' },
 }
+/** Rótulo por tom de resultado — usado no filtro de "aprovado/reprovado/etc." do modal de
+ *  relatórios e no filtro (dropdown) da coluna Resultado no HTML interativo exportado. */
+const RESULTADO_TONE_LABEL: Record<ResultadoTone, string> = {
+  ok: 'Conforme / Aprovado', no: 'Reprovação', acc: 'Aprovado com restrição', na: 'Não aplicável / Não avaliado',
+}
+const TODOS_TONES: ResultadoTone[] = ['ok', 'no', 'acc', 'na']
+
+/** Largura (%) de cada coluna de uma tabela de relatório — Resultado estreito, Observação
+ *  (sempre a última) mais larga, o resto dividido igualmente. Usada com table-layout:fixed
+ *  pra que as tabelas de todos os grupos fiquem com as mesmas colunas alinhadas, em vez de
+ *  cada uma calcular a própria largura a partir do conteúdo. */
+function larguraColunasRelatorio(cols: string[], resultadoIdx: number): string[] {
+  const obsIdx = cols.length - 1
+  const restantes = cols.length - 2
+  const pesos = cols.map((_, idx) => {
+    if (idx === resultadoIdx) return 12
+    if (idx === obsIdx) return 30
+    return restantes > 0 ? 58 / restantes : 58
+  })
+  const soma = pesos.reduce((a, b) => a + b, 0)
+  return pesos.map(p => (p / soma * 100).toFixed(2) + '%')
+}
 
 /** Como agrupar os relatórios exportados: uma seção por empresa (com seus itens dentro)
  *  ou uma seção por item de checklist (com as empresas que o têm dentro). */
@@ -825,6 +847,7 @@ export default function WorkflowProgramasClient() {
   const [modalRelatorio, setModalRelatorio] = useState(false)
   const [relatorioItensSel, setRelatorioItensSel] = useState<Set<string>>(new Set())
   const [relatorioModo, setRelatorioModo] = useState<RelatorioModo>('empresa')
+  const [relatorioTonesSel, setRelatorioTonesSel] = useState<Set<ResultadoTone>>(new Set(['ok', 'no', 'na', 'acc']))
 
   // "+ Novo segmento" (Textos → Segmento) — cria o setor de atuação e já pergunta se quer
   // manter o mesmo texto padrão de outro segmento já existente, ou escrever um texto próprio.
@@ -1608,12 +1631,20 @@ export default function WorkflowProgramasClient() {
   // Só os itens marcados no modal "Gerar relatórios", agrupados por empresa ou por
   // requisito (à escolha, no próprio modal) — usa o mesmo filtro do Banco (bancoFiltrado).
 
-  function montarGruposPorEmpresa(lista: AnaliseRow[], itemIds: Set<string>): RelatorioGrupo[] {
+  function montarGruposPorEmpresa(lista: AnaliseRow[], itemIds: Set<string>, tones: Set<ResultadoTone>): RelatorioGrupo[] {
     const grupos: RelatorioGrupo[] = []
     lista.forEach(a => {
       const itens = itensDaAnalise(a.dados).filter(i => itemIds.has(i.id))
       if (!itens.length) return
       const nomesC = nomesContratantes(a.dados.contratanteIds)
+      const linhas = itens
+        .map(i => {
+          const r = a.dados.respostas[i.id]
+          const res = resultadoItem(i, r)
+          return { tone: res.tone, valores: [i.titulo, i.documento, res.label, r?.obs ? htmlToPlainText(r.obs) : ''] }
+        })
+        .filter(l => !l.tone || tones.has(l.tone))
+      if (!linhas.length) return
       grupos.push({
         titulo: a.empresa || '(sem nome)',
         meta: [
@@ -1625,17 +1656,13 @@ export default function WorkflowProgramasClient() {
         ],
         colunas: ['Item', 'Documento', 'Resultado', 'Observação'],
         resultadoColIdx: 2,
-        linhas: itens.map(i => {
-          const r = a.dados.respostas[i.id]
-          const res = resultadoItem(i, r)
-          return { tone: res.tone, valores: [i.titulo, i.documento, res.label, r?.obs ? htmlToPlainText(r.obs) : ''] }
-        }),
+        linhas,
       })
     })
     return grupos
   }
 
-  function montarGruposPorRequisito(lista: AnaliseRow[], itemIds: Set<string>): RelatorioGrupo[] {
+  function montarGruposPorRequisito(lista: AnaliseRow[], itemIds: Set<string>, tones: Set<ResultadoTone>): RelatorioGrupo[] {
     if (!catalog) return []
     const itensSel = ordenarPorDocumento(catalog.itens.filter(i => itemIds.has(i.id)))
     const grupos: RelatorioGrupo[] = []
@@ -1646,6 +1673,7 @@ export default function WorkflowProgramasClient() {
         if (!ia) return
         const r = a.dados.respostas[item.id]
         const res = resultadoItem(ia, r)
+        if (res.tone && !tones.has(res.tone)) return
         const nomesC = nomesContratantes(a.dados.contratanteIds)
         linhas.push({
           tone: res.tone,
@@ -1664,19 +1692,22 @@ export default function WorkflowProgramasClient() {
     return grupos
   }
 
-  function montarGruposRelatorio(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo): RelatorioGrupo[] {
-    return modo === 'requisito' ? montarGruposPorRequisito(lista, itemIds) : montarGruposPorEmpresa(lista, itemIds)
+  function montarGruposRelatorio(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>): RelatorioGrupo[] {
+    return modo === 'requisito' ? montarGruposPorRequisito(lista, itemIds, tones) : montarGruposPorEmpresa(lista, itemIds, tones)
   }
 
   function abrirRelatorioModal() {
     setRelatorioItensSel(new Set())
+    setRelatorioTonesSel(new Set(TODOS_TONES))
     setModalRelatorio(true)
   }
 
-  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo) {
-    const grupos = montarGruposRelatorio(lista, itemIds, modo)
+  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>) {
+    const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
     if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
     const totalLinhas = grupos.reduce((n, g) => n + g.linhas.length, 0)
+    const larguras = larguraColunasRelatorio(grupos[0].colunas, grupos[0].resultadoColIdx)
+    const colgroupHtml = `<colgroup>${larguras.map(w => `<col style="width:${w}">`).join('')}</colgroup>`
     const gruposHtml = grupos.map(g => {
       const linhasHtml = g.linhas.map(l => '<tr>' + l.valores.map((v, idx) => {
         if (idx === g.resultadoColIdx && l.tone) {
@@ -1688,7 +1719,7 @@ export default function WorkflowProgramasClient() {
       return `<div class="grupo">
         <div class="grupo-titulo">${escapeHtml(g.titulo)}</div>
         <div class="grupo-meta">${g.meta.map(escapeHtml).join(' &nbsp;·&nbsp; ')}</div>
-        <table><thead><tr>${g.colunas.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhasHtml}</tbody></table>
+        <table>${colgroupHtml}<thead><tr>${g.colunas.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhasHtml}</tbody></table>
       </div>`
     }).join('')
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório GT3 · Workflow Programas</title><style>
@@ -1699,8 +1730,8 @@ export default function WorkflowProgramasClient() {
       .grupo{ margin-bottom: 16px; page-break-inside: avoid; }
       .grupo-titulo{ font-size: 13px; font-weight: 700; color: #1E3A70; background: #E8EEF9; padding: 5px 8px; border-radius: 4px 4px 0 0; }
       .grupo-meta{ font-size: 10px; color: #6B7A90; padding: 4px 8px; border: 1px solid #E8EEF9; border-top: none; }
-      table{ width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 2px; }
-      th, td{ border: 1px solid #B9C2D0; padding: 4px 6px; text-align: left; vertical-align: top; }
+      table{ width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 2px; table-layout: fixed; }
+      th, td{ border: 1px solid #B9C2D0; padding: 4px 6px; text-align: left; vertical-align: top; overflow-wrap: break-word; }
       th{ background: #F4F6FA; font-weight: 700; }
       tr:nth-child(even) td{ background: #FAFBFD; }
       .badge{ display: inline-block; padding: 1px 8px; border-radius: 99px; font-weight: 700; }
@@ -1728,8 +1759,8 @@ export default function WorkflowProgramasClient() {
     else iframe.onload = () => setTimeout(trigger, 150)
   }
 
-  async function exportarRelatorioExcel(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo) {
-    const grupos = montarGruposRelatorio(lista, itemIds, modo)
+  async function exportarRelatorioExcel(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>) {
+    const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
     if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
     const { Workbook } = await import('exceljs')
     const wb = new Workbook()
@@ -1790,8 +1821,8 @@ export default function WorkflowProgramasClient() {
     showToast('Excel exportado')
   }
 
-  function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo) {
-    const grupos = montarGruposRelatorio(lista, itemIds, modo)
+  function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>) {
+    const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
     if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
     const cols = grupos[0].colunas
     const resultadoIdx = grupos[0].resultadoColIdx
@@ -1802,9 +1833,13 @@ export default function WorkflowProgramasClient() {
     const gruposJson = JSON.stringify(dadosGrupos).replace(/<\/script/gi, '<\\/script')
     const colsJson = JSON.stringify(cols).replace(/<\/script/gi, '<\\/script')
     const totalLinhasJson = JSON.stringify(totalLinhas)
+    const toneLabelsJson = JSON.stringify(RESULTADO_TONE_LABEL)
     // Arquivo HTML autocontido (sem dependências externas), com seções por grupo (empresa ou
     // requisito, conforme escolhido) e filtro por coluna aplicado dentro de cada grupo — um
-    // grupo some da tela se nenhuma linha dele sobreviver ao filtro.
+    // grupo some da tela se nenhuma linha dele sobreviver ao filtro. A coluna Resultado usa um
+    // <select> (por tom: conforme/reprovação/restrição/n·a·) em vez de texto livre, e todas as
+    // tabelas usam a mesma largura de coluna (table-layout:fixed + colgroup) pra não ficarem
+    // desalinhadas de um grupo pro outro.
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Relatório GT3 · Workflow Programas</title><style>
       *{box-sizing:border-box} body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#F4F6FA;color:#1B2432;padding:24px}
@@ -1813,13 +1848,13 @@ export default function WorkflowProgramasClient() {
       .toolbar button{border:1px solid #E2E8F2;background:#fff;border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13px}
       .toolbar button:hover{background:#E8EEF9}
       .filtros{display:flex;gap:6px;flex-wrap:wrap}
-      .filtros input{padding:6px 8px;border:1px solid #E2E8F2;border-radius:6px;font-size:12px;font-family:inherit;width:130px}
+      .filtros input,.filtros select{padding:6px 8px;border:1px solid #E2E8F2;border-radius:6px;font-size:12px;font-family:inherit;width:130px;background:#fff}
       .contador{font-size:12.5px;color:#6B7A90;margin-left:auto}
       .grupo{margin-bottom:20px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(27,36,50,.08)}
       .grupo-titulo{font-size:14px;font-weight:700;color:#1E3A70;background:#E8EEF9;padding:9px 14px}
       .grupo-meta{font-size:11.5px;color:#6B7A90;padding:6px 14px;border-bottom:1px solid #E2E8F2}
-      table{width:100%;border-collapse:collapse;font-size:12.5px}
-      th,td{border:1px solid #E2E8F2;padding:7px 9px;text-align:left;vertical-align:top}
+      table{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+      th,td{border:1px solid #E2E8F2;padding:7px 9px;text-align:left;vertical-align:top;overflow-wrap:break-word}
       th{background:#F4F6FA;color:#1E3A70}
       tbody tr:nth-child(even){background:#FAFBFD}
       .badge{display:inline-block;padding:2px 9px;border-radius:99px;font-weight:700;font-size:12px}
@@ -1831,7 +1866,7 @@ export default function WorkflowProgramasClient() {
       @media print{ .toolbar{display:none} }
       </style></head><body>
       <h1>GT3 · Workflow Programas — Relatório interativo (${modo === 'empresa' ? 'por empresa' : 'por requisito'})</h1>
-      <p class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · filtre por coluna abaixo — um grupo some se nenhuma linha dele sobrar.</p>
+      <p class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · filtre por coluna abaixo (a coluna Resultado filtra por aprovado/reprovado/etc.) — um grupo some se nenhuma linha dele sobrar.</p>
       <div class="toolbar">
         <div class="filtros" id="filtrosWrap"></div>
         <button id="btnLimpar">Limpar filtros</button>
@@ -1845,15 +1880,45 @@ export default function WorkflowProgramasClient() {
         var RESULTADO_IDX = ${resultadoIdx};
         var GRUPOS = ${gruposJson};
         var TOTAL_LINHAS = ${totalLinhasJson};
+        var TONE_LABELS = ${toneLabelsJson};
         var filtros = COLS.map(function(){ return ''; });
         var filtrosWrap = document.getElementById('filtrosWrap');
         var gruposEl = document.getElementById('grupos');
         var contador = document.getElementById('contador');
+
+        // Larguras fixas e iguais em toda tabela do relatório: Resultado estreito, Observação
+        // (sempre a última coluna) mais larga, o resto dividido igualmente — resolve colunas
+        // "desencontradas" de um grupo pro outro, já que cada <table> antes calculava sozinha.
+        var obsIdx = COLS.length - 1;
+        var pesos = COLS.map(function(_, idx){
+          if (idx === RESULTADO_IDX) return 12;
+          if (idx === obsIdx) return 30;
+          var restantes = COLS.length - 2;
+          return restantes > 0 ? 58 / restantes : 58;
+        });
+        var somaPesos = pesos.reduce(function(a, b){ return a + b; }, 0);
+        var larguras = pesos.map(function(p){ return (p / somaPesos * 100).toFixed(2) + '%'; });
+
+        var tonsPresentes = [];
+        GRUPOS.forEach(function(g){ g.linhas.forEach(function(l){ if (l.t && tonsPresentes.indexOf(l.t) === -1) tonsPresentes.push(l.t); }); });
+
         COLS.forEach(function(c, idx){
-          var inp = document.createElement('input');
-          inp.placeholder = c;
-          inp.addEventListener('input', function(){ filtros[idx] = inp.value.toLowerCase(); render(); });
-          filtrosWrap.appendChild(inp);
+          if (idx === RESULTADO_IDX && tonsPresentes.length) {
+            var sel = document.createElement('select');
+            var optTodos = document.createElement('option'); optTodos.value = ''; optTodos.textContent = c + ' (todos)';
+            sel.appendChild(optTodos);
+            tonsPresentes.forEach(function(t){
+              var opt = document.createElement('option'); opt.value = t; opt.textContent = TONE_LABELS[t] || t;
+              sel.appendChild(opt);
+            });
+            sel.addEventListener('change', function(){ filtros[idx] = sel.value; render(); });
+            filtrosWrap.appendChild(sel);
+          } else {
+            var inp = document.createElement('input');
+            inp.placeholder = c;
+            inp.addEventListener('input', function(){ filtros[idx] = inp.value.toLowerCase(); render(); });
+            filtrosWrap.appendChild(inp);
+          }
         });
         function render(){
           gruposEl.innerHTML = '';
@@ -1861,7 +1926,11 @@ export default function WorkflowProgramasClient() {
           var gruposVisiveis = 0;
           GRUPOS.forEach(function(g){
             var linhasVisiveis = g.linhas.filter(function(linha){
-              return filtros.every(function(f, idx){ return !f || String(linha.v[idx]).toLowerCase().indexOf(f) !== -1; });
+              return filtros.every(function(f, idx){
+                if (!f) return true;
+                if (idx === RESULTADO_IDX) return linha.t === f;
+                return String(linha.v[idx]).toLowerCase().indexOf(f) !== -1;
+              });
             });
             if (!linhasVisiveis.length) return;
             gruposVisiveis++;
@@ -1871,6 +1940,9 @@ export default function WorkflowProgramasClient() {
             var h = document.createElement('div'); h.className = 'grupo-titulo'; h.textContent = g.titulo;
             var m = document.createElement('div'); m.className = 'grupo-meta'; m.textContent = g.meta.join(' · ');
             var tbl = document.createElement('table');
+            var colgroup = document.createElement('colgroup');
+            larguras.forEach(function(w){ var col = document.createElement('col'); col.style.width = w; colgroup.appendChild(col); });
+            tbl.appendChild(colgroup);
             var thead = document.createElement('thead');
             var trh = document.createElement('tr');
             COLS.forEach(function(c){ var th=document.createElement('th'); th.textContent=c; trh.appendChild(th); });
@@ -1901,7 +1973,7 @@ export default function WorkflowProgramasClient() {
         }
         document.getElementById('btnLimpar').addEventListener('click', function(){
           filtros = COLS.map(function(){ return ''; });
-          Array.prototype.forEach.call(filtrosWrap.querySelectorAll('input'), function(i){ i.value=''; });
+          Array.prototype.forEach.call(filtrosWrap.querySelectorAll('input,select'), function(i){ i.value=''; });
           render();
         });
         document.getElementById('btnImprimir').addEventListener('click', function(){ window.print(); });
@@ -2428,10 +2500,11 @@ export default function WorkflowProgramasClient() {
           catalog={catalog} selecionados={relatorioItensSel} onChange={setRelatorioItensSel}
           totalNaLista={bancoFiltrado.length}
           modo={relatorioModo} onModoChange={setRelatorioModo}
+          tones={relatorioTonesSel} onTonesChange={setRelatorioTonesSel}
           onClose={() => setModalRelatorio(false)}
-          onPdf={() => exportarRelatorioPdf(bancoFiltrado, relatorioItensSel, relatorioModo)}
-          onExcel={() => exportarRelatorioExcel(bancoFiltrado, relatorioItensSel, relatorioModo)}
-          onHtml={() => exportarRelatorioHtml(bancoFiltrado, relatorioItensSel, relatorioModo)}
+          onPdf={() => exportarRelatorioPdf(bancoFiltrado, relatorioItensSel, relatorioModo, relatorioTonesSel)}
+          onExcel={() => exportarRelatorioExcel(bancoFiltrado, relatorioItensSel, relatorioModo, relatorioTonesSel)}
+          onHtml={() => exportarRelatorioHtml(bancoFiltrado, relatorioItensSel, relatorioModo, relatorioTonesSel)}
         />
       )}
     </div>
@@ -3257,9 +3330,10 @@ function VContratantes({ catalog, getI, onNovo, onEditar, onDel }: {
 // Não usa ModalShell porque o rodapé precisa de 3 ações de exportação além de Cancelar,
 // em vez do padrão Cancelar/Salvar — mesma linguagem visual (overlay, cantos, sombra).
 
-function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, modo, onModoChange, onClose, onPdf, onExcel, onHtml }: {
+function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, modo, onModoChange, tones, onTonesChange, onClose, onPdf, onExcel, onHtml }: {
   catalog: Catalog; selecionados: Set<string>; onChange: (s: Set<string>) => void; totalNaLista: number
   modo: RelatorioModo; onModoChange: (m: RelatorioModo) => void
+  tones: Set<ResultadoTone>; onTonesChange: (s: Set<ResultadoTone>) => void
   onClose: () => void; onPdf: () => void; onExcel: () => void; onHtml: () => void
 }) {
   const itens = ordenarPorDocumento(catalog.itens)
@@ -3274,7 +3348,13 @@ function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, modo, o
     else next.add(id)
     onChange(next)
   }
-  const nada = selecionados.size === 0
+  function toggleTone(t: ResultadoTone) {
+    const next = new Set(tones)
+    if (next.has(t)) next.delete(t)
+    else next.add(t)
+    onTonesChange(next)
+  }
+  const nada = selecionados.size === 0 || tones.size === 0
 
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
@@ -3303,6 +3383,24 @@ function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, modo, o
                 </label>
               ))}
             </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, display: 'block', marginBottom: 6 }}>Resultado</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {TODOS_TONES.map(t => (
+                <label key={t} style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+                  border: `1px solid ${tones.has(t) ? RESULTADO_CORES[t].fg + '55' : LINE}`,
+                  background: tones.has(t) ? RESULTADO_CORES[t].bg : '#fff',
+                  color: tones.has(t) ? RESULTADO_CORES[t].fg : MU,
+                }}>
+                  <input type="checkbox" checked={tones.has(t)} onChange={() => toggleTone(t)} style={{ accentColor: RESULTADO_CORES[t].fg }} />
+                  {RESULTADO_TONE_LABEL[t]}
+                </label>
+              ))}
+            </div>
+            {tones.size === 0 && <div style={{ fontSize: 12, color: NO, marginTop: 6 }}>Selecione ao menos um resultado.</div>}
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: PS, borderRadius: 8, marginBottom: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
