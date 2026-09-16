@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { requireGestorAdmin } from '../../../../lib/api-helpers'
-import { variaveisEmailAta, aplicaVariaveisEmail, corpoParaHtml } from '../../../../lib/ata-email'
+import { variaveisEmailAta, aplicaVariaveisEmail, corpoParaHtml, resolverDestinatarios, separarGt3, combinarCcGt3, DOMINIO_GT3 } from '../../../../lib/ata-email'
 import { nomeArquivoAta, type AtaHtmlData } from '../../../../lib/ata-html'
 import { gerarAtaPdfBuffer } from '../../../../lib/ata-pdf'
 import { ASSUNTO_PADRAO, CORPO_PADRAO, CC_GT3_PADRAO, type EmailConfigDados } from '../../email-config/route'
@@ -64,9 +64,13 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))
-  const destinatarios: string[] = Array.isArray(body.destinatarios)
+  const destinatariosBrutos: string[] = Array.isArray(body.destinatarios)
     ? body.destinatarios.map((e: string) => String(e).trim()).filter(Boolean)
     : []
+  // Blindagem: mesmo que um @gttres.com.br chegue aqui (extra digitado manualmente, por
+  // exemplo), nunca vai como destinatário — sempre em cópia junto com o resto da GT3.
+  const destinatarios = destinatariosBrutos.filter(e => !e.toLowerCase().endsWith(DOMINIO_GT3))
+  const ccExtrasManual = destinatariosBrutos.filter(e => e.toLowerCase().endsWith(DOMINIO_GT3))
 
   const admin = createAdminClient()
   const [{ data: ata, error: ataErr }, { data: configRow }] = await Promise.all([
@@ -78,9 +82,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (ataErr || !ata) return Response.json({ error: 'Ata não encontrada' }, { status: 404 })
 
   const dados = (configRow?.dados ?? {}) as Partial<EmailConfigDados>
+  const diretorio = Array.isArray(dados.diretorio) ? dados.diretorio : []
   const assuntoTemplate = dados.assunto?.trim() || ASSUNTO_PADRAO
   const corpoTemplate = dados.corpo?.trim() || CORPO_PADRAO
-  const ccGt3 = dados.ccGt3?.trim() || CC_GT3_PADRAO
 
   const ataHtmlData: AtaHtmlData = ata
   const ctx = variaveisEmailAta(ataHtmlData)
@@ -89,6 +93,13 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const topicos = parseTopicos(ata.conteudo)
   const partes = parseParticipantes(ata.participantes)
+  // Participantes da própria GT3 (@gttres.com.br) também não entram como destinatários —
+  // reforça a mesma regra aplicada na prévia (ver email-preview).
+  const { gt3: gt3Resolvidos } = separarGt3(resolverDestinatarios(partes, diretorio).resolvidos)
+  const ccGt3 = combinarCcGt3(
+    dados.ccGt3?.trim() || CC_GT3_PADRAO,
+    [...gt3Resolvidos.map(p => p.email), ...ccExtrasManual],
+  )
   const pdfBuffer = await gerarAtaPdfBuffer(ataHtmlData, topicos, partes)
   const pdfFilename = `${nomeArquivoAta(ataHtmlData)}.pdf`
 

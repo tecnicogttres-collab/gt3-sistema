@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { requireGestorAdmin } from '../../../../lib/api-helpers'
-import { resolverDestinatarios, variaveisEmailAta, aplicaVariaveisEmail } from '../../../../lib/ata-email'
+import { resolverDestinatarios, separarGt3, combinarCcGt3, variaveisEmailAta, aplicaVariaveisEmail } from '../../../../lib/ata-email'
 import { ASSUNTO_PADRAO, CORPO_PADRAO, CC_GT3_PADRAO, type EmailConfigDados } from '../../email-config/route'
 import type { Participante } from '../../../../atas/AtasEditor'
 
@@ -34,7 +34,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const corpoTemplate = dados.corpo?.trim() || CORPO_PADRAO
 
   const participantes = parseParticipantes(ata.participantes)
-  const { resolvidos, semEmail } = resolverDestinatarios(participantes, diretorio)
+  const { resolvidos: resolvidosTodos, semEmail } = resolverDestinatarios(participantes, diretorio)
+  // Quem tem e-mail @gttres.com.br é da GT3 — nunca entra como destinatário (Para), mesmo
+  // tendo sido adicionado como participante da reunião: some da lista de "Para" e junta ao Cc.
+  const { contratante: resolvidos, gt3 } = separarGt3(resolvidosTodos)
   const ctx = variaveisEmailAta(ata)
 
   return Response.json({
@@ -42,6 +45,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
     semEmail,
     assunto: aplicaVariaveisEmail(assuntoTemplate, ctx),
     corpoPreview: aplicaVariaveisEmail(corpoTemplate, ctx),
-    ccGt3: dados.ccGt3?.trim() || CC_GT3_PADRAO,
+    ccGt3: combinarCcGt3(dados.ccGt3?.trim() || CC_GT3_PADRAO, gt3.map(p => p.email)),
   })
 }

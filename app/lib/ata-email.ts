@@ -27,6 +27,28 @@ export function resolverDestinatarios(
   return { resolvidos, semEmail }
 }
 
+export const DOMINIO_GT3 = '@gttres.com.br'
+
+/** Quem tem e-mail @gttres.com.br é da GT3 — nunca vai como destinatário (Para), sempre
+ *  em cópia (Cc), mesmo que tenha sido adicionado como participante da própria contratante
+ *  ou digitado manualmente no "Gerar e-mail". Separa a lista resolvida em dois grupos. */
+export function separarGt3<T extends { email: string }>(pessoas: T[]): { contratante: T[]; gt3: T[] } {
+  const contratante: T[] = []
+  const gt3: T[] = []
+  for (const p of pessoas) {
+    if (p.email.toLowerCase().endsWith(DOMINIO_GT3)) gt3.push(p)
+    else contratante.push(p)
+  }
+  return { contratante, gt3 }
+}
+
+/** Junta o(s) e-mail(s) fixos de Cc configurados com os endereços @gttres.com.br já
+ *  resolvidos, sem duplicar. */
+export function combinarCcGt3(ccConfig: string, resolvidosGt3Emails: string[]): string {
+  const base = ccConfig.split(',').map(s => s.trim()).filter(Boolean)
+  return Array.from(new Set([...base, ...resolvidosGt3Emails])).join(', ')
+}
+
 function fmtDataPtBr(iso: string): string {
   const [y, m, d] = iso.split('-')
   return y && m && d ? `${d}/${m}/${y}` : iso

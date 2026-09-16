@@ -1363,6 +1363,7 @@ export default function AtasContratantesClient() {
                 />
                 <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 14px' }}>
                   Entra sempre em cópia (Cc) — nunca como destinatário. Quem recebe (Para) é sempre a contratante. Vários e-mails: separe por vírgula.
+                  Qualquer pessoa com e-mail @gttres.com.br (mesmo cadastrada como participante da reunião) também vai automaticamente em cópia, além destes.
                 </p>
 
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Assunto</label>
