@@ -1091,11 +1091,13 @@ export default function WorkflowProgramasClient() {
       return s === 'restricao' || (!i.critico && s === 'nao') || (s === 'ok' && !!i.textoAprovadoId)
     })
     // Itens aprovados com restrição entram agrupados (juntos), igual à reprovação: um campo só
-    // — "Item(ns) aprovado(s) com restrição:" — seguido da lista numerada "1 - texto", "2 - texto"
-    // (em vez de um cabeçalho por item, espalhado entre orientativos/aprovados). Quando há 2+
-    // restrições, todas usam um prazo só no descritivo: o menor prazo marcado entre elas (não o
-    // prazo individual de cada uma). Vale tanto para texto vindo da Biblioteca quanto para
-    // observação livre digitada no item — qualquer item marcado "restricao" entra nesse padrão.
+    // — "ITEM(NS) APROVADO(S) COM RESTRIÇÃO - N DIA(S)", já com o prazo no próprio título — seguido
+    // da lista numerada "1 - texto", "2 - texto" (em vez de um cabeçalho por item, espalhado entre
+    // orientativos/aprovados). Quando há 2+ restrições, todas usam um prazo só: o menor prazo
+    // marcado entre elas (não o prazo individual de cada uma). Como o prazo já sai no título, os
+    // textos de restrição do catálogo não devem repetir "por N dias" no corpo (redundante).
+    // Vale tanto para texto vindo da Biblioteca quanto para observação livre digitada no item —
+    // qualquer item marcado "restricao" entra nesse padrão.
     const restantes = observacoesBase.filter(i => a.respostas[i.id]?.status !== 'restricao')
     const prazoRestricaoComum = restricoes.length
       ? Math.min(...restricoes.map(i => a.respostas[i.id]?.prazoRestricaoDias || 60))
@@ -1115,8 +1117,10 @@ export default function WorkflowProgramasClient() {
             if (obs) linha += `<br>Observação: ${obs}`
             return `<div>${linha}</div>`
           }).join('')
+          const diasLabel = prazoRestricaoComum === 1 ? '1 DIA' : `${prazoRestricaoComum} DIAS`
+          const titulo = `${plural ? 'ITENS APROVADOS' : 'ITEM APROVADO'} COM RESTRIÇÃO - ${diasLabel}`
           partes.push(
-            `<div style="font-weight:700;margin-bottom:4px">${plural ? 'Itens aprovados com restrição' : 'Item aprovado com restrição'}:</div>${itensHtml}`
+            `<div style="font-weight:700;margin-bottom:4px">${titulo}</div>${itensHtml}`
           )
         }
         if (restantes.length) {
