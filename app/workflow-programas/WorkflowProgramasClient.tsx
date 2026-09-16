@@ -1090,32 +1090,49 @@ export default function WorkflowProgramasClient() {
       const s = a.respostas[i.id]?.status
       return s === 'restricao' || (!i.critico && s === 'nao') || (s === 'ok' && !!i.textoAprovadoId)
     })
-    // Itens aprovados com restrição entram agrupados (juntos), igual à reprovação — em vez de
-    // espalhados entre orientativos/aprovados na ordem dos documentos. Quando há 2+ restrições,
-    // todas usam um prazo só: o menor prazo marcado entre elas (não o prazo individual de cada uma).
-    const observacoes = [
-      ...restricoes,
-      ...observacoesBase.filter(i => a.respostas[i.id]?.status !== 'restricao'),
-    ]
+    // Itens aprovados com restrição entram agrupados (juntos), igual à reprovação: um campo só
+    // — "Item(ns) aprovado(s) com restrição:" — seguido da lista numerada "1 - texto", "2 - texto"
+    // (em vez de um cabeçalho por item, espalhado entre orientativos/aprovados). Quando há 2+
+    // restrições, todas usam um prazo só no descritivo: o menor prazo marcado entre elas (não o
+    // prazo individual de cada uma). Vale tanto para texto vindo da Biblioteca quanto para
+    // observação livre digitada no item — qualquer item marcado "restricao" entra nesse padrão.
+    const restantes = observacoesBase.filter(i => a.respostas[i.id]?.status !== 'restricao')
     const prazoRestricaoComum = restricoes.length
       ? Math.min(...restricoes.map(i => a.respostas[i.id]?.prazoRestricaoDias || 60))
       : undefined
     const marcados = itens.filter(i => a.respostas[i.id]?.status)
     const blocos: Record<BlocoParecer, () => string> = {
       aprovacao: () => aplicaVars(getT(c?.aprovadoId || catalog?.config.aprovadoId)?.corpo || '', ctx),
-      observacoes: () => htmlJoinBlocos(observacoes.map((i, n) => {
-        const status = a.respostas[i.id]?.status
-        const t = status === 'restricao' ? getT(i.textoRestricaoId) : status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
-        const obs = a.respostas[i.id]?.obs
-        const tag = status === 'restricao' ? ' — APROVADO COM RESTRIÇÃO' : status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
-        const ctxItem = status === 'restricao' && prazoRestricaoComum != null
-          ? { ...ctxParaItem(ctx, i, a), prazorestricao: String(prazoRestricaoComum) }
-          : ctxParaItem(ctx, i, a)
-        let bloco = `<div style="font-weight:700;margin-bottom:4px">${n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
-          aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxItem)
-        if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
-        return bloco
-      })),
+      observacoes: () => {
+        const partes: string[] = []
+        if (restricoes.length) {
+          const plural = restricoes.length > 1
+          const itensHtml = restricoes.map((i, n) => {
+            const t = getT(i.textoRestricaoId)
+            const obs = a.respostas[i.id]?.obs
+            const ctxItem = { ...ctxParaItem(ctx, i, a), prazorestricao: String(prazoRestricaoComum) }
+            let linha = `${n + 1} - ${aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxItem)}`
+            if (obs) linha += `<br>Observação: ${obs}`
+            return `<div>${linha}</div>`
+          }).join('')
+          partes.push(
+            `<div style="font-weight:700;margin-bottom:4px">${plural ? 'Itens aprovados com restrição' : 'Item aprovado com restrição'}:</div>${itensHtml}`
+          )
+        }
+        if (restantes.length) {
+          partes.push(htmlJoinBlocos(restantes.map((i, n) => {
+            const status = a.respostas[i.id]?.status
+            const t = status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
+            const obs = a.respostas[i.id]?.obs
+            const tag = status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
+            let bloco = `<div style="font-weight:700;margin-bottom:4px">${restricoes.length + n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
+              aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i, a))
+            if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
+            return bloco
+          })))
+        }
+        return htmlJoinBlocos(partes)
+      },
       validade: () => buildValidadeObservacao(a, ctx),
       segmento: () => buildSegmentoObservacoes(a, ctx),
       assinatura: () => aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx),
