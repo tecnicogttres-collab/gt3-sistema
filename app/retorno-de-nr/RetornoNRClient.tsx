@@ -678,10 +678,18 @@ export default function RetornoNRClient() {
    */
   function renderPainelRegistro(nome: string, ids: string[]) {
     const nomes = nomesTreinos(ids, treinos)
-    const precisaContato = form.origem === 'contratante' || form.origem === 'empresa'
     const m = mesclar(ids, treinos)
     const orientacao = textoOrientacao(ids, treinos, config)
     const registro = textoRegistro(ids, treinos, config, form, usuario)
+
+    /** Só falta escolher o contratante — os atalhos de Contratante não presetam esse campo (varia sempre). */
+    function selecionarContratante(v: string) {
+      const novo: Form = { ...form, contratante: v }
+      setForm(novo)
+      if (!v) return
+      const texto = textoRegistro(ids, treinos, config, novo, usuario)
+      if (texto) void copiar(texto, 'registro')
+    }
 
     return (
       <>
@@ -722,9 +730,9 @@ export default function RetornoNRClient() {
             </div>
             <div style={S.panelBody}>
 
-              {config.atalhos.length > 0 && (
+              {config.atalhos.length > 0 ? (
                 <div style={{ marginBottom: 18 }}>
-                  <span style={S.label}>Atalhos</span>
+                  <span style={S.label}>Clique na opção que corresponde ao pedido</span>
                   {agruparAtalhos(config.atalhos).map(g => (
                     <div key={g.label} style={{ marginBottom: 10 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: MUTED, margin: '2px 0 6px' }}>{g.label}</div>
@@ -735,40 +743,20 @@ export default function RetornoNRClient() {
                       </div>
                     </div>
                   ))}
-                  <div style={S.hint}>Preenche os campos definidos no atalho e já copia o texto quando estiver completo.</div>
+                  <div style={S.hint}>O texto abaixo já sai pronto e copiado — em Contratante, só falta escolher qual.</div>
+                </div>
+              ) : (
+                <div style={{ ...S.callout, marginBottom: 18 }}>
+                  Nenhum atalho configurado ainda. Cadastre em <b>Configurações → Atalhos prontos</b> pra gerar o registro com um clique.
                 </div>
               )}
-
-              <div style={{ marginBottom: 18 }}>
-                <span style={S.label}>Ação</span>
-                <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-                  <Opcao on={form.acao === 'inclusao'} onClick={() => setForm(f => ({ ...f, acao: 'inclusao' }))}>{config.rotulos.inclusao}</Opcao>
-                  <Opcao on={form.acao === 'remocao'}  onClick={() => setForm(f => ({ ...f, acao: 'remocao' }))}>{config.rotulos.remocao}</Opcao>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 18 }}>
-                <span style={S.label}>Origem da solicitação</span>
-                <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-                  {(['contratante', 'empresa', 'atividade'] as const).map(o => (
-                    <Opcao key={o} on={form.origem === o}
-                      onClick={() => setForm(f => ({
-                        ...f,
-                        origem: f.origem === o ? null : o,
-                        contratante: '', contato: null, contatoOutro: '',
-                      }))}>
-                      {o === 'contratante' ? 'Contratante' : o === 'empresa' ? 'Empresa' : 'Atividade'}
-                    </Opcao>
-                  ))}
-                </div>
-              </div>
 
               {form.origem === 'contratante' && (
                 <div style={{ marginBottom: 18 }}>
                   <span style={S.label}>Qual contratante</span>
                   {contratantes.length > 0 ? (
                     <>
-                      <select value={form.contratante} onChange={e => setForm(f => ({ ...f, contratante: e.target.value }))} style={S.input}>
+                      <select value={form.contratante} onChange={e => selecionarContratante(e.target.value)} style={S.input}>
                         <option value="">Selecione...</option>
                         {contratantes.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
@@ -780,33 +768,6 @@ export default function RetornoNRClient() {
                 </div>
               )}
 
-              {precisaContato && (
-                <div style={{ marginBottom: 18 }}>
-                  <span style={S.label}>Forma de contato</span>
-                  <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-                    {config.formas_contato.map(f => (
-                      <Opcao key={f} gold on={form.contato === f}
-                        onClick={() => setForm(prev => ({
-                          ...prev,
-                          contato: prev.contato === f ? null : f,
-                          contatoOutro: f === 'Outros' ? prev.contatoOutro : '',
-                        }))}>
-                        {f}
-                      </Opcao>
-                    ))}
-                  </div>
-                  {form.contato === 'Outros' && (
-                    <input value={form.contatoOutro} onChange={e => setForm(f => ({ ...f, contatoOutro: e.target.value }))}
-                      placeholder="Qual?" style={{ ...S.input, marginTop: 9 }} />
-                  )}
-                </div>
-              )}
-
-              <div style={{ marginBottom: 18 }}>
-                <span style={S.label}>Data</span>
-                <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} style={S.input} />
-              </div>
-
               <div style={S.divider} />
 
               <span style={S.label}>Observação gerada</span>
@@ -816,7 +777,9 @@ export default function RetornoNRClient() {
                   <button style={{ ...btnStyle('gold', true), marginTop: 12 }} onClick={() => salvarNoHistorico(nome, registro)}>Salvar no histórico</button>
                 </>
               ) : (
-                <div style={{ ...S.empty, padding: 20 }}>Preencha ação, origem e demais campos para gerar o texto.</div>
+                <div style={{ ...S.empty, padding: 20 }}>
+                  {form.origem === 'contratante' ? 'Selecione o contratante para gerar o texto.' : 'Clique em uma opção acima para gerar o texto.'}
+                </div>
               )}
             </div>
           </div>
@@ -831,7 +794,6 @@ export default function RetornoNRClient() {
     }
     return <><BotaoVoltar />{renderPainelRegistro(alvoAtual.nome, alvoAtual.ids)}</>
   }
-
 
   function renderHistorico() {
     async function limpar() {
