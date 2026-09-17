@@ -36,6 +36,8 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
 
   const [sortMode, setSortMode] = useState<SortMode>('padrao')
   const [ordem, setOrdem] = useState<string[]>([])
+  // Evita mostrar os cards na ordem padrão por um instante antes da preferência salva chegar do Supabase.
+  const [prefsReady, setPrefsReady] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [reordering, setReordering] = useState(false)
   const [draftOrder, setDraftOrder] = useState<string[]>([])
@@ -49,10 +51,13 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
     async function load() {
       try {
         const { data } = await supabase.from('dashboard_prefs').select('modo, ordem').eq('user_id', profile!.id).maybeSingle()
-        if (!mounted || !data) return
-        setSortMode((data.modo as SortMode) ?? 'padrao')
-        setOrdem((data.ordem as string[]) ?? [])
+        if (!mounted) return
+        if (data) {
+          setSortMode((data.modo as SortMode) ?? 'padrao')
+          setOrdem((data.ordem as string[]) ?? [])
+        }
       } catch { /* tabela pode não existir ainda */ }
+      finally { if (mounted) setPrefsReady(true) }
     }
     void load()
     return () => { mounted = false }
@@ -131,6 +136,11 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
     { mode: 'az', label: 'A → Z', icon: '⭡' },
     { mode: 'za', label: 'Z → A', icon: '⭣' },
   ]
+
+  // Evita renderizar os cards na ordem padrão e só reorganizar depois — espera a preferência salva chegar primeiro.
+  if (!prefsReady) {
+    return <div style={{ minHeight: 120 }} />
+  }
 
   return (
     <div style={{ position: 'relative' }}>

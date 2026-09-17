@@ -22,12 +22,15 @@ const ACCENT = '#D1AE6E'
 export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeave, mode = 'classic', onModeToggle }: Props) {
   const pathname = usePathname()
   const { profile, loading } = useUser()
-  const { modules: MODULES } = useModules()
+  const { modules: MODULES, loading: modulesLoading } = useModules()
   const [pdiNotifCount, setPdiNotifCount] = useState(0)
   const [moduleNotifs, setModuleNotifs] = useState<Record<string, number>>({})
 
   const papel = profile?.papel as Role | null
   const visibleModules = useMemo(() => {
+    // Evita mostrar o nome padrão do módulo por um instante antes da personalização
+    // (definida em Usuários) chegar do Supabase.
+    if (modulesLoading) return []
     const filtered = papel
       ? MODULES.filter((m) => {
           if (papel === 'admin') return true
@@ -39,7 +42,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       ? []
       : MODULES.filter((m) => m.allowedRoles.includes('colaborador'))
     return [...filtered].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
-  }, [papel, profile?.modulos_permitidos, loading, MODULES])
+  }, [papel, profile?.modulos_permitidos, loading, modulesLoading, MODULES])
 
   // PDI notifications (tabela pdi_notificacoes — sistema existente para colaboradores)
   useEffect(() => {
