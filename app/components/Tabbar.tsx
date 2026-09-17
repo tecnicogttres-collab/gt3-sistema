@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useModules } from './ModulesContext'
+import { evictTabContent } from './TabContentCache'
 
 // Guardamos apenas id/path; nome e cor são resolvidos ao vivo a partir do
 // contexto de módulos, para que renomear um módulo atualize as abas abertas.
@@ -49,6 +50,9 @@ export default function Tabbar() {
     e.preventDefault()
     e.stopPropagation()
     setTabs((prev) => prev.filter((t) => t.id !== tabId))
+    // Fechar de verdade "esquece" o módulo: a próxima abertura começa do zero,
+    // em vez de reaparecer na tela em que o usuário tinha deixado antes.
+    evictTabContent(tabPath)
     if (isUnderTab(tabPath)) router.push('/')
   }
 

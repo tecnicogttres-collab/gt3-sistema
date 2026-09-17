@@ -41,6 +41,10 @@ export async function PATCH(req: NextRequest) {
     if (!Array.isArray(body.formas_contato)) return Response.json({ error: 'formas_contato inválido' }, { status: 400 })
     updates.formas_contato = body.formas_contato.map((f: unknown) => String(f).trim()).filter(Boolean)
   }
+  if (body.atalhos !== undefined) {
+    if (!Array.isArray(body.atalhos)) return Response.json({ error: 'atalhos inválido' }, { status: 400 })
+    updates.atalhos = body.atalhos
+  }
 
   if (Object.keys(updates).length === 0) {
     return Response.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })

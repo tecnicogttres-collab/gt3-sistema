@@ -30,6 +30,16 @@ type Config = {
   acoes: { inclusao: string; remocao: string }
   rotulos: { inclusao: string; remocao: string }
   formas_contato: string[]
+  atalhos: Atalho[]
+}
+
+/** Atalho pronto: define só os campos que quiser (os demais ficam para preencher na hora). */
+type Atalho = {
+  id: string
+  nome: string
+  acao: 'inclusao' | 'remocao' | null
+  origem: 'contratante' | 'empresa' | 'atividade' | null
+  contato: string | null
 }
 
 type Hist = {
@@ -58,7 +68,7 @@ type Form = {
 type Draft = { nome: string; descricao: string; itens: Item[] }
 
 type View = 'home' | 'detalhe' | 'historico' | 'config'
-type CfgTab = 'treinamentos' | 'combos' | 'modelos' | 'email' | 'geral'
+type CfgTab = 'treinamentos' | 'combos' | 'modelos' | 'atalhos' | 'email' | 'geral'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -79,6 +89,24 @@ const DANGER       = '#B91C1C'
 const RADIUS       = 12
 const SHADOW       = '0 1px 3px rgba(30,58,112,.08),0 6px 18px rgba(30,58,112,.06)'
 
+/** Todos os padrões possíveis de ação × origem × contato (sem "Outros", que exige texto livre). */
+const ATALHOS_PADRAO: Atalho[] = [
+  { id: 'inc-emp-whatsapp',   nome: 'Inclusão · Empresa · WhatsApp',      acao: 'inclusao', origem: 'empresa',     contato: 'WhatsApp' },
+  { id: 'inc-emp-email',      nome: 'Inclusão · Empresa · E-mail',        acao: 'inclusao', origem: 'empresa',     contato: 'E-mail' },
+  { id: 'inc-emp-portal',     nome: 'Inclusão · Empresa · Portal',        acao: 'inclusao', origem: 'empresa',     contato: 'Portal' },
+  { id: 'rem-emp-whatsapp',   nome: 'Remoção · Empresa · WhatsApp',       acao: 'remocao',  origem: 'empresa',     contato: 'WhatsApp' },
+  { id: 'rem-emp-email',      nome: 'Remoção · Empresa · E-mail',         acao: 'remocao',  origem: 'empresa',     contato: 'E-mail' },
+  { id: 'rem-emp-portal',     nome: 'Remoção · Empresa · Portal',         acao: 'remocao',  origem: 'empresa',     contato: 'Portal' },
+  { id: 'inc-ctt-whatsapp',   nome: 'Inclusão · Contratante · WhatsApp',  acao: 'inclusao', origem: 'contratante', contato: 'WhatsApp' },
+  { id: 'inc-ctt-email',      nome: 'Inclusão · Contratante · E-mail',    acao: 'inclusao', origem: 'contratante', contato: 'E-mail' },
+  { id: 'inc-ctt-portal',     nome: 'Inclusão · Contratante · Portal',    acao: 'inclusao', origem: 'contratante', contato: 'Portal' },
+  { id: 'rem-ctt-whatsapp',   nome: 'Remoção · Contratante · WhatsApp',   acao: 'remocao',  origem: 'contratante', contato: 'WhatsApp' },
+  { id: 'rem-ctt-email',      nome: 'Remoção · Contratante · E-mail',     acao: 'remocao',  origem: 'contratante', contato: 'E-mail' },
+  { id: 'rem-ctt-portal',     nome: 'Remoção · Contratante · Portal',     acao: 'remocao',  origem: 'contratante', contato: 'Portal' },
+  { id: 'inc-atividade',      nome: 'Inclusão · Atividade da empresa',    acao: 'inclusao', origem: 'atividade',   contato: null },
+  { id: 'rem-atividade',      nome: 'Remoção · Atividade da empresa',     acao: 'remocao',  origem: 'atividade',   contato: null },
+]
+
 const CONFIG_PADRAO: Config = {
   email: {
     tituloComuns: 'Padrão a todos:',
@@ -93,6 +121,7 @@ const CONFIG_PADRAO: Config = {
   acoes: { inclusao: 'inserido', remocao: 'removido' },
   rotulos: { inclusao: 'Aprovação (inclusão)', remocao: 'Remoção' },
   formas_contato: ['E-mail', 'Portal', 'WhatsApp', 'Outros'],
+  atalhos: ATALHOS_PADRAO,
 }
 
 /** Textos que já nascem em todo treinamento novo, com a chave de item comum. */
@@ -158,6 +187,19 @@ function mesclar(ids: string[], treinos: Treino[]) {
 
 function nomesTreinos(ids: string[], treinos: Treino[]) {
   return ids.map(i => treinos.find(t => t.id === i)?.nome ?? '').filter(Boolean)
+}
+
+const GRUPOS_ATALHO: [Atalho['origem'], string][] = [
+  ['contratante', 'Contratante'],
+  ['empresa', 'Empresa'],
+  ['atividade', 'Atividade'],
+  [null, 'Outros'],
+]
+
+function agruparAtalhos(atalhos: Atalho[]) {
+  return GRUPOS_ATALHO
+    .map(([origem, label]) => ({ origem, label, itens: atalhos.filter(a => a.origem === origem) }))
+    .filter(g => g.itens.length > 0)
 }
 
 function textoOrientacao(ids: string[], treinos: Treino[], config: Config) {
@@ -266,6 +308,14 @@ function btnStyle(kind: BtnKind = 'primary', sm = false): React.CSSProperties {
   return { ...base, background: PRIMARY, color: '#fff' }
 }
 
+/** Botão de atalho: verde para inclusão, vermelho para remoção, dourado quando a ação não foi predefinida. */
+function atalhoBtnStyle(a: Atalho): React.CSSProperties {
+  const base = btnStyle('ghost', true)
+  if (a.acao === 'inclusao') return { ...base, background: OK, color: '#fff', border: 'none' }
+  if (a.acao === 'remocao')  return { ...base, background: DANGER, color: '#fff', border: 'none' }
+  return { ...base, background: ACCENT, color: '#3A2E14', border: 'none' }
+}
+
 // ─── Componentes auxiliares (nível de módulo: não remontam a cada render) ─────
 
 function CopyBox({ texto, copiado, onCopy }: { texto: string; copiado: boolean; onCopy: () => void }) {
@@ -333,6 +383,7 @@ export default function RetornoNRClient() {
   const [view, setView]     = useState<View>('home')
   const [cfgTab, setCfgTab] = useState<CfgTab>('treinamentos')
   const [alvo, setAlvo]     = useState<Alvo | null>(null)
+  const [livreSel, setLivreSel] = useState<string[]>([])
   const [busca, setBusca]   = useState('')
   const [form, setForm]     = useState<Form>({ acao: null, origem: null, contratante: '', contato: null, contatoOutro: '', data: hoje() })
 
@@ -343,6 +394,10 @@ export default function RetornoNRClient() {
   const [comboNome, setComboNome]       = useState('')
   const [comboNomeAuto, setComboNomeAuto] = useState(true)
   const [novaForma, setNovaForma]       = useState('')
+  const [atalhoNome, setAtalhoNome]     = useState('')
+  const [atalhoAcao, setAtalhoAcao]     = useState<Atalho['acao']>(null)
+  const [atalhoOrigem, setAtalhoOrigem] = useState<Atalho['origem']>(null)
+  const [atalhoContato, setAtalhoContato] = useState<string | null>(null)
   const [salvando, setSalvando]         = useState(false)
 
   const [copiado, setCopiado] = useState<string | null>(null)
@@ -376,6 +431,7 @@ export default function RetornoNRClient() {
         acoes:          { ...CONFIG_PADRAO.acoes,   ...(data.config.acoes   ?? {}) },
         rotulos:        { ...CONFIG_PADRAO.rotulos, ...(data.config.rotulos ?? {}) },
         formas_contato: data.config.formas_contato?.length ? data.config.formas_contato : CONFIG_PADRAO.formas_contato,
+        atalhos:        Array.isArray(data.config.atalhos) ? data.config.atalhos : CONFIG_PADRAO.atalhos,
       })
     }
   }, [])
@@ -420,16 +476,6 @@ export default function RetornoNRClient() {
     return c ? { nome: c.nome, ids: c.treinamento_ids.filter(i => treinos.some(t => t.id === i)) } : null
   }, [alvo, treinos, combos])
 
-  const orientacao = useMemo(
-    () => alvoAtual ? textoOrientacao(alvoAtual.ids, treinos, config) : '',
-    [alvoAtual, treinos, config]
-  )
-
-  const registro = useMemo(
-    () => alvoAtual ? textoRegistro(alvoAtual.ids, treinos, config, form, usuario) : '',
-    [alvoAtual, treinos, config, form, usuario]
-  )
-
   // ── Ações ───────────────────────────────────────────────────────────────────
 
   const copiar = useCallback(async (txt: string, marca: string) => {
@@ -445,6 +491,46 @@ export default function RetornoNRClient() {
     setAlvo({ tipo, id })
     setForm({ acao: null, origem: null, contratante: '', contato: null, contatoOutro: '', data: hoje() })
     setView('detalhe')
+
+    const ids = tipo === 'nr'
+      ? (treinos.some(t => t.id === id) ? [id] : [])
+      : (combos.find(c => c.id === id)?.treinamento_ids.filter(i => treinos.some(t => t.id === i)) ?? [])
+    if (ids.length) void copiar(textoOrientacao(ids, treinos, config), 'orientacao')
+  }
+
+  /** Marca/desmarca um treinamento na seleção por flag da tela inicial e já copia a orientação atualizada. */
+  function toggleLivre(id: string) {
+    const next = livreSel.includes(id) ? livreSel.filter(i => i !== id) : [...livreSel, id]
+    setLivreSel(next)
+    if (next.length) void copiar(textoOrientacao(next, treinos, config), 'orientacao')
+  }
+
+  /** Limpa a seleção por flag e o formulário, pra começar do zero depois de finalizar um registro. */
+  function resetarLivre() {
+    setLivreSel([])
+    setForm({ acao: null, origem: null, contratante: '', contato: null, contatoOutro: '', data: hoje() })
+  }
+
+  /**
+   * Aplica só os campos definidos no atalho — o resto do formulário fica como está, para completar na mão.
+   * Se os campos aplicados já forem suficientes para gerar o texto (ex.: Empresa + WhatsApp não precisam
+   * de contratante), copia na hora. Senão, só preenche e avisa o que falta.
+   */
+  function aplicarAtalho(a: Atalho, ids: string[]) {
+    const origemMudou = a.origem !== null && a.origem !== form.origem
+    const novo: Form = {
+      ...form,
+      acao: a.acao ?? form.acao,
+      origem: a.origem ?? form.origem,
+      contratante: origemMudou ? '' : form.contratante,
+      contato: a.contato ?? (origemMudou ? null : form.contato),
+      contatoOutro: origemMudou || (a.contato && a.contato !== 'Outros') ? '' : form.contatoOutro,
+    }
+    setForm(novo)
+    if (!ids.length) return
+    const texto = textoRegistro(ids, treinos, config, novo, usuario)
+    if (texto) void copiar(texto, 'registro')
+    else showToast('Atalho aplicado — complete os campos restantes para copiar.')
   }
 
   function abrirEditor(t: Treino) {
@@ -452,19 +538,19 @@ export default function RetornoNRClient() {
     setEditando(t.id)
   }
 
-  async function salvarNoHistorico() {
-    if (!alvoAtual || !registro) return
+  async function salvarNoHistorico(nome: string, texto: string) {
+    if (!texto) return
     const res = await fetch('/api/retorno-de-nr/historico', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         data: form.data,
-        alvo: alvoAtual.nome,
+        alvo: nome,
         acao: form.acao ? config.acoes[form.acao] : '',
         origem: form.origem ?? '',
         contratante: form.contratante,
         contato: contatoTexto(form),
-        texto: registro,
+        texto,
       }),
     })
     if (!res.ok) { showToast('Erro ao salvar no histórico.'); return }
@@ -498,8 +584,38 @@ export default function RetornoNRClient() {
       boxShadow: SHADOW, display: 'block', width: '100%', fontFamily: 'inherit', color: TEXT,
     }
 
+    const nomeLivre = livreSel.length ? nomesTreinos(livreSel, treinos).join(' + ') : ''
+
     return (
       <>
+        <div style={{ ...S.panel, marginBottom: 18 }}>
+          <div style={S.panelHead}>
+            <h3 style={S.panelTitle}>Treinamentos (marque quantos quiser)</h3>
+            {livreSel.length > 0 && (
+              <button style={{ ...btnStyle('danger', true), marginLeft: 'auto' }} onClick={resetarLivre}>Resetar seleção</button>
+            )}
+          </div>
+          <div style={S.panelBody}>
+            <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+              {treinos.filter(t => t.ativo !== false).map(t => (
+                // toggleLivre only runs on click, never during render — copyTimer.current is safe here.
+                // eslint-disable-next-line react-hooks/refs
+                <Opcao key={t.id} on={livreSel.includes(t.id)} onClick={() => toggleLivre(t.id)}>{t.nome}</Opcao>
+              ))}
+            </div>
+            <div style={S.hint}>
+              A cada treinamento marcado ou desmarcado, a orientação ao prestador já é copiada — sem precisar clicar em nada.
+              Prefere ir por card? As combinações e treinamentos prontos continuam logo abaixo.
+            </div>
+          </div>
+        </div>
+
+        {livreSel.length > 0 && (
+          <div style={{ marginBottom: 26 }}>
+            {renderPainelRegistro(nomeLivre, livreSel)}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar NR ou combinação..."
             style={{ ...S.input, maxWidth: 340 }} />
@@ -515,6 +631,8 @@ export default function RetornoNRClient() {
                 const nomes = nomesTreinos(c.treinamento_ids, treinos)
                 const m = mesclar(c.treinamento_ids, treinos)
                 return (
+                  // abrirCard only runs on click, never during render — copyTimer.current is safe here.
+                  // eslint-disable-next-line react-hooks/refs
                   <button key={c.id} onClick={() => abrirCard('combo', c.id)} style={{ ...cardBase, borderLeftColor: ACCENT }}>
                     <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 5 }}>{c.nome}</div>
                     <div style={{ fontSize: 13, color: MUTED, minHeight: 34 }}>{nomes.join(' · ')}</div>
@@ -544,33 +662,36 @@ export default function RetornoNRClient() {
     )
   }
 
-  function renderDetalhe() {
-    const voltar = (
-      <button onClick={() => setView('home')}
-        style={{ background: 'none', border: 0, color: PRIMARY, cursor: 'pointer', padding: 0, fontWeight: 600, marginBottom: 12, fontFamily: 'inherit', fontSize: 14 }}>
-        ← Voltar aos cards
+  /** Botão de voltar ao início do módulo — usado na tela de card e na montagem livre. */
+  function BotaoVoltar() {
+    return (
+      <button onClick={() => setView('home')} style={{ ...btnStyle('ghost', true), marginBottom: 16 }}>
+        ← Voltar ao início
       </button>
     )
+  }
 
-    if (!alvoAtual) {
-      return <>{voltar}<div style={S.empty}>Este card não existe mais.</div></>
-    }
-
-    const nomes = nomesTreinos(alvoAtual.ids, treinos)
+  /**
+   * Painéis "1. Orientação ao prestador" e "2. Registro no GT0100", montados a partir de uma
+   * lista de ids de treinamento — usado tanto pelo card/combinação pronta quanto pela montagem
+   * livre (seleção por flag), que recalcula tudo em tempo real a cada treinamento marcado.
+   */
+  function renderPainelRegistro(nome: string, ids: string[]) {
+    const nomes = nomesTreinos(ids, treinos)
     const precisaContato = form.origem === 'contratante' || form.origem === 'empresa'
-    const m = mesclar(alvoAtual.ids, treinos)
+    const m = mesclar(ids, treinos)
+    const orientacao = textoOrientacao(ids, treinos, config)
+    const registro = textoRegistro(ids, treinos, config, form, usuario)
 
     return (
       <>
-        {voltar}
-
         <div style={{ marginBottom: 22 }}>
-          <h2 style={{ margin: 0, fontSize: 23, fontWeight: 600 }}>{alvoAtual.nome}</h2>
+          <h2 style={{ margin: 0, fontSize: 23, fontWeight: 600 }}>{nome}</h2>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
             {nomes.map(n => (
               <span key={n} style={{ background: PRIMARY_SOFT, color: PRIMARY_DARK, borderRadius: 20, padding: '3px 11px', fontSize: 12.5, fontWeight: 600 }}>{n}</span>
             ))}
-            {alvoAtual.ids.length > 1 && (
+            {ids.length > 1 && (
               <span style={{ background: ACCENT_SOFT, color: ACCENT_DARK, borderRadius: 20, padding: '3px 11px', fontSize: 12.5, fontWeight: 600 }}>
                 {m.comuns.length} itens mesclados
               </span>
@@ -600,6 +721,23 @@ export default function RetornoNRClient() {
                 onClick={() => { setCfgTab('modelos'); setView('config') }}>Editar modelo</button>
             </div>
             <div style={S.panelBody}>
+
+              {config.atalhos.length > 0 && (
+                <div style={{ marginBottom: 18 }}>
+                  <span style={S.label}>Atalhos</span>
+                  {agruparAtalhos(config.atalhos).map(g => (
+                    <div key={g.label} style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: MUTED, margin: '2px 0 6px' }}>{g.label}</div>
+                      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+                        {g.itens.map(a => (
+                          <button key={a.id} onClick={() => aplicarAtalho(a, ids)} style={atalhoBtnStyle(a)}>{a.nome}</button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={S.hint}>Preenche os campos definidos no atalho e já copia o texto quando estiver completo.</div>
+                </div>
+              )}
 
               <div style={{ marginBottom: 18 }}>
                 <span style={S.label}>Ação</span>
@@ -675,7 +813,7 @@ export default function RetornoNRClient() {
               {registro ? (
                 <>
                   <CopyBox texto={registro} copiado={copiado === 'registro'} onCopy={() => copiar(registro, 'registro')} />
-                  <button style={{ ...btnStyle('gold', true), marginTop: 12 }} onClick={salvarNoHistorico}>Salvar no histórico</button>
+                  <button style={{ ...btnStyle('gold', true), marginTop: 12 }} onClick={() => salvarNoHistorico(nome, registro)}>Salvar no histórico</button>
                 </>
               ) : (
                 <div style={{ ...S.empty, padding: 20 }}>Preencha ação, origem e demais campos para gerar o texto.</div>
@@ -686,6 +824,14 @@ export default function RetornoNRClient() {
       </>
     )
   }
+
+  function renderDetalhe() {
+    if (!alvoAtual) {
+      return <><BotaoVoltar /><div style={S.empty}>Este card não existe mais.</div></>
+    }
+    return <><BotaoVoltar />{renderPainelRegistro(alvoAtual.nome, alvoAtual.ids)}</>
+  }
+
 
   function renderHistorico() {
     async function limpar() {
@@ -765,6 +911,7 @@ export default function RetornoNRClient() {
       ['treinamentos', 'Treinamentos e textos'],
       ['combos', 'Combinações'],
       ['modelos', 'Modelos de registro'],
+      ['atalhos', 'Atalhos prontos'],
       ['email', 'E-mail padrão'],
       ['geral', 'Geral'],
     ]
@@ -782,6 +929,7 @@ export default function RetornoNRClient() {
         {cfgTab === 'treinamentos' && (editando ? renderEditorTreino() : renderListaTreinos())}
         {cfgTab === 'combos'       && renderCfgCombos()}
         {cfgTab === 'modelos'      && renderCfgModelos()}
+        {cfgTab === 'atalhos'      && renderCfgAtalhos()}
         {cfgTab === 'email'        && renderCfgEmail()}
         {cfgTab === 'geral'        && renderCfgGeral()}
       </>
@@ -995,6 +1143,106 @@ export default function RetornoNRClient() {
                 <button style={btnStyle('danger', true)} onClick={() => excluir(c.id)}>Excluir</button>
               </div>
             )) : <div style={S.empty}>Nenhuma combinação criada.</div>}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  function renderCfgAtalhos() {
+    function resumoAtalho(a: Atalho) {
+      const partes: string[] = []
+      if (a.acao) partes.push(a.acao === 'inclusao' ? config.rotulos.inclusao : config.rotulos.remocao)
+      if (a.origem) partes.push(a.origem === 'contratante' ? 'Contratante' : a.origem === 'empresa' ? 'Empresa' : 'Atividade')
+      if (a.contato) partes.push(a.contato)
+      return partes.length ? partes.join(' · ') : 'Nenhum campo pré-definido'
+    }
+
+    async function criar() {
+      const nome = atalhoNome.trim()
+      if (!nome) { showToast('Dê um nome ao atalho.'); return }
+      const novo: Atalho = { id: uid(), nome, acao: atalhoAcao, origem: atalhoOrigem, contato: atalhoContato }
+      await salvarConfig({ atalhos: [...config.atalhos, novo] }, 'Atalho criado')
+      setAtalhoNome('')
+      setAtalhoAcao(null)
+      setAtalhoOrigem(null)
+      setAtalhoContato(null)
+    }
+
+    async function excluir(id: string) {
+      await salvarConfig({ atalhos: config.atalhos.filter(a => a.id !== id) }, 'Atalho excluído')
+    }
+
+    return (
+      <>
+        <div style={{ ...S.panel, marginBottom: 18 }}>
+          <div style={S.panelHead}><h3 style={S.panelTitle}>Novo atalho</h3></div>
+          <div style={S.panelBody}>
+            <div style={S.callout}>
+              Defina só os campos que já vêm prontos ao clicar no atalho — os que você deixar sem marcar continuam
+              para preencher na hora, como hoje.
+            </div>
+
+            <label style={{ display: 'block', marginBottom: 14 }}>
+              <span style={S.label}>Nome do atalho (aparece como botão no card)</span>
+              <input value={atalhoNome} onChange={e => setAtalhoNome(e.target.value)}
+                placeholder="Ex.: Inclusão via WhatsApp da empresa" style={S.input} />
+            </label>
+
+            <div style={{ marginBottom: 14 }}>
+              <span style={S.label}>Ação (opcional)</span>
+              <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+                <Opcao on={atalhoAcao === 'inclusao'} onClick={() => setAtalhoAcao(a => a === 'inclusao' ? null : 'inclusao')}>
+                  {config.rotulos.inclusao}
+                </Opcao>
+                <Opcao on={atalhoAcao === 'remocao'} onClick={() => setAtalhoAcao(a => a === 'remocao' ? null : 'remocao')}>
+                  {config.rotulos.remocao}
+                </Opcao>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <span style={S.label}>Origem da solicitação (opcional)</span>
+              <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+                {(['contratante', 'empresa', 'atividade'] as const).map(o => (
+                  <Opcao key={o} on={atalhoOrigem === o} onClick={() => setAtalhoOrigem(v => v === o ? null : o)}>
+                    {o === 'contratante' ? 'Contratante' : o === 'empresa' ? 'Empresa' : 'Atividade'}
+                  </Opcao>
+                ))}
+              </div>
+              <div style={S.hint}>Se marcada, o campo &quot;Qual contratante&quot; continua livre para escolher na hora.</div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <span style={S.label}>Forma de contato (opcional)</span>
+              <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+                {config.formas_contato.map(f => (
+                  <Opcao key={f} gold on={atalhoContato === f} onClick={() => setAtalhoContato(v => v === f ? null : f)}>
+                    {f}
+                  </Opcao>
+                ))}
+              </div>
+            </div>
+
+            <button style={btnStyle('primary')} onClick={criar} disabled={salvando}>Criar atalho</button>
+          </div>
+        </div>
+
+        <div style={S.panel}>
+          <div style={S.panelHead}><h3 style={S.panelTitle}>Atalhos existentes</h3></div>
+          <div style={S.panelBody}>
+            {config.atalhos.length > 0 ? config.atalhos.map(a => (
+              <div key={a.id} style={{
+                ...S.listItem,
+                borderLeft: `4px solid ${a.acao === 'inclusao' ? OK : a.acao === 'remocao' ? DANGER : ACCENT}`,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{a.nome}</div>
+                  <div style={{ fontSize: 12.5, color: MUTED }}>{resumoAtalho(a)}</div>
+                </div>
+                <button style={btnStyle('danger', true)} onClick={() => excluir(a.id)}>Excluir</button>
+              </div>
+            )) : <div style={S.empty}>Nenhum atalho criado ainda.</div>}
           </div>
         </div>
       </>
