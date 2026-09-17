@@ -14,7 +14,6 @@
 | Home Office | ✅ HTML pronto | controle-home-office-gt3.html |
 | Controle de Revisão | ✅ HTML pronto | controle-revisao-gt3.html |
 | PDI — Natália | ✅ HTML pronto | (desta conversa) |
-| PDI — Marina | ✅ HTML pronto | pdi-marina.html |
 | Atas Terça-feira | A construir | — |
 
 ---
@@ -59,8 +58,7 @@ gt3-sistema/
 │   ├── email_templates_manager.html
 │   ├── gt3_manuais.html
 │   ├── controle-home-office-gt3.html
-│   ├── controle-revisao-gt3.html
-│   └── pdi-marina.html
+│   └── controle-revisao-gt3.html
 ├── PROMPT_INICIAL.md
 ├── DADOS_MODULOS.md
 └── README.md
@@ -166,7 +164,6 @@ escala diária, views mês vigente e histórico. Use Supabase.
 Crie o módulo PDI em app/pdi/. A página principal lista os PDIs
 disponíveis para o papel do usuário. app/pdi/[id]/page.tsx abre
 o PDI individual. Dados de Natália e Marina em DADOS_MODULOS.md.
-O HTML pdi-marina.html em htmls-referencia/ é referência de layout.
 Use Supabase com RLS para separar por colaborador.
 ```
 
