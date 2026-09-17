@@ -3,6 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<!--
+  Content-Security-Policy: por padrão nada é permitido (default-src 'none').
+  Os únicos domínios liberados são os CDNs do leitor de PDF (pdf.js) e do OCR
+  (tesseract.js): cdnjs.cloudflare.com e cdn.jsdelivr.net. Para uso 100%
+  offline, baixe as bibliotecas para esta mesma pasta, troque os <script src>
+  por arquivos locais e troque essas URLs por 'self' nas diretivas abaixo.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none';">
 <title>Conferência de Guia FGTS — GT3</title>
 <style>
   :root{
@@ -29,6 +38,7 @@
   header h1{margin:0;font-size:20px;font-weight:600}
   header p{margin:4px 0 0;font-size:13px;opacity:.85}
   main{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+  .notaPrivacidade{max-width:1180px;margin:14px auto 0;padding:0 20px;font-size:12.5px;color:var(--suave)}
   .painel{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:20px;margin-bottom:18px}
   .painel h2{margin:0 0 14px;font-size:15px;font-weight:600;color:var(--azul)}
   .painel h2 span.num{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;
@@ -39,12 +49,16 @@
   .drop strong{display:block;font-size:15px;margin-bottom:4px}
   .drop small{color:var(--suave)}
   .docs{margin-top:14px;display:flex;flex-direction:column;gap:8px}
-  .doc{display:flex;align-items:center;gap:10px;border:1px solid var(--linha);border-radius:8px;
-    padding:9px 12px;font-size:13.5px;background:#fff}
+  .doc{border:1px solid var(--linha);border-radius:8px;padding:9px 12px;font-size:13.5px;background:#fff}
+  .doc .linha{display:flex;align-items:center;gap:10px}
   .doc .nome{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .doc select{padding:5px 8px;border:1px solid var(--linha);border-radius:6px;font-size:13px}
   .doc .x{cursor:pointer;color:var(--suave);border:0;background:none;font-size:17px;line-height:1}
   .doc small{color:var(--suave)}
+  .diagDetalhe{margin-top:8px;font-size:12.5px}
+  .diagDetalhe summary{cursor:pointer;color:var(--azul)}
+  .diagDetalhe table{margin-top:8px}
+  .diagDetalhe th,.diagDetalhe td{padding:5px 6px;font-size:12px}
   textarea{width:100%;padding:10px;border:1px solid var(--linha);border-radius:6px;
     font-family:Consolas,monospace;font-size:12.5px;resize:vertical}
   .colar{min-height:100px;margin-top:6px}
@@ -69,8 +83,15 @@
     padding-top:14px;border-top:1px solid var(--linha);flex-wrap:wrap}
   #acoesDocs .botao.limpar{margin-left:auto}
   .apagaNota{font-size:12.5px;color:var(--suave)}
+  .confirmApagado{background:var(--ok-bg);color:var(--ok);border-radius:8px;padding:10px 14px;
+    font-size:13.5px;margin-top:10px;font-weight:600}
+  .progressoOcr{background:#eef3fc;border:1px solid var(--linha);border-radius:8px;padding:10px 14px;
+    font-size:13px;margin-top:10px}
+  .barra{height:6px;background:#dfe4ee;border-radius:4px;overflow:hidden;margin-top:6px}
+  .barra i{display:block;height:100%;background:var(--azul);transition:width .2s}
   .aviso{background:#fff8e6;border:1px solid var(--ouro);border-radius:8px;padding:12px 14px;
     font-size:13.5px;margin-bottom:18px}
+  .aviso.erro{background:var(--falta-bg);border-color:var(--falta)}
   .empresa{border-left:4px solid var(--ouro);padding:10px 0 10px 14px;margin-bottom:16px}
   .empresa strong{font-size:17px;display:block}
   .empresa span{color:var(--suave);font-size:13.5px}
@@ -110,6 +131,8 @@
   .filtros button{border:1px solid var(--linha);background:#fff;border-radius:16px;padding:5px 14px;
     font-size:13px;cursor:pointer}
   .filtros button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .toggleCpf{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--suave);
+    margin-bottom:12px;cursor:pointer}
   .tokens{font-size:12.5px;color:var(--suave);line-height:1.8;margin-top:8px}
   .tokens code{background:#eef1f7;color:var(--azul);border-radius:4px;padding:1px 6px;
     font-family:Consolas,monospace;font-size:12px}
@@ -117,6 +140,7 @@
   .linhaCfg label{font-size:13px;color:var(--suave)}
   .linhaCfg input{width:100%;padding:7px 9px;border:1px solid var(--linha);border-radius:6px;
     font-family:Consolas,monospace;font-size:12.5px}
+  .buscaItem{border:1px solid var(--linha);border-radius:6px;padding:8px 10px;margin-top:8px;font-size:13px}
   @media(max-width:700px){.linhaCfg{grid-template-columns:1fr}}
 </style>
 </head>
@@ -126,14 +150,19 @@
     <h1>Conferência de Guia FGTS</h1>
     <p>Compara as pessoas cadastradas no Portal GT3 com os trabalhadores que constam no detalhe da guia.</p>
   </div>
-  <button id="btnCfg" class="engrenagem" title="Modelo da observação" aria-label="Modelo da observação">&#9881;</button>
+  <button id="btnCfg" class="engrenagem" title="Configurações" aria-label="Configurações">&#9881;</button>
 </header>
+<p class="notaPrivacidade">
+  Os PDFs são lidos inteiramente no seu navegador: nada é enviado a servidor algum. Tudo é apagado da
+  memória ao remover os arquivos ou ao fechar esta aba.
+</p>
 
 <main>
 
   <div class="aviso" id="avisoLib">
     Carregando o leitor de PDF.
   </div>
+  <div class="aviso erro oculto" id="avisoOcrLib"></div>
 
   <section class="painel">
     <h2><span class="num">1</span>Documentos</h2>
@@ -143,11 +172,15 @@
       <input type="file" id="file" accept="application/pdf" multiple class="oculto">
     </div>
     <div class="docs" id="docs"></div>
+    <div class="progressoOcr oculto" id="progressoOcr">
+      <span id="progressoTexto"></span>
+      <div class="barra"><i id="progressoBarra" style="width:0%"></i></div>
+    </div>
     <div id="acoesDocs" class="oculto">
       <span class="apagaNota">Limpa os arquivos e o resultado desta análise</span>
       <button class="botao limpar" id="btnNova">Remover todos os PDFs</button>
     </div>
-
+    <div class="confirmApagado oculto" id="confirmApagado"></div>
   </section>
 
   <section class="painel">
@@ -169,6 +202,37 @@
     </div>
   </section>
 
+  <section class="painel">
+    <h2><span class="num">3</span>Consultar texto já lido dos PDFs</h2>
+    <div class="config" style="margin-bottom:6px">
+      <div class="campo" style="flex:1 1 280px">
+        <label for="buscaTermo">Procurar nome ou CPF no texto já lido</label>
+        <input id="buscaTermo" type="text" placeholder="Ex.: MARIA DA SILVA ou 123.456.789-00">
+      </div>
+      <div class="campo" style="align-self:flex-end">
+        <button class="botao sec" id="btnBuscar" type="button">Procurar</button>
+      </div>
+    </div>
+    <div id="buscaResultado"></div>
+
+    <details>
+      <summary>Visualizador de página</summary>
+      <div class="config" style="margin-top:10px">
+        <div class="campo">
+          <label for="viewArquivo">Arquivo</label>
+          <select id="viewArquivo"></select>
+        </div>
+        <div class="campo">
+          <label for="viewPagina">Página</label>
+          <input id="viewPagina" type="number" min="1" value="1">
+        </div>
+        <div class="campo" style="align-self:flex-end">
+          <button class="botao sec" id="btnVerPagina" type="button">Mostrar</button>
+        </div>
+      </div>
+      <div id="viewResultado" style="margin-top:10px"></div>
+    </details>
+  </section>
 
   <div style="margin-bottom:18px">
     <button class="botao grande" id="btn">Comparar</button>
@@ -177,7 +241,7 @@
   <div class="modal oculto" id="modalCfg">
     <div class="modalCaixa">
       <div class="modalTopo">
-        <h2 style="margin:0;font-size:16px;color:var(--azul)">Modelo da observação</h2>
+        <h2 style="margin:0;font-size:16px;color:var(--azul)">Configurações</h2>
         <button class="x" id="fecharCfg" aria-label="Fechar">&times;</button>
       </div>
       <div class="modalCorpo">
@@ -189,10 +253,6 @@
           <div class="linhaCfg">
             <label for="itFalta">Cada pessoa que não consta</label>
             <input id="itFalta">
-          </div>
-          <div class="linhaCfg">
-            <label for="itDesc">Cada pessoa desconsiderada</label>
-            <input id="itDesc">
           </div>
           <div class="linhaCfg">
             <label for="itDiv">Cada pessoa em CNPJ divergente</label>
@@ -212,13 +272,50 @@
           <code>{empresa}</code> <code>{cnpj}</code> <code>{competencia}</code>
           <code>{avaliadas}</code> <code>{contempladas}</code> <code>{qtd_faltantes}</code>
           <code>{qtd_desconsiderados}</code> <code>{cnpjs}</code><br>
-          Listas: <code>{faltantes}</code> <code>{desconsiderados}</code> <code>{divergentes}</code> —
+          Listas: <code>{faltantes}</code> <code>{divergentes}</code> —
           cada item segue o formato definido acima, onde valem <code>{nome}</code>, <code>{cpf}</code>,
           <code>{cadastro}</code>, <code>{motivo}</code>, <code>{atividade}</code>,
           <code>{vinculo}</code>, <code>{cnpj_pessoa}</code>, <code>{tomador}</code>.<br>
           Trechos condicionais: <code>{#faltantes}…{/faltantes}</code> só aparece se houver quem não conste.
-          Também existem <code>{#sem_faltantes}</code>, <code>{#desconsiderados}</code>,
-          <code>{#divergentes}</code>, <code>{#varios_cnpj}</code> e <code>{#alerta}</code>.
+          Também existem <code>{#sem_faltantes}</code>, <code>{#divergentes}</code>,
+          <code>{#varios_cnpj}</code> e <code>{#alerta}</code>.<br>
+          As pessoas desconsideradas nunca entram nesta observação — ficam só na tabela, no filtro
+          "Desconsiderados" e no CSV.
+        </div>
+
+        <hr style="margin:22px 0;border:0;border-top:1px solid var(--linha)">
+        <h2 style="margin:0 0 14px;font-size:16px;color:var(--azul)">OCR (páginas escaneadas)</h2>
+        <label style="display:flex;gap:7px;align-items:flex-start;cursor:pointer;font-size:13.5px;margin-bottom:12px">
+          <input type="checkbox" id="ocrAtivo" class="campoOcr" checked>
+          Usar OCR em páginas escaneadas ou ilegíveis, quando necessário
+        </label>
+        <div class="linhaCfg">
+          <label for="ocrIdioma">Idioma do OCR (código Tesseract)</label>
+          <input id="ocrIdioma" class="campoOcr">
+        </div>
+        <div class="linhaCfg">
+          <label for="ocrEscala">Ampliação da página ao renderizar</label>
+          <input id="ocrEscala" class="campoOcr" type="number" step="0.1" min="1" max="6">
+        </div>
+        <div class="linhaCfg">
+          <label for="ocrMinChars">Caracteres mínimos para considerar legível</label>
+          <input id="ocrMinChars" class="campoOcr" type="number" min="10" max="500">
+        </div>
+        <div class="linhaCfg">
+          <label for="ocrNucleos">Núcleos (workers) usados no OCR</label>
+          <input id="ocrNucleos" class="campoOcr" type="number" min="1" max="16">
+        </div>
+        <div class="linhaCfg">
+          <label for="ocrWorkerPath">Caminho local do worker (offline, opcional)</label>
+          <input id="ocrWorkerPath" class="campoOcr" placeholder="ex.: worker.min.js">
+        </div>
+        <div class="linhaCfg">
+          <label for="ocrCorePath">Caminho local do núcleo/core (offline, opcional)</label>
+          <input id="ocrCorePath" class="campoOcr" placeholder="ex.: tesseract-core.wasm.js">
+        </div>
+        <div class="linhaCfg">
+          <label for="ocrLangPath">Caminho local dos dados de idioma (offline, opcional)</label>
+          <input id="ocrLangPath" class="campoOcr" placeholder="ex.: ./lang-data">
         </div>
       </div>
       </div>
@@ -229,6 +326,9 @@
     <div class="empresa" id="empresa"></div>
     <div class="aviso oculto" id="avisoOcr"></div>
     <div class="resumo" id="resumo"></div>
+
+    <label class="toggleCpf"><input type="checkbox" id="cpfOcultar" checked>
+      Ocultar parte do CPF na tela, na observação e no CSV</label>
 
     <div class="filtros" id="filtros">
       <button data-f="falta" class="on">Não constam</button>
@@ -264,13 +364,41 @@
 
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-/* ===========================================================================
-   Uso 100% offline: baixe pdf.min.js e pdf.worker.min.js (versão 3.11.174),
-   deixe-os nesta mesma pasta e troque a tag acima por
-   <script src="pdf.min.js"><\/script>, ajustando o workerSrc logo abaixo.
-   =========================================================================== */
+  /* Bootstrap do OCR: precisa existir antes das tags <script> abaixo, porque
+     seus atributos onload/onerror podem disparar antes do script principal
+     (o carregamento do arquivo local de contorno é assíncrono). */
+  window.OCROK = false;
+  window.__ocrLibPronto = null;
+  function iniciarOcrLib(){
+    window.OCROK = !!window.Tesseract;
+    if(window.__ocrLibPronto) window.__ocrLibPronto(window.OCROK);
+  }
+  function falharOcrLib(){
+    window.OCROK = false;
+    if(window.__ocrLibPronto) window.__ocrLibPronto(false);
+  }
+  function carregarTesseractLocal(){
+    var s = document.createElement('script');
+    s.src = 'tesseract.min.js';
+    s.referrerPolicy = 'no-referrer';
+    s.onload = iniciarOcrLib;
+    s.onerror = falharOcrLib;
+    document.head.appendChild(s);
+  }
+</script>
+<!-- ===========================================================================
+     Uso 100% offline: baixe pdf.min.js, pdf.worker.min.js (pdf.js 3.11.174) e
+     tesseract.min.js (tesseract.js 6), deixe-os nesta mesma pasta e troque as
+     duas tags <script src> abaixo pelos arquivos locais, ajustando o
+     workerSrc do pdf.js logo no início do script principal.
+     =========================================================================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.min.js"
+  crossorigin="anonymous" referrerpolicy="no-referrer"
+  onload="iniciarOcrLib()" onerror="carregarTesseractLocal()"></script>
+<script>
 var PDFOK = false;
 (function(){
   if (window.pdfjsLib) {
@@ -287,7 +415,7 @@ var PDFOK = false;
 
 /* ---------------------------- utilidades ---------------------------------- */
 
-function semAcento(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function semAcento(s){ return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function normNome(s){ return semAcento(s).toUpperCase().replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim(); }
 function chaveNome(s){
   return normNome(s).split(' ').filter(function(p){
@@ -304,6 +432,14 @@ function normCpf(s){
 function fmtCpf(c){
   return c && c.length === 11 ? c.slice(0,3)+'.'+c.slice(3,6)+'.'+c.slice(6,9)+'-'+c.slice(9) : (c||'');
 }
+function fmtCpfMasc(c){
+  return c && c.length === 11 ? '***.'+c.slice(3,6)+'.'+c.slice(6,9)+'-**' : (c ? fmtCpf(c) : '');
+}
+function mostrarCpfMascarado(){
+  var el = document.getElementById('cpfOcultar');
+  return el ? el.checked : true;
+}
+function cpfExibir(c){ return mostrarCpfMascarado() ? fmtCpfMasc(c) : fmtCpf(c); }
 function escapar(s){
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -322,41 +458,77 @@ function similar(a,b){
   }
   return 1 - prev[n]/Math.max(m,n);
 }
+/* caracteres/palavras "úteis": base tanto para decidir se uma página precisa
+   de OCR quanto para avaliar se o texto reconhecido pelo OCR ficou legível */
+function contarUteis(t){
+  var chars = ((t||'').match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g)||[]).length;
+  var palavras = ((t||'').match(/[A-Za-zÀ-ÖØ-öø-ÿ]{3,}/g)||[]).length;
+  return {chars:chars, palavras:palavras};
+}
+function legivel(t, minChars){
+  var c = contarUteis(t);
+  return c.chars >= (minChars||60) && c.palavras >= 5;
+}
 
-/* --------------------------- leitura dos PDFs ------------------------------ */
+/* ------------------------------ leitura de PDFs ---------------------------- */
 
-function lerPdf(file){
+/* Extrai o texto de uma página preservando a ordem visual (linhas por Y, dentro
+   delas por X) — necessário porque o pdf.js devolve os itens fora de ordem. */
+function extrairTextoPagina(tc){
+  var mapa = {};
+  tc.items.forEach(function(it){
+    var y = Math.round(it.transform[5]);
+    if(!mapa[y]) mapa[y] = [];
+    mapa[y].push({x:it.transform[4], s:it.str});
+  });
+  var linhas = [];
+  Object.keys(mapa).sort(function(a,b){ return b-a; }).forEach(function(y){
+    var t = mapa[y].sort(function(a,b){ return a.x-b.x; })
+              .map(function(o){ return o.s; }).join(' ').replace(/\s+/g,' ').trim();
+    if(t) linhas.push(t);
+  });
+  return linhas.join('\n');
+}
+
+/* Lê um PDF página a página e monta o diagnóstico de cada uma. Páginas com
+   menos de 60 caracteres úteis OU menos de 5 palavras de 3+ letras precisam de
+   OCR — isso cobre tanto o scan comum (sem texto algum) quanto o PDF cuja
+   fonte não traz ToUnicode e devolve códigos de glifo em vez de letras. */
+function processarArquivo(file, doc){
   return file.arrayBuffer().then(function(buf){
     return pdfjsLib.getDocument({data:buf}).promise;
   }).then(function(pdf){
-    var linhas = [], seq = [], vazias = [];
+    doc.pdf = pdf;
+    doc.paginasInfo = [];
     var passo = function(n){
       if(n > pdf.numPages) return Promise.resolve();
-      return pdf.getPage(n).then(function(page){ return page.getTextContent(); })
-        .then(function(tc){
-          if(!tc.items.length) vazias.push(n);
-          var mapa = {};
-          tc.items.forEach(function(it){
-            var y = Math.round(it.transform[5]);
-            if(!mapa[y]) mapa[y] = [];
-            mapa[y].push({x:it.transform[4], s:it.str});
-            seq.push(it.str);
-          });
-          Object.keys(mapa).sort(function(a,b){ return b-a; }).forEach(function(y){
-            var t = mapa[y].sort(function(a,b){ return a.x-b.x; })
-                      .map(function(o){ return o.s; }).join(' ').replace(/\s+/g,' ').trim();
-            if(t) linhas.push(t);
+      return pdf.getPage(n).then(function(page){
+        return page.getTextContent().then(function(tc){
+          var textoBruto = extrairTextoPagina(tc);
+          var u = contarUteis(textoBruto);
+          var precisaOcr = u.chars < 60 || u.palavras < 5;
+          var motivo = '';
+          if(precisaOcr){
+            motivo = tc.items.length
+              ? 'texto sem palavras legíveis (possível fonte sem mapa de caracteres)'
+              : 'sem texto extraível (página em imagem)';
+          }
+          doc.paginasInfo.push({
+            pagina:n, texto:textoBruto, origem: precisaOcr ? 'sem-ocr' : 'pdf',
+            caracteres:u.chars, palavras:u.palavras, giro:0, motivo:motivo, precisaOcr:precisaOcr
           });
           return passo(n+1);
         });
+      });
     };
-    return passo(1).then(function(){
-      return {
-        texto: linhas.join('\n') + '\n' + seq.join(' ').replace(/\s+/g,' '),
-        arquivo: file.name, paginas: pdf.numPages, vazias: vazias
-      };
-    });
+    return passo(1).then(function(){ return doc; });
   });
+}
+
+function atualizarTextoDoc(doc){
+  doc.texto = (doc.paginasInfo||[]).filter(function(p){
+    return p.origem === 'pdf' || p.origem === 'ocr';
+  }).map(function(p){ return p.texto; }).join('\n');
 }
 
 /* Identifica, pelo conteúdo, se o PDF é a guia do FGTS ou o relatório do Portal */
@@ -394,6 +566,244 @@ function equilibrar(docs){
   } else if(!gui.length){
     rel.slice().sort(function(a,b){ return margem(b)-margem(a); })[0].tipo = 'guia';
   }
+}
+
+/* --------------------------------- OCR ------------------------------------- */
+
+var ocrScheduler = null;
+var ocrTotal = 0, ocrFeitas = 0, ocrInicio = 0;
+
+function configurarOcrDisponivel(ok){
+  var avisoEl = document.getElementById('avisoOcrLib');
+  var campos = document.querySelectorAll('.campoOcr');
+  if(ok){
+    avisoEl.classList.add('oculto');
+    campos.forEach(function(c){ c.disabled = false; });
+  } else {
+    avisoEl.innerHTML = '<strong>OCR indisponível.</strong> Não foi possível carregar a biblioteca de OCR ' +
+      '(provável bloqueio de rede ou proxy). Páginas escaneadas não poderão ser lidas automaticamente ' +
+      'nesta sessão — confira essas páginas manualmente.';
+    avisoEl.classList.remove('oculto');
+    campos.forEach(function(c){ c.disabled = true; if(c.type === 'checkbox') c.checked = false; });
+  }
+}
+function ocrHabilitado(){
+  var el = document.getElementById('ocrAtivo');
+  return window.OCROK && el && el.checked && !el.disabled;
+}
+function obterConfigOcr(){
+  var nucleosPadrao = Math.max(1, Math.min(4, (navigator.hardwareConcurrency||2)-1));
+  return {
+    idioma: (document.getElementById('ocrIdioma').value || 'por').trim(),
+    escala: parseFloat(document.getElementById('ocrEscala').value) || 2.5,
+    minChars: parseInt(document.getElementById('ocrMinChars').value,10) || 60,
+    nucleos: parseInt(document.getElementById('ocrNucleos').value,10) || nucleosPadrao,
+    workerPath: (document.getElementById('ocrWorkerPath').value||'').trim() || undefined,
+    corePath: (document.getElementById('ocrCorePath').value||'').trim() || undefined,
+    langPath: (document.getElementById('ocrLangPath').value||'').trim() || undefined
+  };
+}
+function prepararScheduler(){
+  if(ocrScheduler) return Promise.resolve(ocrScheduler);
+  var cfg = obterConfigOcr();
+  var opts = {};
+  if(cfg.workerPath) opts.workerPath = cfg.workerPath;
+  if(cfg.corePath) opts.corePath = cfg.corePath;
+  if(cfg.langPath) opts.langPath = cfg.langPath;
+  var scheduler = Tesseract.createScheduler();
+  var criacoes = [];
+  for(var i=0;i<cfg.nucleos;i++){
+    criacoes.push(Tesseract.createWorker(cfg.idioma, 1, opts).then(function(w){ scheduler.addWorker(w); }));
+  }
+  return Promise.all(criacoes).then(function(){ ocrScheduler = scheduler; return scheduler; })
+    .catch(function(err){ try{ scheduler.terminate(); }catch(e){} throw err; });
+}
+/* Encerra os workers para não guardar em memória a última imagem processada;
+   chamado na remoção individual, na remoção de todos e no beforeunload. O
+   scheduler é recriado sob demanda na próxima vez que houver OCR a fazer. */
+function encerrarOcrScheduler(){
+  if(ocrScheduler){
+    try{ ocrScheduler.terminate(); }catch(e){}
+    ocrScheduler = null;
+  }
+}
+
+function atualizarProgressoOcr(){
+  var el = document.getElementById('progressoOcr');
+  if(ocrTotal <= 0){ el.classList.add('oculto'); return; }
+  el.classList.remove('oculto');
+  var pct = Math.round(100*ocrFeitas/ocrTotal);
+  var texto = 'OCR ' + ocrFeitas + ' de ' + ocrTotal + ' páginas';
+  if(ocrFeitas > 0 && ocrFeitas < ocrTotal){
+    var decorrido = (Date.now()-ocrInicio)/1000;
+    var restanteMin = Math.round((decorrido/ocrFeitas) * (ocrTotal-ocrFeitas) / 60);
+    texto += ' · ~' + Math.max(restanteMin,1) + ' min restantes';
+  }
+  document.getElementById('progressoTexto').textContent = texto;
+  document.getElementById('progressoBarra').style.width = pct + '%';
+  if(ocrFeitas >= ocrTotal){
+    setTimeout(function(){
+      if(ocrFeitas >= ocrTotal) el.classList.add('oculto');
+    }, 3000);
+  }
+}
+
+/* pontua o texto reconhecido pelo OCR para decidir a orientação correta:
+   quantidade de datas, CPFs formatados, valores em R$ e palavras do domínio */
+function pontuarTextoOcr(t){
+  var datas = ((t||'').match(/\b\d{2}\/\d{2}\/\d{4}\b/g)||[]).length;
+  var cpfs  = ((t||'').match(/\d{3}\.\d{3}\.\d{3}-\d{2}/g)||[]).length;
+  var valores = ((t||'').match(/R\$\s?\d/g)||[]).length;
+  var chaves = ((t||'').match(/\b(GUIA|TRABALHADOR|CPF|FGTS|TOMADOR|ESTABELECIMENTO|COMPETENCIA)\b/gi)||[]).length;
+  return datas + cpfs + valores + chaves;
+}
+function renderizarPagina(pdf, numPagina, rotacaoExtra, escala){
+  return pdf.getPage(numPagina).then(function(page){
+    var viewport = page.getViewport({scale: escala, rotation: ((page.rotate||0) + rotacaoExtra + 360) % 360});
+    var canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    var ctx = canvas.getContext('2d');
+    return page.render({canvasContext:ctx, viewport:viewport}).promise.then(function(){ return canvas; });
+  });
+}
+function reconhecerCanvas(canvas){
+  return ocrScheduler.addJob('recognize', canvas).then(function(res){
+    canvas.width = 0; canvas.height = 0; /* descarta logo — centenas de páginas em alta resolução estouram a memória */
+    var texto = (res && res.data && res.data.text) || '';
+    return {texto:texto, score:pontuarTextoOcr(texto)};
+  }, function(err){
+    canvas.width = 0; canvas.height = 0;
+    throw err;
+  });
+}
+function testarOrientacoes(pdf, numPagina, rotacoes, escala){
+  return rotacoes.reduce(function(p, rot){
+    return p.then(function(acc){
+      return renderizarPagina(pdf, numPagina, rot, escala).then(reconhecerCanvas).then(function(r){
+        acc.push({rotacao:rot, texto:r.texto, score:r.score});
+        return acc;
+      });
+    });
+  }, Promise.resolve([]));
+}
+/* Testa 0°/180°; se a vencedora pontuar pelo menos o dobro da oposta, aceita.
+   Senão, testa também 90°/270° e fica com a melhor das quatro. */
+function escolherOrientacao(pdf, numPagina, escala){
+  return testarOrientacoes(pdf, numPagina, [0,180], escala).then(function(r){
+    var a = r[0], b = r[1];
+    var maior = a.score >= b.score ? a : b;
+    var menor = a.score >= b.score ? b : a;
+    if(maior.score > 0 && maior.score >= 2*Math.max(menor.score,0)){
+      return {melhor:maior, testadas:r};
+    }
+    return testarOrientacoes(pdf, numPagina, [90,270], escala).then(function(r2){
+      var todas = r.concat(r2);
+      var melhor = todas.reduce(function(m,x){ return x.score > m.score ? x : m; }, todas[0]);
+      return {melhor:melhor, testadas:todas};
+    });
+  });
+}
+function giroDominante(amostras){
+  var cont = {}, soma = {}, melhorRot = 0, melhorCont = -1;
+  amostras.forEach(function(a){
+    var r = a.melhor.rotacao;
+    cont[r] = (cont[r]||0)+1;
+    soma[r] = (soma[r]||0)+a.melhor.score;
+  });
+  Object.keys(cont).forEach(function(r){
+    if(cont[r] > melhorCont || (cont[r] === melhorCont && soma[r] > (soma[melhorRot]||-1))){
+      melhorCont = cont[r]; melhorRot = +r;
+    }
+  });
+  return melhorRot;
+}
+function escolherAmostra(n){
+  var qtd = Math.min(3, n);
+  if(qtd <= 1) return n ? [0] : [];
+  var idx = [];
+  for(var k=0;k<qtd;k++){ idx.push(Math.round(k*(n-1)/(qtd-1))); }
+  return idx.filter(function(v,i,a){ return a.indexOf(v)===i; });
+}
+/* limita a quantidade de jobs simultâneos — usado para dar a fase C (reteste
+   completo) metade dos núcleos, deixando a fase B usar todos */
+function executarComLimite(itens, limite, fn){
+  return new Promise(function(resolve){
+    var resultados = new Array(itens.length), i = 0, ativos = 0;
+    if(!itens.length) return resolve(resultados);
+    function proximo(){
+      if(i >= itens.length && ativos === 0){ resolve(resultados); return; }
+      while(ativos < limite && i < itens.length){
+        (function(idx){
+          ativos++;
+          fn(itens[idx], idx).then(function(r){
+            resultados[idx] = r; ativos--; proximo();
+          });
+        })(i++);
+      }
+    }
+    proximo();
+  });
+}
+function finalizarPaginaOcr(doc, p, resultado, minChars, opts){
+  opts = opts || {};
+  p.texto = resultado.texto;
+  p.giro = resultado.rotacao;
+  var u = contarUteis(p.texto);
+  p.caracteres = u.chars; p.palavras = u.palavras;
+  if(legivel(p.texto, minChars)){
+    p.origem = 'ocr';
+    p.motivo = opts.retestada ? 'recuperado por OCR (nova tentativa de orientação)' : 'recuperado por OCR';
+  } else {
+    p.origem = 'ocr-vazio';
+    p.motivo = 'OCR não extraiu texto legível';
+  }
+  if(opts.contar !== false){ ocrFeitas++; atualizarProgressoOcr(); }
+  pintarDocs();
+}
+/* Fluxo em três fases: a) amostra descobre o giro predominante do documento;
+   b) as demais páginas rodam em paralelo nesse giro, uma passada só;
+   c) as que saírem fracas voltam para comparação completa nas quatro
+   orientações, em paralelo com metade dos workers. */
+function ocrDoDocumento(doc, pdf, cfg){
+  var candidatas = doc.paginasInfo.filter(function(p){ return p.origem === 'sem-ocr'; });
+  if(!candidatas.length) return Promise.resolve();
+
+  ocrTotal += candidatas.length;
+  if(!ocrInicio) ocrInicio = Date.now();
+  atualizarProgressoOcr();
+
+  var amostraIdx = escolherAmostra(candidatas.length);
+  var amostraSet = {};
+  amostraIdx.forEach(function(i){ amostraSet[i] = true; });
+  var amostraPaginas = amostraIdx.map(function(i){ return candidatas[i]; });
+  var restantes = candidatas.filter(function(p,i){ return !amostraSet[i]; });
+
+  return Promise.all(amostraPaginas.map(function(p){
+    return escolherOrientacao(pdf, p.pagina, cfg.escala).then(function(r){
+      finalizarPaginaOcr(doc, p, r.melhor, cfg.minChars);
+      return r;
+    });
+  })).then(function(resultadosAmostra){
+    var giro = amostraPaginas.length ? giroDominante(resultadosAmostra) : 0;
+    doc.giroDocumento = giro;
+
+    return executarComLimite(restantes, Math.max(1,cfg.nucleos), function(p){
+      return renderizarPagina(pdf, p.pagina, giro, cfg.escala).then(reconhecerCanvas).then(function(r){
+        finalizarPaginaOcr(doc, p, {rotacao:giro, texto:r.texto, score:r.score}, cfg.minChars);
+        return p;
+      });
+    }).then(function(){
+      var fracas = restantes.filter(function(p){ return p.origem === 'ocr-vazio'; });
+      if(!fracas.length) return;
+      var meioNucleos = Math.max(1, Math.floor(cfg.nucleos/2));
+      return executarComLimite(fracas, meioNucleos, function(p){
+        return escolherOrientacao(pdf, p.pagina, cfg.escala).then(function(r){
+          finalizarPaginaOcr(doc, p, r.melhor, cfg.minChars, {retestada:true, contar:false});
+          return p;
+        });
+      });
+    });
+  });
 }
 
 /* -------------------- relatório do Portal GT3 (documento A) ---------------- */
@@ -489,31 +899,45 @@ var RE_GUIA = new RegExp(
   '|([A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ\'’.\\- ]{2,70}?)\\s+(\\d{14,22})\\s+(\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2})',
   'g');
 
-function lerGuia(texto){
-  var pessoas = {}, estab = '', tomador = '', m;
-  RE_GUIA.lastIndex = 0;
-  while((m = RE_GUIA.exec(texto)) !== null){
-    if(m[1]){ estab = m[1]; continue; }
-    if(m[2]){ tomador = m[2]; continue; }
-    var cpf = normCpf(m[5]);
-    var nome = (m[3]||'').replace(/\s+/g,' ').trim();
-    if(!pessoas[cpf]) pessoas[cpf] = {cpf:cpf, nome:nome, estab:estab, tomador:tomador};
-  }
-  var reCpf = /\d{3}\.\d{3}\.\d{3}-\d{2}/g, c;
-  while((c = reCpf.exec(texto)) !== null){
-    var k = normCpf(c[0]);
-    if(!pessoas[k]) pessoas[k] = {cpf:k, nome:'', estab:estab, tomador:''};
-  }
+/* Recebe as páginas (só as legíveis) do(s) PDF(s) marcados como "guia" e monta
+   o dicionário de pessoas, mantendo estabelecimento/tomador vigentes entre
+   páginas e marcando a origem (pdf/ocr) e a localização de cada achado. */
+function lerGuia(paginas){
+  var pessoas = {}, estab = '', tomador = '';
+  paginas.forEach(function(pg){
+    var texto = pg.texto, m;
+    RE_GUIA.lastIndex = 0;
+    while((m = RE_GUIA.exec(texto)) !== null){
+      if(m[1]){ estab = m[1]; continue; }
+      if(m[2]){ tomador = m[2]; continue; }
+      var cpf = normCpf(m[5]);
+      var nome = (m[3]||'').replace(/\s+/g,' ').trim();
+      if(!pessoas[cpf]){
+        pessoas[cpf] = {cpf:cpf, nome:nome, estab:estab, tomador:tomador,
+          origem:pg.origem, arquivo:pg.arquivo, pagina:pg.pagina};
+      }
+    }
+    var reCpf = /\d{3}\.\d{3}\.\d{3}-\d{2}/g, c;
+    while((c = reCpf.exec(texto)) !== null){
+      var k = normCpf(c[0]);
+      if(!pessoas[k]){
+        pessoas[k] = {cpf:k, nome:'', estab:estab, tomador:'',
+          origem:pg.origem, arquivo:pg.arquivo, pagina:pg.pagina};
+      }
+    }
+  });
 
+  var textoTudo = paginas.map(function(p){ return p.texto; }).join('\n');
   var comp = '', contagem = {}, reComp = /(?:^|[^\d\/])(\d{2})\/(\d{4})(?![\d\/])/g, x;
-  while((x = reComp.exec(texto)) !== null){
+  while((x = reComp.exec(textoTudo)) !== null){
     var ch = x[1]+'/'+x[2];
     contagem[ch] = (contagem[ch]||0) + 1;
   }
   Object.keys(contagem).forEach(function(k){ if(!comp || contagem[k] > contagem[comp]) comp = k; });
 
-  var cnpj = /Estabelecimento:\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(texto);
-  return {pessoas:pessoas, competencia:comp, razao:acharRazao(texto), cnpj: cnpj ? cnpj[1] : ''};
+  var cnpj = /Estabelecimento:\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(textoTudo);
+  return {pessoas:pessoas, competencia:comp, razao:acharRazao(textoTudo),
+          cnpj: cnpj ? cnpj[1] : '', textoCompleto:textoTudo, paginas:paginas};
 }
 
 /* O rótulo nem sempre fica junto do valor no texto extraído: valida e, se não
@@ -532,6 +956,33 @@ function acharRazao(texto){
     cont[k] = (cont[k]||0) + 1;
   }
   Object.keys(cont).forEach(function(k){ if(!melhor || cont[k] > cont[melhor]) melhor = k; });
+  return melhor;
+}
+
+/* Correspondência por proximidade: procura os pedaços do nome numa janela de
+   ~90 caracteres no texto bruto da guia, exigindo a presença do primeiro nome
+   (sem isso, sobrenomes comuns como SILVA e SANTOS casariam pessoas
+   diferentes). Usada quando CPF, nome exato e a similaridade não acham nada. */
+function buscarPorPartesNome(paginas, nomePessoa){
+  var partes = chaveNome(nomePessoa).split(' ').filter(Boolean);
+  if(!partes.length) return null;
+  var primeiro = partes[0];
+  var necessarias = partes.length === 1 ? 1 : Math.min(2, partes.length);
+  var melhor = null;
+  paginas.forEach(function(pg){
+    var texto = normNome(pg.texto);
+    if(!texto || texto.indexOf(primeiro) < 0) return;
+    var janela = 90, pos = 0, idx;
+    while((idx = texto.indexOf(primeiro, pos)) >= 0){
+      var ini = Math.max(0, idx-janela), fim = Math.min(texto.length, idx+janela);
+      var trecho = texto.slice(ini, fim);
+      var achadas = partes.filter(function(pt){ return trecho.indexOf(pt) >= 0; }).length;
+      if(achadas >= necessarias && (!melhor || achadas > melhor.achadas)){
+        melhor = {achadas:achadas, origem:pg.origem, arquivo:pg.arquivo, pagina:pg.pagina};
+      }
+      pos = idx + primeiro.length;
+    }
+  });
   return melhor;
 }
 
@@ -578,6 +1029,10 @@ function comparar(listaA, guia, opcoes){
       r.motivo = 'cadastro em ' + dataBr(p.dataCad) + ', posterior à competência ' + opcoes.competencia;
     }
 
+    /* pessoa desconsiderada: nenhuma busca ou cruzamento adicional é feita —
+       evita processamento desnecessário e dado incoerente na tabela */
+    if(r.situacao === 'fora') return r;
+
     var achado = (p.cpf && porCpf[p.cpf]) || porNome[chaveNome(p.pessoa)] || null;
 
     if(!achado && p.pessoa){
@@ -589,14 +1044,27 @@ function comparar(listaA, guia, opcoes){
       });
       if(melhor && score >= 0.86){
         achado = melhor;
-        r.nota = 'correspondência aproximada com “' + melhor.nome + '” (CPF diferente — conferir)';
+        r.nota = 'correspondência aproximada com "' + melhor.nome + '" (CPF diferente — conferir)';
       }
     } else if(achado && achado.nome && chaveNome(achado.nome) !== chaveNome(p.pessoa)){
-      r.nota = 'mesmo CPF, grafia diferente na guia: “' + achado.nome + '”';
+      r.nota = 'mesmo CPF, grafia diferente na guia: "' + achado.nome + '"';
+    }
+
+    if(!achado && p.pessoa && guia.paginas && guia.paginas.length){
+      var prox = buscarPorPartesNome(guia.paginas, p.pessoa);
+      if(prox){
+        achado = {cpf:'', nome:p.pessoa, estab:'', tomador:'', origem:prox.origem,
+                  arquivo:prox.arquivo, pagina:prox.pagina, porTexto:true};
+        r.nota = (r.nota ? r.nota + ' · ' : '') + 'localizado por parte do nome — conferir';
+      }
+    }
+
+    if(achado && achado.origem === 'ocr'){
+      r.nota = (r.nota ? r.nota + ' · ' : '') + 'página lida por OCR — conferir nome e data';
     }
 
     r.achado = achado;
-    if(r.situacao !== 'fora') r.situacao = achado ? 'ok' : 'falta';
+    r.situacao = achado ? 'ok' : 'falta';
     if(achado && achado.estab && estabPrincipal && achado.estab !== estabPrincipal){
       r.nota = (r.nota ? r.nota + ' · ' : '') + 'CNPJ divergente: ' + achado.estab;
       r.divergente = true;
@@ -617,7 +1085,6 @@ var MODELO_PADRAO = [
 ].join('\n');
 
 var ITEM_FALTA_PADRAO = '{nome}';
-var ITEM_DESC_PADRAO  = '   - {nome} — {motivo}';
 var ITEM_DIV_PADRAO   = '{nome} — {cnpj_pessoa}{tomador}';
 
 function guardar(chave, valor){
@@ -629,8 +1096,18 @@ function recuperar(chave){
 function carregarConfig(){
   document.getElementById('modelo').value = recuperar('gt3.fgts.modelo') || MODELO_PADRAO;
   document.getElementById('itFalta').value = recuperar('gt3.fgts.itFalta') || ITEM_FALTA_PADRAO;
-  document.getElementById('itDesc').value = recuperar('gt3.fgts.itDesc') || ITEM_DESC_PADRAO;
   document.getElementById('itDiv').value  = recuperar('gt3.fgts.itDiv')  || ITEM_DIV_PADRAO;
+
+  var nucleosPadrao = Math.max(1, Math.min(4, (navigator.hardwareConcurrency||2)-1));
+  document.getElementById('ocrIdioma').value = recuperar('gt3.fgts.ocrIdioma') || 'por';
+  document.getElementById('ocrEscala').value = recuperar('gt3.fgts.ocrEscala') || '2.5';
+  document.getElementById('ocrMinChars').value = recuperar('gt3.fgts.ocrMinChars') || '60';
+  document.getElementById('ocrNucleos').value = recuperar('gt3.fgts.ocrNucleos') || String(nucleosPadrao);
+  document.getElementById('ocrWorkerPath').value = recuperar('gt3.fgts.ocrWorkerPath') || '';
+  document.getElementById('ocrCorePath').value = recuperar('gt3.fgts.ocrCorePath') || '';
+  document.getElementById('ocrLangPath').value = recuperar('gt3.fgts.ocrLangPath') || '';
+  var ativoSalvo = recuperar('gt3.fgts.ocrAtivo');
+  document.getElementById('ocrAtivo').checked = ativoSalvo === null ? true : ativoSalvo === '1';
 }
 carregarConfig();
 
@@ -650,13 +1127,19 @@ document.addEventListener('keydown', function(e){
 });
 
 document.getElementById('btnSalvar').addEventListener('click', function(){
-  var ok = guardar('gt3.fgts.modelo', document.getElementById('modelo').value) &&
-           guardar('gt3.fgts.itFalta', document.getElementById('itFalta').value) &&
-           guardar('gt3.fgts.itDesc', document.getElementById('itDesc').value) &&
-           guardar('gt3.fgts.itDiv', document.getElementById('itDiv').value);
+  var pares = [
+    ['gt3.fgts.modelo','modelo'], ['gt3.fgts.itFalta','itFalta'], ['gt3.fgts.itDiv','itDiv'],
+    ['gt3.fgts.ocrIdioma','ocrIdioma'], ['gt3.fgts.ocrEscala','ocrEscala'], ['gt3.fgts.ocrMinChars','ocrMinChars'],
+    ['gt3.fgts.ocrNucleos','ocrNucleos'], ['gt3.fgts.ocrWorkerPath','ocrWorkerPath'],
+    ['gt3.fgts.ocrCorePath','ocrCorePath'], ['gt3.fgts.ocrLangPath','ocrLangPath']
+  ];
+  var ok = true;
+  pares.forEach(function(par){ ok = guardar(par[0], document.getElementById(par[1]).value) && ok; });
+  ok = guardar('gt3.fgts.ocrAtivo', document.getElementById('ocrAtivo').checked ? '1' : '0') && ok;
+  encerrarOcrScheduler();
   var st = document.getElementById('statusCfg');
-  st.textContent = ok ? 'Modelo salvo neste navegador.'
-                      : 'Não foi possível salvar aqui; o modelo vale só para esta sessão.';
+  st.textContent = ok ? 'Configurações salvas neste navegador.'
+                      : 'Não foi possível salvar aqui; as configurações valem só para esta sessão.';
   st.style.color = ok ? 'var(--ok)' : 'var(--falta)';
   if(resultadoAtual.length) processar();
   setTimeout(function(){ st.textContent = ''; }, 4000);
@@ -664,7 +1147,6 @@ document.getElementById('btnSalvar').addEventListener('click', function(){
 document.getElementById('btnRestaurar').addEventListener('click', function(){
   document.getElementById('modelo').value = MODELO_PADRAO;
   document.getElementById('itFalta').value = ITEM_FALTA_PADRAO;
-  document.getElementById('itDesc').value = ITEM_DESC_PADRAO;
   document.getElementById('itDiv').value = ITEM_DIV_PADRAO;
   if(resultadoAtual.length) processar();
 });
@@ -672,7 +1154,7 @@ document.getElementById('btnRestaurar').addEventListener('click', function(){
 function preencher(modelo, dados){
   var t = modelo;
   /* trechos condicionais {#nome} … {/nome} */
-  var secoes = ['alerta','faltantes','sem_faltantes','desconsiderados','divergentes','varios_cnpj'];
+  var secoes = ['alerta','faltantes','sem_faltantes','divergentes','varios_cnpj'];
   secoes.forEach(function(s){
     var re = new RegExp('\\{#'+s+'\\}([\\s\\S]*?)\\{\\/'+s+'\\}','g');
     t = t.replace(re, function(_, dentro){ return dados['cond_'+s] ? dentro : ''; });
@@ -690,7 +1172,26 @@ function item(formato, campos){
 
 /* --------------------------------- tela ----------------------------------- */
 
-var docs = [], resultadoAtual = [], paginasVazias = [], filtroAtual = 'falta';
+var docs = [], resultadoAtual = [], filtroAtual = 'falta', ultimoContexto = null;
+
+function rotuloOrigem(o){
+  return {pdf:'texto do PDF', ocr:'OCR', 'ocr-vazio':'OCR não extraiu', 'sem-ocr':'precisa de OCR', erro:'erro'}[o] || o;
+}
+function construirDiagnostico(d){
+  if(!d.paginasInfo || !d.paginasInfo.length) return '';
+  var candidatas = d.paginasInfo.filter(function(p){
+    return p.origem === 'ocr' || p.origem === 'ocr-vazio' || p.origem === 'erro' || p.origem === 'sem-ocr';
+  }).length;
+  var resumo = d.paginasInfo.length + ' pág.' + (candidatas ? ' · ' + candidatas + ' por OCR' : '');
+  var linhas = d.paginasInfo.map(function(p){
+    return '<tr><td>' + p.pagina + '</td><td>' + escapar(rotuloOrigem(p.origem)) + '</td>' +
+      '<td>' + p.caracteres + '</td><td>' + p.palavras + '</td><td>' + p.giro + '°</td>' +
+      '<td>' + escapar(p.motivo||'—') + '</td></tr>';
+  }).join('');
+  return '<details class="diagDetalhe"><summary>' + escapar(resumo) + '</summary>' +
+    '<table><thead><tr><th>Pág.</th><th>Origem</th><th>Caract.</th><th>Palavras</th><th>Giro</th><th>Motivo</th></tr></thead>' +
+    '<tbody>' + linhas + '</tbody></table></details>';
+}
 
 function pintarDocs(){
   var alvo = document.getElementById('docs');
@@ -699,46 +1200,101 @@ function pintarDocs(){
   docs.forEach(function(d, i){
     var el = document.createElement('div');
     el.className = 'doc';
-    el.innerHTML =
-      '<span class="nome">📄 ' + escapar(d.arquivo) + '</span>' +
-      (d.lendo ? '<small>lendo…</small>' :
+    var status = d.lendo ? '<small>' + (d.fase === 'ocr' ? 'OCR em andamento…' : 'lendo…') + '</small>' :
         '<select data-i="' + i + '">' +
           '<option value="guia"' + (d.tipo==='guia'?' selected':'') + '>detalhe da guia</option>' +
           '<option value="relatorio"' + (d.tipo==='relatorio'?' selected':'') + '>relatório do Portal</option>' +
-        '</select>') +
-      '<button class="x" data-x="' + i + '" title="remover">×</button>';
+        '</select>';
+    el.innerHTML =
+      '<div class="linha"><span class="nome">📄 ' + escapar(d.arquivo) + '</span>' + status +
+      '<button class="x" data-x="' + i + '" title="remover">×</button></div>' +
+      (d.lendo ? '' : construirDiagnostico(d));
     alvo.appendChild(el);
   });
+  atualizarSelectArquivos();
 }
 document.getElementById('docs').addEventListener('change', function(e){
   if(e.target.tagName !== 'SELECT') return;
   var d = docs[+e.target.dataset.i];
   d.tipo = e.target.value;
   d.manual = true;
+  limparResultado();
 });
 document.getElementById('docs').addEventListener('click', function(e){
   if(!e.target.dataset.x) return;
-  docs.splice(+e.target.dataset.x, 1);
+  var idx = +e.target.dataset.x;
+  apagarTextoDoc(docs[idx]);
+  docs.splice(idx, 1);
+  encerrarOcrScheduler();
+  limparResultado();
   pintarDocs();
 });
 
+/* Sobrescreve o texto de cada página antes de soltar a referência e derruba a
+   PDFDocumentProxy — apagamento best-effort, já que strings JS são imutáveis
+   e o engine pode manter cópias internas, mas evita reter o conteúdo à vista. */
+function apagarTextoDoc(d){
+  if(d.texto) d.texto = ' '.repeat(Math.min(d.texto.length, 2048));
+  d.texto = '';
+  if(d.paginasInfo){
+    d.paginasInfo.forEach(function(p){
+      if(p.texto) p.texto = ' '.repeat(Math.min(p.texto.length, 256));
+      p.texto = '';
+    });
+    d.paginasInfo.length = 0;
+  }
+  if(d.pdf){ try{ d.pdf.destroy(); }catch(e){} d.pdf = null; }
+  d.giroDocumento = 0;
+}
+
 function receber(lista){
-  lista.filter(function(f){ return /\.pdf$/i.test(f.name); }).forEach(function(f){
+  var pdfs = lista.filter(function(f){ return /\.pdf$/i.test(f.name); });
+  if(!pdfs.length) return;
+  limparResultado();
+  pdfs.forEach(function(f){
     if(!PDFOK){
       alert('O leitor de PDF não está disponível. Recarregue a página com internet ou deixe ' +
             'pdf.min.js e pdf.worker.min.js na mesma pasta deste arquivo.');
       return;
     }
-    var d = {arquivo:f.name, lendo:true, texto:'', vazias:[], paginas:0};
+    var d = {arquivo:f.name, lendo:true, fase:'lendo', texto:'', paginasInfo:[], pdf:null, giroDocumento:0};
     docs.push(d);
     pintarDocs();
-    lerPdf(f).then(function(r){
-      d.texto = r.texto; d.vazias = r.vazias; d.paginas = r.paginas; d.lendo = false;
+    processarArquivo(f, d).then(function(){
+      atualizarTextoDoc(d);
       classificar(d);
       equilibrar(docs);
       pintarDocs();
+
+      var precisaOcr = d.paginasInfo.some(function(p){ return p.origem === 'sem-ocr'; });
+      if(!precisaOcr || !ocrHabilitado()){
+        d.lendo = false; d.fase = 'pronto';
+        if(d.pdf){ try{ d.pdf.destroy(); }catch(e){} d.pdf = null; }
+        pintarDocs();
+        return;
+      }
+      d.fase = 'ocr';
+      pintarDocs();
+      var cfg = obterConfigOcr();
+      return prepararScheduler().then(function(){
+        return ocrDoDocumento(d, d.pdf, cfg);
+      }).then(function(){
+        atualizarTextoDoc(d);
+        if(!d.manual){ classificar(d); equilibrar(docs); }
+        d.lendo = false; d.fase = 'pronto';
+        if(d.pdf){ try{ d.pdf.destroy(); }catch(e){} d.pdf = null; }
+        pintarDocs();
+      }).catch(function(err){
+        d.paginasInfo.forEach(function(p){
+          if(p.origem === 'sem-ocr'){ p.origem = 'erro'; p.motivo = 'erro no OCR: ' + err.message; }
+        });
+        atualizarTextoDoc(d);
+        d.lendo = false; d.fase = 'pronto';
+        if(d.pdf){ try{ d.pdf.destroy(); }catch(e){} d.pdf = null; }
+        pintarDocs();
+      });
     }).catch(function(err){
-      d.lendo = false; d.tipo = 'guia';
+      d.lendo = false; d.fase = 'pronto'; d.tipo = 'guia';
       pintarDocs();
       alert('Não consegui ler ' + f.name + ': ' + err.message);
     });
@@ -758,7 +1314,7 @@ drop.addEventListener('drop', function(e){ receber(Array.prototype.slice.call(e.
 
 document.getElementById('btn').addEventListener('click', function(){
   if(docs.some(function(d){ return d.lendo; })){
-    alert('Ainda estou lendo um dos PDFs. Tente de novo em instantes.');
+    alert('Ainda estou lendo ou processando OCR em um dos PDFs. Tente de novo em instantes.');
     return;
   }
   processar();
@@ -768,17 +1324,45 @@ document.getElementById('btnNova').addEventListener('click', function(){
   novaAnalise();
 });
 
+function mostrarConfirmacaoApagado(){
+  var agora = new Date();
+  var z = function(n){ return ('0'+n).slice(-2); };
+  var el = document.getElementById('confirmApagado');
+  el.textContent = 'Arquivos e dados desta análise apagados da memória às ' + z(agora.getHours())+':'+z(agora.getMinutes()) + '.';
+  el.classList.remove('oculto');
+  setTimeout(function(){ el.classList.add('oculto'); }, 6000);
+}
+
 /* Apaga da memória o texto de cada PDF, a lista de documentos e tudo o que foi
-   gerado a partir deles. Nada é gravado em disco nem enviado a lugar nenhum:
-   o conteúdo dos PDFs só existe enquanto a página está aberta. */
+   gerado a partir deles, e encerra os workers de OCR. Nada é gravado em disco
+   nem enviado a lugar nenhum: o conteúdo dos PDFs só existe enquanto a página
+   está aberta. */
 function novaAnalise(){
-  docs.forEach(function(d){ d.texto = ''; d.vazias = []; });
+  docs.forEach(function(d){ apagarTextoDoc(d); });
   docs.length = 0;
-  resultadoAtual = [];
-  paginasVazias = [];
-  filtroAtual = 'falta';
+  encerrarOcrScheduler();
+  ocrTotal = 0; ocrFeitas = 0; ocrInicio = 0;
+  atualizarProgressoOcr();
+  limparResultado();
 
   document.getElementById('file').value = '';
+  document.getElementById('buscaTermo').value = '';
+  document.getElementById('buscaResultado').innerHTML = '';
+  document.getElementById('viewResultado').innerHTML = '';
+
+  pintarDocs();
+  mostrarConfirmacaoApagado();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* Qualquer mudança no conjunto de arquivos (remover um, remover todos, anexar
+   novo, trocar o tipo) limpa o resultado inteiro — tabela, resumo, observação,
+   avisos e as variáveis que guardam nomes — para nunca mostrar um resultado
+   que não corresponde mais aos arquivos atuais. */
+function limparResultado(){
+  resultadoAtual = [];
+  ultimoContexto = null;
+  filtroAtual = 'falta';
   document.getElementById('resultado').classList.add('oculto');
   document.getElementById('empresa').innerHTML = '';
   document.getElementById('resumo').innerHTML = '';
@@ -786,28 +1370,39 @@ function novaAnalise(){
   document.getElementById('avisoOcr').innerHTML = '';
   document.querySelector('#tabela tbody').innerHTML = '';
   document.getElementById('semFalta').classList.add('oculto');
-  document.getElementById('obs').textContent = '';
-
-  pintarDocs();
-  window.scrollTo({top:0, behavior:'smooth'});
+  var obs = document.getElementById('obs');
+  obs.textContent = '';
+  var dica = document.createElement('span');
+  dica.className = 'dica'; dica.id = 'dica'; dica.textContent = 'clique para copiar';
+  obs.appendChild(dica);
 }
 
 function processar(){
-  var textoRel = '', textoGuia = '';
-  paginasVazias = [];
+  var textoRel = '', paginasGuia = [];
+  var paginasRecuperadas = [], paginasIlegiveis = [];
 
   docs.forEach(function(d){
-    if(d.tipo === 'relatorio') textoRel += '\n' + d.texto; else textoGuia += '\n' + d.texto;
-    if(d.vazias && d.vazias.length) paginasVazias.push(d);
+    (d.paginasInfo||[]).forEach(function(p){
+      if(p.origem === 'ocr'){
+        paginasRecuperadas.push({arquivo:d.arquivo, pagina:p.pagina});
+      } else if(p.origem === 'ocr-vazio' || p.origem === 'erro' || p.origem === 'sem-ocr'){
+        paginasIlegiveis.push({arquivo:d.arquivo, pagina:p.pagina, motivo:p.motivo});
+      }
+      if(p.origem === 'pdf' || p.origem === 'ocr'){
+        if(d.tipo === 'relatorio') textoRel += '\n' + p.texto;
+        else paginasGuia.push({texto:p.texto, origem:p.origem, arquivo:d.arquivo, pagina:p.pagina});
+      }
+    });
   });
 
-  if(!textoRel.trim() || !textoGuia.trim()){
-    alert('Faltou um dos documentos: preciso do relatório do Portal e do detalhe da guia.\n\n' +
-          'Se os dois PDFs já estão na lista, confira o tipo indicado ao lado de cada um.');
+  if(!textoRel.trim() || !paginasGuia.length){
+    alert('Faltou um dos documentos: preciso do relatório do Portal e do detalhe da guia, com texto legível ' +
+          'em pelo menos uma página de cada.\n\nSe os dois PDFs já estão na lista, confira o tipo indicado ' +
+          'ao lado de cada um e o detalhamento de páginas (pode ser necessário aguardar o OCR terminar).');
     return;
   }
 
-  var guia = lerGuia(textoGuia);
+  var guia = lerGuia(paginasGuia);
   var competencia = guia.competencia;
 
   if(!competencia){
@@ -841,17 +1436,18 @@ function processar(){
     ' · ' + Object.keys(guia.pessoas).length + ' trabalhadores na guia</span>';
 
   var avisoOcr = document.getElementById('avisoOcr');
-  if(paginasVazias.length){
-    avisoOcr.innerHTML = '<strong>Atenção: há páginas sem texto nos PDFs enviados.</strong><br>' +
-      paginasVazias.map(function(d){
-        return escapar(d.arquivo) + ' — página(s) ' + d.vazias.join(', ') + ' de ' + d.paginas;
-      }).join('<br>') +
-      '<br>São páginas em imagem (digitalizadas) e não puderam ser lidas. Quem aparecer só nelas ' +
-      'será marcado como “não consta”. Confira à mão ou cole o texto dessas páginas.';
-    avisoOcr.classList.remove('oculto');
-  } else {
-    avisoOcr.classList.add('oculto');
+  var partes = [];
+  if(paginasRecuperadas.length){
+    partes.push('<strong>' + paginasRecuperadas.length + ' página(s) recuperada(s) por OCR:</strong> ' +
+      paginasRecuperadas.map(function(p){ return escapar(p.arquivo)+' p.'+p.pagina; }).join(', '));
   }
+  if(paginasIlegiveis.length){
+    partes.push('<strong>' + paginasIlegiveis.length + ' página(s) continuam ilegíveis:</strong> ' +
+      paginasIlegiveis.map(function(p){ return escapar(p.arquivo)+' p.'+p.pagina; }).join(', ') +
+      '. Quem aparecer só nelas será marcado como "não consta". Confira à mão essas páginas.');
+  }
+  if(partes.length){ avisoOcr.innerHTML = partes.join('<br><br>'); avisoOcr.classList.remove('oculto'); }
+  else { avisoOcr.classList.add('oculto'); }
 
   var falta = resultadoAtual.filter(function(r){ return r.situacao === 'falta'; });
   var ok    = resultadoAtual.filter(function(r){ return r.situacao === 'ok'; });
@@ -878,7 +1474,8 @@ function processar(){
     b.classList.toggle('on', b.dataset.f === 'falta');
   });
   desenharTabela('falta');
-  montarObservacao(guia, competencia, cnpjs, falta, fora, div, ok);
+  ultimoContexto = {guia:guia, competencia:competencia, cnpjs:cnpjs, falta:falta, fora:fora, div:div, ok:ok, ilegiveis:paginasIlegiveis};
+  montarObservacao(guia, competencia, cnpjs, falta, fora, div, ok, paginasIlegiveis);
 
   document.getElementById('resultado').classList.remove('oculto');
   document.getElementById('resultado').scrollIntoView({behavior:'smooth'});
@@ -913,8 +1510,10 @@ function desenharTabela(filtro){
             : '<span class="tag fora">desconsiderado</span>';
     if(r.divergente) tag += ' <span class="tag alerta">CNPJ divergente</span>';
     var onde = r.achado
-      ? escapar(r.achado.estab || '—') +
-        (r.achado.tomador ? '<br><small>tomador ' + escapar(r.achado.tomador) + '</small>' : '')
+      ? (r.achado.porTexto
+          ? 'texto da página ' + escapar(r.achado.arquivo) + ' p.' + r.achado.pagina
+          : escapar(r.achado.estab || '—') +
+            (r.achado.tomador ? '<br><small>tomador ' + escapar(r.achado.tomador) + '</small>' : ''))
       : '—';
     var g = function(campo){ return r.campo === campo ? ' class="grifo"' : ''; };
     tr.innerHTML =
@@ -923,7 +1522,7 @@ function desenharTabela(filtro){
         (r.dados.repeticoes > 1 ? '<span class="nota">' + r.dados.repeticoes +
             ' linhas no relatório, contada uma vez</span>' : '') +
         (r.nota ? '<span class="nota">' + escapar(r.nota) + '</span>' : '') + '</td>' +
-      '<td>' + fmtCpf(r.dados.cpf) + '</td>' +
+      '<td>' + cpfExibir(r.dados.cpf) + '</td>' +
       '<td' + g('atividade') + '>' + escapar(r.dados.atividade || '—') + '</td>' +
       '<td' + g('vinculo') + '>' + escapar(r.dados.vinculo || '—') + '</td>' +
       '<td' + g('cadastro') + '>' + (dataBr(r.dados.dataCad) || escapar(r.dados.cadastro)) + '</td>' +
@@ -941,16 +1540,23 @@ document.getElementById('filtros').addEventListener('click', function(e){
   e.target.classList.add('on');
   desenharTabela(e.target.dataset.f);
 });
+document.getElementById('cpfOcultar').addEventListener('change', function(){
+  if(!resultadoAtual.length) return;
+  desenharTabela(filtroAtual);
+  if(ultimoContexto){
+    montarObservacao(ultimoContexto.guia, ultimoContexto.competencia, ultimoContexto.cnpjs,
+      ultimoContexto.falta, ultimoContexto.fora, ultimoContexto.div, ultimoContexto.ok, ultimoContexto.ilegiveis);
+  }
+});
 
-function montarObservacao(guia, competencia, cnpjs, falta, fora, div, ok){
+function montarObservacao(guia, competencia, cnpjs, falta, fora, div, ok, ilegiveis){
   var fFalta = document.getElementById('itFalta').value || ITEM_FALTA_PADRAO;
-  var fDesc  = document.getElementById('itDesc').value  || ITEM_DESC_PADRAO;
   var fDiv   = document.getElementById('itDiv').value   || ITEM_DIV_PADRAO;
 
   var campos = function(r){
     return {
       nome: r.dados.pessoa,
-      cpf: fmtCpf(r.dados.cpf),
+      cpf: cpfExibir(r.dados.cpf),
       cadastro: dataBr(r.dados.dataCad) || r.dados.cadastro,
       motivo: r.motivo,
       atividade: r.dados.atividade,
@@ -978,16 +1584,18 @@ function montarObservacao(guia, competencia, cnpjs, falta, fora, div, ok){
     qtd_faltantes: falta.length,
     qtd_desconsiderados: fora.length,
     cnpjs: cnpjs.join(', '),
-    alerta: paginasVazias.map(function(d){
-      return 'páginas sem texto em ' + d.arquivo + ': ' + d.vazias.join(', ');
+    alerta: (ilegiveis||[]).map(function(p){
+      return 'página ilegível em ' + p.arquivo + ' (p.' + p.pagina + ')';
     }).join(' | '),
     faltantes: falta.map(function(r){ return item(fFalta, campos(r)); }).join('\n'),
-    desconsiderados: fora.map(function(r){ return item(fDesc, campos(r)); }).join('\n'),
+    /* desconsiderados nunca entram na observação — só aparecem na tabela, no
+       filtro próprio e no CSV, para não gerar apontamento de reprovação */
+    desconsiderados: '',
     divergentes: div.map(function(r){ return item(fDiv, campos(r)); }).join('\n'),
-    cond_alerta: paginasVazias.length > 0,
+    cond_alerta: (ilegiveis||[]).length > 0,
     cond_faltantes: falta.length > 0,
     cond_sem_faltantes: falta.length === 0,
-    cond_desconsiderados: fora.length > 0,
+    cond_desconsiderados: false,
     cond_divergentes: div.length > 0,
     cond_varios_cnpj: cnpjs.length > 1
   };
@@ -1028,19 +1636,101 @@ document.getElementById('btnCsv').addEventListener('click', function(){
   resultadoAtual.forEach(function(r){
     linhas.push([
       r.situacao === 'ok' ? 'Consta' : r.situacao === 'falta' ? 'Nao consta' : 'Desconsiderado',
-      r.motivo, r.dados.pessoa, fmtCpf(r.dados.cpf), r.dados.atividade, r.dados.vinculo,
+      r.motivo, r.dados.pessoa, cpfExibir(r.dados.cpf), r.dados.atividade, r.dados.vinculo,
       dataBr(r.dados.dataCad) || r.dados.cadastro,
       r.achado ? r.achado.nome : '', r.achado ? r.achado.estab : '', r.achado ? r.achado.tomador : '',
       r.nota
     ]);
   });
-  var csv = '\ufeff' + linhas.map(function(l){
+  var csv = '﻿' + linhas.map(function(l){
     return l.map(function(c){ return '"' + String(c||'').replace(/"/g,'""') + '"'; }).join(';');
   }).join('\n');
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
   a.download = 'conferencia-guia-fgts.csv';
   a.click();
+});
+
+/* ---------------------- busca no texto lido e visualizador ----------------- */
+
+function trechoAoRedor(texto, idx, tamanho){
+  var t = tamanho || 60;
+  var ini = Math.max(0, idx-t), fim = Math.min(texto.length, idx+t);
+  return (ini>0?'…':'') + texto.slice(ini,fim).replace(/\s+/g,' ').trim() + (fim<texto.length?'…':'');
+}
+document.getElementById('btnBuscar').addEventListener('click', function(){
+  var termo = document.getElementById('buscaTermo').value.trim();
+  var alvo = document.getElementById('buscaResultado');
+  if(!termo){ alvo.innerHTML = ''; return; }
+  var ehCpf = soDigitos(termo).length >= 8;
+  var achados = [];
+  docs.forEach(function(d){
+    (d.paginasInfo||[]).forEach(function(p){
+      if(!p.texto) return;
+      if(ehCpf){
+        var alvoDig = soDigitos(termo);
+        var digitosPagina = soDigitos(p.texto);
+        var posDig = digitosPagina.indexOf(alvoDig);
+        if(posDig < 0) return;
+        var posTexto = Math.round(posDig * p.texto.length / Math.max(digitosPagina.length,1));
+        achados.push({arquivo:d.arquivo, pagina:p.pagina, trecho: trechoAoRedor(p.texto, posTexto)});
+      } else {
+        var alvoNorm = normNome(termo);
+        var textoNorm = normNome(p.texto);
+        var idx = textoNorm.indexOf(alvoNorm);
+        if(idx < 0) return;
+        achados.push({arquivo:d.arquivo, pagina:p.pagina, trecho: trechoAoRedor(p.texto, idx)});
+      }
+    });
+  });
+  if(!achados.length){
+    alvo.innerHTML = '<div class="vazio">Nada encontrado no texto já lido. Se a pessoa deveria estar aqui, ' +
+      'confira no detalhamento do arquivo se a página correspondente não ficou marcada como ilegível.</div>';
+    return;
+  }
+  alvo.innerHTML = achados.map(function(a){
+    return '<div class="buscaItem"><strong>' + escapar(a.arquivo) + '</strong> — página ' + a.pagina +
+      '<br>' + escapar(a.trecho) + '</div>';
+  }).join('');
+});
+
+function atualizarSelectArquivos(){
+  var sel = document.getElementById('viewArquivo');
+  var atual = sel.value;
+  sel.innerHTML = docs.map(function(d,i){ return '<option value="'+i+'">'+escapar(d.arquivo)+'</option>'; }).join('');
+  if(atual) sel.value = atual;
+}
+document.getElementById('btnVerPagina').addEventListener('click', function(){
+  var i = +document.getElementById('viewArquivo').value;
+  var n = +document.getElementById('viewPagina').value;
+  var d = docs[i];
+  var alvo = document.getElementById('viewResultado');
+  if(!d){ alvo.innerHTML = '<div class="vazio">Selecione um arquivo.</div>'; return; }
+  var p = (d.paginasInfo||[]).filter(function(x){ return x.pagina === n; })[0];
+  if(!p){ alvo.innerHTML = '<div class="vazio">Página não encontrada.</div>'; return; }
+  alvo.innerHTML =
+    '<div class="tokens" style="margin-bottom:8px">' +
+      'origem: <code>' + escapar(rotuloOrigem(p.origem)) + '</code> · ' +
+      'caracteres: <code>' + p.caracteres + '</code> · palavras: <code>' + p.palavras + '</code> · ' +
+      'giro: <code>' + p.giro + '°</code>' +
+      (p.motivo ? ' · motivo: <code>' + escapar(p.motivo) + '</code>' : '') +
+    '</div>' +
+    '<textarea readonly style="min-height:260px">' + escapar(p.texto || '(sem texto)') + '</textarea>';
+});
+
+/* -------------------------- estado do OCR (lib) ----------------------------- */
+
+window.__ocrLibPronto = function(ok){ configurarOcrDisponivel(ok); };
+configurarOcrDisponivel(window.OCROK);
+
+/* ---------------------------- limpeza ao sair ------------------------------- */
+
+window.addEventListener('beforeunload', function(){
+  docs.forEach(function(d){ apagarTextoDoc(d); });
+  docs.length = 0;
+  resultadoAtual.length = 0;
+  ultimoContexto = null;
+  encerrarOcrScheduler();
 });
 </script>
 </body>
