@@ -1,0 +1,2230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<!-- Trava de segurança: o navegador só permite conexão com os CDNs das duas
+     bibliotecas de leitura. Qualquer tentativa de enviar dado para outro lugar
+     é bloqueada por ele, sem depender de revisão de código.
+     Uso 100% offline com arquivos locais: troque as duas URLs por 'self'. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;
+  worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;
+  connect-src 'self' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;
+  img-src 'self' data: blob:;
+  style-src 'self' 'unsafe-inline';
+  font-src 'self' data:;
+  object-src 'none';
+  base-uri 'none';
+  form-action 'none';
+">
+<title>Conferência de Comprovantes de Depósito — GT3</title>
+<style>
+  :root{
+    --azul:#2A4F96; --azul-esc:#1d3a71; --ouro:#D1AE6E; --fundo:#F4F6FA;
+    --linha:#dfe4ee; --texto:#1f2733; --suave:#5d6a7d;
+    --ok:#1f7a4d; --ok-bg:#e8f5ee; --falta:#b3261e; --falta-bg:#fdecea;
+    --neutro:#7a6a3f; --neutro-bg:#fbf3e2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fundo);color:var(--texto);
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5}
+  header{background:var(--azul);color:#fff;padding:22px 28px;border-bottom:4px solid var(--ouro);
+    display:flex;align-items:center;justify-content:space-between;gap:16px}
+  header h1{margin:0;font-size:20px;font-weight:600}
+  header p{margin:4px 0 0;font-size:13px;opacity:.85}
+  .engrenagem{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.35);
+    border-radius:8px;width:40px;height:40px;font-size:20px;line-height:1;cursor:pointer;flex:0 0 auto}
+  .engrenagem:hover{background:rgba(255,255,255,.26)}
+  main{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+  .painel{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:20px;margin-bottom:18px}
+  .painel h2{margin:0 0 14px;font-size:15px;font-weight:600;color:var(--azul)}
+  .painel h2 span.num{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;
+    background:var(--azul);color:#fff;border-radius:50%;font-size:12px;margin-right:8px}
+  .drop{border:2px dashed #c3cede;border-radius:8px;padding:30px 18px;text-align:center;
+    background:#fafbfe;cursor:pointer;transition:border-color .15s,background .15s}
+  .drop:hover,.drop.ativo{border-color:var(--azul);background:#eef3fc}
+  .drop strong{display:block;font-size:15px;margin-bottom:4px}
+  .drop small{color:var(--suave)}
+  .docs{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  .doc{display:flex;align-items:center;gap:10px;border:1px solid var(--linha);border-radius:8px;
+    padding:9px 12px;font-size:13.5px;background:#fff}
+  .doc .nome{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .doc select{padding:5px 8px;border:1px solid var(--linha);border-radius:6px;font-size:13px}
+  .doc .x{cursor:pointer;color:var(--suave);border:0;background:none;font-size:17px;line-height:1}
+  .doc small{color:var(--suave)}
+  #acoesDocs{display:flex;align-items:center;gap:16px;margin-top:16px;
+    padding-top:16px;border-top:1px solid var(--linha);flex-wrap:wrap}
+  #acoesDocs .botao{margin-left:auto}
+  #acoesDocs .prazo{margin:0;padding:0;border:0;flex:1 1 320px;min-width:200px}
+  .apagaNota{font-size:12.5px;color:var(--suave)}
+  .docsTopo{display:flex;align-items:center;justify-content:space-between;margin-top:16px;
+    padding-bottom:6px;border-bottom:1px solid var(--linha)}
+  .docsTopo span{font-size:12.5px;color:var(--suave)}
+  .xTudo{background:var(--falta-bg);color:var(--falta);border:1px solid var(--falta);
+    border-radius:50%;width:26px;height:26px;font-size:17px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;padding:0;margin-right:2px}
+  .xTudo:hover{background:var(--falta);color:#fff}
+  .apagado{background:var(--ok-bg);color:var(--ok);border-radius:8px;padding:10px 14px;
+    font-size:13.5px;font-weight:600;margin-top:14px}
+  .privacidade{margin:0 0 18px;padding:10px 14px;background:#eef3fc;border-left:3px solid var(--azul);
+    border-radius:6px;font-size:12.5px;color:var(--suave)}
+  .versaoLibs{margin:-10px 0 14px;font-size:11px;color:var(--suave);text-align:right}
+  .ocrOpcao{display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:13.5px;cursor:pointer}
+  .ocrProgresso{font-size:12.5px;color:var(--neutro);white-space:nowrap}
+  details.leitura{margin:-2px 0 0 0}
+  details.leitura summary{font-size:12.5px;padding:4px 12px;color:var(--azul)}
+  .tabLeitura{margin:6px 0 10px;font-size:12.5px}
+  .tabLeitura th{padding:5px 8px;font-size:11.5px}
+  .tabLeitura td{padding:4px 8px}
+  .erroLeitura{margin:6px 0 0;font-size:12.5px;color:var(--falta)}
+  #buscaBloco{margin-top:12px}
+  #buscaBloco summary{font-size:13px;color:var(--azul)}
+  .buscaLinha{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}
+  .buscaLinha input{flex:1 1 280px;padding:8px 10px;border:1px solid var(--linha);border-radius:6px;font-size:14px}
+  .achado{border:1px solid var(--linha);border-left:3px solid var(--ok);border-radius:6px;
+    padding:8px 10px;margin-bottom:8px;font-size:12.5px}
+  .achado b{color:var(--azul)}
+  .achado .trecho{display:block;margin-top:4px;font-family:Consolas,monospace;color:var(--suave)}
+  .achado mark{background:#fde9a9;color:var(--texto)}
+  .semAchado{font-size:13px;color:var(--falta);padding:6px 0}
+  .verPagina{margin-top:14px;padding-top:12px;border-top:1px solid var(--linha)}
+  .verPagina strong{font-size:13px;color:var(--texto)}
+  .verPagina select{padding:8px 10px;border:1px solid var(--linha);border-radius:6px;
+    font-size:13.5px;flex:1 1 220px}
+  .saidaPagina{background:#f7f9fc;border:1px solid var(--linha);border-radius:6px;padding:12px;
+    font-size:12px;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  textarea{width:100%;padding:10px;border:1px solid var(--linha);border-radius:6px;
+    font-family:Consolas,monospace;font-size:12.5px;resize:vertical}
+  .config{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+  .campo{display:flex;flex-direction:column;gap:4px}
+  .campo label{font-size:12px;color:var(--suave)}
+  .campo input,.campo select{padding:7px 9px;border:1px solid var(--linha);border-radius:6px;font-size:14px}
+  .campoComp{background:var(--neutro-bg);border:2px solid var(--ouro);border-radius:8px;
+    padding:10px 14px}
+  .campoComp label{font-size:13px;font-weight:600;color:var(--texto)}
+  .inputComp{font-size:19px !important;font-weight:700;padding:8px 12px !important;
+    border:2px solid var(--ouro) !important;text-align:center;letter-spacing:.5px;
+    min-width:150px;color:var(--azul-esc)}
+  .inputComp:focus{outline:2px solid var(--azul);outline-offset:1px}
+  .campo input.erro{border-color:var(--falta);background:var(--falta-bg)}
+  .obrig{color:var(--falta)}
+  .regras{display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+  .regras label{display:flex;gap:7px;align-items:flex-start;cursor:pointer}
+  .prazo{margin-top:14px;padding-top:14px;border-top:1px solid var(--linha);font-size:13.5px;color:var(--suave)}
+  .prazo b{color:var(--texto)}
+  .botao{background:var(--azul);color:#fff;border:0;border-radius:6px;padding:11px 26px;
+    font-size:15px;font-weight:600;cursor:pointer}
+  .botao:hover{background:var(--azul-esc)}
+  .botao.sec{background:#fff;color:var(--azul);border:1px solid var(--azul);font-weight:500;
+    padding:8px 16px;font-size:13.5px}
+  .botao.limpar{background:var(--ouro);color:#3b2f14;padding:10px 22px;font-size:14px}
+  .botao.limpar:hover{background:#c09a4f}
+  .botao.grande{padding:20px 54px;font-size:19px;border-radius:8px}
+  .aviso{background:#fff8e6;border:1px solid var(--ouro);border-radius:8px;padding:12px 14px;
+    font-size:13.5px;margin-bottom:18px}
+  .empresa{border-left:4px solid var(--ouro);padding:10px 0 10px 14px;margin-bottom:16px}
+  .empresa strong{font-size:17px;display:block}
+  .empresa span{color:var(--suave);font-size:13.5px}
+  .resumo{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+  .cartao{flex:1 1 150px;border:1px solid var(--linha);border-radius:8px;padding:12px 14px;background:#fff}
+  .cartao b{display:block;font-size:24px;line-height:1.2}
+  .cartao small{color:var(--suave);font-size:12.5px}
+  .cartao.destaque{border:2px solid var(--ouro);background:var(--neutro-bg)}
+  .cartao.destaque small{color:var(--neutro);font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;padding:9px 8px;background:#eef1f7;border-bottom:2px solid var(--linha);
+    font-weight:600;font-size:12.5px;color:var(--azul)}
+  td{padding:8px;border-bottom:1px solid var(--linha);vertical-align:top}
+  tr.falta td{background:var(--falta-bg)}
+  tr.fora td{background:#f7f8fa;color:var(--suave)}
+  tr.atraso td{background:var(--neutro-bg)}
+  td.grifo{background:#fdf1d6;box-shadow:inset 0 0 0 2px var(--ouro);border-radius:4px;
+    font-weight:600;color:var(--neutro)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:11px;font-size:11.5px;font-weight:600;white-space:nowrap}
+  .tag.ok{background:var(--ok-bg);color:var(--ok)}
+  .tag.nao{background:var(--falta-bg);color:var(--falta)}
+  .tag.fora{background:#eceff4;color:var(--suave)}
+  .tag.alerta{background:var(--neutro-bg);color:var(--neutro)}
+  .nota{font-size:12px;color:var(--neutro);display:block;margin-top:3px}
+  .copiavel{position:relative;background:#fff;border:1px solid var(--linha);border-left:4px solid var(--ouro);
+    border-radius:8px;padding:16px 18px;white-space:pre-wrap;font-size:13.5px;cursor:pointer;
+    font-family:"Segoe UI",Roboto,Arial,sans-serif}
+  .copiavel:hover{background:#fffdf7}
+  .copiavel:focus{outline:2px solid var(--azul);outline-offset:2px}
+  .dica{position:absolute;top:10px;right:12px;font-size:11.5px;color:var(--suave);
+    background:#f1f4f9;border-radius:11px;padding:2px 10px}
+  .oculto{display:none !important}
+  .semfalta{background:var(--ok-bg);color:var(--ok);border-radius:8px;padding:16px;
+    font-weight:600;text-align:center}
+  .notaTolerancia{display:block;margin-top:3px;font-size:12px;color:var(--neutro)}
+  .notaTolerancia code{background:#fdf1d6;padding:1px 5px;border-radius:3px}
+  .vazio{color:var(--suave);font-size:14px;padding:12px 0;text-align:center}
+  .filtros{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .filtros button{border:1px solid var(--linha);background:#fff;border-radius:16px;padding:5px 14px;
+    font-size:13px;cursor:pointer}
+  .filtros button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .modal{position:fixed;inset:0;background:rgba(20,28,45,.5);display:flex;align-items:flex-start;
+    justify-content:center;padding:40px 16px;z-index:50;overflow:auto}
+  .modalCaixa{background:#fff;border-radius:10px;max-width:860px;width:100%;box-shadow:0 18px 50px rgba(20,28,45,.3)}
+  .modalTopo{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;
+    border-bottom:1px solid var(--linha)}
+  .modalTopo .x{border:0;background:none;font-size:24px;line-height:1;cursor:pointer;color:var(--suave)}
+  .modalCorpo{padding:18px 20px 22px}
+  .abaCfg{display:flex;gap:6px;border-bottom:1px solid var(--linha);margin-bottom:16px;flex-wrap:wrap}
+  .abaCfg button{border:0;background:none;padding:9px 14px;cursor:pointer;font-size:13.5px;
+    color:var(--suave);border-bottom:3px solid transparent}
+  .abaCfg button.on{color:var(--azul);font-weight:600;border-bottom-color:var(--azul)}
+  .tokens{font-size:12.5px;color:var(--suave);line-height:1.8;margin-top:8px}
+  .tokens code{background:#eef1f7;color:var(--azul);border-radius:4px;padding:1px 6px;
+    font-family:Consolas,monospace;font-size:12px}
+  .linhaCfg{display:grid;grid-template-columns:250px 1fr;gap:12px;align-items:center;margin-bottom:10px}
+  .linhaCfg label{font-size:13px;color:var(--suave)}
+  .linhaCfg input{width:100%;padding:7px 9px;border:1px solid var(--linha);border-radius:6px;
+    font-family:Consolas,monospace;font-size:12.5px}
+  @media(max-width:700px){.linhaCfg{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Conferência de Comprovantes de Depósito</h1>
+    <p>Compara as pessoas do relatório do Portal GT3 com os comprovantes de depósito bancário e confere o prazo de pagamento.</p>
+  </div>
+  <button id="btnCfg" class="engrenagem" title="Configurações" aria-label="Configurações">&#9881;</button>
+</header>
+
+<main>
+
+  <div class="aviso" id="avisoLib">Carregando o leitor de PDF.</div>
+  <p class="versaoLibs">build 2026-09-17 19:43 UTC · pdf.js 3.11.174 · tesseract.js 6.0.1</p>
+
+  <p class="privacidade">
+    Os PDFs são lidos aqui mesmo, no seu navegador. Nenhum arquivo, nome ou CPF é enviado
+    para servidor nenhum, e tudo é apagado da memória ao remover os arquivos ou fechar a aba.
+  </p>
+
+  <section class="painel">
+    <h2>Documentos</h2>
+    <div class="drop" id="drop">
+      <strong>Solte aqui os PDFs, em qualquer ordem</strong>
+      <small>O relatório do Portal e os comprovantes são identificados pelo conteúdo</small>
+      <input type="file" id="file" accept="application/pdf" multiple class="oculto">
+    </div>
+    <label class="ocrOpcao"><input type="checkbox" id="usarOcr" checked>
+      Ler com OCR as páginas escaneadas (comprovante fotografado ou digitalizado)</label>
+    <div class="docsTopo oculto" id="docsTopo">
+      <span>Arquivos anexados</span>
+      <button class="xTudo" id="btnNova" title="Remover todos os PDFs e apagar os dados">×</button>
+    </div>
+    <div class="docs" id="docs"></div>
+    <div id="avisoApagado" class="apagado oculto"></div>
+    <div id="acoesDocs" class="oculto">
+      <div class="campo campoComp">
+        <label for="comp">Competência <span class="obrig">obrigatória</span></label>
+        <input id="comp" class="inputComp" placeholder="08/2026 ou 082026" size="12">
+      </div>
+      <span class="prazo" id="prazoTexto">Informe a competência para ver o prazo aplicado.</span>
+      <button class="botao grande" id="btn">Comparar</button>
+    </div>
+    <details id="buscaBloco" class="oculto">
+      <summary>Procurar um nome ou CPF no texto lido dos PDFs</summary>
+      <div class="buscaLinha">
+        <input id="buscaTermo" placeholder="Ex.: Joseane Padilha  ou  123.456.789-00">
+        <button class="botao sec" id="btnBuscar">Procurar</button>
+      </div>
+      <div id="buscaResultado"></div>
+      <div class="verPagina">
+        <strong>Ver o texto que foi lido de uma página</strong>
+        <div class="buscaLinha">
+          <select id="verArquivo"></select>
+          <input id="verNumero" type="number" min="1" placeholder="página" style="flex:0 0 110px">
+          <button class="botao sec" id="btnVerPagina">Ver texto</button>
+        </div>
+        <pre id="verSaida" class="saidaPagina oculto"></pre>
+      </div>
+    </details>
+  </section>
+
+
+  <div class="modal oculto" id="modalCfg">
+    <div class="modalCaixa">
+      <div class="modalTopo">
+        <h2 style="margin:0;font-size:16px;color:var(--azul)">Configurações</h2>
+        <button class="x" id="fecharCfg" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="modalCorpo">
+        <div class="abaCfg" id="abas">
+          <button data-a="regras" class="on">Regras</button>
+          <button data-a="obs">Observação</button>
+          <button data-a="atraso">Frase de atraso</button>
+          <button data-a="prazo">Prazo</button>
+          <button data-a="excecoes">Exceções</button>
+          <button data-a="leitura">Leitura dos comprovantes</button>
+        </div>
+
+        <div class="aba" id="aba-regras">
+          <div class="linhaCfg">
+            <label for="fmt">Formato das datas do relatório</label>
+            <select id="fmt" style="padding:7px 9px;border:1px solid var(--linha);border-radius:6px;font-size:14px">
+              <option value="auto">Detectar automaticamente</option>
+              <option value="mdy">MM/DD/AAAA</option>
+              <option value="dmy">DD/MM/AAAA</option>
+            </select>
+          </div>
+          <div class="regras" style="margin-top:14px">
+            <label><input type="checkbox" id="rData" checked> Desconsiderar cadastro posterior à competência</label>
+            <label><input type="checkbox" id="rVinculo" checked> Desconsiderar os vínculos configurados</label>
+            <label><input type="checkbox" id="rCargo" checked> Desconsiderar os cargos configurados</label>
+            <label><input type="checkbox" id="rPrazo" checked> Conferir a data do depósito contra o prazo</label>
+            <label><input type="checkbox" id="mascararCpf" checked> Mostrar o CPF parcialmente oculto (***.456.789-**)</label>
+          </div>
+          <div class="tokens">
+            Quais vínculos e cargos entram nessas regras fica na aba “Exceções”; a janela de datas
+            considerada fica na aba “Prazo”.
+          </div>
+        </div>
+
+        <div class="aba oculto" id="aba-obs">
+          <label style="font-size:13px;color:var(--suave)">Texto da observação</label>
+          <textarea id="modelo" style="min-height:210px"></textarea>
+          <div class="linhaCfg" style="margin-top:12px">
+            <label for="itFalta">Cada pessoa sem comprovante</label>
+            <input id="itFalta">
+          </div>
+          <div class="linhaCfg">
+            <label for="itDesc">Cada pessoa desconsiderada</label>
+            <input id="itDesc">
+          </div>
+          <div class="linhaCfg">
+            <label for="itDiverg">Cada divergência de valor</label>
+            <input id="itDiverg">
+          </div>
+          <div class="linhaCfg">
+            <label for="itTerceiro">Cada crédito a terceiro</label>
+            <input id="itTerceiro">
+          </div>
+          <div class="tokens">
+            <code>{data}</code> <code>{hora}</code> <code>{data_hora}</code> <code>{competencia}</code>
+            <code>{empresa}</code> <code>{avaliadas}</code> <code>{contempladas}</code>
+            <code>{qtd_faltantes}</code> <code>{qtd_desconsiderados}</code>
+            <code>{qtd_atrasados}</code> <code>{prazo_inicio}</code> <code>{prazo_final}</code><br>
+            Listas: <code>{faltantes}</code> <code>{desconsiderados}</code> <code>{atrasados}</code> —
+            nos itens valem <code>{nome}</code>, <code>{cpf}</code>, <code>{cadastro}</code>,
+            <code>{motivo}</code>, <code>{atividade}</code>, <code>{vinculo}</code>,
+            <code>{data_deposito}</code>, <code>{valor}</code>, <code>{valor_holerite}</code>,
+            <code>{favorecido}</code>, <code>{dias_atraso}</code>.<br>
+            Listas de holerite: <code>{divergencias}</code> e <code>{terceiros}</code>.<br>
+            Condicionais: <code>{#faltantes}…{/faltantes}</code>, <code>{#sem_faltantes}</code>,
+            <code>{#desconsiderados}</code>, <code>{#atrasados}</code>, <code>{#divergencias}</code>,
+            <code>{#terceiros}</code>, <code>{#alerta}</code>.
+          </div>
+        </div>
+
+        <div class="aba oculto" id="aba-atraso">
+          <label style="font-size:13px;color:var(--suave)">
+            Frase orientativa, gerada em campo separado quando houver depósito fora do prazo
+          </label>
+          <textarea id="modeloAtraso" style="min-height:180px"></textarea>
+          <div class="linhaCfg" style="margin-top:12px">
+            <label for="itAtraso">Cada pessoa em atraso</label>
+            <input id="itAtraso">
+          </div>
+          <div class="tokens">Valem os mesmos campos da aba anterior.</div>
+        </div>
+
+        <div class="aba oculto" id="aba-prazo">
+          <div class="linhaCfg">
+            <label for="cfgDiasFim">Dias no fim do mês da competência</label>
+            <input id="cfgDiasFim" type="number" min="0" max="31">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgDiasUteis">Dias úteis no mês seguinte</label>
+            <input id="cfgDiasUteis" type="number" min="1" max="20">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgFeriados">Feriados adicionais (dd/mm/aaaa, separados por vírgula)</label>
+            <input id="cfgFeriados" placeholder="20/09/2026, 03/09/2026">
+          </div>
+          <div class="tokens">
+            Os feriados nacionais já entram sozinhos, inclusive os móveis (Carnaval, Sexta-feira Santa e
+            Corpus Christi). Use o campo acima para os municipais e estaduais.
+          </div>
+        </div>
+
+        <div class="aba oculto" id="aba-excecoes">
+          <div class="linhaCfg">
+            <label for="cfgVinculos">Vínculos desconsiderados</label>
+            <input id="cfgVinculos" placeholder="ASSOCIADO, PJ">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgCargos">Cargos desconsiderados</label>
+            <input id="cfgCargos" placeholder="SOCIO, ESTAGIARIO, DIRETOR">
+          </div>
+          <div class="tokens">
+            Separe por vírgula. A comparação ignora acentos e maiúsculas, e basta que o termo apareça
+            dentro do texto do campo. Diferente da conferência da guia, o vínculo temporário não vem
+            marcado aqui.
+          </div>
+        </div>
+
+        <div class="aba oculto" id="aba-leitura">
+          <div class="linhaCfg">
+            <label for="cfgRotDatas">Rótulos que indicam a data do pagamento</label>
+            <input id="cfgRotDatas">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgRotValor">Rótulos que indicam o valor</label>
+            <input id="cfgRotValor">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgSimilar">Semelhança mínima do nome (0 a 1)</label>
+            <input id="cfgSimilar" type="number" step="0.01" min="0.5" max="1">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgOcrIdioma">Idioma do OCR</label>
+            <input id="cfgOcrIdioma" placeholder="por">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgOcrEscala">Ampliação da página no OCR</label>
+            <input id="cfgOcrEscala" type="number" step="0.1" min="1" max="4">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgOcrMin">Caracteres mínimos para considerar a página legível</label>
+            <input id="cfgOcrMin" type="number" min="0" max="2000">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgOcrNucleos">Núcleos usados no OCR (0 = automático)</label>
+            <input id="cfgOcrNucleos" type="number" min="0" max="8">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgOcrWorker">Caminho local do worker (opcional)</label>
+            <input id="cfgOcrWorker" placeholder="worker.min.js">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgOcrCore">Caminho local do núcleo (opcional)</label>
+            <input id="cfgOcrCore" placeholder="tesseract-core-simd.wasm.js">
+          </div>
+          <div class="linhaCfg">
+            <label for="cfgOcrLang">Pasta local do idioma (opcional)</label>
+            <input id="cfgOcrLang" placeholder="./">
+          </div>
+          <div class="tokens">
+            Cada comprovante é lido pelo bloco de texto da página. A pessoa é localizada pelo nome ou
+            pelo CPF, inclusive quando o banco mascara o CPF (***.456.789-**). A data escolhida é a mais
+            próxima do nome, dando preferência à que vier depois de um dos rótulos acima.<br><br>
+            <strong style="color:var(--texto)">OCR</strong> — páginas sem camada de texto são convertidas
+            em imagem e lidas por reconhecimento óptico. A ampliação maior melhora a leitura de letras
+            pequenas e deixa o processo mais lento. Na primeira execução o navegador baixa o idioma
+            (cerca de 10 MB) e guarda em cache. Quem for localizado numa página de OCR sai marcado para
+            conferência, porque o reconhecimento pode trocar caracteres.
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+          <button class="botao sec" id="btnSalvar">Salvar como padrão</button>
+          <button class="botao sec" id="btnRestaurar">Restaurar o original</button>
+          <span id="statusCfg" style="font-size:13px;color:var(--ok);align-self:center"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="painel oculto" id="resultado">
+    <div class="empresa" id="empresa"></div>
+    <div class="aviso oculto" id="avisoOcr"></div>
+    <div class="resumo" id="resumo"></div>
+
+    <div class="filtros" id="filtros">
+      <button data-f="falta" class="on">Sem comprovante</button>
+      <button data-f="divergente">Valor divergente</button>
+      <button data-f="terceiro">Pago a terceiro</button>
+      <button data-f="atraso">Fora do prazo</button>
+      <button data-f="tolerancia">Grafia diferente</button>
+      <button data-f="ok">Com comprovante</button>
+      <button data-f="fora">Desconsiderados</button>
+      <button data-f="todos">Todos</button>
+    </div>
+
+    <div id="semFalta" class="semfalta oculto">
+      Sem divergências: todas as pessoas avaliadas têm comprovante de depósito.
+    </div>
+
+    <div style="overflow-x:auto" id="caixaTabela">
+      <table id="tabela">
+        <thead>
+          <tr>
+            <th>Situação</th><th>Pessoa</th><th>CPF</th><th>Atividade</th>
+            <th>Vínculo</th><th>Cadastro</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:26px">Observação para envio</h2>
+    <div class="copiavel" id="obs" tabindex="0" role="button" aria-label="Clique para copiar a observação">
+      <span class="dica" id="dica">clique para copiar</span>
+    </div>
+
+    <div id="blocoAtraso" class="oculto">
+      <h2 style="margin-top:26px">Orientação sobre prazo de depósito</h2>
+      <div class="copiavel" id="obsAtraso" tabindex="0" role="button" aria-label="Clique para copiar a orientação">
+        <span class="dica" id="dicaAtraso">clique para copiar</span>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <button class="botao sec" id="btnCsv">Baixar resultado em CSV</button>
+    </div>
+  </section>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+/* ===========================================================================
+   Uso 100% offline: baixe pdf.min.js e pdf.worker.min.js (versão 3.11.174),
+   deixe-os nesta mesma pasta e troque a tag acima por
+   <script src="pdf.min.js"><\/script>, ajustando o workerSrc logo abaixo.
+   =========================================================================== */
+var PDFOK = false;
+(function(){
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    PDFOK = true;
+    if(!window.Tesseract){
+      /* CDN bloqueado? tenta o arquivo local, na mesma pasta deste HTML */
+      var s = document.createElement('script');
+      s.src = 'tesseract.min.js';
+      s.onload = function(){ avisarOcr(); };
+      s.onerror = function(){ avisarOcr(); };
+      document.head.appendChild(s);
+    } else {
+      document.getElementById('avisoLib').classList.add('oculto');
+    }
+  } else {
+    document.getElementById('avisoLib').innerHTML =
+      '<strong>O leitor de PDF não carregou.</strong> Verifique a conexão e recarregue a página. ' +
+      'Para uso sem internet, deixe pdf.min.js e pdf.worker.min.js na mesma pasta deste HTML.';
+  }
+})();
+
+function avisarOcr(){
+  var aviso = document.getElementById('avisoLib');
+  var caixa = document.getElementById('usarOcr');
+  if(window.Tesseract){
+    aviso.classList.add('oculto');
+    caixa.disabled = false;
+    return;
+  }
+  aviso.innerHTML =
+    '<strong>O OCR não está disponível nesta máquina.</strong> A biblioteca de reconhecimento ' +
+    'óptico não carregou — normalmente é bloqueio de rede ou falta de internet. Páginas ' +
+    'escaneadas, ou com fonte sem mapa de caracteres, não poderão ser lidas; o resto da ' +
+    'conferência funciona normalmente.<br>Para usar sem internet, baixe <em>tesseract.min.js</em>, ' +
+    '<em>worker.min.js</em>, o núcleo <em>tesseract-core</em> e o idioma <em>por.traineddata.gz</em>, ' +
+    'deixe-os nesta pasta e informe os caminhos na engrenagem, aba “Leitura dos comprovantes”.';
+  aviso.classList.remove('oculto');
+  caixa.checked = false;
+  caixa.disabled = true;
+}
+
+/* ---------------------------- utilidades ---------------------------------- */
+
+function semAcento(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normBusca(s){ return semAcento(s||'').toUpperCase(); }
+function normNome(s){ return normBusca(s).replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim(); }
+function chaveNome(s){
+  return normNome(s).split(' ').filter(function(p){
+    return ['DA','DE','DO','DAS','DOS','E'].indexOf(p) < 0;
+  }).join(' ');
+}
+function soDigitos(s){ return (s||'').replace(/\D/g,''); }
+function normCpf(s){
+  var d = soDigitos(s);
+  if(!d) return '';
+  if(d.length > 11) d = d.slice(-11);
+  return d.padStart(11,'0');
+}
+function fmtCpf(c){
+  return c && c.length === 11 ? c.slice(0,3)+'.'+c.slice(3,6)+'.'+c.slice(6,9)+'-'+c.slice(9) : (c||'');
+}
+/* Mostra o CPF parcialmente oculto: ***.456.789-**  */
+function mascararCpf(c){
+  if(!c || c.length !== 11) return c || '';
+  return '***.' + c.slice(3,6) + '.' + c.slice(6,9) + '-**';
+}
+function cpfExibicao(c){
+  var caixa = document.getElementById('mascararCpf');
+  return (!caixa || caixa.checked) ? mascararCpf(c) : fmtCpf(c);
+}
+
+function escapar(s){
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+function lista(s){
+  return (s||'').split(',').map(function(x){ return normBusca(x).trim(); }).filter(Boolean);
+}
+function similar(a,b){
+  a = chaveNome(a); b = chaveNome(b);
+  if(!a || !b) return 0;
+  if(a === b) return 1;
+  var m = a.length, n = b.length, prev = [], cur = [], i, j;
+  for(j=0;j<=n;j++) prev[j] = j;
+  for(i=1;i<=m;i++){
+    cur[0] = i;
+    for(j=1;j<=n;j++){
+      cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1]===b[j-1] ? 0 : 1));
+    }
+    prev = cur.slice();
+  }
+  return 1 - prev[n]/Math.max(m,n);
+}
+function z2(n){ return ('0'+n).slice(-2); }
+function dataBr(d){ return d ? z2(d.getDate())+'/'+z2(d.getMonth()+1)+'/'+d.getFullYear() : ''; }
+function chaveDia(d){ return d.getFullYear()+'-'+z2(d.getMonth()+1)+'-'+z2(d.getDate()); }
+
+/* --------------------------- feriados e dias úteis ------------------------- */
+
+function pascoa(ano){
+  var a = ano%19, b = Math.floor(ano/100), c = ano%100;
+  var d = Math.floor(b/4), e = b%4, f = Math.floor((b+8)/25);
+  var g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15)%30;
+  var i = Math.floor(c/4), k = c%4, l = (32+2*e+2*i-h-k)%7;
+  var m = Math.floor((a+11*h+22*l)/451);
+  var mes = Math.floor((h+l-7*m+114)/31), dia = ((h+l-7*m+114)%31)+1;
+  return new Date(ano, mes-1, dia);
+}
+function feriadosNacionais(ano){
+  var f = [[1,1],[4,21],[5,1],[9,7],[10,12],[11,2],[11,15],[11,20],[12,25]].map(function(p){
+    return new Date(ano, p[0]-1, p[1]);
+  });
+  var p = pascoa(ano), dia = 86400000;
+  f.push(new Date(p.getTime() - 47*dia));  /* Carnaval */
+  f.push(new Date(p.getTime() - 2*dia));   /* Sexta-feira Santa */
+  f.push(new Date(p.getTime() + 60*dia));  /* Corpus Christi */
+  return f;
+}
+function conjuntoFeriados(ano, extras){
+  var s = {};
+  feriadosNacionais(ano).concat(feriadosNacionais(ano+1)).forEach(function(d){ s[chaveDia(d)] = true; });
+  (extras||'').split(',').forEach(function(x){
+    var p = x.trim().split('/');
+    if(p.length === 3) s[p[2]+'-'+z2(+p[1])+'-'+z2(+p[0])] = true;
+  });
+  return s;
+}
+function ehDiaUtil(d, fer){ return d.getDay() !== 0 && d.getDay() !== 6 && !fer[chaveDia(d)]; }
+function nesimoDiaUtil(ano, mes, n, fer){
+  var d = new Date(ano, mes, 1), conta = 0;
+  while(true){
+    if(ehDiaUtil(d, fer)) conta++;
+    if(conta >= n) return new Date(d);
+    d.setDate(d.getDate()+1);
+    if(d.getMonth() !== mes && conta === 0) return null;
+  }
+}
+/* Janela de depósito: últimos N dias da competência até o Nº dia útil do mês seguinte */
+function janelaPrazo(comp, cfg){
+  var p = (comp||'').split('/');
+  if(p.length !== 2) return null;
+  var mes = parseInt(p[0],10)-1, ano = parseInt(p[1],10);
+  if(isNaN(mes) || isNaN(ano) || mes < 0 || mes > 11) return null;
+  if(ano < 100) ano += 2000;
+  var fer = conjuntoFeriados(ano, cfg.feriados);
+  var ultimo = new Date(ano, mes+1, 0);
+  var inicio = new Date(ano, mes+1, 0);
+  inicio.setDate(ultimo.getDate() - (cfg.diasFim - 1));
+  var proxMes = mes + 1, proxAno = ano;
+  if(proxMes > 11){ proxMes = 0; proxAno++; }
+  var fim = nesimoDiaUtil(proxAno, proxMes, cfg.diasUteis, fer);
+  fim.setHours(23,59,59);
+  return {inicio:inicio, fim:fim, competencia:comp};
+}
+
+/* ------------------------------ OCR --------------------------------------- */
+
+var schedulerOcr = null, nucleosOcr = 1;
+
+function ocrDisponivel(){
+  return !!window.Tesseract && document.getElementById('usarOcr').checked;
+}
+
+/* Vários workers em paralelo: cada um ocupa um núcleo do processador. */
+function obterScheduler(cfg, aviso){
+  if(schedulerOcr) return Promise.resolve(schedulerOcr);
+  var quantos = Math.min(4, Math.max(1, (navigator.hardwareConcurrency || 2) - 1));
+  if(cfg.nucleos) quantos = Math.min(8, Math.max(1, cfg.nucleos));
+  if(aviso) aviso('preparando OCR (' + quantos + (quantos > 1 ? ' núcleos' : ' núcleo') + ')…');
+
+  var opcoes = {};
+  if(cfg.workerPath) opcoes.workerPath = cfg.workerPath;
+  if(cfg.corePath) opcoes.corePath = cfg.corePath;
+  if(cfg.langPath) opcoes.langPath = cfg.langPath;
+
+  var sch = Tesseract.createScheduler();
+  var criacoes = [];
+  for(var i = 0; i < quantos; i++){
+    criacoes.push(Tesseract.createWorker(cfg.idioma || 'por', 1, opcoes));
+  }
+  return Promise.all(criacoes).then(function(workers){
+    workers.forEach(function(w){ sch.addWorker(w); });
+    schedulerOcr = sch;
+    nucleosOcr = workers.length;
+    return sch;
+  });
+}
+
+function renderizarPagina(pdf, n, escala, giro){
+  return pdf.getPage(n).then(function(page){
+    var vp = page.getViewport({scale:escala, rotation:((page.rotate||0) + (giro||0)) % 360});
+    var c = document.createElement('canvas');
+    c.width = Math.floor(vp.width);
+    c.height = Math.floor(vp.height);
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    return page.render({canvasContext:ctx, viewport:vp}).promise.then(function(){ return c; });
+  });
+}
+
+function pontuarTexto(t){
+  if(!t) return 0;
+  var p = 0;
+  p += (t.match(/\d{2}\/\d{2}\/\d{2,4}/g) || []).length * 6;
+  p += (t.match(/\d{3}[.,]\d{3}[.,]\d{3}[-\s]?\d{2}/g) || []).length * 6;
+  p += (t.match(/R\$|VALOR|BANCO|PAGAMENTO|COMPROVANTE|TRANSFER|CPF|AG[EÊ]NCIA|CONTA|FAVORECIDO|BENEFICI|TOTAL|DATA/gi) || []).length * 3;
+  p += (t.match(/\b[A-Za-zÀ-ÿ]{4,}\b/g) || []).length;
+  return p;
+}
+
+/* Lê uma página num giro e pontua o resultado. O canvas é descartado logo
+   depois — com centenas de páginas, a memória pesa. */
+function reconhecer(pdf, n, cfg, giro){
+  return renderizarPagina(pdf, n, cfg.escala, giro).then(function(canvas){
+    return schedulerOcr.addJob('recognize', canvas).then(function(r){
+      canvas.width = 0; canvas.height = 0;
+      var t = (r && r.data && r.data.text) ? r.data.text : '';
+      return {pontos:pontuarTexto(t), texto:t, angulo:giro};
+    }, function(e){
+      canvas.width = 0; canvas.height = 0;
+      throw e;
+    });
+  });
+}
+
+/* Compara o giro com o seu oposto; a orientação certa costuma pontuar o dobro. */
+function melhorGiro(pdf, n, cfg, ordem){
+  var resultados = [];
+  function par(a, b){
+    return Promise.all([reconhecer(pdf,n,cfg,a), reconhecer(pdf,n,cfg,b)]).then(function(rs){
+      resultados = resultados.concat(rs);
+      var alto = rs[0].pontos >= rs[1].pontos ? rs[0] : rs[1];
+      var baixo = rs[0].pontos >= rs[1].pontos ? rs[1] : rs[0];
+      return (alto.pontos >= 40 && alto.pontos >= baixo.pontos * 2) ? alto : null;
+    });
+  }
+  return par(ordem[0], ordem[1]).then(function(r){
+    if(r) return r;
+    return par(ordem[2], ordem[3]).then(function(){
+      return resultados.sort(function(x,y){ return y.pontos - x.pontos; })[0];
+    });
+  });
+}
+
+/* Executa várias páginas ao mesmo tempo, respeitando o número de núcleos. */
+function emParalelo(itens, limite, tarefa, aoConcluir){
+  var i = 0, ativos = 0, feitos = 0;
+  return new Promise(function(resolve){
+    function seguir(){
+      if(i >= itens.length && ativos === 0){ resolve(); return; }
+      while(ativos < limite && i < itens.length){
+        var item = itens[i++];
+        ativos++;
+        tarefa(item).then(function(){}, function(){}).then(function(){
+          ativos--; feitos++;
+          if(aoConcluir) aoConcluir(feitos);
+          seguir();
+        });
+      }
+    }
+    seguir();
+  });
+}
+
+/* Lê por OCR as páginas sem texto aproveitável.
+   1) descobre o giro numa amostra;  2) processa tudo em paralelo nesse giro;
+   3) refaz, com comparação completa, as páginas que saíram fracas. */
+function ocrPaginas(pdf, vazias, paginas, cfg, aviso, diag){
+  var recuperadas = [], restantes = [], erro = '', inicio = 0, anguloDoc = 0;
+  var porNumero = function(a,b){ return a-b; };
+  var anota = function(n, dados){
+    var d = diag && diag[n-1];
+    if(d) for(var k in dados) d[k] = dados[k];
+  };
+  var guardar = function(n, res){
+    var txt = (res.texto || '').replace(/[ \t]+/g,' ').trim();
+    if(textoUtil(txt) >= 20){
+      paginas[n-1] = txt;
+      if(recuperadas.indexOf(n) < 0) recuperadas.push(n);
+      anota(n, {origem:'ocr', angulo:res.angulo, pontos:res.pontos, chars:textoUtil(txt),
+                palavras:palavrasLegiveis(txt)});
+      return true;
+    }
+    anota(n, {origem:'ocr-vazio', angulo:res.angulo, pontos:res.pontos,
+              chars:textoUtil(res.texto||''), palavras:palavrasLegiveis(res.texto||'')});
+    return false;
+  };
+  var progresso = function(feitos, total){
+    if(!aviso) return;
+    var msg = 'OCR ' + feitos + ' de ' + total + ' páginas';
+    if(feitos >= 2 && inicio){
+      var faltam = Math.round((Date.now() - inicio) / feitos * (total - feitos) / 60000);
+      msg += faltam >= 1 ? ' · ~' + faltam + ' min restantes' : ' · quase lá';
+    }
+    aviso(msg + '…');
+  };
+
+  return obterScheduler(cfg, aviso).then(function(){
+    inicio = Date.now();
+    if(aviso) aviso('descobrindo a orientação das páginas…');
+    var amostra = vazias.slice(0, Math.min(3, vazias.length));
+    return Promise.all(amostra.map(function(n){
+      return melhorGiro(pdf, n, cfg, [0,180,90,270]).then(function(r){
+        guardar(n, r);
+        return r.angulo;
+      }).catch(function(){ return null; });
+    })).then(function(angulos){
+      var conta = {};
+      angulos.forEach(function(a){ if(a !== null) conta[a] = (conta[a]||0) + 1; });
+      Object.keys(conta).forEach(function(a){
+        if(!conta[anguloDoc] || conta[a] > conta[anguloDoc]) anguloDoc = parseInt(a,10);
+      });
+      return vazias.filter(function(n){ return amostra.indexOf(n) < 0; });
+    });
+  }).then(function(pendentes){
+    var fracas = [], total = pendentes.length;
+    inicio = Date.now();
+    return emParalelo(pendentes, nucleosOcr, function(n){
+      return reconhecer(pdf, n, cfg, anguloDoc).then(function(res){
+        if(res.pontos >= 40) guardar(n, res);
+        else fracas.push(n);
+      }).catch(function(e){
+        erro = erro || (e && e.message ? e.message : 'falha no OCR');
+        anota(n, {origem:'ocr-erro', detalhe:erro});
+        restantes.push(n);
+      });
+    }, function(feitos){ progresso(feitos, total); }).then(function(){ return fracas; });
+  }).then(function(fracas){
+    if(!fracas.length) return;
+    if(aviso) aviso('revendo ' + fracas.length + ' página(s) em outras orientações…');
+    var ordem = [anguloDoc, (anguloDoc+180)%360, (anguloDoc+90)%360, (anguloDoc+270)%360];
+    return emParalelo(fracas, Math.max(1, Math.floor(nucleosOcr/2)), function(n){
+      return melhorGiro(pdf, n, cfg, ordem).then(function(res){
+        if(!guardar(n, res)) restantes.push(n);
+      }).catch(function(e){
+        erro = erro || (e && e.message ? e.message : 'falha no OCR');
+        anota(n, {origem:'ocr-erro', detalhe:erro});
+        restantes.push(n);
+      });
+    });
+  }).then(function(){
+    /* o paralelismo termina cada página numa ordem diferente da numérica;
+       ordena antes de exibir, senão o diagnóstico parece aleatório */
+    return {recuperadas:recuperadas.sort(porNumero), restantes:restantes.sort(porNumero), erro:erro};
+  }).catch(function(e){
+    return {recuperadas:recuperadas.sort(porNumero),
+            restantes:vazias.filter(function(n){ return recuperadas.indexOf(n) < 0; }).sort(porNumero),
+            erro: e && e.message ? e.message : 'falha ao iniciar o OCR'};
+  });
+}
+/* --------------------------- leitura dos PDFs ------------------------------ */
+
+function textoUtil(t){ return (t||'').replace(/[^A-Za-z0-9À-ÿ]/g,'').length; }
+function palavrasLegiveis(t){ return ((t||'').match(/\b[A-Za-zÀ-ÿ]{3,}\b/g) || []).length; }
+/* Alguns PDFs trazem a fonte sem mapa de caracteres: o texto existe, mas sai
+   como códigos de glifo ("4 ) R S T ( < > >"). Tem caractere, não tem palavra.
+   Nesse caso a página precisa de OCR tanto quanto uma página escaneada. */
+function diagnosticarPagina(tx, minChars){
+  var chars = textoUtil(tx), palavras = palavrasLegiveis(tx);
+  var motivo = '';
+  if(chars < minChars) motivo = 'pouco texto';
+  else if(palavras < 5) motivo = 'texto ilegível (fonte sem mapa de caracteres)';
+  return {chars:chars, palavras:palavras, motivo:motivo};
+}
+
+function lerPdf(file, aviso){
+  return file.arrayBuffer().then(function(buf){
+    return pdfjsLib.getDocument({data:buf}).promise;
+  }).then(function(pdf){
+    var paginas = [], vazias = [], diag = [];
+    var minChars = cfgAtual().ocr.minChars;
+    var passo = function(n){
+      if(n > pdf.numPages) return Promise.resolve();
+      return pdf.getPage(n).then(function(page){ return page.getTextContent(); })
+        .then(function(tc){
+          var mapa = {}, seq = [];
+          tc.items.forEach(function(it){
+            var y = Math.round(it.transform[5]);
+            if(!mapa[y]) mapa[y] = [];
+            mapa[y].push({x:it.transform[4], s:it.str});
+            seq.push(it.str);
+          });
+          var linhas = [];
+          Object.keys(mapa).sort(function(a,b){ return b-a; }).forEach(function(y){
+            var t = mapa[y].sort(function(a,b){ return a.x-b.x; })
+                      .map(function(o){ return o.s; }).join(' ').replace(/\s+/g,' ').trim();
+            if(t) linhas.push(t);
+          });
+          var tx = linhas.join('\n') + '\n' + seq.join(' ').replace(/\s+/g,' ');
+          paginas.push(tx);
+          var dg = diagnosticarPagina(tx, minChars);
+          diag.push({n:n, chars:dg.chars, palavras:dg.palavras, itens:tc.items.length,
+                     origem:'pdf', motivo:dg.motivo});
+          if(dg.motivo) vazias.push(n);
+          return passo(n+1);
+        });
+    };
+    return passo(1).then(function(){
+      if(!vazias.length) return {recuperadas:[], restantes:[], erro:''};
+      if(!ocrDisponivel()){
+        return {recuperadas:[], restantes:vazias.slice(),
+                erro: window.Tesseract ? 'OCR desmarcado na tela' : 'biblioteca de OCR não carregou'};
+      }
+      return ocrPaginas(pdf, vazias, paginas, cfgAtual().ocr, aviso, diag);
+    }).then(function(res){
+      return {paginas:paginas, texto:paginas.join('\n'), arquivo:file.name,
+              totalPaginas:pdf.numPages, vazias:res.restantes, ocr:res.recuperadas,
+              erroOcr:res.erro || '', diag:diag};
+    });
+  });
+}
+
+function pontuar(t){
+  var g = 0, r = 0;
+  if(/CONFER[EÊ]NCIA GUIA|CONFERENCIA GUIA/i.test(t)) r += 4;
+  if(/GT1000|INSOFT/i.test(t)) r += 3;
+  if(/Empresa\s+Pessoa/i.test(t)) r += 4;
+  if(/Admiss[aã]o/i.test(t)) r += 3;
+  if(/V[ií]nculo/i.test(t)) r += 2;
+  if(/\bEFETIVO\b/.test(t)) r += 2;
+
+  if(/comprovante/i.test(t)) g += 4;
+  if(/favorecido|benefici[aá]rio|creditado/i.test(t)) g += 3;
+  if(/transfer[eê]ncia|pix|ted|doc\b|dep[óo]sito|pagamento/i.test(t)) g += 2;
+  if(/ag[eê]ncia|conta corrente|banco/i.test(t)) g += 2;
+  if(/autentica[çc][aã]o|id da transa[çc][aã]o|n[uú]mero do documento/i.test(t)) g += 2;
+  return {comprovantes:g, relatorio:r};
+}
+function classificar(doc){
+  var p = pontuar(doc.texto);
+  doc.pontos = p;
+  doc.tipo = p.relatorio > p.comprovantes ? 'relatorio' : 'comprovantes';
+  return doc;
+}
+function equilibrar(docs){
+  /* só entram na conta os arquivos já lidos e ainda não ajustados à mão */
+  var prontos = docs.filter(function(d){ return d.pontos && !d.manual; });
+  if(prontos.length < 2 || docs.some(function(d){ return d.manual; })) return;
+  if(prontos.some(function(d){ return d.tipo === 'relatorio'; })) return;
+  var margem = function(d){ return d.pontos.relatorio - d.pontos.comprovantes; };
+  var cand = prontos.slice().sort(function(a,b){ return margem(b) - margem(a); })[0];
+  if(cand && cand.pontos.relatorio >= 4) cand.tipo = 'relatorio';
+}
+
+/* -------------------- relatório do Portal GT3 ------------------------------ */
+
+var VINCULOS = ['EFETIVO','TEMPORARIO','ASSOCIADO','PJ','AUTONOMO','APRENDIZ','ESTAGIARIO','SOCIO','DIRETOR','COOPERADO'];
+
+function lerRelatorio(texto, formato){
+  var linhas = texto.replace(/\t/g,' ').split(/\n+/), brutos = [];
+  var re = /^(.*?)\s(\d{8,11})\s+(.*?)\s*(\d{1,2}\/\d{1,2}\/\d{2,4})(?:\s+(\d{1,2}\/\d{1,2}\/\d{2,4}))?\s*$/;
+
+  linhas.forEach(function(l){
+    l = l.replace(/\s+/g,' ').trim();
+    if(!l || /Empresa\s+Pessoa/i.test(l)) return;
+    var m = re.exec(l);
+    if(!m) return;
+    var antes = m[1].trim();
+    if(!/[A-Za-zÀ-ÿ]{3}/.test(antes)) return;
+    brutos.push({antes:antes, cpf:normCpf(m[2]), meio:(m[3]||'').trim(),
+                 cadastro:m[4], admissao:m[5]||''});
+  });
+
+  var prefixo = '';
+  if(brutos.length > 1){
+    prefixo = brutos[0].antes;
+    brutos.forEach(function(b){
+      var i = 0;
+      while(i < prefixo.length && i < b.antes.length && prefixo[i] === b.antes[i]) i++;
+      prefixo = prefixo.slice(0,i);
+    });
+    prefixo = prefixo.replace(/\S*$/,'').trim();
+  }
+  var empresa = prefixo;
+
+  var fmt = formato;
+  if(fmt === 'auto'){
+    fmt = 'mdy';
+    brutos.forEach(function(b){
+      if(parseInt(b.cadastro.split('/')[0],10) > 12) fmt = 'dmy';
+    });
+  }
+
+  var pessoas = brutos.map(function(b){
+    var pessoa = prefixo && b.antes.indexOf(prefixo) === 0 ? b.antes.slice(prefixo.length).trim() : b.antes;
+    var meio = b.meio, vinculo = '', atividade = meio;
+    var tokens = meio.split(' ');
+    var ultimo = normBusca(tokens[tokens.length-1] || '');
+    if(VINCULOS.indexOf(ultimo) >= 0){
+      vinculo = tokens.pop();
+      atividade = tokens.join(' ').trim();
+    }
+    return {pessoa:pessoa, cpf:b.cpf, atividade:atividade, vinculo:vinculo,
+            cadastro:b.cadastro, admissao:b.admissao, dataCad:paraData(b.cadastro, fmt), repeticoes:1};
+  });
+
+  var vistos = {}, unicos = [];
+  pessoas.forEach(function(p){
+    var chave = p.cpf || chaveNome(p.pessoa);
+    if(vistos[chave]){
+      var j = vistos[chave];
+      j.repeticoes++;
+      if(!j.atividade && p.atividade) j.atividade = p.atividade;
+      if(!j.vinculo && p.vinculo) j.vinculo = p.vinculo;
+      if(p.dataCad && (!j.dataCad || p.dataCad < j.dataCad)){ j.dataCad = p.dataCad; j.cadastro = p.cadastro; }
+      return;
+    }
+    vistos[chave] = p;
+    unicos.push(p);
+  });
+  unicos.empresa = empresa;
+  return unicos;
+}
+
+function paraData(s, fmt){
+  if(!s) return null;
+  var p = s.split('/').map(function(x){ return parseInt(x,10); });
+  if(p.length < 3 || isNaN(p[0]) || isNaN(p[1]) || isNaN(p[2])) return null;
+  var dia, mes;
+  if(fmt === 'dmy'){ dia = p[0]; mes = p[1]; } else { mes = p[0]; dia = p[1]; }
+  if(mes > 12){ var t = mes; mes = dia; dia = t; }
+  var ano = p[2] < 100 ? 2000 + p[2] : p[2];
+  return new Date(ano, mes-1, dia);
+}
+
+/* ----------------------- comprovantes de depósito -------------------------- */
+
+var MESES = {JAN:0,FEV:1,MAR:2,ABR:3,MAI:4,JUN:5,JUL:6,AGO:7,SET:8,OUT:9,NOV:10,DEZ:11};
+
+/* datas com posição dentro do bloco */
+function datasDoBloco(t){
+  var achados = [], m;
+  var re1 = /\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/g;
+  while((m = re1.exec(t)) !== null){
+    var ano = +m[3] < 100 ? 2000 + +m[3] : +m[3];
+    achados.push({pos:m.index, data:new Date(ano, +m[2]-1, +m[1]), texto:m[0]});
+  }
+  var re2 = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
+  while((m = re2.exec(t)) !== null){
+    achados.push({pos:m.index, data:new Date(+m[1], +m[2]-1, +m[3]), texto:m[0]});
+  }
+  var re3 = /\b(\d{1,2})\s*(?:DE\s+)?(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]*\s*(?:DE\s+)?(\d{4})\b/g;
+  while((m = re3.exec(t)) !== null){
+    achados.push({pos:m.index, data:new Date(+m[3], MESES[m[2]], +m[1]), texto:m[0]});
+  }
+  return achados.filter(function(a){ return !isNaN(a.data.getTime()); });
+}
+
+function paraNumero(s){
+  if(!s) return null;
+  var n = parseFloat(String(s).replace(/\./g,'').replace(',','.'));
+  return isNaN(n) ? null : n;
+}
+function dinheiroBr(n){
+  if(n === null || n === undefined) return '';
+  return 'R$ ' + n.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+}
+
+var MESES_NOME = {JANEIRO:1,FEVEREIRO:2,MARCO:3,ABRIL:4,MAIO:5,JUNHO:6,JULHO:7,
+                  AGOSTO:8,SETEMBRO:9,OUTUBRO:10,NOVEMBRO:11,DEZEMBRO:12};
+
+/* O holerite traz o líquido a receber, que deve bater com o valor depositado. */
+function ehHolerite(norm){
+  /* "RECIBO DE PAGAMENTO" também é usado por alguns bancos como título de
+     comprovante de depósito comum (ex.: CAIXA), sem relação com folha de
+     pagamento. Por isso o cabeçalho sozinho não basta: exige-se também um
+     traço específico de holerite — INSS, FGTS, descontos ou base de cálculo
+     — que um simples aviso de depósito nunca traz. */
+  var titulo = /RECIBO DE PAGAMENTO|RECIBO DE SALARIO|DEMONSTRATIVO DE PAGAMENTO|DEMONSTRATIVO DE PAGTO|CONTRACHEQUE|HOLERITE/.test(norm);
+  var liquidoDireto = /LIQUIDO A RECEBER|LIQ\.? A RECEBER/.test(norm);
+  var tracosPayroll = /\bINSS\b|\bFGTS\b|\bDESCONTOS?\b|BASE DE C[AÁ]LCULO|SALARIO BASE|SAL[AÁ]RIO BASE/.test(norm);
+  return liquidoDireto || (titulo && tracosPayroll);
+}
+function lerHolerite(norm){
+  var dados = {nome:'', liquido:null, competencia:''};
+
+  /* líquido: última ocorrência de um valor logo após a palavra RECEBER */
+  var re = /(?:RECEBER|L[IÍ]QUIDO)[^0-9]{0,25}(\d{1,3}(?:\.\d{3})*,\d{2})/g, m;
+  while((m = re.exec(norm)) !== null) dados.liquido = paraNumero(m[1]);
+
+  var nome = /NOME\s*:?\s*([A-ZÀ-Ú][A-ZÀ-Ú' ]{4,60}?)\s+(?:LOCAL|NOME SOC|CBO|FUN[CÇ]AO|ORDEM|SAL[AÁ]RIO|DEPTO|MATRICULA|CNPJ)/.exec(norm);
+  if(nome) dados.nome = nome[1].replace(/\s+/g,' ').trim();
+
+  var comp = /\b(JANEIRO|FEVEREIRO|MARCO|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s*\/\s*(\d{4})\b/.exec(norm);
+  if(comp) dados.competencia = z2(MESES_NOME[comp[1]]) + '/' + comp[2];
+  return dados;
+}
+
+/* Nome do favorecido de um comprovante, para o caso de pagamento a terceiro. */
+function lerFavorecido(norm){
+  var padroes = [
+    /DADOS DO FAVORECIDO\s*NOME\s+([A-ZÀ-Ú][A-ZÀ-Ú' ]{4,60}?)\s+(?:CNPJ|CPF|CONTA|BANCO|AG[EÊ]NCIA)/,
+    /FAVORECIDO\s*:?\s*([A-ZÀ-Ú][A-ZÀ-Ú' ]{4,60}?)\s+(?:CNPJ|CPF|CONTA|BANCO|AG[EÊ]NCIA|DATA|VALOR)/,
+    /BENEFICI[AÁ]RIO\s*:?\s*([A-ZÀ-Ú][A-ZÀ-Ú' ]{4,60}?)\s+(?:CNPJ|CPF|CONTA|BANCO|-|DATA|VALOR)/,
+    /\bPARA\b\s+([A-ZÀ-Ú][A-ZÀ-Ú' ]{4,60}?)\s+(?:CHAVE|CPF|CNPJ|BANCO|INSTITUI|DADOS)/
+  ];
+  for(var i=0;i<padroes.length;i++){
+    var m = padroes[i].exec(norm);
+    if(m) return m[1].replace(/\s+/g,' ').trim();
+  }
+  return '';
+}
+
+/* Nem todo comprovante escreve "R$": o Santander imprime só "Valor 2.255,32",
+   na mesma linha da data do crédito. */
+function valorProximo(t, pos, rotulos){
+  var re = /(R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/g, m, melhor = null;
+  while((m = re.exec(t)) !== null){
+    var antes = normBusca(t.slice(Math.max(0, m.index-45), m.index));
+    var bonus = 0;
+    if(m[1]) bonus += 150;
+    (rotulos||[]).forEach(function(r){ if(r && antes.indexOf(r) >= 0) bonus += 300; });
+    if(/\d{2}\/\d{2}\/\d{2,4}[^0-9]{0,15}$/.test(antes)) bonus += 200;
+    var peso = Math.abs(m.index - pos) - bonus;
+    if(!melhor || peso < melhor.peso){
+      melhor = {peso:peso, texto:dinheiroBr(paraNumero(m[2])), numero:paraNumero(m[2])};
+    }
+  }
+  return melhor || {texto:'', numero:null};
+}
+
+/* Procura os pedaços do nome próximos uns dos outros, em vez de exigir o nome
+   inteiro igualzinho. Resolve nome do meio a mais ou a menos, "DE"/"DA" que o
+   banco omite, quebra de linha no meio do nome e letra trocada pelo OCR. */
+/* Vocabulário comum de comprovante e holerite: nunca deve ser tratado como
+   candidato a "nome parecido" — foi assim que "VALMIR" quase casou com a
+   palavra "VALOR" de um comprovante qualquer. */
+var VOCABULARIO_COMPROVANTE = {
+  VALOR:1, DATA:1, BANCO:1, CONTA:1, AGENCIA:1, TOTAL:1, DOCUMENTO:1,
+  COMPROVANTE:1, DEPOSITO:1, PAGAMENTO:1, PAGO:1, NOME:1, CPF:1, CNPJ:1,
+  FAVORECIDO:1, BENEFICIARIO:1, CREDITO:1, DEBITO:1, TRANSFERENCIA:1,
+  AUTENTICACAO:1, SEGURANCA:1, ORIGEM:1, DESTINO:1, TIPO:1, FINALIDADE:1,
+  IDENTIFICACAO:1, RECIBO:1, SALARIO:1, LIQUIDO:1, RECEBER:1, DESCONTOS:1,
+  BASE:1, BRUTO:1, INSS:1, FGTS:1, FUNCAO:1, EMPRESA:1, MATRICULA:1,
+  ADMISSAO:1, VINCULO:1, CADASTRO:1, ATIVIDADE:1, EFETIVO:1, MENSAL:1,
+  CATEGORIA:1, TRABALHADOR:1, ESTABELECIMENTO:1, TOMADOR:1, GUIA:1,
+  REMUNERACAO:1, CONVENIO:1, OPERACAO:1, PARCELADO:1, VENCIMENTO:1,
+  ELETRONICA:1, BANCARIA:1, OUVIDORIA:1, ATENDIMENTO:1, PESSOAS:1,
+  DEFICIENCIA:1, LOCALIDADES:1, METROPOLITANAS:1, REGIOES:1, CENTRAL:1
+};
+
+var JANELA_TOKENS = 90;
+
+/* Palavras de 3+ letras do bloco, com a posição de cada uma. */
+function palavrasDoTexto(norm){
+  var lista = [], re = /[A-ZÀ-Ú]{3,}/g, m;
+  while((m = re.exec(norm)) !== null){
+    if(!VOCABULARIO_COMPROVANTE[m[0]]) lista.push({palavra:m[0], pos:m.index});
+  }
+  return lista;
+}
+/* Quanto uma palavra pode diferir para ainda contar como a mesma, com erro
+   de digitação: uma letra em palavras curtas, até duas em palavras longas
+   (cobre também duas letras trocadas de lugar, tipo ANDADRE/ANDRADE). */
+function distanciaTolerada(tamanho){
+  if(tamanho < 4) return 0;
+  if(tamanho < 6) return 1;
+  return 2;
+}
+function acharPalavraProxima(t, palavras){
+  var dist = distanciaTolerada(t.length), achadas = [];
+  if(!dist) return achadas;
+  palavras.forEach(function(w){
+    if(Math.abs(w.palavra.length - t.length) > dist) return;
+    var limiar = 1 - dist / Math.max(t.length, w.palavra.length);
+    if(similar(t, w.palavra) >= limiar) achadas.push({pos:w.pos, palavra:w.palavra});
+  });
+  return achadas;
+}
+
+/* Casa o nome por partes, permitindo pequeno erro de digitação — mas só
+   quando pelo menos um outro pedaço do nome (sobrenome ou nome do meio,
+   não o primeiro nome) bate exato no texto. Essa âncora é o que impede
+   duas pessoas diferentes, com sobrenomes parecidos, de serem confundidas:
+   sem ela, "PEDRO ANDRADI" casaria com o comprovante de "PEDRO ANDRADE". */
+function acharPorTokens(norm, tokens, janela, fracao){
+  if(!tokens.length) return -1;
+
+  var exatas = tokens.map(function(t){
+    var re = new RegExp('\\b' + escRegex(t) + '\\b','g'), achados = [], m;
+    while((m = re.exec(norm)) !== null) achados.push(m.index);
+    return achados;
+  });
+
+  var temAncora = exatas.some(function(l, i){ return i > 0 && l.length > 0; });
+  var palavras = null, detalhes = [];
+  var posicoes = exatas.map(function(l, i){
+    if(l.length) return l;
+    /* o primeiro nome nunca tolera erro de digitação: é ele que costuma
+       diferenciar pessoas de verdade (ex.: LUCIAN e LUCAS), diferente de um
+       sobrenome com uma letra trocada — foi assim que "LUCIAN ... SANTOS"
+       quase casou com o comprovante de um "LUCAS ... SANTOS" qualquer */
+    if(i === 0 || !temAncora) return [];
+    if(!palavras) palavras = palavrasDoTexto(norm);
+    var prox = acharPalavraProxima(tokens[i], palavras);
+    if(prox.length) detalhes.push({portal:tokens[i], comprovante:prox[0].palavra});
+    return prox.map(function(x){ return x.pos; });
+  });
+
+  if(!posicoes[0].length) return -1;
+  var necessarios = tokens.length === 1 ? 1 : Math.max(2, Math.ceil(tokens.length * fracao));
+  var achado = -1;
+  posicoes[0].forEach(function(p){
+    if(achado >= 0) return;
+    var conta = 0;
+    posicoes.forEach(function(l){
+      if(l.some(function(q){ return Math.abs(q - p) <= janela; })) conta++;
+    });
+    if(conta >= necessarios) achado = p;
+  });
+  return achado < 0 ? -1 : {pos:achado, tolerante:detalhes.length > 0, detalhes:detalhes};
+}
+
+/* localiza a pessoa nos blocos e devolve a melhor ocorrência */
+function localizar(pessoa, blocos, cfg){
+  var nomeTokens = normNome(pessoa.pessoa).split(' ').filter(Boolean);
+  if(!nomeTokens.length) return null;
+  var reNome = new RegExp(nomeTokens.map(escRegex).join('[\\s.]+'));
+  var cpf = pessoa.cpf;
+  var meio = cpf ? cpf.slice(3,9) : '';
+  var reMasc = meio ? new RegExp('\\*{2,3}[.\\s]?' + meio.slice(0,3) + '[.\\s]?' + meio.slice(3) + '[-\\s]?\\*{2}') : null;
+
+  /* Varre o documento inteiro e guarda o melhor casamento, não o primeiro.
+     Sem isso, um casamento por tolerância numa página cedo no arquivo podia
+     "roubar" a vaga de um casamento exato que só aparecia páginas depois —
+     foi assim que um "FERREIRA" tolerante venceu um "PEREIRA" exato. */
+  var PRIORIDADE = {nome:5, CPF:4, 'CPF mascarado':3, tokenExato:2, tokenTolerante:1, aproximado:0};
+  var melhor = null, melhorPrioridade = -1;
+
+  for(var i=0;i<blocos.length;i++){
+    var b = blocos[i], t = b.norm, pos = -1, via = '', prioridade = -1;
+    var tolerancia = false, detalhesTolerancia = [];
+
+    var m = reNome.exec(t);
+    if(m){ pos = m.index; via = 'nome'; prioridade = PRIORIDADE.nome; }
+    if(pos < 0 && cpf){
+      var idx = b.digitos.indexOf(cpf);
+      if(idx >= 0){ pos = b.mapa[idx] !== undefined ? b.mapa[idx] : 0; via = 'CPF'; prioridade = PRIORIDADE.CPF; }
+    }
+    if(pos < 0 && reMasc){
+      var mm = reMasc.exec(t);
+      if(mm){ pos = mm.index; via = 'CPF mascarado'; prioridade = PRIORIDADE['CPF mascarado']; }
+    }
+    if(pos < 0){
+      var chave = chaveNome(pessoa.pessoa).split(' ').filter(Boolean);
+      var pt = acharPorTokens(t, chave, JANELA_TOKENS, 0.6);
+      if(pt !== -1){
+        pos = pt.pos; via = 'nome parcial'; tolerancia = pt.tolerante; detalhesTolerancia = pt.detalhes;
+        prioridade = tolerancia ? PRIORIDADE.tokenTolerante : PRIORIDADE.tokenExato;
+      }
+    }
+    if(pos < 0 && cfg.similar < 1){
+      for(var c=0;c<b.candidatos.length;c++){
+        if(similar(pessoa.pessoa, b.candidatos[c].texto) >= cfg.similar){
+          pos = b.candidatos[c].pos;
+          via = 'nome aproximado (“' + b.candidatos[c].texto + '”)';
+          prioridade = PRIORIDADE.aproximado;
+          break;
+        }
+      }
+    }
+
+    if(pos >= 0 && prioridade > melhorPrioridade){
+      var datas = b.datas, escolhida = null;
+      datas.forEach(function(d){
+        var antes = t.slice(Math.max(0, d.pos-45), d.pos);
+        var bonus = 0;
+        cfg.rotulosData.forEach(function(r){ if(antes.indexOf(r) >= 0) bonus = 400; });
+        var peso = Math.abs(d.pos - pos) - bonus;
+        if(!escolhida || peso < escolhida.peso) escolhida = {peso:peso, data:d.data, texto:d.texto};
+      });
+      melhorPrioridade = prioridade;
+      melhor = {
+        bloco: b.rotulo, via: via, ocr: !!b.ocr, tolerancia: tolerancia, detalhesTolerancia: detalhesTolerancia,
+        data: escolhida ? escolhida.data : null,
+        valor: valorProximo(b.bruto, pos, cfg.rotulosValor).texto,
+        valorNum: valorProximo(b.bruto, pos, cfg.rotulosValor).numero
+      };
+      /* nome exato é o melhor caso possível — nada supera isso, pode parar */
+      if(prioridade === PRIORIDADE.nome) break;
+    }
+  }
+  return melhor;
+}
+
+function prepararBlocos(docs, cfg){
+  var blocos = [];
+  docs.forEach(function(d){
+    if(d.tipo !== 'comprovantes') return;
+    d.paginas.forEach(function(tx, i){
+      /* só fica de fora a página sem nenhuma palavra legível (imagem pura ou
+         fonte sem mapa de caracteres); página curta mas com texto real entra */
+      if(palavrasLegiveis(tx) < 3) return;
+      var norm = normBusca(tx);
+      var digitos = '', mapa = {};
+      for(var k=0;k<norm.length;k++){
+        if(norm[k] >= '0' && norm[k] <= '9'){ mapa[digitos.length] = k; digitos += norm[k]; }
+      }
+      var candidatos = [];
+      norm.split('\n').forEach(function(l){
+        var limpo = l.replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim();
+        if(limpo.split(' ').length >= 2 && limpo.length >= 8 && limpo.length <= 60){
+          candidatos.push({texto:limpo, pos:Math.max(0, norm.indexOf(l))});
+        }
+      });
+      var veioDeOcr = (d.ocr || []).indexOf(i+1) >= 0;
+      var holerite = ehHolerite(norm);
+      blocos.push({rotulo:d.arquivo + ' · pág. ' + (i+1) + (veioDeOcr ? ' (OCR)' : ''), ocr:veioDeOcr,
+                   bruto:tx, norm:norm, digitos:digitos, mapa:mapa,
+                   datas:datasDoBloco(norm), candidatos:candidatos,
+                   tipo: holerite ? 'holerite' : 'comprovante',
+                   holerite: holerite ? lerHolerite(norm) : null,
+                   favorecido: holerite ? '' : lerFavorecido(norm),
+                   valores: (norm.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g) || []).map(paraNumero)});
+      /* devolve a classificação para o diagnóstico por página, para que o
+         usuário veja o que o sistema entendeu sem precisar adivinhar */
+      if(d.diag && d.diag[i]) d.diag[i].classificacao = holerite ? 'holerite' : 'comprovante';
+    });
+  });
+  return blocos;
+}
+
+/* Acha o holerite da pessoa e devolve o líquido a receber. */
+function acharHolerite(pessoa, blocos, cfg){
+  var chave = chaveNome(pessoa.pessoa);
+  var tokens = chave.split(' ').filter(Boolean);
+  for(var i=0;i<blocos.length;i++){
+    var b = blocos[i], hol = b.holerite;
+    if(!hol) continue;
+    var bate = hol.nome && chaveNome(hol.nome) === chave;
+    if(!bate && hol.nome && similar(hol.nome, pessoa.pessoa) >= (cfg.similar || 0.88)) bate = true;
+    if(!bate && acharPorTokens(b.norm, tokens, JANELA_TOKENS, 0.6) !== -1) bate = true;
+    if(bate) return {liquido:hol.liquido, competencia:hol.competencia,
+                     nome:hol.nome, bloco:b.rotulo, ocr:b.ocr};
+  }
+  return null;
+}
+
+/* Comprovante cujo valor bate com o líquido do holerite, mas em nome de outra
+   pessoa — caso do salário pago a cônjuge mediante autorização assinada. */
+function acharPagamentoPorValor(liquido, blocos){
+  if(liquido === null || liquido === undefined) return null;
+  for(var i=0;i<blocos.length;i++){
+    var b = blocos[i];
+    if(b.tipo === 'holerite') continue;
+    for(var j=0;j<b.valores.length;j++){
+      if(b.valores[j] !== null && Math.abs(b.valores[j] - liquido) < 0.005){
+        var datas = b.datas.slice().sort(function(x,y){ return x.pos - y.pos; });
+        return {favorecido:b.favorecido, bloco:b.rotulo, ocr:b.ocr,
+                valorNum:b.valores[j], valor:dinheiroBr(b.valores[j]),
+                data: datas.length ? datas[0].data : null};
+      }
+    }
+  }
+  return null;
+}
+
+/* ------------------------------ comparação -------------------------------- */
+
+function ultimoDia(comp){
+  var p = (comp||'').split('/');
+  if(p.length !== 2) return null;
+  return new Date(parseInt(p[1],10), parseInt(p[0],10), 0, 23, 59, 59);
+}
+
+function comparar(listaA, blocos, opcoes){
+  var limite = opcoes.data ? ultimoDia(opcoes.competencia) : null;
+  return listaA.map(function(p){
+    var r = {dados:p, situacao:'', motivo:'', campo:'', achado:null, nota:'', diasAtraso:0};
+    var vin = normBusca(p.vinculo);
+    var car = normBusca(p.atividade);
+
+    if(opcoes.vinculo && opcoes.vinculos.some(function(v){ return v && vin.indexOf(v) >= 0; })){
+      r.situacao = 'fora'; r.campo = 'vinculo';
+      r.motivo = 'vínculo ' + (p.vinculo||'').toLowerCase();
+    } else if(opcoes.cargo && opcoes.cargos.some(function(c){ return c && car.indexOf(c) >= 0; })){
+      r.situacao = 'fora'; r.campo = 'atividade';
+      r.motivo = 'cargo ' + (p.atividade||'').toLowerCase();
+    } else if(limite && p.dataCad && p.dataCad > limite){
+      r.situacao = 'fora'; r.campo = 'cadastro';
+      r.motivo = 'cadastro em ' + dataBr(p.dataCad) + ', posterior à competência ' + opcoes.competencia;
+    }
+
+    var achado = null;
+    if(r.situacao !== 'fora'){
+      var soComprovantes = blocos.filter(function(b){ return b.tipo !== 'holerite'; });
+      achado = localizar(p, soComprovantes, opcoes.leitura);
+      r.achado = achado;
+      r.holerite = acharHolerite(p, blocos, opcoes.leitura);
+    }
+
+    /* salário pago a terceiro: sem comprovante no nome da pessoa, mas existe um
+       crédito exatamente no valor do líquido do holerite dela */
+    if(r.situacao !== 'fora' && !achado && r.holerite && r.holerite.liquido !== null){
+      var terceiro = acharPagamentoPorValor(r.holerite.liquido, blocos);
+      if(terceiro){
+        r.terceiro = terceiro;
+        r.achado = achado = {bloco:terceiro.bloco, via:'valor do holerite', ocr:terceiro.ocr,
+                             data:terceiro.data, valor:terceiro.valor, valorNum:terceiro.valorNum};
+      }
+    }
+
+    if(r.situacao !== 'fora'){
+      if(!achado){ r.situacao = 'falta'; }
+      else if(opcoes.prazo && opcoes.janela && achado.data){
+        if(achado.data > opcoes.janela.fim){
+          r.situacao = 'atraso';
+          r.diasAtraso = Math.round((achado.data - opcoes.janela.fim)/86400000);
+          r.campo = 'deposito';
+          r.motivo = 'depósito após o prazo (' + dataBr(opcoes.janela.fim) + ')';
+        } else if(achado.data < opcoes.janela.inicio){
+          r.situacao = 'ok';
+          r.nota = 'depósito em ' + dataBr(achado.data) + ', anterior à janela do prazo — conferir se é da competência';
+        } else { r.situacao = 'ok'; }
+      } else {
+        r.situacao = 'ok';
+        if(!achado.data) r.nota = 'não identifiquei a data neste comprovante';
+      }
+      if(achado && achado.via === 'nome parcial'){
+        r.nota = (r.nota ? r.nota + ' · ' : '') + 'localizado por parte do nome — conferir';
+      }
+      if(achado && achado.via && achado.via.indexOf('aproximado') >= 0){
+        r.nota = (r.nota ? r.nota + ' · ' : '') + 'localizado por ' + achado.via;
+      }
+
+      /* cruzamento com o holerite */
+      if(r.holerite){
+        if(r.holerite.competencia && opcoes.competencia &&
+           r.holerite.competencia !== opcoes.competencia){
+          r.nota = (r.nota ? r.nota + ' · ' : '') +
+            'holerite é da competência ' + r.holerite.competencia;
+        }
+        if(r.holerite.liquido !== null && achado && achado.valorNum !== null &&
+           achado.valorNum !== undefined){
+          if(Math.abs(achado.valorNum - r.holerite.liquido) >= 0.005 && r.situacao !== 'atraso'){
+            r.situacao = 'divergente';
+            r.campo = 'valor';
+            r.motivo = 'holerite ' + dinheiroBr(r.holerite.liquido) +
+                       ', comprovante ' + dinheiroBr(achado.valorNum);
+          }
+        }
+      }
+      if(r.terceiro && r.situacao !== 'atraso' && r.situacao !== 'divergente'){
+        r.situacao = 'terceiro';
+        r.campo = 'deposito';
+        r.motivo = 'crédito em nome de ' +
+          (r.terceiro.favorecido || 'outra pessoa') + ', no valor do holerite';
+      }
+      if(achado && achado.ocr){
+        r.nota = (r.nota ? r.nota + ' · ' : '') + 'página lida por OCR — conferir nome e data';
+      }
+    }
+    return r;
+  });
+}
+
+/* --------------------------- modelos configuráveis ------------------------- */
+
+var MODELO_PADRAO = [
+  '{#alerta}[CONFERIR ANTES DE ENVIAR — {alerta}. Apague esta linha depois da conferência.]',
+  '{/alerta}{data} {hora} - {#faltantes}Por favor, verificar que o(s) seguinte(s) colaborador(es) cadastrado(s) no Portal não possui(em) comprovante de depósito referente à competência {competencia}:',
+  '{faltantes}{/faltantes}{#sem_faltantes}todos os colaboradores cadastrados no Portal possuem comprovante de depósito referente à competência {competencia}.{/sem_faltantes}',
+  '{#divergencias}',
+  'Também identificamos divergência entre o valor do holerite e o do comprovante:',
+  '{divergencias}',
+  '{/divergencias}{#terceiros}',
+  'E o(s) seguinte(s) crédito(s) foi(ram) efetuado(s) em nome de terceiro; favor encaminhar a autorização do colaborador:',
+  '{terceiros}',
+  '{/terceiros}'
+].join('\n');
+
+var MODELO_ATRASO_PADRAO = [
+  '{data} {hora} - Identificamos que o(s) depósito(s) da competência {competencia} foi(ram) realizado(s) após o prazo, que se encerrou em {prazo_final}. O pagamento do salário deve ocorrer até o 5º dia útil do mês seguinte ao trabalhado, conforme o art. 459, §1º, da CLT. Solicitamos atenção para que os próximos depósitos sejam efetuados dentro do prazo.',
+  '',
+  'Colaborador(es) com depósito fora do prazo:',
+  '{atrasados}'
+].join('\n');
+
+var ITEM_FALTA_PADRAO  = '{nome}';
+var ITEM_DESC_PADRAO   = '{nome} — {motivo}';
+var ITEM_ATRASO_PADRAO = '{nome} — depósito em {data_deposito} ({dias_atraso} dia(s) após o prazo)';
+var ITEM_DIVERG_PADRAO = '{nome} — holerite {valor_holerite}, comprovante {valor}';
+var ITEM_TERCEIRO_PADRAO = '{nome} — crédito de {valor} em nome de {favorecido}';
+
+var PADROES = {
+  'gt3.dep.modelo': MODELO_PADRAO,
+  'gt3.dep.modeloAtraso': MODELO_ATRASO_PADRAO,
+  'gt3.dep.itFalta': ITEM_FALTA_PADRAO,
+  'gt3.dep.itDesc': ITEM_DESC_PADRAO,
+  'gt3.dep.itAtraso': ITEM_ATRASO_PADRAO,
+  'gt3.dep.itDiverg': ITEM_DIVERG_PADRAO,
+  'gt3.dep.itTerceiro': ITEM_TERCEIRO_PADRAO,
+  'gt3.dep.diasFim': '5',
+  'gt3.dep.diasUteis': '5',
+  'gt3.dep.feriados': '',
+  'gt3.dep.vinculos': 'ASSOCIADO, PJ',
+  'gt3.dep.cargos': 'SOCIO, ESTAGIARIO, DIRETOR',
+  'gt3.dep.rotulosData': 'DATA DO PAGAMENTO, DATA DA TRANSFERENCIA, DATA DO DEPOSITO, DATA DA OPERACAO, DATA DE EFETIVACAO, PAGO EM, DATA',
+  'gt3.dep.rotulosValor': 'VALOR, VALOR TOTAL, VALOR DO PAGAMENTO',
+  'gt3.dep.similar': '0.88',
+  'gt3.dep.ocrIdioma': 'por',
+  'gt3.dep.ocrEscala': '2.2',
+  'gt3.dep.ocrMin': '60',
+  'gt3.dep.ocrNucleos': '0',
+  'gt3.dep.ocrWorker': '',
+  'gt3.dep.ocrCore': '',
+  'gt3.dep.ocrLang': ''
+};
+var CAMPOS = {
+  'gt3.dep.modelo':'modelo', 'gt3.dep.modeloAtraso':'modeloAtraso', 'gt3.dep.itFalta':'itFalta',
+  'gt3.dep.itDesc':'itDesc', 'gt3.dep.itAtraso':'itAtraso', 'gt3.dep.diasFim':'cfgDiasFim',
+  'gt3.dep.diasUteis':'cfgDiasUteis', 'gt3.dep.feriados':'cfgFeriados',
+  'gt3.dep.vinculos':'cfgVinculos', 'gt3.dep.cargos':'cfgCargos',
+  'gt3.dep.rotulosData':'cfgRotDatas', 'gt3.dep.rotulosValor':'cfgRotValor', 'gt3.dep.similar':'cfgSimilar',
+  'gt3.dep.ocrIdioma':'cfgOcrIdioma', 'gt3.dep.ocrEscala':'cfgOcrEscala',
+  'gt3.dep.ocrMin':'cfgOcrMin', 'gt3.dep.ocrNucleos':'cfgOcrNucleos', 'gt3.dep.ocrWorker':'cfgOcrWorker',
+  'gt3.dep.ocrCore':'cfgOcrCore', 'gt3.dep.ocrLang':'cfgOcrLang'
+};
+
+function guardar(c,v){ try{ localStorage.setItem(c,v); return true; }catch(e){ return false; } }
+function recuperar(c){ try{ return localStorage.getItem(c); }catch(e){ return null; } }
+
+/* Textos salvos no navegador de versões antigas do modelo padrão, que este
+   sistema não deve mais usar — se o usuário salvou um desses antes de uma
+   melhoria, ele fica preso ao texto velho para sempre. Corrige sozinho. */
+var MODELO_DESATUALIZADO = /desconsiderado\(s\) nesta avalia[çc][ãa]o/i;
+
+function carregarConfig(usarPadrao){
+  Object.keys(CAMPOS).forEach(function(chave){
+    var salvo = recuperar(chave);
+    var v = usarPadrao ? PADROES[chave] : (salvo !== null ? salvo : PADROES[chave]);
+    if(chave === 'gt3.dep.modelo' && !usarPadrao && salvo !== null && MODELO_DESATUALIZADO.test(salvo)){
+      v = PADROES[chave];
+      guardar(chave, v); /* já corrige de vez no navegador, não só nesta sessão */
+    }
+    document.getElementById(CAMPOS[chave]).value = v;
+  });
+  mostrarPrazo();
+}
+function cfgAtual(){
+  return {
+    diasFim: parseInt(document.getElementById('cfgDiasFim').value,10) || 5,
+    diasUteis: parseInt(document.getElementById('cfgDiasUteis').value,10) || 5,
+    feriados: document.getElementById('cfgFeriados').value,
+    vinculos: lista(document.getElementById('cfgVinculos').value),
+    cargos: lista(document.getElementById('cfgCargos').value),
+    leitura: {
+      rotulosData: lista(document.getElementById('cfgRotDatas').value),
+      rotulosValor: lista(document.getElementById('cfgRotValor').value),
+      similar: parseFloat(document.getElementById('cfgSimilar').value) || 0.88
+    },
+    ocr: {
+      idioma: (document.getElementById('cfgOcrIdioma').value || 'por').trim(),
+      escala: parseFloat(document.getElementById('cfgOcrEscala').value) || 2.2,
+      minChars: parseInt(document.getElementById('cfgOcrMin').value,10) || 60,
+      nucleos: parseInt(document.getElementById('cfgOcrNucleos').value,10) || 0,
+      workerPath: document.getElementById('cfgOcrWorker').value.trim(),
+      corePath: document.getElementById('cfgOcrCore').value.trim(),
+      langPath: document.getElementById('cfgOcrLang').value.trim()
+    }
+  };
+}
+
+function preencher(modelo, dados){
+  var t = modelo;
+  ['alerta','faltantes','sem_faltantes','desconsiderados','atrasados','divergencias','terceiros'].forEach(function(s){
+    var re = new RegExp('\\{#'+s+'\\}([\\s\\S]*?)\\{\\/'+s+'\\}','g');
+    t = t.replace(re, function(_, dentro){ return dados['cond_'+s] ? dentro : ''; });
+  });
+  t = t.replace(/\{(\w+)\}/g, function(todo, chave){
+    return dados[chave] !== undefined && dados[chave] !== null ? dados[chave] : '';
+  });
+  return t.replace(/\n{3,}/g,'\n\n').replace(/[ \t]+$/gm,'').trim();
+}
+function item(formato, campos){
+  return formato.replace(/\{(\w+)\}/g, function(todo, chave){
+    return campos[chave] !== undefined && campos[chave] !== null ? campos[chave] : '';
+  });
+}
+
+/* --------------------------------- tela ----------------------------------- */
+
+var docs = [], resultadoAtual = [], paginasVazias = [], paginasOcr = [], janelaAtual = null, empresaAtual = '';
+
+carregarConfig(false);
+
+var modalCfg = document.getElementById('modalCfg');
+document.getElementById('btnCfg').addEventListener('click', function(){ modalCfg.classList.remove('oculto'); });
+document.getElementById('fecharCfg').addEventListener('click', function(){ modalCfg.classList.add('oculto'); });
+modalCfg.addEventListener('click', function(e){ if(e.target === modalCfg) modalCfg.classList.add('oculto'); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') modalCfg.classList.add('oculto'); });
+
+document.getElementById('abas').addEventListener('click', function(e){
+  if(e.target.tagName !== 'BUTTON') return;
+  Array.prototype.forEach.call(this.children, function(b){ b.classList.remove('on'); });
+  e.target.classList.add('on');
+  ['regras','obs','atraso','prazo','excecoes','leitura'].forEach(function(a){
+    document.getElementById('aba-'+a).classList.toggle('oculto', a !== e.target.dataset.a);
+  });
+});
+
+document.getElementById('btnSalvar').addEventListener('click', function(){
+  var ok = true;
+  Object.keys(CAMPOS).forEach(function(chave){
+    if(!guardar(chave, document.getElementById(CAMPOS[chave]).value)) ok = false;
+  });
+  var st = document.getElementById('statusCfg');
+  st.textContent = ok ? 'Configuração salva neste navegador.'
+                      : 'Não foi possível salvar aqui; vale só para esta sessão.';
+  st.style.color = ok ? 'var(--ok)' : 'var(--falta)';
+  mostrarPrazo();
+  if(resultadoAtual.length) processar();
+  setTimeout(function(){ st.textContent = ''; }, 4000);
+});
+document.getElementById('btnRestaurar').addEventListener('click', function(){
+  carregarConfig(true);
+  if(resultadoAtual.length) processar();
+});
+
+document.getElementById('comp').addEventListener('input', mostrarPrazo);
+['cfgDiasFim','cfgDiasUteis','cfgFeriados'].forEach(function(id){
+  document.getElementById(id).addEventListener('input', mostrarPrazo);
+});
+
+function mostrarPrazo(){
+  var comp = document.getElementById('comp').value.trim();
+  var alvo = document.getElementById('prazoTexto');
+  var j = janelaPrazo(normalizarComp(comp), cfgAtual());
+  if(!j){
+    alvo.innerHTML = 'Informe a competência (mm/aaaa) para ver o prazo de depósito aplicado.';
+    return;
+  }
+  alvo.innerHTML = 'Competência <b>' + escapar(j.competencia) + '</b>: depósitos esperados entre <b>' +
+    dataBr(j.inicio) + '</b> e <b>' + dataBr(j.fim) + '</b> (' +
+    cfgAtual().diasUteis + 'º dia útil do mês seguinte, já descontados sábados, domingos e feriados).';
+}
+function normalizarComp(v){
+  var s = (v||'').trim();
+  var m = /^(\d{1,2})\s*[\/\-.]\s*(\d{2,4})$/.exec(s);
+  if(!m){
+    /* "082026" ou "0826": os dois primeiros dígitos são sempre o mês */
+    var m2 = /^(\d{2})(\d{2}|\d{4})$/.exec(s);
+    if(m2) m = m2;
+  }
+  if(!m) return '';
+  var mes = z2(parseInt(m[1],10)), ano = m[2].length === 2 ? '20'+m[2] : m[2];
+  if(+mes < 1 || +mes > 12) return '';
+  return mes + '/' + ano;
+}
+
+function pintarDocs(){
+  var alvo = document.getElementById('docs');
+  document.getElementById('docsTopo').classList.toggle('oculto', docs.length === 0);
+  document.getElementById('acoesDocs').classList.toggle('oculto', docs.length === 0);
+  document.getElementById('buscaBloco').classList.toggle('oculto', docs.length === 0);
+  listarArquivosDoSeletor();
+  alvo.innerHTML = '';
+  docs.forEach(function(d, i){
+    var caixa = document.createElement('div');
+    var el = document.createElement('div');
+    el.className = 'doc';
+    el.innerHTML =
+      '<span class="nome">📄 ' + escapar(d.arquivo) + '</span>' +
+      (d.lendo ? '<small class="ocrProgresso">' + escapar(d.status || 'lendo…') + '</small>' :
+        '<small>' + escapar(resumoLeitura(d)) + '</small>' +
+        '<select data-i="' + i + '">' +
+          '<option value="comprovantes"' + (d.tipo==='comprovantes'?' selected':'') + '>comprovantes de depósito</option>' +
+          '<option value="relatorio"' + (d.tipo==='relatorio'?' selected':'') + '>relatório do Portal</option>' +
+        '</select>') +
+      '<button class="x" data-x="' + i + '" title="remover">×</button>';
+    caixa.appendChild(el);
+    if(!d.lendo && d.diag && d.diag.length){
+      var det = document.createElement('details');
+      det.className = 'leitura';
+      det.innerHTML = '<summary>ver leitura de cada página</summary>' + tabelaLeitura(d);
+      caixa.appendChild(det);
+    }
+    alvo.appendChild(caixa);
+  });
+}
+function resumoLeitura(d){
+  if(!d.diag || !d.diag.length) return '';
+  var porOcr = d.diag.filter(function(p){ return p.origem === 'ocr'; }).length;
+  var falhou = d.diag.filter(function(p){ return p.origem === 'ocr-vazio' || p.origem === 'ocr-erro'; }).length;
+  var semTexto = d.vazias.length;
+  var partes = [d.totalPaginas + ' pág.'];
+  if(porOcr) partes.push(porOcr + ' por OCR');
+  if(falhou) partes.push(falhou + ' sem leitura');
+  else if(semTexto) partes.push(semTexto + ' sem texto');
+  return partes.join(' · ');
+}
+function tabelaLeitura(d){
+  var rotulos = {'pdf':'texto do PDF', 'ocr':'OCR', 'ocr-vazio':'OCR não extraiu texto',
+                 'ocr-erro':'erro no OCR'};
+  var linhas = d.diag.map(function(p){
+    var extra = [];
+    if(p.origem === 'ocr' || p.origem === 'ocr-vazio'){
+      extra.push('giro ' + (p.angulo || 0) + '°');
+      if(p.pontos !== undefined) extra.push(p.pontos + ' pts');
+    }
+    if(p.origem === 'pdf' && p.motivo) extra.push(p.motivo);
+    if(p.classificacao) extra.push('classificada como ' + p.classificacao);
+    if(p.palavras !== undefined) extra.push(p.palavras + ' palavras');
+    if(p.detalhe) extra.push(p.detalhe);
+    return '<tr><td>' + p.n + '</td><td>' + (rotulos[p.origem] || p.origem) + '</td>' +
+           '<td>' + (p.chars || 0) + ' caracteres</td><td>' + escapar(extra.join(' · ')) + '</td></tr>';
+  }).join('');
+  var erro = d.erroOcr ? '<p class="erroLeitura">OCR: ' + escapar(d.erroOcr) + '</p>' : '';
+  return erro + '<table class="tabLeitura"><thead><tr><th>Pág.</th><th>Origem</th>' +
+         '<th>Texto obtido</th><th>Detalhe</th></tr></thead><tbody>' + linhas + '</tbody></table>';
+}
+
+document.getElementById('docs').addEventListener('change', function(e){
+  if(e.target.tagName !== 'SELECT') return;
+  docs[+e.target.dataset.i].tipo = e.target.value;
+  docs[+e.target.dataset.i].manual = true;
+  limparResultado();
+});
+document.getElementById('docs').addEventListener('click', function(e){
+  if(!e.target.dataset.x) return;
+  apagarDoc(docs[+e.target.dataset.x]);
+  docs.splice(+e.target.dataset.x, 1);
+  if(!docs.length) encerrarOcr();
+  limparResultado();
+  pintarDocs();
+});
+
+function receber(arquivos){
+  if(resultadoAtual.length) limparResultado();
+  arquivos.filter(function(f){ return /\.pdf$/i.test(f.name); }).forEach(function(f){
+    if(!PDFOK){
+      alert('O leitor de PDF não está disponível. Recarregue a página com internet ou deixe ' +
+            'pdf.min.js e pdf.worker.min.js na mesma pasta deste arquivo.');
+      return;
+    }
+    var d = {arquivo:f.name, lendo:true, status:'lendo…', texto:'', paginas:[], vazias:[], ocr:[], totalPaginas:0};
+    docs.push(d);
+    pintarDocs();
+    lerPdf(f, function(msg){ d.status = msg; pintarDocs(); }).then(function(r){
+      d.texto = r.texto; d.paginas = r.paginas; d.vazias = r.vazias; d.ocr = r.ocr || [];
+      d.totalPaginas = r.totalPaginas; d.lendo = false; d.status = '';
+      d.diag = r.diag || []; d.erroOcr = r.erroOcr || '';
+      try{
+        classificar(d);
+        equilibrar(docs);
+      }catch(err){
+        if(!d.tipo) d.tipo = 'comprovantes';
+      }
+      pintarDocs();
+    }).catch(function(err){
+      d.lendo = false; d.tipo = 'comprovantes';
+      pintarDocs();
+      alert('Não consegui ler ' + f.name + ': ' + err.message);
+    });
+  });
+}
+var drop = document.getElementById('drop'), input = document.getElementById('file');
+drop.addEventListener('click', function(){ input.click(); });
+input.addEventListener('change', function(){ receber(Array.prototype.slice.call(input.files)); input.value=''; });
+['dragover','dragenter'].forEach(function(ev){
+  drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('ativo'); });
+});
+['dragleave','drop'].forEach(function(ev){
+  drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('ativo'); });
+});
+drop.addEventListener('drop', function(e){ receber(Array.prototype.slice.call(e.dataTransfer.files)); });
+
+document.getElementById('btnVerPagina').addEventListener('click', function(){
+  var d = docs[+document.getElementById('verArquivo').value];
+  var n = parseInt(document.getElementById('verNumero').value, 10);
+  var saida = document.getElementById('verSaida');
+  saida.classList.remove('oculto');
+  if(!d || !n || n < 1 || n > (d.paginas || []).length){
+    saida.textContent = 'Escolha um arquivo e uma página válida.';
+    return;
+  }
+  var tx = (d.paginas[n-1] || '').trim();
+  var info = d.diag && d.diag[n-1] ? d.diag[n-1] : null;
+  var cabec = 'Página ' + n + ' de ' + d.totalPaginas +
+    (info ? ' · origem: ' + info.origem + ' · ' + (info.chars || 0) + ' caracteres' +
+            (info.angulo !== undefined ? ' · giro ' + info.angulo + '°' : '') : '') + '\n' +
+    '────────────────────────────────────────\n';
+  saida.textContent = cabec + (tx ? tx.slice(0, 4000) : '(nenhum texto foi extraído desta página)');
+});
+
+function listarArquivosDoSeletor(){
+  var sel = document.getElementById('verArquivo');
+  var atual = sel.value;
+  sel.innerHTML = docs.map(function(d, i){
+    return '<option value="' + i + '">' + escapar(d.arquivo) + '</option>';
+  }).join('');
+  if(atual && docs[atual]) sel.value = atual;
+}
+
+document.getElementById('btnBuscar').addEventListener('click', buscarNoTexto);
+document.getElementById('buscaTermo').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); buscarNoTexto(); }
+});
+
+/* Mostra onde o termo aparece no texto que a ferramenta realmente extraiu.
+   Se não aparecer em lugar nenhum, o problema é de leitura da página, não de
+   comparação de nomes. */
+function buscarNoTexto(){
+  var termo = document.getElementById('buscaTermo').value.trim();
+  var alvo = document.getElementById('buscaResultado');
+  alvo.innerHTML = '';
+  if(!termo){ return; }
+
+  var achados = [], digitos = soDigitos(termo);
+  var tokens = chaveNome(termo).split(' ').filter(Boolean);
+  var termoNorm = normBusca(termo).replace(/\s+/g,' ').trim();
+
+  docs.forEach(function(d){
+    (d.paginas || []).forEach(function(tx, i){
+      var norm = normBusca(tx);
+      var pos = -1, via = '';
+      var direto = norm.replace(/\s+/g,' ').indexOf(termoNorm);
+      if(direto >= 0){ pos = norm.indexOf(termoNorm.split(' ')[0]); via = 'texto exato'; }
+      if(pos < 0 && digitos.length >= 6){
+        var apenas = norm.replace(/\D/g,'');
+        if(apenas.indexOf(digitos) >= 0){ pos = 0; via = 'dígitos do CPF'; }
+      }
+      if(pos < 0 && tokens.length){
+        var pt = acharPorTokens(norm, tokens, JANELA_TOKENS * 2, 0.5);
+        if(pt !== -1){ pos = pt.pos; via = pt.tolerante ? 'partes do nome, com tolerância' : 'partes do nome'; }
+      }
+      if(pos >= 0 && achados.length < 12){
+        var ini = Math.max(0, pos - 90), fim = Math.min(norm.length, pos + 160);
+        achados.push({
+          arquivo: d.arquivo, pagina: i+1, via: via,
+          origem: (d.ocr || []).indexOf(i+1) >= 0 ? 'OCR' : 'texto do PDF',
+          classificacao: ehHolerite(norm) ? 'holerite' : 'comprovante',
+          trecho: tx.slice(ini, fim).replace(/\s+/g,' ')
+        });
+      }
+    });
+  });
+
+  if(!achados.length){
+    var semTexto = docs.reduce(function(s,d){ return s + (d.vazias ? d.vazias.length : 0); }, 0);
+    alvo.innerHTML = '<p class="semAchado">Não encontrei esse termo em nenhuma página lida.' +
+      (semTexto ? ' Há ' + semTexto + ' página(s) que não puderam ser lidas — é bem provável que ' +
+                  'a pessoa esteja em uma delas.'
+                : ' O texto foi lido, mas o termo não aparece exatamente assim nos PDFs.') + '</p>';
+    return;
+  }
+  alvo.innerHTML = achados.map(function(a){
+    return '<div class="achado"><b>' + escapar(a.arquivo) + ' · pág. ' + a.pagina + '</b> — ' +
+      escapar(a.origem) + ', classificada como ' + escapar(a.classificacao) +
+      ', achado por ' + escapar(a.via) +
+      '<span class="trecho">' + escapar(a.trecho) + '</span></div>';
+  }).join('');
+}
+
+document.getElementById('btnNova').addEventListener('click', novaAnalise);
+window.addEventListener('beforeunload', function(){
+  docs.forEach(apagarDoc);
+  encerrarOcr();
+});
+
+/* Apaga de fato o conteúdo do arquivo da memória: sobrescreve cada página,
+   solta as referências e encerra os workers de OCR, que também guardam a
+   última imagem processada. */
+function apagarDoc(d){
+  if(!d) return;
+  if(d.paginas) for(var i = 0; i < d.paginas.length; i++) d.paginas[i] = '';
+  d.paginas = []; d.texto = ''; d.diag = []; d.vazias = []; d.ocr = [];
+  d.status = ''; d.pontos = null;
+}
+function encerrarOcr(){
+  if(schedulerOcr && schedulerOcr.terminate){
+    try{ schedulerOcr.terminate(); }catch(e){}
+  }
+  schedulerOcr = null;
+  nucleosOcr = 1;
+}
+
+/* Qualquer mudança nos arquivos invalida a análise: os nomes saem da tela e
+   da memória na mesma hora. */
+function limparResultado(){
+  resultadoAtual = [];
+  paginasVazias = []; paginasOcr = [];
+  janelaAtual = null; empresaAtual = '';
+  document.getElementById('resultado').classList.add('oculto');
+  document.getElementById('empresa').innerHTML = '';
+  document.getElementById('resumo').innerHTML = '';
+  document.getElementById('avisoOcr').classList.add('oculto');
+  document.getElementById('avisoOcr').innerHTML = '';
+  document.querySelector('#tabela tbody').innerHTML = '';
+  document.getElementById('semFalta').classList.add('oculto');
+  document.getElementById('obs').textContent = '';
+  document.getElementById('obsAtraso').textContent = '';
+  document.getElementById('blocoAtraso').classList.add('oculto');
+  document.getElementById('buscaResultado').innerHTML = '';
+  var saida = document.getElementById('verSaida');
+  saida.textContent = '';
+  saida.classList.add('oculto');
+}
+
+function novaAnalise(){
+  docs.forEach(apagarDoc);
+  docs.length = 0;
+  encerrarOcr();
+  limparResultado();
+  document.getElementById('file').value = '';
+  document.getElementById('buscaTermo').value = '';
+  document.getElementById('comp').value = '';
+  document.getElementById('prazoTexto').innerHTML =
+    'Informe a competência (mm/aaaa) para ver o prazo de depósito aplicado.';
+  pintarDocs();
+  var agora = new Date();
+  var msg = document.getElementById('avisoApagado');
+  msg.textContent = 'Arquivos e dados desta análise apagados da memória às ' +
+    z2(agora.getHours()) + ':' + z2(agora.getMinutes()) + '.';
+  msg.classList.remove('oculto');
+  setTimeout(function(){ msg.classList.add('oculto'); }, 8000);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+document.getElementById('btn').addEventListener('click', function(){
+  if(docs.some(function(d){ return d.lendo; })){
+    alert('Ainda estou lendo um dos PDFs. Tente de novo em instantes.');
+    return;
+  }
+  processar();
+});
+
+function processar(){
+  var campoComp = document.getElementById('comp');
+  var competencia = normalizarComp(campoComp.value);
+  if(!competencia){
+    campoComp.classList.add('erro');
+    campoComp.focus();
+    alert('Informe a competência no formato mm/aaaa. Ela define o prazo dos depósitos e é obrigatória nesta conferência.');
+    return;
+  }
+  campoComp.classList.remove('erro');
+  campoComp.value = competencia;
+
+  var cfg = cfgAtual();
+  var textoRel = '';
+  paginasVazias = []; paginasOcr = [];
+  docs.forEach(function(d){
+    if(d.tipo === 'relatorio') textoRel += '\n' + d.texto;
+    if(d.vazias && d.vazias.length) paginasVazias.push(d);
+    if(d.ocr && d.ocr.length) paginasOcr.push(d);
+  });
+  var blocos = prepararBlocos(docs, cfg);
+
+  if(!textoRel.trim() || !blocos.length){
+    alert('Faltou um dos documentos: preciso do relatório do Portal e dos comprovantes de depósito.\n\n' +
+          'Se os PDFs já estão na lista, confira o tipo indicado ao lado de cada um.');
+    return;
+  }
+
+  var lista_ = lerRelatorio(textoRel, document.getElementById('fmt').value);
+  if(!lista_.length){
+    alert('Nenhuma pessoa foi reconhecida no relatório do Portal. Confira se o documento marcado ' +
+          'como “relatório do Portal” é o certo.');
+    return;
+  }
+  empresaAtual = lista_.empresa || '';
+  janelaAtual = janelaPrazo(competencia, cfg);
+
+  resultadoAtual = comparar(lista_, blocos, {
+    competencia: competencia,
+    janela: janelaAtual,
+    data: document.getElementById('rData').checked,
+    vinculo: document.getElementById('rVinculo').checked,
+    cargo: document.getElementById('rCargo').checked,
+    prazo: document.getElementById('rPrazo').checked,
+    vinculos: cfg.vinculos,
+    cargos: cfg.cargos,
+    leitura: cfg.leitura
+  });
+
+  var ordem = {falta:0, divergente:1, terceiro:2, atraso:3, ok:4, fora:5};
+  resultadoAtual.sort(function(a,b){
+    return (ordem[a.situacao] - ordem[b.situacao]) ||
+           a.dados.pessoa.localeCompare(b.dados.pessoa, 'pt-BR');
+  });
+
+  var falta = resultadoAtual.filter(function(r){ return r.situacao === 'falta'; });
+  var divergentes = resultadoAtual.filter(function(r){ return r.situacao === 'divergente'; });
+  var terceiros = resultadoAtual.filter(function(r){ return r.situacao === 'terceiro'; });
+  var atraso = resultadoAtual.filter(function(r){ return r.situacao === 'atraso'; });
+  var ok = resultadoAtual.filter(function(r){ return r.situacao === 'ok'; });
+  var fora = resultadoAtual.filter(function(r){ return r.situacao === 'fora'; });
+
+  document.getElementById('empresa').innerHTML =
+    '<strong>' + escapar(empresaAtual || 'Empresa não identificada no relatório') + '</strong>' +
+    '<span>competência ' + escapar(competencia) + ' · prazo de ' + dataBr(janelaAtual.inicio) +
+    ' a ' + dataBr(janelaAtual.fim) + ' · ' + blocos.length + ' comprovante(s) lido(s)</span>';
+
+  var avisoOcr = document.getElementById('avisoOcr');
+  var partes = [];
+  if(paginasOcr.length){
+    partes.push('<strong>Páginas escaneadas lidas por OCR.</strong><br>' +
+      paginasOcr.map(function(d){
+        return escapar(d.arquivo) + ' — página(s) ' + d.ocr.join(', ');
+      }).join('<br>') +
+      '<br>O reconhecimento pode trocar caracteres: confira os nomes e as datas dessas páginas ' +
+      'antes de enviar a observação.');
+  }
+  if(paginasVazias.length){
+    partes.push('<strong>Páginas que não puderam ser lidas.</strong><br>' +
+      paginasVazias.map(function(d){
+        return escapar(d.arquivo) + ' — página(s) ' + d.vazias.join(', ') + ' de ' + d.totalPaginas;
+      }).join('<br>') +
+      '<br>' + (ocrDisponivel()
+        ? 'Nem o OCR conseguiu extrair texto dessas páginas. Confira-as à mão.'
+        : 'Marque a opção de OCR na área de documentos para tentar lê-las.') +
+      ' Quem aparecer só nelas será marcado como sem comprovante.');
+  }
+  if(partes.length){
+    avisoOcr.innerHTML = partes.join('<hr style="border:0;border-top:1px solid var(--ouro);margin:10px 0">');
+    avisoOcr.classList.remove('oculto');
+  } else {
+    avisoOcr.classList.add('oculto');
+  }
+
+  var tolerantes = resultadoAtual.filter(function(r){ return r.achado && r.achado.tolerancia; });
+
+  document.getElementById('resumo').innerHTML =
+    cartao(falta.length, 'sem comprovante', falta.length ? 'var(--falta)' : 'var(--ok)') +
+    cartao(divergentes.length, 'valor divergente', divergentes.length ? 'var(--falta)' : '', divergentes.length > 0) +
+    cartao(terceiros.length, 'pago a terceiro', terceiros.length ? 'var(--neutro)' : '', terceiros.length > 0) +
+    cartao(atraso.length, 'fora do prazo', atraso.length ? 'var(--neutro)' : '', atraso.length > 0) +
+    cartao(tolerantes.length, 'grafia diferente', tolerantes.length ? 'var(--neutro)' : '', tolerantes.length > 0) +
+    cartao(ok.length, 'com comprovante', 'var(--ok)') +
+    cartao(fora.length, 'desconsideradas');
+
+  Array.prototype.forEach.call(document.getElementById('filtros').children, function(b){
+    b.classList.toggle('on', b.dataset.f === 'falta');
+  });
+  desenharTabela('falta');
+  montarTextos(competencia, falta, atraso, fora, ok, divergentes, terceiros);
+
+  document.getElementById('resultado').classList.remove('oculto');
+  document.getElementById('resultado').scrollIntoView({behavior:'smooth'});
+}
+
+function cartao(n, rotulo, cor, destaque){
+  return '<div class="cartao' + (destaque ? ' destaque' : '') + '"><b' +
+         (cor ? ' style="color:'+cor+'"' : '') + '>' + n + '</b><small>' + rotulo + '</small></div>';
+}
+
+/* Lista, num quadro à parte, quem foi localizado com pequena tolerância de
+   digitação — encontrado, então não entra como pendência, mas merece uma
+   conferência visual antes de fechar a análise. */
+function desenharTabela(filtro){
+  var tb = document.querySelector('#tabela tbody');
+  var lista_ = resultadoAtual.filter(function(r){
+    if(filtro === 'todos') return true;
+    if(filtro === 'tolerancia') return !!(r.achado && r.achado.tolerancia);
+    return r.situacao === filtro;
+  });
+  var semFalta = document.getElementById('semFalta');
+  var caixa = document.getElementById('caixaTabela');
+
+  if(filtro === 'falta' && !lista_.length){
+    semFalta.classList.remove('oculto');
+    caixa.classList.add('oculto');
+    return;
+  }
+  semFalta.classList.add('oculto');
+  caixa.classList.remove('oculto');
+
+  tb.innerHTML = '';
+  lista_.forEach(function(r){
+    var tr = document.createElement('tr');
+    tr.className = r.situacao;
+    var tag = r.situacao === 'ok'         ? '<span class="tag ok">com comprovante</span>'
+            : r.situacao === 'falta'      ? '<span class="tag nao">sem comprovante</span>'
+            : r.situacao === 'divergente' ? '<span class="tag nao">valor divergente</span>'
+            : r.situacao === 'terceiro'   ? '<span class="tag alerta">pago a terceiro</span>'
+            : r.situacao === 'atraso'     ? '<span class="tag alerta">fora do prazo</span>'
+            : '<span class="tag fora">desconsiderado</span>';
+    var g = function(campo){ return r.campo === campo ? ' class="grifo"' : ''; };
+    var notaGrafia = '';
+    if(r.achado && r.achado.tolerancia && r.achado.detalhesTolerancia && r.achado.detalhesTolerancia.length){
+      notaGrafia = '<span class="notaTolerancia">grafia diferente: Portal <code>' +
+        r.achado.detalhesTolerancia.map(function(d){ return escapar(d.portal); }).join(', ') +
+        '</code> · comprovante <code>' +
+        r.achado.detalhesTolerancia.map(function(d){ return escapar(d.comprovante); }).join(', ') +
+        '</code></span>';
+    }
+    tr.innerHTML =
+      '<td>' + tag + (r.motivo ? '<span class="nota">' + escapar(r.motivo) + '</span>' : '') + '</td>' +
+      '<td>' + escapar(r.dados.pessoa) +
+        (r.dados.repeticoes > 1 ? '<span class="nota">' + r.dados.repeticoes +
+            ' linhas no relatório, contada uma vez</span>' : '') +
+        (r.nota ? '<span class="nota">' + escapar(r.nota) + '</span>' : '') +
+        notaGrafia + '</td>' +
+      '<td>' + cpfExibicao(r.dados.cpf) + '</td>' +
+      '<td' + g('atividade') + '>' + escapar(r.dados.atividade || '—') + '</td>' +
+      '<td' + g('vinculo') + '>' + escapar(r.dados.vinculo || '—') + '</td>' +
+      '<td' + g('cadastro') + '>' + (dataBr(r.dados.dataCad) || escapar(r.dados.cadastro)) + '</td>';
+    tb.appendChild(tr);
+  });
+  if(!tb.children.length){
+    tb.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma pessoa nesta situação.</td></tr>';
+  }
+}
+document.getElementById('filtros').addEventListener('click', function(e){
+  if(e.target.tagName !== 'BUTTON') return;
+  Array.prototype.forEach.call(this.children, function(b){ b.classList.remove('on'); });
+  e.target.classList.add('on');
+  desenharTabela(e.target.dataset.f);
+});
+
+function montarTextos(competencia, falta, atraso, fora, ok, divergentes, terceiros){
+  var fFalta  = document.getElementById('itFalta').value  || ITEM_FALTA_PADRAO;
+  var fDesc   = document.getElementById('itDesc').value   || ITEM_DESC_PADRAO;
+  var fAtraso = document.getElementById('itAtraso').value || ITEM_ATRASO_PADRAO;
+  var fDiverg = document.getElementById('itDiverg').value || ITEM_DIVERG_PADRAO;
+  var fTerceiro = document.getElementById('itTerceiro').value || ITEM_TERCEIRO_PADRAO;
+
+  var campos = function(r){
+    return {
+      nome: r.dados.pessoa, cpf: cpfExibicao(r.dados.cpf),
+      cadastro: dataBr(r.dados.dataCad) || r.dados.cadastro,
+      motivo: r.motivo, atividade: r.dados.atividade, vinculo: r.dados.vinculo,
+      data_deposito: r.achado && r.achado.data ? dataBr(r.achado.data) : 'data não identificada',
+      valor: r.achado && r.achado.valor ? r.achado.valor : '',
+      valor_holerite: r.holerite && r.holerite.liquido !== null ? dinheiroBr(r.holerite.liquido) : '',
+      favorecido: r.terceiro && r.terceiro.favorecido ? r.terceiro.favorecido : 'outra pessoa',
+      dias_atraso: r.diasAtraso || ''
+    };
+  };
+  var agora = new Date();
+  var dataTexto = dataBr(agora), horaTexto = z2(agora.getHours())+':'+z2(agora.getMinutes());
+  var avaliadas = resultadoAtual.length - fora.length;
+
+  var dados = {
+    data: dataTexto, hora: horaTexto, data_hora: dataTexto + ' ' + horaTexto,
+    empresa: empresaAtual || 'empresa não identificada',
+    competencia: competencia,
+    prazo_inicio: dataBr(janelaAtual.inicio), prazo_final: dataBr(janelaAtual.fim),
+    avaliadas: avaliadas, contempladas: avaliadas - falta.length,
+    qtd_faltantes: falta.length, qtd_desconsiderados: fora.length, qtd_atrasados: atraso.length,
+    qtd_divergencias: divergentes.length, qtd_terceiros: terceiros.length,
+    divergencias: divergentes.map(function(r){ return item(fDiverg, campos(r)); }).join('\n'),
+    terceiros: terceiros.map(function(r){ return item(fTerceiro, campos(r)); }).join('\n'),
+    cond_divergencias: divergentes.length > 0,
+    cond_terceiros: terceiros.length > 0,
+    alerta: paginasVazias.map(function(d){
+      return 'páginas sem texto em ' + d.arquivo + ': ' + d.vazias.join(', ');
+    }).join(' | '),
+    faltantes: falta.map(function(r){ return item(fFalta, campos(r)); }).join('\n'),
+    desconsiderados: fora.map(function(r){ return item(fDesc, campos(r)); }).join('\n'),
+    atrasados: atraso.map(function(r){ return item(fAtraso, campos(r)); }).join('\n'),
+    cond_alerta: paginasVazias.length > 0,
+    cond_faltantes: falta.length > 0,
+    cond_sem_faltantes: falta.length === 0,
+    cond_desconsiderados: fora.length > 0,
+    cond_atrasados: atraso.length > 0
+  };
+
+  escrever('obs', 'dica', preencher(document.getElementById('modelo').value || MODELO_PADRAO, dados));
+
+  var bloco = document.getElementById('blocoAtraso');
+  if(atraso.length){
+    bloco.classList.remove('oculto');
+    escrever('obsAtraso', 'dicaAtraso',
+      preencher(document.getElementById('modeloAtraso').value || MODELO_ATRASO_PADRAO, dados));
+  } else {
+    bloco.classList.add('oculto');
+  }
+}
+
+function escrever(idCaixa, idDica, texto){
+  var caixa = document.getElementById(idCaixa);
+  caixa.textContent = texto;
+  var dica = document.createElement('span');
+  dica.className = 'dica'; dica.id = idDica; dica.textContent = 'clique para copiar';
+  caixa.appendChild(dica);
+}
+function copiar(idCaixa, idDica){
+  var caixa = document.getElementById(idCaixa), dica = document.getElementById(idDica);
+  var texto = caixa.textContent.replace('clique para copiar','').replace(/\s+$/,'');
+  var feito = function(){
+    dica.textContent = 'copiado';
+    setTimeout(function(){ dica.textContent = 'clique para copiar'; }, 1600);
+  };
+  function manual(){
+    var ta = document.createElement('textarea');
+    ta.value = texto; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); feito(); }catch(e){ dica.textContent = 'copie manualmente'; }
+    document.body.removeChild(ta);
+  }
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(texto).then(feito, manual);
+  } else { manual(); }
+}
+document.getElementById('obs').addEventListener('click', function(){ copiar('obs','dica'); });
+document.getElementById('obsAtraso').addEventListener('click', function(){ copiar('obsAtraso','dicaAtraso'); });
+document.getElementById('obs').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); copiar('obs','dica'); }
+});
+document.getElementById('obsAtraso').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); copiar('obsAtraso','dicaAtraso'); }
+});
+
+document.getElementById('btnCsv').addEventListener('click', function(){
+  var linhas = [['Situacao','Motivo','Pessoa','CPF','Atividade','Vinculo','Cadastro',
+                 'Data do deposito','Dias de atraso','Valor pago','Liquido do holerite',
+                 'Comprovante','Localizado por','Observacao']];
+  resultadoAtual.forEach(function(r){
+    linhas.push([
+      r.situacao === 'ok' ? 'Com comprovante' : r.situacao === 'falta' ? 'Sem comprovante'
+        : r.situacao === 'divergente' ? 'Valor divergente'
+        : r.situacao === 'terceiro' ? 'Pago a terceiro'
+        : r.situacao === 'atraso' ? 'Fora do prazo' : 'Desconsiderado',
+      r.motivo, r.dados.pessoa, cpfExibicao(r.dados.cpf), r.dados.atividade, r.dados.vinculo,
+      dataBr(r.dados.dataCad) || r.dados.cadastro,
+      r.achado && r.achado.data ? dataBr(r.achado.data) : '', r.diasAtraso || '',
+      r.achado ? r.achado.valor : '',
+      r.holerite && r.holerite.liquido !== null ? dinheiroBr(r.holerite.liquido) : '',
+      r.achado ? r.achado.bloco : '', r.achado ? r.achado.via : '',
+      r.nota
+    ]);
+  });
+  var csv = '\ufeff' + linhas.map(function(l){
+    return l.map(function(c){ return '"' + String(c||'').replace(/"/g,'""') + '"'; }).join(';');
+  }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = 'conferencia-comprovantes.csv';
+  a.click();
+});
+</script>
+</body>
+</html>
