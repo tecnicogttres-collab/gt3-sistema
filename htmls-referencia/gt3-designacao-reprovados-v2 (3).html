@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT3 · Designação de Reprovados v2</title>
+<style>
+  :root{
+    --primary:#2A4F96; --primary-dark:#1E3A70; --primary-light:#3D67B5;
+    --accent:#D1AE6E; --accent-dark:#B8945A; --accent-soft:#FAF4E8;
+    --bg:#F7F9FC; --card:#FFFFFF; --border:#E8EDF4; --border-soft:#F1F5F9;
+    --text:#1A2436; --text-soft:#7086A0; --text-mute:#9AAABF;
+    --danger:#E0453E; --warn:#E08A1E; --ok:#10A37F; --info:#2D8FD5;
+    --r-sm:8px; --r:12px; --r-lg:16px; --r-xl:20px;
+    --sh-xs:0 1px 2px rgba(26,36,54,.04);
+    --sh-sm:0 2px 8px rgba(26,36,54,.05), 0 1px 2px rgba(26,36,54,.03);
+    --sh:0 4px 16px rgba(26,36,54,.06), 0 1px 3px rgba(26,36,54,.04);
+    --sh-md:0 8px 28px rgba(26,36,54,.08), 0 2px 6px rgba(26,36,54,.04);
+    --sh-lg:0 18px 48px rgba(26,36,54,.12), 0 4px 12px rgba(26,36,54,.06);
+    --ease:cubic-bezier(.34,.8,.35,1);
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --t:.28s var(--ease);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Segoe UI',system-ui,-apple-system,'Inter',sans-serif;
+       background:var(--bg);color:var(--text);font-size:14px;
+       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+       letter-spacing:-.005em}
+  ::selection{background:rgba(42,79,150,.16)}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#D6DFEA;border-radius:9px;border:3px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#BCC9D9}
+
+  /* ===== HEADER ===== */
+  header{background:linear-gradient(135deg,#2A4F96 0%,#22417D 55%,#1E3A70 100%);
+         color:#fff;padding:18px 30px;display:flex;align-items:center;gap:17px;
+         position:relative;overflow:hidden}
+  header::after{content:'';position:absolute;top:-60%;right:-4%;width:340px;height:340px;
+                background:radial-gradient(circle,rgba(209,174,110,.16),transparent 68%);pointer-events:none}
+  .logo{width:40px;height:40px;border-radius:12px;
+        background:linear-gradient(140deg,#E3C68A,#D1AE6E 55%,#BE9A55);
+        display:flex;align-items:center;justify-content:center;font-weight:800;
+        color:#22417D;font-size:14.5px;letter-spacing:-.4px;
+        box-shadow:0 4px 14px rgba(209,174,110,.35);flex-shrink:0}
+  header h1{font-size:18px;font-weight:600;letter-spacing:-.2px}
+  header .sub{font-size:12px;opacity:.7;margin-top:3px;font-weight:400}
+  .user-box{margin-left:auto;display:flex;align-items:center;gap:11px;position:relative;z-index:1;white-space:nowrap}
+  .user-box select{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);
+        color:#fff;padding:8px 11px;border-radius:var(--r-sm);font-size:13px;cursor:pointer;
+        font-family:inherit;transition:var(--t);backdrop-filter:blur(8px)}
+  .user-box select:hover{background:rgba(255,255,255,.2)}
+  .user-box select option{color:var(--text)}
+  .bell{position:relative;width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.13);
+        display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;
+        border:1px solid rgba(255,255,255,.16);transition:var(--t);backdrop-filter:blur(8px)}
+  .bell:hover{background:rgba(255,255,255,.22);transform:translateY(-1px)}
+  .bell .badge{position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;
+        font-size:10px;font-weight:700;min-width:19px;height:19px;border-radius:10px;
+        display:flex;align-items:center;justify-content:center;padding:0 5px;
+        border:2.5px solid #26457F;box-shadow:0 2px 6px rgba(224,69,62,.4)}
+
+  /* ===== TABS ===== */
+  nav.tabs{background:rgba(255,255,255,.85);backdrop-filter:blur(12px);
+           border-bottom:1px solid var(--border);padding:0 30px;display:flex;gap:2px;
+           position:sticky;top:0;z-index:30}
+  nav.tabs button{background:none;border:none;padding:15px 18px;font-size:14px;font-weight:500;
+           color:var(--text-soft);cursor:pointer;font-family:inherit;display:flex;align-items:center;
+           gap:8px;position:relative;transition:var(--t);letter-spacing:-.1px}
+  nav.tabs button::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:2.5px;
+           background:var(--accent);border-radius:3px 3px 0 0;transform:scaleX(0);
+           transition:transform .32s var(--ease-out);transform-origin:center}
+  nav.tabs button:hover{color:var(--primary)}
+  nav.tabs button.active{color:var(--primary-dark);font-weight:600}
+  nav.tabs button.active::after{transform:scaleX(1)}
+  nav.tabs .pill{background:var(--danger);color:#fff;font-size:10px;font-weight:700;
+           padding:2px 7px;border-radius:9px;box-shadow:0 2px 5px rgba(224,69,62,.3)}
+
+  main{padding:26px 30px 70px;max-width:1560px;margin:0 auto;animation:pageIn .4s var(--ease-out)}
+  @keyframes pageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ===== KPIs ===== */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:14px;margin-bottom:20px}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);
+       padding:17px 18px;box-shadow:var(--sh-sm);position:relative;overflow:hidden;
+       transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
+  .kpi:hover{transform:translateY(-2px);box-shadow:var(--sh-md)}
+  .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+       background:var(--primary);opacity:.85}
+  .kpi.warn::before{background:var(--warn)} .kpi.danger::before{background:var(--danger)}
+  .kpi.ok::before{background:var(--ok)} .kpi.accent::before{background:var(--accent)}
+  .kpi .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;
+       color:var(--text-mute);font-weight:700}
+  .kpi .value{font-size:29px;font-weight:700;margin-top:7px;line-height:1;
+       letter-spacing:-1.2px;font-variant-numeric:tabular-nums}
+
+  /* ===== TOOLBAR ===== */
+  .toolbar{background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);
+       padding:15px 17px;display:flex;gap:11px;flex-wrap:wrap;align-items:center;
+       margin-bottom:15px;box-shadow:var(--sh-sm)}
+  .toolbar input[type=text]{padding:10px 14px;border:1px solid var(--border);border-radius:10px;
+       font-size:13px;font-family:inherit;background:#FBFCFE;color:var(--text);
+       min-width:240px;flex:1;transition:var(--t)}
+  .toolbar input[type=text]:hover{background:#fff;border-color:#D8E1EC}
+
+  /* ===== BOTÕES ===== */
+  .btn{padding:10px 17px;border-radius:10px;border:none;font-size:13px;font-weight:600;
+       cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px;
+       transition:transform .2s var(--ease),box-shadow .25s var(--ease),background .22s var(--ease),color .22s var(--ease),border-color .22s var(--ease);
+       letter-spacing:-.1px;position:relative}
+  .btn:active{transform:scale(.97)}
+  .btn:disabled{cursor:not-allowed;transform:none!important}
+  .btn-primary{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(42,79,150,.22)}
+  .btn-primary:hover:not(:disabled){background:var(--primary-dark);box-shadow:0 5px 16px rgba(42,79,150,.3);transform:translateY(-1px)}
+  .btn-accent{background:var(--accent);color:#3D2F14;box-shadow:0 2px 8px rgba(209,174,110,.28)}
+  .btn-accent:hover:not(:disabled){background:var(--accent-dark);transform:translateY(-1px);box-shadow:0 5px 16px rgba(209,174,110,.35)}
+  .btn-ghost{background:#fff;color:var(--text-soft);border:1px solid var(--border);box-shadow:var(--sh-xs)}
+  .btn-ghost:hover:not(:disabled){border-color:#C9D6E6;color:var(--primary);background:#FBFCFE}
+  .btn-danger{background:#FDF0EF;color:var(--danger)}
+  .btn-danger:hover{background:#FBE0DE}
+  .btn-sm{padding:7px 12px;font-size:12px;border-radius:8px}
+  .btn-lg{padding:12px 24px;font-size:14px;border-radius:11px}
+  .btn-destaque{background:linear-gradient(135deg,#DDBE81,#D1AE6E 60%,#C3A05F);color:#3D2F14;
+       box-shadow:0 4px 16px rgba(209,174,110,.42)}
+  .btn-destaque:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 24px rgba(209,174,110,.5)}
+
+  /* ===== FORMULÁRIO INLINE ===== */
+  .form-inline{background:var(--card);border:1px solid var(--border);border-radius:var(--r-xl);
+       box-shadow:var(--sh-lg);margin-bottom:18px;display:none;overflow:hidden;position:relative}
+  .form-inline::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+       background:linear-gradient(90deg,var(--accent),#E3C68A 50%,var(--accent))}
+  .form-inline.open{display:block;animation:dropIn .38s var(--ease-out)}
+  @keyframes dropIn{from{opacity:0;transform:translateY(-14px) scale(.985)}to{opacity:1;transform:none}}
+  .form-head{padding:17px 24px 15px;display:flex;align-items:center;justify-content:space-between}
+  .form-head h2{font-size:16px;font-weight:700;color:var(--primary-dark);letter-spacing:-.3px}
+  .form-head .close{background:#F4F7FB;border:none;font-size:15px;color:var(--text-soft);
+       cursor:pointer;width:30px;height:30px;border-radius:9px;transition:var(--t);
+       display:flex;align-items:center;justify-content:center}
+  .form-head .close:hover{background:#E9EFF7;color:var(--text);transform:rotate(90deg)}
+  .form-body{padding:4px 24px 22px}
+  .form-foot{padding:16px 24px;background:linear-gradient(180deg,#FBFCFE,#F6F9FC);
+       border-top:1px solid var(--border-soft);display:flex;gap:11px;
+       justify-content:flex-end;align-items:center;flex-wrap:wrap}
+
+  .fgroup{margin-bottom:20px}
+  .fgroup:last-child{margin-bottom:0}
+  .flabel{font-size:10.5px;font-weight:700;color:var(--text-mute);text-transform:uppercase;
+       letter-spacing:.8px;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+  .flabel .cnt{background:var(--primary);color:#fff;border-radius:10px;padding:2px 8px;
+       font-size:10px;letter-spacing:0;box-shadow:0 2px 5px rgba(42,79,150,.22);
+       transition:transform .3s var(--ease-out)}
+  .grid4{display:grid;grid-template-columns:3fr 1fr;gap:14px}
+  @media(max-width:900px){.grid4{grid-template-columns:1fr}}
+  input[type=text],input[type=date],select,textarea{width:100%;padding:11px 14px;
+       border:1px solid var(--border);border-radius:10px;font-size:13.5px;font-family:inherit;
+       background:#FBFCFE;color:var(--text);transition:var(--t)}
+  input[type=text]:hover,input[type=date]:hover,textarea:hover{background:#fff;border-color:#D8E1EC}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary-light);
+       background:#fff;box-shadow:0 0 0 4px rgba(42,79,150,.09)}
+  textarea{resize:vertical;min-height:66px;line-height:1.55}
+  ::placeholder{color:var(--text-mute)}
+
+  /* ===== FLAGS COM CHECKBOX ===== */
+  .flags{display:flex;flex-wrap:wrap;gap:9px}
+  .flag{border:1.5px solid #DCE4EF;border-radius:11px;padding:9px 15px 9px 12px;cursor:pointer;
+        background:#fff;font-size:13px;font-weight:600;color:var(--primary-dark);user-select:none;
+        transition:transform .2s var(--ease),border-color .22s var(--ease),background .22s var(--ease),box-shadow .25s var(--ease);
+        display:inline-flex;align-items:center;gap:10px;line-height:1.15;box-shadow:var(--sh-xs)}
+  .flag:hover{border-color:#B9C9DE;background:#FBFCFE;transform:translateY(-1.5px);box-shadow:var(--sh-sm)}
+  .flag:active{transform:translateY(0) scale(.98)}
+  .flag .ck{width:18px;height:18px;border:1.5px solid #B8C6D8;border-radius:5px;background:#fff;
+        flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;
+        color:#fff;font-weight:900;transition:background .22s var(--ease),border-color .22s var(--ease),transform .3s var(--ease-out)}
+  .flag.on{border-color:var(--primary);background:#F2F6FD;box-shadow:0 2px 10px rgba(42,79,150,.13)}
+  .flag.on .ck{background:var(--primary);border-color:var(--primary);transform:scale(1.06)}
+  .flag small{font-weight:400;opacity:.65;font-size:11px}
+  .flag-user .av{width:22px;height:22px;border-radius:50%;background:#EDF1F7;color:var(--text-soft);
+        display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:800;
+        transition:var(--t);flex-shrink:0}
+  .flag-user.on .av{background:var(--primary);color:#fff}
+  .flag-doc{padding:8px 14px 8px 11px;font-size:12.5px;border-radius:10px}
+  .flag-static{cursor:default}
+  .flag-static:hover{border-color:#DCE4EF;background:#fff;transform:none;box-shadow:var(--sh-xs)}
+  .flags-sm .flag{padding:6px 12px 6px 9px;font-size:12px;border-radius:9px}
+  .flags-sm .ck{width:15px;height:15px;font-size:9.5px;border-radius:4px}
+  .filtros{display:flex;flex-direction:column;gap:10px;margin-top:14px;padding-top:14px;
+        border-top:1px solid var(--border-soft);width:100%}
+  .filtro-linha{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .filtro-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+        color:var(--text-mute);min-width:98px}
+  .cores{display:flex;gap:9px;flex-wrap:wrap}
+  .cor{width:30px;height:30px;border-radius:9px;cursor:pointer;border:2.5px solid transparent;
+        display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;
+        font-weight:900;transition:transform .25s var(--ease-out),box-shadow .25s var(--ease)}
+  .cor:hover{transform:scale(1.12) rotate(-3deg)}
+  .cor.on{border-color:#fff;box-shadow:0 0 0 2.5px currentColor,0 4px 12px rgba(26,36,54,.2)}
+
+  .reveal{animation:fadeUp .35s var(--ease-out)}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .sub-block{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;
+        margin-bottom:11px;background:#FCFDFF;transition:var(--t)}
+  .sub-block:hover{border-color:#DCE6F2}
+  .sub-head{padding:9px 15px;background:linear-gradient(180deg,#F6F9FC,#F1F5FA);
+        font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;
+        color:var(--primary-dark);display:flex;justify-content:space-between;align-items:center;
+        border-bottom:1px solid var(--border-soft)}
+  .sub-head .mini{font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-mute);font-size:11px}
+  .sub-body{padding:13px 15px}
+  .placeholder{font-size:12.5px;color:var(--text-mute);background:#FAFBFD;
+        border:1.5px dashed #DFE7F1;border-radius:var(--r);padding:17px;text-align:center;line-height:1.5}
+  .alerta-cfg{font-size:12.5px;color:#8A5A12;background:#FEFAF0;border:1.5px dashed #EFD08F;
+        border-radius:var(--r);padding:12px 15px;line-height:1.5}
+
+  /* ===== ALERTA DE DUPLICIDADE ===== */
+  .alerta-dup{background:linear-gradient(135deg,#FFFBF2,#FEF7E8);border:1px solid #F0DDB4;
+        border-left:4px solid var(--accent);border-radius:var(--r);padding:13px 16px;
+        margin-bottom:18px;display:none;animation:slideDown .4s var(--ease-out);
+        box-shadow:0 3px 14px rgba(209,174,110,.16)}
+  .alerta-dup.show{display:block}
+  @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  .alerta-dup-top{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:#7A5814}
+  .alerta-dup-top .ic{width:26px;height:26px;border-radius:8px;background:var(--accent);
+        color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+  .alerta-dup-lista{margin-top:11px;display:flex;flex-direction:column;gap:7px}
+  .dup-item{background:rgba(255,255,255,.75);border:1px solid #F0E4C8;border-radius:9px;
+        padding:9px 12px;font-size:12.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+        transition:var(--t)}
+  .dup-item:hover{background:#fff;border-color:#E6D5AE}
+  .dup-item .hora{color:var(--text-mute);font-size:11px;margin-left:auto;white-space:nowrap}
+
+  /* ===== TABELA ===== */
+  .table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);
+        overflow:hidden;box-shadow:var(--sh-sm)}
+  table{width:100%;border-collapse:collapse}
+  thead th{background:linear-gradient(180deg,#FAFCFE,#F5F8FC);text-align:left;padding:13px 15px;
+        font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--text-mute);
+        font-weight:700;border-bottom:1px solid var(--border);white-space:nowrap}
+  tbody td{padding:14px 15px;border-bottom:1px solid var(--border-soft);vertical-align:top;
+        transition:background .2s var(--ease)}
+  tbody tr{transition:background .2s var(--ease);animation:rowIn .35s var(--ease-out) backwards}
+  @keyframes rowIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  tbody tr:hover{background:#FAFCFF}
+  tbody tr:last-child td{border-bottom:none}
+  .empresa-cell{font-weight:650;letter-spacing:-.15px}
+  .empresa-cell small{display:block;font-weight:400;color:var(--text-mute);font-size:11.5px;margin-top:3px}
+  .tag{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;
+        white-space:nowrap;margin:1.5px 2px 1.5px 0;letter-spacing:-.1px}
+  .tag-doc{background:#F3F6FA;color:#54687F;border-radius:7px;border:1px solid #E8EDF4}
+  .resp-chip{display:inline-flex;align-items:center;gap:7px;background:#F4F7FB;border-radius:20px;
+        padding:3px 11px 3px 3px;font-size:12px;margin:2px 4px 2px 0;font-weight:500;
+        border:1px solid #EAF0F7;transition:var(--t)}
+  .resp-chip:hover{background:#EDF3FA}
+  .avatar{width:23px;height:23px;border-radius:50%;
+        background:linear-gradient(140deg,var(--primary-light),var(--primary));color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;flex-shrink:0}
+  .st{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;letter-spacing:-.1px;white-space:nowrap}
+  .st::before{content:'';width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .st-aguardando{color:var(--danger)}
+  .st-aguardando::before{background:var(--danger);box-shadow:0 0 0 3px rgba(224,69,62,.15);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(224,69,62,.15)}50%{box-shadow:0 0 0 5px rgba(224,69,62,.06)}}
+  .st-ciente{color:var(--info)} .st-ciente::before{background:var(--info);box-shadow:0 0 0 3px rgba(45,143,213,.14)}
+  .st-andamento{color:var(--warn)} .st-andamento::before{background:var(--warn);box-shadow:0 0 0 3px rgba(224,138,30,.14)}
+  .st-resolvido{color:var(--ok)} .st-resolvido::before{background:var(--ok);box-shadow:0 0 0 3px rgba(16,163,127,.14)}
+  .contador-sessao{background:linear-gradient(135deg,#EDFBF6,#E4F7EF);border:1px solid #A9E6D2;
+        color:#0A7A5E;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:600;
+        display:none;align-items:center;gap:8px;animation:popIn .4s var(--ease-out)}
+  .contador-sessao.show{display:inline-flex}
+  @keyframes popIn{0%{opacity:0;transform:scale(.88)}60%{transform:scale(1.03)}100%{opacity:1;transform:scale(1)}}
+  .empty{padding:58px 20px;text-align:center;color:var(--text-mute);line-height:1.6}
+  .empty .ico{font-size:40px;opacity:.28;margin-bottom:12px}
+
+  /* ===== CONFIG ===== */
+  .cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:19px;align-items:start}
+  @media(max-width:1050px){.cfg-grid{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);
+        box-shadow:var(--sh-sm);overflow:hidden;transition:box-shadow .3s var(--ease)}
+  .panel:hover{box-shadow:var(--sh)}
+  .panel-head{padding:15px 20px;border-bottom:1px solid var(--border-soft);
+        background:linear-gradient(180deg,#FAFCFE,#F6F9FC)}
+  .panel-head h3{font-size:14.5px;font-weight:700;color:var(--primary-dark);letter-spacing:-.25px}
+  .panel-head p{font-size:11.5px;color:var(--text-mute);margin-top:3px;line-height:1.45}
+  .panel-body{padding:18px 20px}
+  .matrix{width:100%;border-collapse:collapse}
+  .matrix th{background:#FAFCFE;padding:10px 8px;font-size:10px;text-align:center;
+        color:var(--text-mute);border-bottom:1px solid var(--border);font-weight:700;
+        text-transform:uppercase;letter-spacing:.6px}
+  .matrix th:first-child{text-align:left;padding-left:13px}
+  .matrix td{padding:11px 8px;border-bottom:1px solid var(--border-soft);text-align:center}
+  .matrix tr:last-child td{border-bottom:none}
+  .matrix td:first-child{text-align:left;padding-left:13px;font-weight:600;font-size:13px}
+  .matrix td small{display:block;font-weight:400;color:var(--text-mute);font-size:11px;margin-top:1px}
+  .matrix tbody tr{transition:background .2s var(--ease)}
+  .matrix tbody tr:hover{background:#FAFCFF}
+  .sw{width:40px;height:22px;background:#DFE6EF;border-radius:12px;position:relative;cursor:pointer;
+        display:inline-block;transition:background .28s var(--ease)}
+  .sw::after{content:'';position:absolute;top:2.5px;left:2.5px;width:17px;height:17px;border-radius:50%;
+        background:#fff;transition:transform .32s var(--ease-out);box-shadow:0 1px 4px rgba(26,36,54,.22)}
+  .sw:hover{background:#D2DCE8}
+  .sw.on{background:var(--primary)} .sw.on:hover{background:var(--primary-dark)}
+  .sw.on::after{transform:translateX(18px)}
+  .add-row{display:flex;gap:9px;margin-top:15px;flex-wrap:wrap}
+  .add-row input,.add-row select{flex:1;min-width:110px}
+  .hint{font-size:11.5px;color:var(--text-mute);margin-top:10px;line-height:1.55}
+  .lista-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;
+        border-bottom:1px solid var(--border-soft);font-size:13px;transition:var(--t)}
+  .lista-item:last-child{border-bottom:none}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:-1px}
+
+  /* ===== CAIXA ===== */
+  .inbox-card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--danger);
+        border-radius:var(--r-lg);padding:18px 20px;margin-bottom:13px;box-shadow:var(--sh-sm);
+        transition:transform .28s var(--ease),box-shadow .3s var(--ease);
+        animation:fadeUp .4s var(--ease-out) backwards}
+  .inbox-card:hover{transform:translateY(-2px);box-shadow:var(--sh-md)}
+  .inbox-card.ciente{border-left-color:var(--info)}
+  .inbox-card.andamento{border-left-color:var(--warn)}
+  .inbox-card.resolvido{border-left-color:var(--ok);opacity:.72}
+  .inbox-top{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:12px}
+  .inbox-top h4{font-size:15.5px;font-weight:700;letter-spacing:-.25px}
+  .inbox-meta{font-size:12px;color:var(--text-mute);margin-top:6px;line-height:1.7}
+  .inbox-desc{font-size:13px;line-height:1.6;background:#FAFBFD;border:1px solid var(--border-soft);
+        border-radius:var(--r);padding:13px 15px;margin-bottom:13px;white-space:pre-wrap}
+  .inbox-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  .alerta-fixo{background:linear-gradient(135deg,#FEF4F3,#FDEDEC);border:1px solid #F7CDCA;
+        border-left:4px solid var(--danger);color:#8E2C27;border-radius:var(--r);padding:12px 16px;
+        font-size:12.5px;margin-bottom:18px;display:flex;align-items:center;gap:10px;
+        box-shadow:0 3px 14px rgba(224,69,62,.1);animation:slideDown .4s var(--ease-out)}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(140px);
+        background:linear-gradient(135deg,#243B63,#1E3A70);color:#fff;padding:14px 24px;
+        border-radius:13px;font-size:13.5px;font-weight:600;box-shadow:var(--sh-lg);
+        transition:transform .45s var(--ease-out),opacity .3s var(--ease);z-index:100;
+        opacity:0;letter-spacing:-.1px;border:1px solid rgba(255,255,255,.08)}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+  .toast.err{background:linear-gradient(135deg,#C93B34,#AE322C)}
+
+  @media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">GT3</div>
+  <div>
+    <h1>Designação de Reprovados / Pendências</h1>
+    <div class="sub">Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
+  </div>
+  <div class="user-box">
+    <label style="font-size:12px;opacity:.8">Simular usuário:</label>
+    <select id="selUsuarioAtual" onchange="trocarUsuario()"></select>
+    <div class="bell" onclick="abrirTab('caixa')">🔔<span class="badge" id="bellBadge" style="display:none">0</span></div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="active" data-tab="designacoes" onclick="abrirTab('designacoes')">📋 Designações</button>
+  <button data-tab="caixa" onclick="abrirTab('caixa')">📥 Minha Caixa <span class="pill" id="pillCaixa" style="display:none">0</span></button>
+  <button data-tab="config" onclick="abrirTab('config')">⚙️ Configurações</button>
+</nav>
+
+<main>
+
+<!-- ================= DESIGNAÇÕES ================= -->
+<section id="tab-designacoes">
+
+  <div class="kpis">
+    <div class="kpi danger"><div class="label">Aguardando ciência</div><div class="value" id="kpiAguard">0</div></div>
+    <div class="kpi" style="border-left-color:var(--info)"><div class="label">Ciente</div><div class="value" id="kpiCiente">0</div></div>
+    <div class="kpi warn"><div class="label">Em andamento</div><div class="value" id="kpiAnd">0</div></div>
+    <div class="kpi ok"><div class="label">Resolvidos</div><div class="value" id="kpiRes">0</div></div>
+    <div class="kpi accent"><div class="label">Total de itens</div><div class="value" id="kpiTotal">0</div></div>
+  </div>
+
+  <!-- ===== FORM INLINE (flags, sem gaveta) ===== -->
+  <div class="form-inline" id="formNovo">
+    <div class="form-head">
+      <h2>＋ Nova designação</h2>
+      <button class="close" onclick="fecharForm()">✕</button>
+    </div>
+    <div class="form-body">
+
+      <!-- alerta: empresa já designada hoje -->
+      <div class="alerta-dup" id="alertaDup">
+        <div class="alerta-dup-top">
+          <span class="ic">↺</span>
+          <span id="alertaDupTexto"></span>
+        </div>
+        <div class="alerta-dup-lista" id="alertaDupLista"></div>
+      </div>
+
+      <!-- linha 1: empresa + datas -->
+      <div class="fgroup">
+        <div class="grid4">
+          <div>
+            <div class="flabel">Empresa</div>
+            <input type="text" id="inpEmpresa" list="dlEmpresas" placeholder="Digite para buscar..." oninput="onEmpresa()" autocomplete="off">
+            <div class="hint" id="hintEmpresa"></div>
+          </div>
+          <div>
+            <div class="flabel">Data verificação</div>
+            <input type="date" id="inpDataVerif" onchange="atualizarResumo()">
+          </div>
+        </div>
+      </div>
+
+      <!-- SETOR -->
+      <div class="fgroup">
+        <div class="flabel">Tipo de setor <span class="cnt" id="cntSetor">0</span></div>
+        <div class="flags" id="flagsSetores"></div>
+      </div>
+
+      <!-- DOCUMENTOS (aparece após setor) -->
+      <div class="fgroup" id="grpDocs">
+        <div class="flabel">Tipo de documento <span class="cnt" id="cntDoc">0</span></div>
+        <div id="blocosDocs"></div>
+      </div>
+
+      <!-- STATUS DO DOC -->
+      <div class="fgroup" id="grpSit">
+        <div class="flabel">Status do documento</div>
+        <div class="flags" id="flagsSituacoes"></div>
+      </div>
+
+      <!-- RESPONSÁVEIS (aparece após setor) -->
+      <div class="fgroup" id="grpResp">
+        <div class="flabel">Responsáveis pertinentes <span class="cnt" id="cntResp">0</span></div>
+        <div id="blocosResp"></div>
+      </div>
+
+      <!-- OBSERVAÇÃO -->
+      <div class="fgroup">
+        <div class="flabel">Observação / orientação para a empresa</div>
+        <textarea id="inpMotivo" placeholder="Ex.: ASO do João vencido desde 10/09 — solicitar reagendamento e reenvio pelo portal..."></textarea>
+      </div>
+
+    </div>
+    <div class="form-foot">
+      <span class="contador-sessao" id="contadorSessao">✓ <b id="qtdSessao">0</b> incluída(s) nesta sessão</span>
+      <span id="resumoForm" style="margin-right:auto;font-size:12px;color:var(--text-soft)"></span>
+      <button class="btn btn-ghost" onclick="fecharForm()">Cancelar</button>
+      <button class="btn btn-ghost" id="btnSalvarFechar" onclick="salvarDesignacao(false)">Salvar e fechar</button>
+      <button class="btn btn-destaque btn-lg" id="btnSalvar" onclick="salvarDesignacao(true)">💾 Salvar e incluir ＋</button>
+    </div>
+  </div>
+  <datalist id="dlEmpresas"></datalist>
+
+  <div class="toolbar" style="flex-direction:column;align-items:stretch">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:100%">
+      <input type="text" id="fBusca" placeholder="🔍 Buscar por empresa, documento ou responsável..." oninput="renderDesignacoes()">
+      <button class="btn btn-ghost btn-sm" onclick="limparFiltros()">Limpar filtros</button>
+      <button class="btn btn-primary" style="margin-left:auto" onclick="abrirForm()">＋ Novo</button>
+    </div>
+    <div class="filtros">
+      <div class="filtro-linha"><span class="filtro-lbl">Setor</span><div class="flags flags-sm" id="filtroSetores"></div></div>
+      <div class="filtro-linha"><span class="filtro-lbl">Status doc.</span><div class="flags flags-sm" id="filtroSituacoes"></div></div>
+      <div class="filtro-linha"><span class="filtro-lbl">Tratativa</span><div class="flags flags-sm" id="filtroTratativas"></div></div>
+      <div class="filtro-linha"><span class="filtro-lbl">Responsável</span><div class="flags flags-sm" id="filtroResponsaveis"></div></div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:19%">Empresa</th>
+        <th style="width:11%">Setor</th>
+        <th style="width:22%">Documentos</th>
+        <th style="width:9%">Status doc.</th>
+        <th style="width:16%">Responsáveis</th>
+        <th style="width:10%">Tratativa</th>
+        <th style="width:5%"></th>
+      </tr></thead>
+      <tbody id="tbodyDesignacoes"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= CAIXA ================= -->
+<section id="tab-caixa" style="display:none">
+  <div class="alerta-fixo" id="alertaFixo" style="display:none">
+    ⚠️ <span><b id="alertaQtd">0</b> item(ns) aguardando sua ciência. O aviso permanece no dashboard até você dar ciência aqui dentro.</span>
+  </div>
+  <div id="listaCaixa"></div>
+</section>
+
+<!-- ================= CONFIG ================= -->
+<section id="tab-config" style="display:none">
+  <div class="cfg-grid">
+
+    <div class="panel">
+      <div class="panel-head"><h3>Tipos de setor</h3><p>As flags do primeiro nível da designação</p></div>
+      <div class="panel-body">
+        <table class="matrix" id="tabelaSetores"></table>
+        <div class="add-row">
+          <input type="text" id="novoSetorNome" placeholder="Nome do setor (ex.: Ambiental)">
+          <button class="btn btn-accent btn-sm" onclick="addSetor()">＋ Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Status do documento</h3><p>Conectado direto ao campo da designação</p></div>
+      <div class="panel-body">
+        <table class="matrix" id="tabelaSituacoes"></table>
+        <div class="add-row">
+          <input type="text" id="novaSitNome" placeholder="Ex.: Vencido, Aguardando envio...">
+          <button class="btn btn-accent btn-sm" onclick="addSituacao()">＋ Add</button>
+        </div>
+        <div style="margin-top:10px">
+          <div class="flabel" style="margin-bottom:6px">Cor</div>
+          <div class="cores" id="coresSituacao"></div>
+        </div>
+        <div class="hint">Tudo que for cadastrado aqui já aparece como flag na tela de designação, sem mexer no código.</div>
+      </div>
+    </div>
+
+    <div class="panel" style="grid-column:1/-1">
+      <div class="panel-head"><h3>Documentos por setor</h3><p>O que é solicitado dentro de cada tipo de setor</p></div>
+      <div class="panel-body">
+        <div style="margin-bottom:12px">
+          <div class="flabel">Setor</div>
+          <div class="flags flags-sm" id="cfgSetorFlags"></div>
+        </div>
+        <div class="add-row" style="margin-top:0;margin-bottom:14px">
+          <input type="text" id="novoDocNome" placeholder="Nome do documento (ex.: ASO, CRLV, LTCAT...)" onkeydown="if(event.key==='Enter')addDocumento()">
+          <button class="btn btn-accent btn-sm" onclick="addDocumento()">＋ Add documento</button>
+        </div>
+        <div id="listaDocsConfig"></div>
+        <div class="hint">Ao flegar o setor na designação, só os documentos ativos deste setor aparecem como flag.</div>
+      </div>
+    </div>
+
+    <div class="panel" style="grid-column:1/-1">
+      <div class="panel-head"><h3>Matriz de pertinência · usuário × setor</h3><p>Define quem é liberado como responsável ao flegar cada setor</p></div>
+      <div class="panel-body" style="overflow-x:auto">
+        <table class="matrix" id="tabelaMatriz"></table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Usuários</h3><p>Quem pode receber designações</p></div>
+      <div class="panel-body">
+        <table class="matrix" id="tabelaUsuarios"></table>
+        <div class="add-row">
+          <input type="text" id="novoUsuarioNome" placeholder="Nome (ex.: Caroline)">
+          <input type="text" id="novoUsuarioSetor" placeholder="Setor" style="max-width:140px">
+          <button class="btn btn-accent btn-sm" onclick="addUsuario()">＋ Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Empresas / Prestadoras</h3><p>Autocomplete (espelhar do módulo Cadastro)</p></div>
+      <div class="panel-body">
+        <div id="listaEmpresas" style="max-height:240px;overflow-y:auto"></div>
+        <div class="add-row">
+          <input type="text" id="novaEmpresaNome" placeholder="Razão social / fantasia">
+          <input type="text" id="novaEmpresaContratante" placeholder="Contratante" style="max-width:140px">
+          <button class="btn btn-accent btn-sm" onclick="addEmpresa()">＋ Add</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   GT3 · DESIGNAÇÃO DE REPROVADOS — v2 (flags inline, 2 níveis de documento)
+   Persistência: localStorage → trocar por Supabase na migração
+   ========================================================================= */
+const LS_KEY = 'gt3_designacao_reprovados_v2';
+
+const SEED = {
+  usuarios:[
+    {id:'u1',nome:'Alexandra',setor:'Documentação',ativo:true},
+    {id:'u2',nome:'Camila',setor:'SST',ativo:true},
+    {id:'u3',nome:'Daiana',setor:'Documentação',ativo:true},
+    {id:'u4',nome:'Luciane',setor:'Pessoas',ativo:true},
+    {id:'u5',nome:'Mariane',setor:'Frota',ativo:true},
+    {id:'u6',nome:'Marina',setor:'SST',ativo:true},
+    {id:'u7',nome:'Caroline',setor:'Pessoas',ativo:true},
+    {id:'u8',nome:'Marcio Zim',setor:'Gestão',ativo:true}
+  ],
+  setores:[
+    {id:'s1',nome:'Empresa',ativo:true},
+    {id:'s2',nome:'PGR/PCMSO',ativo:true},
+    {id:'s3',nome:'Pessoas',ativo:true},
+    {id:'s4',nome:'Veículos',ativo:true}
+  ],
+  // documentos[] pertencem a um setor
+  documentos:[
+    {id:'d01',setorId:'s1',nome:'Contrato Social',ativo:true},
+    {id:'d02',setorId:'s1',nome:'Cartão CNPJ',ativo:true},
+    {id:'d03',setorId:'s1',nome:'CND Federal',ativo:true},
+    {id:'d04',setorId:'s1',nome:'CRF / FGTS',ativo:true},
+    {id:'d05',setorId:'s1',nome:'Alvará',ativo:true},
+    {id:'d06',setorId:'s2',nome:'PGR',ativo:true},
+    {id:'d07',setorId:'s2',nome:'PCMSO',ativo:true},
+    {id:'d08',setorId:'s2',nome:'LTCAT',ativo:true},
+    {id:'d09',setorId:'s2',nome:'Inventário de Riscos',ativo:true},
+    {id:'d10',setorId:'s2',nome:'Plano de Ação',ativo:true},
+    {id:'d11',setorId:'s3',nome:'ASO',ativo:true},
+    {id:'d12',setorId:'s3',nome:'Ficha de EPI',ativo:true},
+    {id:'d13',setorId:'s3',nome:'Certificado de NR',ativo:true},
+    {id:'d14',setorId:'s3',nome:'Ordem de Serviço',ativo:true},
+    {id:'d15',setorId:'s3',nome:'Ficha de Registro',ativo:true},
+    {id:'d16',setorId:'s4',nome:'CRLV',ativo:true},
+    {id:'d17',setorId:'s4',nome:'CNH do condutor',ativo:true},
+    {id:'d18',setorId:'s4',nome:'Checklist veicular',ativo:true},
+    {id:'d19',setorId:'s4',nome:'Seguro',ativo:true}
+  ],
+  // status do documento — cadastrável, ligado direto ao campo
+  situacoes:[
+    {id:'sit1',nome:'Reprovado',cor:'#DC2626',ativo:true},
+    {id:'sit2',nome:'Pendente', cor:'#D97706',ativo:true}
+  ],
+  // matriz[setorId] = [usuarioId...]
+  matriz:{
+    s1:['u1','u3'],
+    s2:['u2','u6'],
+    s3:['u3','u6','u7'],
+    s4:['u5','u4']
+  },
+  empresas:[
+    {id:'e1',nome:'Transportes Silva Ltda',contratante:'Marcopolo'},
+    {id:'e2',nome:'Metalúrgica Andrade ME',contratante:'Volare'},
+    {id:'e3',nome:'Conservadora Brilho Total',contratante:'Marcopolo'},
+    {id:'e4',nome:'Elétrica Serrana Eireli',contratante:'Marcopolo'},
+    {id:'e5',nome:'Logística Caxias S/A',contratante:'Volare'}
+  ],
+  designacoes:[],
+  usuarioAtual:'u1'
+};
+
+let DB = carregar();
+function carregar(){
+  try{ const raw=localStorage.getItem(LS_KEY);
+    if(raw) return Object.assign(JSON.parse(JSON.stringify(SEED)), JSON.parse(raw));
+  }catch(e){console.warn(e)}
+  return JSON.parse(JSON.stringify(SEED));
+}
+function salvar(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(DB)); }catch(e){console.warn(e)}
+  /* >>> SUPABASE: upsert em designacoes / setores / documentos / situacoes /
+         designacao_matriz — ver comentários no NotificacaoService <<< */
+}
+
+/* =========================================================================
+   >>> INTEGRAÇÃO: NOTIFICAÇÃO PERSISTENTE NO DASHBOARD <<<
+   Igual ao módulo de Legislações: o aviso só sai quando o usuário abre o
+   módulo e dá CIÊNCIA. Trocar o corpo pelas chamadas reais na migração.
+   ========================================================================= */
+const NotificacaoService = {
+  async criar({designacaoId, usuarioId, titulo, descricao}){
+    /* await supabase.from('notificacoes').insert({
+         usuario_id:usuarioId, modulo:'designacao_reprovados',
+         referencia_id:designacaoId, titulo, descricao,
+         persistente:true, lida:false, criado_em:new Date().toISOString() }); */
+    console.log('[NOTIF CRIADA]',{designacaoId,usuarioId,titulo,descricao});
+  },
+  async marcarLida({designacaoId, usuarioId}){
+    /* await supabase.from('notificacoes').update({lida:true,lida_em:new Date().toISOString()})
+         .eq('referencia_id',designacaoId).eq('usuario_id',usuarioId)
+         .eq('modulo','designacao_reprovados'); */
+    console.log('[NOTIF LIDA]',{designacaoId,usuarioId});
+  },
+  async encerrar({designacaoId}){
+    /* await supabase.from('notificacoes').update({encerrada:true})
+         .eq('referencia_id',designacaoId).eq('modulo','designacao_reprovados'); */
+    console.log('[NOTIF ENCERRADA]',{designacaoId});
+  },
+  contarPendentes(usuarioId){
+    return DB.designacoes.filter(d=>d.responsaveis.includes(usuarioId) && d.tratativa==='aguardando').length;
+  }
+};
+
+/* ---------- HELPERS ---------- */
+const $=id=>document.getElementById(id);
+const uid=()=>'id'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const hoje=()=>new Date().toISOString().slice(0,10);
+const usuario=id=>DB.usuarios.find(u=>u.id===id)||{nome:'—',setor:''};
+const setor=id=>DB.setores.find(s=>s.id===id)||{nome:'—'};
+const doc_=id=>DB.documentos.find(d=>d.id===id)||{nome:'—'};
+const sit=id=>DB.situacoes.find(s=>s.id===id)||{nome:'—',cor:'#64748B'};
+const iniciais=n=>n.split(' ').map(p=>p[0]).slice(0,2).join('').toUpperCase();
+const fmtData=d=>d?d.split('-').reverse().join('/'):'—';
+function toast(m,e){const t=$('toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2800);}
+
+/* ---------- NAVEGAÇÃO ---------- */
+function abrirTab(n){
+  ['designacoes','caixa','config'].forEach(t=>$('tab-'+t).style.display=(t===n)?'block':'none');
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===n));
+  if(n==='caixa')renderCaixa();
+  if(n==='config')renderConfig();
+}
+function trocarUsuario(){DB.usuarioAtual=$('selUsuarioAtual').value;salvar();renderTudo();}
+
+/* =========================================================================
+   FORMULÁRIO INLINE — tudo em flag, reveal progressivo
+   ========================================================================= */
+let R = {empresa:'',setores:[],documentos:[],situacao:'sit1',responsaveis:[]};
+let qtdSessao = 0;   // quantas foram incluídas sem fechar o formulário
+// filtros multi-seleção (vazio = todos)
+let F = {setores:[],situacoes:[],tratativas:[],responsaveis:[]};
+const TRATATIVAS=[{id:'aguardando',nome:'Aguardando ciência'},{id:'ciente',nome:'Ciente'},
+                  {id:'andamento',nome:'Em andamento'},{id:'resolvido',nome:'Resolvido'}];
+
+function abrirForm(){
+  qtdSessao=0;
+  $('contadorSessao').classList.remove('show');
+  $('inpEmpresa').value='';$('inpDataVerif').value=hoje();
+  limparCamposItem();
+  $('formNovo').classList.add('open');
+  setTimeout(()=>$('inpEmpresa').focus(),120);
+}
+
+/* Limpa só o que muda de item para item — empresa e data de verificação
+   permanecem, porque no uso diário costuma-se lançar vários seguidos. */
+function limparCamposItem(){
+  R={empresa:$('inpEmpresa').value.trim(),setores:[],documentos:[],
+     situacao:DB.situacoes.filter(s=>s.ativo)[0]?.id||'',responsaveis:[]};
+  $('inpMotivo').value='';$('hintEmpresa').textContent='';
+  renderFlagsSetores();renderFlagsSituacoes();renderDocsForm();renderRespForm();
+  onEmpresa();atualizarResumo();
+}
+function fecharForm(){$('formNovo').classList.remove('open');}
+
+function onEmpresa(){
+  R.empresa=$('inpEmpresa').value.trim();
+  const e=DB.empresas.find(x=>x.nome.toLowerCase()===R.empresa.toLowerCase());
+  $('hintEmpresa').textContent = e ? '✓ Contratante: '+e.contratante
+    : (R.empresa?'⚠ Não cadastrada — será salva como texto livre.':'');
+  atualizarResumo();
+}
+
+/* Avisa quando a mesma empresa já foi designada na mesma data de verificação.
+   Não bloqueia: é comum a mesma prestadora ter itens de setores diferentes —
+   o alerta só evita designar duas vezes a mesma coisa sem perceber. */
+function verificarDuplicidade(){
+  const box=$('alertaDup');
+  const nome=R.empresa.toLowerCase();
+  const dia=$('inpDataVerif').value||hoje();
+  if(nome.length<2){ box.classList.remove('show'); return; }
+
+  const jaHoje=DB.designacoes.filter(d=>
+    d.empresa.toLowerCase()===nome && d.dataVerificacao===dia
+  );
+  if(!jaHoje.length){ box.classList.remove('show'); return; }
+
+  // sobreposição com o que está sendo montado agora
+  const mesmoDoc=jaHoje.filter(d=>R.documentos.some(x=>d.documentos.includes(x)));
+  const mesmoSetor=jaHoje.filter(d=>R.setores.some(s=>d.setores.includes(s)));
+
+  let texto=`${R.empresa} já tem ${jaHoje.length} designação(ões) em ${fmtData(dia)}`;
+  if(!R.setores.length)      texto+=' — confira abaixo antes de lançar';
+  else if(mesmoDoc.length)   texto+=' — atenção: documento repetido';
+  else if(mesmoSetor.length) texto+=' — mesmo setor, documento diferente';
+  else                       texto+=' — setores diferentes, sem conflito';
+
+  $('alertaDupTexto').textContent=texto;
+  $('alertaDupLista').innerHTML=jaHoje.map(d=>{
+    const repete=R.documentos.some(x=>d.documentos.includes(x));
+    return `<div class="dup-item" ${repete?'style="border-color:#E8A9A4;background:#FEF6F5"':''}>
+      ${repete?'<b style="color:#B93A33">⚠</b>':'<span style="color:var(--ok)">✓</span>'}
+      <span class="tag" style="background:${sit(d.situacao).cor}1A;color:${sit(d.situacao).cor}">${sit(d.situacao).nome}</span>
+      <span>${d.setores.map(s=>setor(s).nome).join(', ')}</span>
+      <b>${d.documentos.map(x=>doc_(x).nome).join(' · ')}</b>
+      <span>→ ${d.responsaveis.map(u=>usuario(u).nome).join(', ')}</span>
+      <span class="hora">${new Date(d.criadoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
+    </div>`;
+  }).join('');
+  box.classList.add('show');
+}
+
+/* --- SETORES (nível 1) --- */
+function renderFlagsSetores(){
+  $('flagsSetores').innerHTML = DB.setores.filter(s=>s.ativo).map(s=>{
+    const on=R.setores.includes(s.id);
+    return `<div class="flag ${on?'on':''}" onclick="toggleSetor('${s.id}')">
+      <span class="ck">${on?'✓':''}</span>${s.nome}</div>`;
+  }).join('');
+  $('cntSetor').textContent = R.setores.length;
+}
+function toggleSetor(id){
+  const i=R.setores.indexOf(id);
+  if(i>=0){
+    R.setores.splice(i,1);
+    // limpa documentos e responsáveis que dependiam desse setor
+    R.documentos = R.documentos.filter(dId => R.setores.includes(doc_(dId).setorId));
+    R.responsaveis = R.responsaveis.filter(uId => R.setores.some(sId => (DB.matriz[sId]||[]).includes(uId)));
+  } else R.setores.push(id);
+  renderFlagsSetores(); renderDocsForm(); renderRespForm(); atualizarResumo();
+}
+
+/* --- DOCUMENTOS (nível 2, só após setor) --- */
+function renderDocsForm(){
+  const box=$('blocosDocs');
+  if(!R.setores.length){
+    box.innerHTML='<div class="placeholder">Flegue um tipo de setor acima para liberar os documentos.</div>';
+    $('cntDoc').textContent=0; return;
+  }
+  box.innerHTML = R.setores.map(sId=>{
+    const s=setor(sId);
+    const docs=DB.documentos.filter(d=>d.setorId===sId && d.ativo);
+    return `<div class="sub-block reveal">
+      <div class="sub-head"><span>${s.nome}</span><span class="mini">${docs.length} documento(s)</span></div>
+      <div class="sub-body">${
+        docs.length
+        ? `<div class="flags">${docs.map(d=>{const on=R.documentos.includes(d.id);
+            return `<div class="flag flag-doc ${on?'on':''}" onclick="toggleDoc('${d.id}')">
+              <span class="ck">${on?'✓':''}</span>${d.nome}</div>`;}).join('')}</div>`
+        : `<div class="alerta-cfg">Nenhum documento cadastrado para "${s.nome}". Cadastre em ⚙️ Configurações → Documentos por setor.</div>`
+      }</div>
+    </div>`;
+  }).join('');
+  $('cntDoc').textContent=R.documentos.length;
+}
+function toggleDoc(id){
+  const i=R.documentos.indexOf(id);
+  if(i>=0)R.documentos.splice(i,1);else R.documentos.push(id);
+  renderDocsForm();atualizarResumo();
+}
+
+/* --- STATUS DO DOCUMENTO (cadastrável) --- */
+function renderFlagsSituacoes(){
+  $('flagsSituacoes').innerHTML = DB.situacoes.filter(s=>s.ativo).map(s=>{
+    const on=R.situacao===s.id;
+    return `<div class="flag flag-sit ${on?'on':''}"
+      style="${on?`border-color:${s.cor};background:${s.cor}12;color:${s.cor}`:`color:${s.cor}`}"
+      onclick="setSituacao('${s.id}')">
+      <span class="ck" style="${on?`background:${s.cor};border-color:${s.cor}`:''}">${on?'✓':''}</span>${s.nome}</div>`;
+  }).join('');
+}
+function setSituacao(id){R.situacao=id;renderFlagsSituacoes();atualizarResumo();}
+
+/* --- RESPONSÁVEIS (só após setor) --- */
+function renderRespForm(){
+  const box=$('blocosResp');
+  if(!R.setores.length){
+    box.innerHTML='<div class="placeholder">Os usuários pertinentes aparecem assim que você flegar o setor.</div>';
+    $('cntResp').textContent=0; return;
+  }
+  box.innerHTML = R.setores.map(sId=>{
+    const s=setor(sId);
+    const ids=(DB.matriz[sId]||[]).filter(uId=>usuario(uId).ativo!==false);
+    return `<div class="sub-block reveal">
+      <div class="sub-head"><span>${s.nome}</span><span class="mini">${ids.length} pertinente(s)</span></div>
+      <div class="sub-body">${
+        ids.length
+        ? `<div class="flags">${ids.map(uId=>{const u=usuario(uId);const on=R.responsaveis.includes(uId);
+            return `<div class="flag flag-user ${on?'on':''}" onclick="toggleResp('${uId}')">
+              <span class="ck">${on?'✓':''}</span><span class="av">${iniciais(u.nome)}</span>${u.nome}</div>`;}).join('')}</div>`
+        : `<div class="alerta-cfg">Nenhum usuário pertinente a "${s.nome}". Ajuste em ⚙️ Configurações → Matriz de pertinência.</div>`
+      }</div>
+    </div>`;
+  }).join('');
+  $('cntResp').textContent=R.responsaveis.length;
+}
+function toggleResp(id){
+  const i=R.responsaveis.indexOf(id);
+  if(i>=0)R.responsaveis.splice(i,1);else R.responsaveis.push(id);
+  renderRespForm();atualizarResumo();
+}
+
+function atualizarResumo(){
+  verificarDuplicidade();
+  const ok = R.empresa.length>1 && R.setores.length && R.documentos.length && R.responsaveis.length && R.situacao;
+  ['btnSalvar','btnSalvarFechar'].forEach(b=>{
+    $(b).disabled=!ok; $(b).style.opacity=ok?'1':'.5';
+  });
+  const falta=[];
+  if(R.empresa.length<2)falta.push('empresa');
+  if(!R.setores.length)falta.push('setor');
+  if(!R.documentos.length)falta.push('documento');
+  if(!R.responsaveis.length)falta.push('responsável');
+  $('resumoForm').textContent = ok
+    ? `${R.documentos.length} documento(s) · ${R.responsaveis.length} responsável(is) · ${sit(R.situacao).nome}`
+    : 'Falta: '+falta.join(', ');
+}
+
+async function salvarDesignacao(continuar){
+  if($('btnSalvar').disabled){toast('Complete os campos obrigatórios.',true);return;}
+  const d={
+    id:uid(),
+    empresa:R.empresa,
+    contratante:(DB.empresas.find(e=>e.nome.toLowerCase()===R.empresa.toLowerCase())||{}).contratante||'',
+    setores:[...R.setores],
+    documentos:[...R.documentos],
+    situacao:R.situacao,
+    responsaveis:[...R.responsaveis],
+    motivo:$('inpMotivo').value.trim(),
+    dataVerificacao:$('inpDataVerif').value||hoje(),
+    tratativa:'aguardando',          // aguardando → ciente → andamento → resolvido
+    cienciaPor:[],
+    historico:[{em:new Date().toISOString(),por:DB.usuarioAtual,acao:'Designação criada'}],
+    criadoPor:DB.usuarioAtual,
+    criadoEm:new Date().toISOString()
+  };
+  DB.designacoes.unshift(d); salvar();
+
+  for(const uId of d.responsaveis){
+    await NotificacaoService.criar({
+      designacaoId:d.id, usuarioId:uId,
+      titulo:`${sit(d.situacao).nome}: ${d.empresa}`,
+      descricao:`${d.setores.map(s=>setor(s).nome).join(', ')} — ${d.documentos.map(x=>doc_(x).nome).join(', ')}`
+    });
+  }
+  renderTudo();
+
+  if(continuar){
+    // mantém o formulário aberto para o próximo lançamento
+    qtdSessao++;
+    $('qtdSessao').textContent=qtdSessao;
+    $('contadorSessao').classList.add('show');
+    limparCamposItem();
+    $('inpEmpresa').focus(); $('inpEmpresa').select();
+    toast(`Salvo. ${d.responsaveis.length} notificado(s) — pode incluir o próximo.`);
+  } else {
+    fecharForm();
+    toast(`Designação criada e ${d.responsaveis.length} usuário(s) notificado(s).`);
+  }
+}
+
+/* =========================================================================
+   TABELA
+   ========================================================================= */
+const tratLabel=t=>({aguardando:'Aguardando ciência',ciente:'Ciente',andamento:'Em andamento',resolvido:'Resolvido'}[t]||t);
+
+function renderDesignacoes(){
+  const b=$('fBusca').value.toLowerCase();
+  const lista=DB.designacoes.filter(d=>{
+    if(F.setores.length && !d.setores.some(s=>F.setores.includes(s)))return false;
+    if(F.situacoes.length && !F.situacoes.includes(d.situacao))return false;
+    if(F.tratativas.length && !F.tratativas.includes(d.tratativa))return false;
+    if(F.responsaveis.length && !d.responsaveis.some(u=>F.responsaveis.includes(u)))return false;
+    if(b){
+      const alvo=(d.empresa+' '+d.motivo+' '+d.documentos.map(x=>doc_(x).nome).join(' ')+' '+
+                  d.responsaveis.map(u=>usuario(u).nome).join(' ')).toLowerCase();
+      if(!alvo.includes(b))return false;
+    }
+    return true;
+  });
+
+  $('tbodyDesignacoes').innerHTML = lista.length ? lista.map(d=>`
+    <tr>
+      <td class="empresa-cell">${d.empresa}<small>${d.contratante?d.contratante+' · ':''}verif. ${fmtData(d.dataVerificacao)}</small></td>
+      <td>${d.setores.map(s=>`<span class="tag" style="background:#EEF2FF;color:#3730A3">${setor(s).nome}</span>`).join('')}</td>
+      <td>${d.documentos.map(x=>`<span class="tag tag-doc">${doc_(x).nome}</span>`).join('')}
+          ${d.motivo?`<small style="display:block;color:var(--text-soft);font-size:11.5px;margin-top:4px">${d.motivo.slice(0,70)}${d.motivo.length>70?'…':''}</small>`:''}</td>
+      <td><span class="tag" style="background:${sit(d.situacao).cor}1A;color:${sit(d.situacao).cor}">${sit(d.situacao).nome}</span></td>
+      <td>${d.responsaveis.map(u=>`<span class="resp-chip"><span class="avatar">${iniciais(usuario(u).nome)}</span>${usuario(u).nome}</span>`).join('')}</td>
+      <td><span class="st st-${d.tratativa}">${tratLabel(d.tratativa)}</span></td>
+      <td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="excluir('${d.id}')">🗑</button></td>
+    </tr>`).join('')
+    : `<tr><td colspan="7"><div class="empty"><div class="ico">📭</div>Nenhuma designação encontrada.<br>
+       <small>Use "＋ Novo" após a verificação diária no Portal GT3.</small></div></td></tr>`;
+
+  $('kpiAguard').textContent=DB.designacoes.filter(d=>d.tratativa==='aguardando').length;
+  $('kpiCiente').textContent=DB.designacoes.filter(d=>d.tratativa==='ciente').length;
+  $('kpiAnd').textContent   =DB.designacoes.filter(d=>d.tratativa==='andamento').length;
+  $('kpiRes').textContent   =DB.designacoes.filter(d=>d.tratativa==='resolvido').length;
+  $('kpiTotal').textContent=DB.designacoes.length;
+}
+function excluir(id){
+  if(!confirm('Excluir esta designação?'))return;
+  DB.designacoes=DB.designacoes.filter(d=>d.id!==id);
+  NotificacaoService.encerrar({designacaoId:id});
+  salvar();renderTudo();toast('Designação excluída.');
+}
+
+/* =========================================================================
+   CAIXA DO USUÁRIO
+   ========================================================================= */
+function renderCaixa(){
+  const me=DB.usuarioAtual, meus=DB.designacoes.filter(d=>d.responsaveis.includes(me));
+  const pend=meus.filter(d=>d.tratativa==='aguardando').length;
+  $('alertaFixo').style.display=pend?'flex':'none';$('alertaQtd').textContent=pend;
+  $('listaCaixa').innerHTML = meus.length ? meus.map(d=>{
+    const jaCiente=d.cienciaPor.includes(me);
+    return `<div class="inbox-card ${d.tratativa}">
+      <div class="inbox-top">
+        <div><h4>${d.empresa}</h4>
+          <div class="inbox-meta">
+            ${d.setores.map(s=>`<span class="tag" style="background:#EEF2FF;color:#3730A3">${setor(s).nome}</span>`).join('')}
+            <span class="tag" style="background:${sit(d.situacao).cor}1A;color:${sit(d.situacao).cor}">${sit(d.situacao).nome}</span>
+            · verif. ${fmtData(d.dataVerificacao)} · por ${usuario(d.criadoPor).nome}
+          </div></div>
+        <span class="st st-${d.tratativa}">${tratLabel(d.tratativa)}</span>
+      </div>
+      <div class="inbox-desc"><b>${d.documentos.map(x=>doc_(x).nome).join(' · ')}</b>${d.motivo?'\n\n'+d.motivo:''}</div>
+      <div class="inbox-actions">
+        ${!jaCiente?`<button class="btn btn-primary btn-sm" onclick="darCiencia('${d.id}')">✓ Dar ciência</button>`
+                   :`<span style="font-size:12px;color:var(--ok);font-weight:600">✓ Ciência registrada</span>`}
+        ${jaCiente&&d.tratativa!=='resolvido'?`
+          <button class="btn btn-ghost btn-sm" onclick="mudarTrat('${d.id}','andamento')">▶ Em andamento</button>
+          <button class="btn btn-accent btn-sm" onclick="mudarTrat('${d.id}','resolvido')">✔ Resolvido</button>`:''}
+      </div></div>`;
+  }).join('') : `<div class="panel"><div class="empty"><div class="ico">✅</div>Nenhum item designado para ${usuario(me).nome}.</div></div>`;
+}
+async function darCiencia(id){
+  const d=DB.designacoes.find(x=>x.id===id);if(!d)return;
+  const me=DB.usuarioAtual;
+  if(!d.cienciaPor.includes(me))d.cienciaPor.push(me);
+  if(d.tratativa==='aguardando')d.tratativa='ciente';
+  d.historico.push({em:new Date().toISOString(),por:me,acao:'Ciência registrada'});
+  salvar();await NotificacaoService.marcarLida({designacaoId:id,usuarioId:me});
+  renderTudo();toast('Ciência registrada — o aviso sai do dashboard.');
+}
+async function mudarTrat(id,novo){
+  const d=DB.designacoes.find(x=>x.id===id);if(!d)return;
+  d.tratativa=novo;
+  d.historico.push({em:new Date().toISOString(),por:DB.usuarioAtual,acao:'Tratativa → '+tratLabel(novo)});
+  if(novo==='resolvido')await NotificacaoService.encerrar({designacaoId:id});
+  salvar();renderTudo();toast('Atualizado para '+tratLabel(novo)+'.');
+}
+
+/* =========================================================================
+   CONFIGURAÇÕES
+   ========================================================================= */
+function renderConfig(){
+  // setores
+  $('tabelaSetores').innerHTML='<thead><tr><th>Setor</th><th>Docs</th><th>Pertinentes</th><th>Ativo</th><th></th></tr></thead><tbody>'+
+    DB.setores.map(s=>`<tr>
+      <td>${s.nome}</td>
+      <td>${DB.documentos.filter(d=>d.setorId===s.id&&d.ativo).length}</td>
+      <td>${(DB.matriz[s.id]||[]).length}</td>
+      <td><span class="sw ${s.ativo?'on':''}" onclick="toggleSetorAtivo('${s.id}')"></span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="removerSetor('${s.id}')">🗑</button></td>
+    </tr>`).join('')+'</tbody>';
+
+  // situações
+  $('tabelaSituacoes').innerHTML='<thead><tr><th>Status</th><th>Uso</th><th>Ativo</th><th></th></tr></thead><tbody>'+
+    DB.situacoes.map(s=>`<tr>
+      <td><span class="dot" style="background:${s.cor}"></span>${s.nome}</td>
+      <td>${DB.designacoes.filter(d=>d.situacao===s.id).length}</td>
+      <td><span class="sw ${s.ativo?'on':''}" onclick="toggleSitAtiva('${s.id}')"></span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="removerSituacao('${s.id}')">🗑</button></td>
+    </tr>`).join('')+'</tbody>';
+
+  // flags de setor do painel de documentos
+  if(!cfgSetorAtual || !DB.setores.some(s=>s.id===cfgSetorAtual)) cfgSetorAtual = DB.setores[0]?.id || '';
+  $('cfgSetorFlags').innerHTML=DB.setores.map(s=>{
+    const on=cfgSetorAtual===s.id;
+    return `<div class="flag ${on?'on':''}" onclick="selecionarSetorCfg('${s.id}')">
+      <span class="ck">${on?'✓':''}</span>${s.nome}</div>`;
+  }).join('');
+  renderDocsConfig();
+
+  // matriz
+  const setoresAtivos=DB.setores.filter(s=>s.ativo);
+  $('tabelaMatriz').innerHTML='<thead><tr><th>Usuário</th>'+setoresAtivos.map(s=>`<th>${s.nome}</th>`).join('')+'</tr></thead><tbody>'+
+    DB.usuarios.filter(u=>u.ativo).map(u=>`<tr>
+      <td>${u.nome}<small>${u.setor||''}</small></td>
+      ${setoresAtivos.map(s=>{
+        const on=(DB.matriz[s.id]||[]).includes(u.id);
+        return `<td><span class="sw ${on?'on':''}" onclick="togglePertinencia('${s.id}','${u.id}')"></span></td>`;
+      }).join('')}
+    </tr>`).join('')+'</tbody>';
+
+  // usuários
+  $('tabelaUsuarios').innerHTML='<thead><tr><th>Nome</th><th>Setor</th><th>Ativo</th><th></th></tr></thead><tbody>'+
+    DB.usuarios.map(u=>`<tr>
+      <td>${u.nome}</td>
+      <td style="text-align:left;font-size:12.5px;color:var(--text-soft)">${u.setor||'—'}</td>
+      <td><span class="sw ${u.ativo?'on':''}" onclick="toggleUsuarioAtivo('${u.id}')"></span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="removerUsuario('${u.id}')">🗑</button></td>
+    </tr>`).join('')+'</tbody>';
+
+  renderCores();
+
+  // empresas
+  $('listaEmpresas').innerHTML=DB.empresas.map(e=>`
+    <div class="lista-item"><div><b>${e.nome}</b><br><small style="color:var(--text-soft)">${e.contratante||'—'}</small></div>
+    <button class="btn btn-danger btn-sm" onclick="removerEmpresa('${e.id}')">🗑</button></div>`).join('')
+    ||'<div class="hint">Nenhuma empresa cadastrada.</div>';
+}
+
+let cfgSetorAtual = '';
+function selecionarSetorCfg(id){cfgSetorAtual=id;renderConfig();}
+
+function renderDocsConfig(){
+  const sId=cfgSetorAtual;
+  const docs=DB.documentos.filter(d=>d.setorId===sId);
+  $('listaDocsConfig').innerHTML = docs.length ? `<div class="flags">`+docs.map(d=>`
+    <div class="flag flag-static" style="${d.ativo?'':'opacity:.45'}">
+      ${d.nome}
+      <span class="sw ${d.ativo?'on':''}" style="transform:scale(.72);margin-left:2px" onclick="toggleDocAtivo('${d.id}')"></span>
+      <span style="cursor:pointer;color:var(--danger);font-weight:700" onclick="removerDocumento('${d.id}')">✕</span>
+    </div>`).join('')+`</div>`
+    : '<div class="placeholder">Nenhum documento cadastrado neste setor ainda.</div>';
+}
+
+function togglePertinencia(sId,uId){
+  if(!DB.matriz[sId])DB.matriz[sId]=[];
+  const i=DB.matriz[sId].indexOf(uId);
+  if(i>=0)DB.matriz[sId].splice(i,1);else DB.matriz[sId].push(uId);
+  salvar();renderConfig();
+}
+function addSetor(){
+  const nome=$('novoSetorNome').value.trim();if(!nome){toast('Informe o nome.',true);return;}
+  const id=uid();DB.setores.push({id,nome,ativo:true});DB.matriz[id]=[];
+  $('novoSetorNome').value='';salvar();renderConfig();renderFiltros();toast('Setor adicionado.');
+}
+function toggleSetorAtivo(id){const s=DB.setores.find(x=>x.id===id);s.ativo=!s.ativo;salvar();renderConfig();renderFiltros();}
+function removerSetor(id){
+  if(!confirm('Remover o setor? Os documentos dele também serão removidos.'))return;
+  DB.setores=DB.setores.filter(s=>s.id!==id);
+  DB.documentos=DB.documentos.filter(d=>d.setorId!==id);
+  delete DB.matriz[id];salvar();renderConfig();renderFiltros();
+}
+function addDocumento(){
+  const nome=$('novoDocNome').value.trim(), sId=cfgSetorAtual;
+  if(!nome){toast('Informe o documento.',true);return;}
+  DB.documentos.push({id:uid(),setorId:sId,nome,ativo:true});
+  $('novoDocNome').value='';salvar();renderConfig();toast('Documento adicionado a '+setor(sId).nome+'.');
+  $('novoDocNome').focus();
+}
+function toggleDocAtivo(id){const d=DB.documentos.find(x=>x.id===id);d.ativo=!d.ativo;salvar();renderConfig();}
+function removerDocumento(id){DB.documentos=DB.documentos.filter(d=>d.id!==id);salvar();renderConfig();}
+const CORES=['#DC2626','#D97706','#0284C7','#059669','#6B21A8','#64748B'];
+let corSelecionada=CORES[0];
+function renderCores(){
+  $('coresSituacao').innerHTML=CORES.map(c=>
+    `<div class="cor ${corSelecionada===c?'on':''}" style="background:${c}" onclick="selecionarCor('${c}')">${corSelecionada===c?'✓':''}</div>`
+  ).join('');
+}
+function selecionarCor(c){corSelecionada=c;renderCores();}
+
+function addSituacao(){
+  const nome=$('novaSitNome').value.trim();if(!nome){toast('Informe o status.',true);return;}
+  DB.situacoes.push({id:uid(),nome,cor:corSelecionada,ativo:true});
+  $('novaSitNome').value='';salvar();renderConfig();renderFiltros();toast('Status adicionado — já disponível na designação.');
+}
+function toggleSitAtiva(id){const s=DB.situacoes.find(x=>x.id===id);s.ativo=!s.ativo;salvar();renderConfig();renderFiltros();}
+function removerSituacao(id){
+  if(DB.designacoes.some(d=>d.situacao===id)){toast('Status em uso — desative ao invés de remover.',true);return;}
+  DB.situacoes=DB.situacoes.filter(s=>s.id!==id);salvar();renderConfig();renderFiltros();
+}
+function addUsuario(){
+  const nome=$('novoUsuarioNome').value.trim();if(!nome){toast('Informe o nome.',true);return;}
+  DB.usuarios.push({id:uid(),nome,setor:$('novoUsuarioSetor').value.trim(),ativo:true});
+  $('novoUsuarioNome').value='';$('novoUsuarioSetor').value='';
+  salvar();renderConfig();renderFiltros();toast('Usuário adicionado.');
+}
+function toggleUsuarioAtivo(id){const u=DB.usuarios.find(x=>x.id===id);u.ativo=!u.ativo;salvar();renderConfig();renderFiltros();}
+function removerUsuario(id){
+  if(!confirm('Remover usuário? Sai também da matriz.'))return;
+  DB.usuarios=DB.usuarios.filter(u=>u.id!==id);
+  Object.keys(DB.matriz).forEach(k=>DB.matriz[k]=DB.matriz[k].filter(u=>u!==id));
+  salvar();renderConfig();renderFiltros();
+}
+function addEmpresa(){
+  const nome=$('novaEmpresaNome').value.trim();if(!nome){toast('Informe a empresa.',true);return;}
+  DB.empresas.push({id:uid(),nome,contratante:$('novaEmpresaContratante').value.trim()});
+  $('novaEmpresaNome').value='';$('novaEmpresaContratante').value='';
+  salvar();renderConfig();renderDatalist();toast('Empresa adicionada.');
+}
+function removerEmpresa(id){DB.empresas=DB.empresas.filter(e=>e.id!==id);salvar();renderConfig();renderDatalist();}
+
+/* ---------- AUXILIARES ---------- */
+function renderDatalist(){
+  $('dlEmpresas').innerHTML=DB.empresas.map(e=>`<option value="${e.nome}">${e.contratante||''}</option>`).join('');
+}
+function renderFiltros(){
+  const fl=(cont,itens,chave,corFn)=>{
+    $(cont).innerHTML=itens.map(i=>{
+      const on=F[chave].includes(i.id);
+      const cor=corFn?corFn(i):null;
+      return `<div class="flag ${on?'on':''}" ${on&&cor?`style="border-color:${cor};background:${cor}12;color:${cor}"`:''}
+        onclick="toggleFiltro('${chave}','${i.id}')">
+        <span class="ck" ${on&&cor?`style="background:${cor};border-color:${cor}"`:''}>${on?'✓':''}</span>${i.nome}</div>`;
+    }).join('');
+  };
+  fl('filtroSetores',      DB.setores.filter(s=>s.ativo),   'setores');
+  fl('filtroSituacoes',    DB.situacoes.filter(s=>s.ativo), 'situacoes', s=>s.cor);
+  fl('filtroTratativas',   TRATATIVAS,                      'tratativas');
+  fl('filtroResponsaveis', DB.usuarios.filter(u=>u.ativo),  'responsaveis');
+  $('selUsuarioAtual').innerHTML=DB.usuarios.filter(u=>u.ativo).map(u=>`<option value="${u.id}" ${u.id===DB.usuarioAtual?'selected':''}>${u.nome}</option>`).join('');
+}
+function toggleFiltro(chave,id){
+  const i=F[chave].indexOf(id);
+  if(i>=0)F[chave].splice(i,1);else F[chave].push(id);
+  renderFiltros();renderDesignacoes();
+}
+function limparFiltros(){
+  $('fBusca').value='';
+  F={setores:[],situacoes:[],tratativas:[],responsaveis:[]};
+  renderFiltros();renderDesignacoes();
+}
+function renderBadge(){
+  const n=NotificacaoService.contarPendentes(DB.usuarioAtual);
+  const b=$('bellBadge'),p=$('pillCaixa');
+  b.style.display=n?'flex':'none';b.textContent=n;
+  p.style.display=n?'inline-block':'none';p.textContent=n;
+}
+function renderTudo(){
+  renderFiltros();renderDatalist();renderDesignacoes();renderBadge();
+  if($('tab-caixa').style.display!=='none')renderCaixa();
+  if($('tab-config').style.display!=='none')renderConfig();
+}
+
+renderTudo();
+$('inpDataVerif').value=hoje();
+</script>
+</body>
+</html>
