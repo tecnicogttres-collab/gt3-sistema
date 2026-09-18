@@ -82,16 +82,16 @@ a {
 
 .module-card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   border: 1px solid #E8EDF5;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(30,37,61,0.06);
-  transition: box-shadow 0.2s, transform 0.15s;
+  box-shadow: var(--sh-sm);
+  transition: box-shadow 300ms var(--ease-gt3), transform 300ms var(--ease-gt3);
 }
 
 .module-card:hover {
-  box-shadow: 0 4px 16px rgba(30,37,61,0.10);
-  transform: translateY(-1px);
+  box-shadow: var(--sh-md);
+  transform: translateY(-2px);
 }
 
 .module-card-icon {
@@ -122,15 +122,16 @@ a {
 /* PDI card */
 .pdi-card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   border: 1px solid #E8D9B8;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(209,174,110,0.12);
-  transition: box-shadow 0.2s;
+  transition: box-shadow 300ms var(--ease-gt3), transform 300ms var(--ease-gt3);
 }
 
 .pdi-card:hover {
   box-shadow: 0 6px 20px rgba(209,174,110,0.22);
+  transform: translateY(-2px);
 }
 
 .pdi-icon {
@@ -229,6 +230,53 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
 .gt3-drop-in   { animation: gt3DropIn   .38s var(--ease-out) }
 .gt3-pop-in    { animation: gt3PopIn    .40s var(--ease-out) }
 .gt3-slide-down{ animation: gt3SlideDown .40s var(--ease-out) }
+
+/* ─── Elementos base: botão, input, card ──────────────────────────────────
+   Aplicado por seletor de elemento/classe (não por componente) porque o
+   projeto não tem Button/Card/Input compartilhado — todo botão e input é
+   inline em cada página. Só transição, sombra e movimento; nenhuma cor
+   muda aqui. */
+
+button {
+  transition: transform 200ms var(--ease-gt3), box-shadow 200ms var(--ease-gt3),
+    background-color 200ms var(--ease-gt3), border-color 200ms var(--ease-gt3);
+}
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--sh-sm);
+}
+button:active:not(:disabled) {
+  transform: scale(.97);
+}
+button:disabled {
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Exclui os tipos de input que não são "campo de texto" — checkbox, radio etc.
+   não devem ganhar cantos arredondados nem fundo, ficariam quebrados visualmente. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+select,
+textarea {
+  border-radius: 10px;
+  background-color: #FBFCFE;
+  transition: background-color var(--duration-gt3) var(--ease-gt3),
+    border-color var(--duration-gt3) var(--ease-gt3), box-shadow var(--duration-gt3) var(--ease-gt3);
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):hover,
+select:hover,
+textarea:hover {
+  background-color: #fff;
+  border-color: #D8E1EC;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  background-color: #fff;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(42,79,150,.09);
+}
 
 /* Respeita quem desativou animação no sistema operacional — OBRIGATÓRIO */
 @media (prefers-reduced-motion: reduce) {
