@@ -8,6 +8,49 @@
   --color-ink: #1E253D;
   --color-muted: #6B7A99;
   --font-sans: var(--font-geist-sans, system-ui, sans-serif);
+
+  /* Curvas de animação */
+  --ease:       cubic-bezier(.34,.8,.35,1);
+  --ease-out:   cubic-bezier(.16,1,.3,1);
+  --t-fast:     .18s;
+  --t:          .28s;
+  --t-slow:     .40s;
+
+  /* Escala de sombras — difusas e de baixa opacidade */
+  --sh-xs: 0 1px 2px rgba(26,36,54,.04);
+  --sh-sm: 0 2px 8px rgba(26,36,54,.05), 0 1px 2px rgba(26,36,54,.03);
+  --sh:    0 4px 16px rgba(26,36,54,.06), 0 1px 3px rgba(26,36,54,.04);
+  --sh-md: 0 8px 28px rgba(26,36,54,.08), 0 2px 6px rgba(26,36,54,.04);
+  --sh-lg: 0 18px 48px rgba(26,36,54,.12), 0 4px 12px rgba(26,36,54,.06);
+
+  /* Raios */
+  --r-sm: 8px;  --r: 12px;  --r-lg: 16px;  --r-xl: 20px;
+
+  /* Cinza de apoio (NÃO substitui as cores da marca) */
+  --border-soft: #F1F5F9;
+
+  /* Equivalentes de utility do Tailwind (theme.extend adaptado pro @theme do v4) */
+  --shadow-gt3-xs: var(--sh-xs);
+  --shadow-gt3-sm: var(--sh-sm);
+  --shadow-gt3:    var(--sh);
+  --shadow-gt3-md: var(--sh-md);
+  --shadow-gt3-lg: var(--sh-lg);
+  --radius-gt3-sm: 8px;
+  --radius-gt3:    12px;
+  --radius-gt3-lg: 16px;
+  --radius-gt3-xl: 20px;
+  --ease-gt3:      cubic-bezier(.34,.8,.35,1);
+  --ease-gt3-out:  cubic-bezier(.16,1,.3,1);
+  --duration-gt3:      280ms;
+  --duration-gt3-slow: 400ms;
+}
+
+/* --text-mute fica fora do @theme de propósito: o prefixo --text-* ali dentro é
+   reservado pelo Tailwind pra escala de tamanho de fonte, não cor — colocar uma
+   cor lá geraria uma classe "text-mute" quebrada. Como variável comum, funciona
+   normalmente via var(--text-mute) e não temos essa colisão. */
+:root {
+  --text-mute: #9AAABF;
 }
 
 * {
@@ -165,3 +208,33 @@ a {
   min-width: 80px;
 }
 .obs-scroll-top::-webkit-scrollbar-thumb:hover { background: #1e3a70; }
+
+/* ─── Fundação do design system — sem mexer em componente nenhum aqui ────── */
+
+html { scroll-behavior: smooth; }
+body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
+::selection { background: rgba(42,79,150,.16); }
+
+::-webkit-scrollbar { width:11px; height:11px }
+::-webkit-scrollbar-track { background: transparent }
+::-webkit-scrollbar-thumb { background:#D6DFEA; border-radius:9px; border:3px solid #F7F9FC }
+::-webkit-scrollbar-thumb:hover { background:#BCC9D9 }
+
+@keyframes gt3FadeUp  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+@keyframes gt3DropIn  { from{opacity:0;transform:translateY(-14px) scale(.985)} to{opacity:1;transform:none} }
+@keyframes gt3PopIn   { 0%{opacity:0;transform:scale(.88)} 60%{transform:scale(1.03)} 100%{opacity:1;transform:scale(1)} }
+@keyframes gt3SlideDown { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:none} }
+
+.gt3-fade-up   { animation: gt3FadeUp   .35s var(--ease-out) backwards }
+.gt3-drop-in   { animation: gt3DropIn   .38s var(--ease-out) }
+.gt3-pop-in    { animation: gt3PopIn    .40s var(--ease-out) }
+.gt3-slide-down{ animation: gt3SlideDown .40s var(--ease-out) }
+
+/* Respeita quem desativou animação no sistema operacional — OBRIGATÓRIO */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
