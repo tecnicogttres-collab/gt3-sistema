@@ -126,6 +126,9 @@ function normCpf(s: string): string {
 function fmtCpf(c: string): string {
   return c && c.length === 11 ? `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}` : (c || '')
 }
+function fmtCpfMasc(c: string): string {
+  return c && c.length === 11 ? `***.${c.slice(3, 6)}.${c.slice(6, 9)}-**` : (c ? fmtCpf(c) : '')
+}
 function similar(a: string, b: string): number {
   a = chaveNome(a); b = chaveNome(b)
   if (!a || !b) return 0
@@ -557,6 +560,9 @@ export default function ComparativoGuiaClient() {
   const [analise, setAnalise] = useState<Analise | null>(null)
   const [filtro, setFiltro] = useState<Filtro>('falta')
   const [copiado, setCopiado] = useState(false)
+  // Oculta parte do CPF por padrão — na tela, na observação e no CSV.
+  const [ocultarCpf, setOcultarCpf] = useState(true)
+  const cpfExibir = useCallback((c: string) => (ocultarCpf ? fmtCpfMasc(c) : fmtCpf(c)), [ocultarCpf])
 
   // Carrega o leitor de PDF (pdf.js via CDN)
   useEffect(() => {
@@ -701,7 +707,7 @@ export default function ComparativoGuiaClient() {
     if (!analise) return ''
     const camposDe = (r: Resultado): CamposItem => ({
       nome: r.dados.pessoa,
-      cpf: fmtCpf(r.dados.cpf),
+      cpf: cpfExibir(r.dados.cpf),
       cadastro: dataBr(r.dados.dataCad) || r.dados.cadastro,
       motivo: r.motivo,
       atividade: r.dados.atividade,
@@ -741,7 +747,7 @@ export default function ComparativoGuiaClient() {
       cond_varios_cnpj: analise.cnpjs.length > 1,
     }
     return preencherModelo(modelo || MODELO_PADRAO, dados)
-  }, [analise, falta, fora, div, modelo, itFalta, itDesc, itDiv, meuNomeAssinatura])
+  }, [analise, falta, fora, div, modelo, itFalta, itDesc, itDiv, meuNomeAssinatura, cpfExibir])
 
   // ── Config modal ──────────────────────────────────────────────────────
 
@@ -783,7 +789,7 @@ export default function ComparativoGuiaClient() {
     analise.resultado.forEach(r => {
       linhas.push([
         r.situacao === 'ok' ? 'Consta' : r.situacao === 'falta' ? 'Nao consta' : 'Desconsiderado',
-        r.motivo, r.dados.pessoa, fmtCpf(r.dados.cpf), r.dados.atividade, r.dados.vinculo,
+        r.motivo, r.dados.pessoa, cpfExibir(r.dados.cpf), r.dados.atividade, r.dados.vinculo,
         dataBr(r.dados.dataAdmissao) || r.dados.admissao,
         dataBr(r.dados.dataCad) || r.dados.cadastro,
         r.admissaoPosterior ? 'Sim' : 'Não',
@@ -1038,6 +1044,11 @@ export default function ComparativoGuiaClient() {
               />
             </div>
 
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12, fontSize: 13, color: TEXT, cursor: 'pointer' }}>
+              <input type="checkbox" checked={ocultarCpf} onChange={e => setOcultarCpf(e.target.checked)} />
+              Ocultar parte do CPF na tela, na observação e no CSV
+            </label>
+
             <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
               {filtros.map(f => (
                 <button
@@ -1099,7 +1110,7 @@ export default function ComparativoGuiaClient() {
                             {r.dados.repeticoes > 1 && <span style={{ fontSize: 12, color: NEUTRO, display: 'block', marginTop: 3 }}>{r.dados.repeticoes} linhas no relatório, contada uma vez</span>}
                             {r.nota && <span style={{ fontSize: 12, color: NEUTRO, display: 'block', marginTop: 3 }}>{r.nota}</span>}
                           </td>
-                          <td style={tdBase}>{fmtCpf(r.dados.cpf)}</td>
+                          <td style={tdBase}>{cpfExibir(r.dados.cpf)}</td>
                           <td style={{ ...tdBase, ...grifo('atividade') }}>{r.dados.atividade || '—'}</td>
                           <td style={{ ...tdBase, ...grifo('vinculo') }}>{r.dados.vinculo || '—'}</td>
                           <td style={{ ...tdBase, ...admissaoDestaque }}>
