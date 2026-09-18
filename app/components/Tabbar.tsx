@@ -75,6 +75,7 @@ export default function Tabbar() {
           <Link
             key={tab.id}
             href={tab.path}
+            className={`gt3-tab${isActive ? ' gt3-tab-active' : ''}`}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -82,13 +83,14 @@ export default function Tabbar() {
               padding: '8px 14px',
               fontSize: 13,
               whiteSpace: 'nowrap',
-              borderBottom: `2px solid ${isActive ? color : 'transparent'}`,
+              borderBottom: '2px solid transparent', // reserva o mesmo espaço de antes — a barra ativa agora é o ::after
               color: isActive ? '#1E253D' : '#6B7A99',
               fontWeight: isActive ? 500 : 400,
-              transition: 'all 0.15s',
+              transition: 'background-color var(--duration-gt3) var(--ease-gt3), color var(--duration-gt3) var(--ease-gt3)',
               backgroundColor: isActive ? '#fff' : 'transparent',
               cursor: 'pointer',
-            }}
+              ['--tab-active-color' as string]: color,
+            } as React.CSSProperties}
           >
             {tab.id !== 'home' && (
               <span

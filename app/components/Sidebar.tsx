@@ -85,14 +85,27 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       gap: collapsed ? 0 : 12,
       padding: collapsed ? '12px 0' : '10px 16px',
       justifyContent: collapsed ? 'center' : undefined,
-      borderLeft: `2px solid ${isActive ? ACCENT : 'transparent'}`,
-      backgroundColor: isActive ? 'rgba(255,255,255,0.10)' : undefined,
+      borderLeft: '2px solid transparent', // espaço reservado — a barra ativa é o span abaixo, não a borda
+      backgroundColor: isActive ? 'rgba(255,255,255,0.10)' : 'transparent',
       color: isActive ? ACCENT : 'rgba(255,255,255,0.85)',
       fontSize: 14,
       fontWeight: isActive ? 500 : 400,
-      transition: 'all 0.15s',
+      transition: 'background-color var(--duration-gt3) var(--ease-gt3), color var(--duration-gt3) var(--ease-gt3)',
       cursor: 'pointer',
     }
+  }
+
+  /** Barrinha do item ativo — escala em vez de aparecer/sumir de repente. */
+  function ActiveBar({ active }: { active: boolean }) {
+    return (
+      <span style={{
+        position: 'absolute', left: 0, top: '50%', width: 2, height: '60%',
+        backgroundColor: ACCENT,
+        transform: `translateY(-50%) scaleY(${active ? 1 : 0})`,
+        transformOrigin: 'center',
+        transition: 'transform .32s cubic-bezier(.16,1,.3,1)',
+      }} />
+    )
   }
 
   return (
@@ -133,6 +146,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
         <Link href="/" style={itemStyle(pathname === '/')}>
+          <ActiveBar active={pathname === '/'} />
           <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.8)', flexShrink: 0 }} />
           {!collapsed && <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>Dashboard</span>}
         </Link>
@@ -146,6 +160,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
             (moduleNotifs[mod.id] ?? 0) > 0
           return (
             <Link key={mod.id} href={mod.path} style={itemStyle(isActive)}>
+              <ActiveBar active={isActive} />
               <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: mod.color, flexShrink: 0 }} />
               {!collapsed && <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{mod.label}</span>}
               {hasBadge && (

@@ -742,15 +742,19 @@ export default function CadastroTerceirasClient() {
         ] as const).map(tab => {
           const ativa = activeTab === tab.id
           return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-              padding: '10px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-              color: ativa ? tab.cor : S.textMuted,
-              borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-              borderBottomWidth: 2, borderBottomStyle: 'solid',
-              borderBottomColor: ativa ? tab.cor : 'transparent',
-              background: 'none',
-              marginBottom: -2, transition: 'all 0.15s', fontFamily: 'inherit',
-            }}>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`gt3-tab${ativa ? ' gt3-tab-active' : ''}`}
+              style={{
+                padding: '10px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                color: ativa ? tab.cor : S.textMuted,
+                borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                borderBottomWidth: 2, borderBottomStyle: 'solid', borderBottomColor: 'transparent',
+                background: 'none',
+                marginBottom: -2,
+                transition: 'color var(--duration-gt3) var(--ease-gt3)',
+                fontFamily: 'inherit',
+                ['--tab-active-color' as string]: tab.cor,
+              } as React.CSSProperties}>
               {tab.label}
               <span style={{
                 display: 'inline-block', marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 11,

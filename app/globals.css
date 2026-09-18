@@ -231,6 +231,22 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
 .gt3-pop-in    { animation: gt3PopIn    .40s var(--ease-out) }
 .gt3-slide-down{ animation: gt3SlideDown .40s var(--ease-out) }
 
+/* ─── Indicador deslizante de aba ──────────────────────────────────────────
+   A cor vem da própria aba via --tab-active-color (setada inline por elemento,
+   já que cada módulo tem sua cor); currentColor cobre quem não passar a var. */
+.gt3-tab { position: relative; }
+.gt3-tab::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background-color: var(--tab-active-color, currentColor);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .32s var(--ease-out);
+}
+.gt3-tab-active::after { transform: scaleX(1); }
+
 /* ─── Elementos base: botão, input, card ──────────────────────────────────
    Aplicado por seletor de elemento/classe (não por componente) porque o
    projeto não tem Button/Card/Input compartilhado — todo botão e input é

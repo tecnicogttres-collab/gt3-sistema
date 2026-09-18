@@ -72,7 +72,7 @@ export function TabContentCache({
   return (
     <main style={mainStyle}>
       {allPaths.map(path => (
-        <div key={path} style={{ display: path === pathname ? 'block' : 'none', height: '100%' }}>
+        <div key={path} className="gt3-fade-up" style={{ display: path === pathname ? 'block' : 'none', height: '100%' }}>
           {contentCache.get(path)}
         </div>
       ))}

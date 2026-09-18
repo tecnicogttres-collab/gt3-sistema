@@ -357,8 +357,9 @@ function Opcao({ on, gold, onClick, children }: { on: boolean; gold?: boolean; o
 function Tab({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick}
+      className={`gt3-tab${ativo ? ' gt3-tab-active' : ''}`}
       style={{
-        background: 'none', border: 0, borderBottom: `2px solid ${ativo ? PRIMARY : 'transparent'}`,
+        background: 'none', border: 0, borderBottom: '2px solid transparent',
         padding: '9px 14px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, marginBottom: -1,
         color: ativo ? PRIMARY : MUTED, fontWeight: ativo ? 600 : 500,
       }}>
