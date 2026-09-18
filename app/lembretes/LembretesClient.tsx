@@ -118,6 +118,8 @@ export default function LembretesClient() {
   const [outrosData, setOutrosData] = useState<{ lembretes: (Lembrete & { confirmado: boolean })[]; historico: { lembrete_id: string; created_at: string }[] } | null>(null)
   const [outrosLoading, setOutrosLoading] = useState(false)
   const [outrosUserSearch, setOutrosUserSearch] = useState('')
+  // IDs de colaboradores com lembrete próprio ainda pendente neste mês — bolinha na lista.
+  const [equipeAtivos, setEquipeAtivos] = useState<Set<string>>(new Set())
 
   // ── Confirmados neste mês (por qualquer usuário) ───────────────────────────
 
@@ -393,6 +395,10 @@ export default function LembretesClient() {
         if (res.ok) setUsers(await res.json())
       } catch { /* noop */ }
     }
+    try {
+      const res = await fetch('/api/lembretes/equipe-ativos')
+      if (res.ok) setEquipeAtivos(new Set(await res.json() as string[]))
+    } catch { /* noop */ }
   }
 
   // ── Calendar ───────────────────────────────────────────────────────────────
@@ -951,8 +957,12 @@ export default function LembretesClient() {
                       const q = outrosUserSearch.toLowerCase()
                       return (u.nome ?? '').toLowerCase().includes(q) || (u.usuario ?? '').toLowerCase().includes(q)
                     })
+                    // Organizado por quem tem lembrete próprio ativo neste mês primeiro —
+                    // dentro de cada grupo, mantém a ordem alfabética que já vinha da API.
+                    .sort((a, b) => Number(equipeAtivos.has(b.id)) - Number(equipeAtivos.has(a.id)))
                     .map(u => {
                       const active = outrosUserId === u.id
+                      const temAtivo = equipeAtivos.has(u.id)
                       const displayN = u.nome?.trim() || u.usuario?.trim() || 'Usuário'
                       return (
                         <button
@@ -965,7 +975,15 @@ export default function LembretesClient() {
                             borderLeft: `3px solid ${active ? INK : 'transparent'}`,
                           }}
                         >
-                          <div style={{ fontSize: 13, fontWeight: 600, color: active ? INK : TEXT }}>{displayN}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {temAtivo && (
+                              <span
+                                title="Tem lembrete ativo neste mês"
+                                style={{ width: 7, height: 7, borderRadius: '50%', background: WARN, flexShrink: 0 }}
+                              />
+                            )}
+                            <div style={{ fontSize: 13, fontWeight: 600, color: active ? INK : TEXT }}>{displayN}</div>
+                          </div>
                           {u.usuario && u.nome?.trim() && (
                             <div style={{ fontSize: 11, color: TEXT_FAINT }}>{u.usuario}</div>
                           )}

@@ -399,6 +399,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!profile) return
     const userId = profile.id
+    const userPapel = profile.papel
     const supabase = createClient()
     let mounted = true
 
@@ -492,14 +493,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!mounted || !res.ok) return
-        const data: Array<{ data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual'; hora_inicio: string | null; concluido: boolean; confirmado?: boolean }> = await res.json()
+        const data: Array<{ data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual'; hora_inicio: string | null; concluido: boolean; confirmado?: boolean; criado_por: string | null }> = await res.json()
         const today = new Date().toISOString().split('T')[0]
         const snoozedAte = getLembreteSnoozedAte(userId)
         if (snoozedAte && today <= snoozedAte) return
+        // Gestor/admin enxergam lembrete de toda a equipe (visibilidade "todos"), mas o
+        // pop-up de atraso é só sobre o próprio — lembrete de colaborador fica visível
+        // na tela inicial do módulo, sem interromper com pop-up quem não é o dono dele.
+        const isGestorOuAdmin = userPapel === 'gestor' || userPapel === 'admin'
+        const meus = isGestorOuAdmin ? data.filter(r => r.criado_por === userId) : data
         // Só conta como atrasado quem tem ocorrência real neste mês (não apenas
         // uma data_inicio antiga) — senão um lembrete "único" já confirmado no
         // passado volta a acusar atraso todo mês, sem nenhuma forma de resolver.
-        const count = data.filter(r => isLembreteOverdue(r, !!r.confirmado)).length
+        const count = meus.filter(r => isLembreteOverdue(r, !!r.confirmado)).length
         if (count > 0) { setLembreteCount(count); setShowLembreteNotif(true) }
       } catch { /* noop */ }
     }
