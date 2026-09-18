@@ -607,11 +607,13 @@ export default function DesignacaoReprovadosClient() {
           { id: 'caixa' as const, label: `📥 Minha Caixa${minhaCaixaPendentes ? ` (${minhaCaixaPendentes})` : ''}` },
           { id: 'config' as const, label: '⚙️ Configurações' },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            background: 'none', border: 'none', borderBottom: `2.5px solid ${tab === t.id ? ACCENT : 'transparent'}`,
-            padding: '14px 16px', fontSize: 13.5, fontWeight: tab === t.id ? 700 : 500,
-            color: tab === t.id ? PRIMARY : MUTED, cursor: 'pointer', fontFamily: 'inherit',
-          }}>{t.label}</button>
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`gt3-tab${tab === t.id ? ' gt3-tab-active' : ''}`}
+            style={{
+              background: 'none', border: 'none', borderBottom: '2.5px solid transparent',
+              padding: '14px 16px', fontSize: 13.5, fontWeight: tab === t.id ? 700 : 500,
+              color: tab === t.id ? PRIMARY : MUTED, cursor: 'pointer', fontFamily: 'inherit',
+            }}>{t.label}</button>
         ))}
       </div>
 
