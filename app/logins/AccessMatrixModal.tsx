@@ -33,6 +33,28 @@ export default function AccessMatrixModal({
 }) {
   const [search, setSearch] = useState('')
   const [pending, setPending] = useState<string | null>(null) // `${userId}|${modId}` em voo
+  // Destaque: clicar no nome de um usuário ou no cabeçalho de um módulo deixa
+  // os demais quase transparentes. Clicar de novo (ou "Limpar destaque") desfaz.
+  const [focusUsers, setFocusUsers] = useState<Set<string>>(new Set())
+  const [focusModules, setFocusModules] = useState<Set<string>>(new Set())
+
+  function toggleFocusUser(id: string) {
+    setFocusUsers(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleFocusModule(id: string) {
+    setFocusModules(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const hasFocus = focusUsers.size > 0 || focusModules.size > 0
 
   const orderedModules = useMemo(
     () => [...modules].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
@@ -45,6 +67,25 @@ export default function AccessMatrixModal({
       .filter(u => !q || (u.nome ?? '').toLowerCase().includes(q) || (u.usuario ?? '').toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
       .sort((a, b) => (a.nome ?? a.usuario ?? a.email).localeCompare(b.nome ?? b.usuario ?? b.email, 'pt-BR'))
   }, [users, search])
+
+  const [grantAllPending, setGrantAllPending] = useState<string | null>(null)
+
+  /** Concede um módulo pra todo mundo que ainda não tem — não mexe em quem já tem nem em admin protegido. */
+  async function grantModuleToAll(modId: string) {
+    if (!canManage) return
+    setGrantAllPending(modId)
+    try {
+      const targets = users.filter(u => {
+        const isProtectedAdmin = u.papel === 'admin' && currentUserId !== u.id
+        if (isProtectedAdmin) return false
+        const enabledIds = u.modulos_permitidos ?? orderedModules.map(m => m.id)
+        return !enabledIds.includes(modId)
+      })
+      await Promise.all(targets.map(u => onToggle(u, modId)))
+    } finally {
+      setGrantAllPending(prev => (prev === modId ? null : prev))
+    }
+  }
 
   async function handleClick(u: UserRow, modId: string) {
     const isProtectedAdmin = u.papel === 'admin' && currentUserId !== u.id
@@ -77,15 +118,28 @@ export default function AccessMatrixModal({
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
         </div>
 
-        <input
-          type="text"
-          placeholder="Buscar usuário..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: '100%', maxWidth: 320, margin: '10px 0 14px', padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 13.5, color: '#1E293B', outline: 'none', boxSizing: 'border-box' }}
-          onFocus={(e) => { e.target.style.borderColor = PRIMARY }}
-          onBlur={(e) => { e.target.style.borderColor = '#D1D5DB' }}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 14px' }}>
+          <input
+            type="text"
+            placeholder="Buscar usuário..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: '100%', maxWidth: 320, padding: '8px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 13.5, color: '#1E293B', outline: 'none', boxSizing: 'border-box' }}
+            onFocus={(e) => { e.target.style.borderColor = PRIMARY }}
+            onBlur={(e) => { e.target.style.borderColor = '#D1D5DB' }}
+          />
+          {hasFocus && (
+            <button
+              onClick={() => { setFocusUsers(new Set()); setFocusModules(new Set()) }}
+              style={{
+                padding: '7px 14px', borderRadius: 8, border: `1px solid ${PRIMARY}`, backgroundColor: '#fff',
+                color: PRIMARY, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+              }}
+            >
+              ✕ Limpar destaque
+            </button>
+          )}
+        </div>
 
         <div style={{ overflow: 'auto', border: '1px solid #E2E8F0', borderRadius: 8, flex: 1 }}>
           <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: 12.5 }}>
@@ -98,22 +152,42 @@ export default function AccessMatrixModal({
                 }}>
                   Usuário
                 </th>
-                {orderedModules.map(mod => (
-                  <th key={mod.id} title={mod.label} style={{
-                    position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#F9FAFB',
-                    borderBottom: '1px solid #E2E8F0', borderRight: '1px solid #F1F5F9',
-                    padding: '8px 4px 10px', height: 150, width: 30, minWidth: 30, verticalAlign: 'bottom',
-                  }}>
-                    <div style={{
-                      writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap',
-                      fontSize: 11, fontWeight: 500, color: '#374151', margin: '0 auto',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: mod.color, flexShrink: 0 }} />
-                      {mod.label}
-                    </div>
-                  </th>
-                ))}
+                {orderedModules.map(mod => {
+                  const selected = focusModules.has(mod.id)
+                  const dimmed = focusModules.size > 0 && !selected
+                  const granting = grantAllPending === mod.id
+                  return (
+                    <th key={mod.id} title={`${mod.label} — clique para destacar esta coluna`}
+                      onClick={() => toggleFocusModule(mod.id)}
+                      style={{
+                        position: 'sticky', top: 0, zIndex: 2, backgroundColor: selected ? '#EBF0FA' : '#F9FAFB',
+                        borderBottom: `1px solid ${selected ? PRIMARY : '#E2E8F0'}`, borderRight: '1px solid #F1F5F9',
+                        padding: '8px 4px 10px', height: 150, width: 30, minWidth: 30, verticalAlign: 'bottom',
+                        cursor: 'pointer', opacity: dimmed ? 0.25 : 1, transition: 'opacity .15s, background-color .15s',
+                      }}>
+                      {selected && canManage && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); if (!granting) void grantModuleToAll(mod.id) }}
+                          title={`Conceder ${mod.label} para todo mundo`}
+                          disabled={granting}
+                          style={{
+                            position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
+                            width: 15, height: 15, borderRadius: '50%', border: `1.5px solid ${PRIMARY}`, padding: 0, lineHeight: 0,
+                            backgroundColor: granting ? '#CBD5E1' : '#fff', cursor: granting ? 'default' : 'pointer',
+                          }}
+                        />
+                      )}
+                      <div style={{
+                        writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap',
+                        fontSize: 11, fontWeight: selected ? 700 : 500, color: selected ? PRIMARY : '#374151', margin: '0 auto',
+                        display: 'flex', alignItems: 'center', gap: 5,
+                      }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: mod.color, flexShrink: 0 }} />
+                        {mod.label}
+                      </div>
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
@@ -122,15 +196,23 @@ export default function AccessMatrixModal({
                 const isProtectedAdmin = u.papel === 'admin' && currentUserId !== u.id
                 const editableRow = canManage && !isProtectedAdmin
                 const enabledIds = u.modulos_permitidos ?? orderedModules.map(m => m.id)
+                const rowSelected = focusUsers.has(u.id)
+                const rowDimmed = focusUsers.size > 0 && !rowSelected
+                const rowBg = rowSelected ? '#EBF0FA' : (i % 2 === 1 ? '#FBFCFE' : '#fff')
                 return (
-                  <tr key={u.id} style={{ backgroundColor: i % 2 === 1 ? '#FBFCFE' : '#fff' }}>
-                    <td style={{
-                      position: 'sticky', left: 0, zIndex: 1, backgroundColor: i % 2 === 1 ? '#FBFCFE' : '#fff',
-                      padding: '7px 14px', borderBottom: '1px solid #F1F5F9', borderRight: '1px solid #E2E8F0',
-                      whiteSpace: 'nowrap',
-                    }}>
+                  <tr key={u.id} style={{ backgroundColor: rowBg, opacity: rowDimmed ? 0.25 : 1, transition: 'opacity .15s' }}>
+                    <td
+                      onClick={() => toggleFocusUser(u.id)}
+                      title="Clique para destacar esta linha"
+                      style={{
+                        position: 'sticky', left: 0, zIndex: 1, backgroundColor: rowBg,
+                        padding: '7px 14px', borderBottom: '1px solid #F1F5F9',
+                        borderRight: `1px solid ${rowSelected ? PRIMARY : '#E2E8F0'}`,
+                        whiteSpace: 'nowrap', cursor: 'pointer',
+                      }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: '#1E293B' }}>{u.nome || u.usuario || u.email}</span>
+                        <span style={{ fontSize: 13, fontWeight: rowSelected ? 700 : 500, color: rowSelected ? PRIMARY : '#1E293B' }}>{u.nome || u.usuario || u.email}</span>
                         <span style={{ padding: '2px 6px', borderRadius: 5, backgroundColor: colors.bg, color: colors.color, fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
                           {PAPEL_LABELS[u.papel ?? ''] ?? u.papel ?? '—'}
                         </span>
@@ -140,6 +222,7 @@ export default function AccessMatrixModal({
                       const checked = enabledIds.includes(mod.id)
                       const key = `${u.id}|${mod.id}`
                       const isPending = pending === key
+                      const colDimmed = focusModules.size > 0 && !focusModules.has(mod.id)
                       return (
                         <td
                           key={mod.id}
@@ -148,7 +231,8 @@ export default function AccessMatrixModal({
                           style={{
                             borderBottom: '1px solid #F1F5F9', borderRight: '1px solid #F8FAFC',
                             textAlign: 'center', cursor: editableRow ? 'pointer' : 'default',
-                            transition: 'background-color .1s',
+                            opacity: colDimmed ? 0.3 : 1,
+                            transition: 'background-color .1s, opacity .15s',
                           }}
                           onMouseEnter={e => { if (editableRow) (e.currentTarget as HTMLElement).style.backgroundColor = '#EEF2FF' }}
                           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
