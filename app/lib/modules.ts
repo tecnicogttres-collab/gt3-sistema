@@ -269,6 +269,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['admin'],
   },
   {
+    id: 'designacao_reprovados',
+    label: 'Designação de Reprovados',
+    color: '#4A90D9',
+    path: '/designacao-reprovados',
+    description: 'Encaminhamento e tratativa de pendências documentais por empresa/setor/documento',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'coisas-a-fazer',
     label: 'Melhorias',
     color: '#4A90D9',

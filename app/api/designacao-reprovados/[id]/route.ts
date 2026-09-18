@@ -93,6 +93,19 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
+  const { data: atual, error: fetchError } = await admin
+    .from('designacoes')
+    .select('criado_por')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !atual) return Response.json({ error: 'Designação não encontrada' }, { status: 404 })
+
+  const podeExcluir = ['gestor', 'admin'].includes(caller.role) || atual.criado_por === caller.user.id
+  if (!podeExcluir) {
+    return Response.json({ error: 'Só quem criou a designação, gestor ou admin pode excluir' }, { status: 403 })
+  }
+
   const { error } = await admin.from('designacoes').delete().eq('id', id)
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return new Response(null, { status: 204 })
