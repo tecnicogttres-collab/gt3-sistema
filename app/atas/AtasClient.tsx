@@ -222,8 +222,15 @@ export default function AtasClient() {
   useEffect(() => {
     if (!selected || !isGestorOrAdmin || selected.status !== 'Validada') return
     const supabase = createClient()
+    const topic = `atas-leituras-${selected.id}`
+    // supabase.removeChannel() é assíncrono; em dev o React pode remontar o efeito
+    // antes da remoção anterior terminar, deixando um canal com o mesmo tópico já
+    // inscrito. Remover qualquer canal remanescente antes de recriar evita o erro
+    // "cannot add postgres_changes callbacks ... after subscribe()".
+    const stale = supabase.getChannels().find(c => c.topic === `realtime:${topic}`)
+    if (stale) supabase.removeChannel(stale)
     const ch = supabase
-      .channel(`atas-leituras-${selected.id}`)
+      .channel(topic)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'atas_leituras' }, () => {
         fetchLeituras(selected.id)
       })
