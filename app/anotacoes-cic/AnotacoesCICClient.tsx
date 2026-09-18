@@ -372,9 +372,9 @@ function ImportModal({ pastas, currentId, onImport, onClose }: {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 600, maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
+      <div className="gt3-drop-in" style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 600, maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: PRIMARY }}>📥 Importar de outra pasta</div>
 
         {outras.length === 0 ? (
@@ -777,9 +777,9 @@ export default function AnotacoesCICClient() {
       </div>
 
       {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onMouseDown={e => { if (e.target === e.currentTarget) { setModal(false); setModalNome(''); setModalPeriodo('') } }}>
-          <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 360, boxShadow: '0 8px 30px rgba(42,79,150,0.15)' }}>
+          <div className="gt3-drop-in" style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 360, boxShadow: '0 8px 30px rgba(42,79,150,0.15)' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: PRIMARY, marginBottom: 16 }}>📁 Nova pasta</div>
             {([{ label: 'Nome da feira', value: modalNome, setter: setModalNome, ph: 'Ex.: Expobento 2027' }, { label: 'Período', value: modalPeriodo, setter: setModalPeriodo, ph: 'Ex.: Agosto/2027' }] as const).map((f, i) => (
               <div key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>

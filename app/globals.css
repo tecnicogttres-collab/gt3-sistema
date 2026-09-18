@@ -225,11 +225,22 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
 @keyframes gt3DropIn  { from{opacity:0;transform:translateY(-14px) scale(.985)} to{opacity:1;transform:none} }
 @keyframes gt3PopIn   { 0%{opacity:0;transform:scale(.88)} 60%{transform:scale(1.03)} 100%{opacity:1;transform:scale(1)} }
 @keyframes gt3SlideDown { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:none} }
+@keyframes gt3OverlayFade { from{opacity:0} to{opacity:1} }
+@keyframes gt3ToastIn { from{opacity:0;transform:scale(.96) translateY(6px)} to{opacity:1;transform:none} }
 
 .gt3-fade-up   { animation: gt3FadeUp   .35s var(--ease-out) backwards }
 .gt3-drop-in   { animation: gt3DropIn   .38s var(--ease-out) }
 .gt3-pop-in    { animation: gt3PopIn    .40s var(--ease-out) }
 .gt3-slide-down{ animation: gt3SlideDown .40s var(--ease-out) }
+/* Overlay de modal — @keyframes em vez de transition porque o elemento só existe no
+   DOM quando aberto (condicional): não há um estado "de antes" pra transition animar. */
+.gt3-overlay-fade { animation: gt3OverlayFade var(--duration-gt3) var(--ease-gt3); }
+/* Entrada dos pop-ups de notificação (ata, enquete, lembrete, PDI, prioridade, sugestão). */
+.gt3-toast-in { animation: gt3ToastIn 450ms var(--ease-gt3-out); }
+
+/* Botão de fechar de modal/drawer — gira ao passar o mouse. */
+.gt3-close-btn { transition: transform var(--duration-gt3) var(--ease-gt3); }
+.gt3-close-btn:hover { transform: rotate(90deg); }
 
 /* ─── Indicador deslizante de aba ──────────────────────────────────────────
    A cor vem da própria aba via --tab-active-color (setada inline por elemento,
@@ -246,6 +257,15 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
   transition: transform .32s var(--ease-out);
 }
 .gt3-tab-active::after { transform: scaleX(1); }
+
+/* Hover de linha de tabela — só pra linhas sem cor de fundo própria (status/seleção);
+   onde já existe onMouseEnter/Leave customizado, não uso esta classe. */
+.gt3-table-row-hover {
+  transition: background-color 200ms var(--ease-gt3);
+}
+.gt3-table-row-hover:hover {
+  background-color: #FAFCFF;
+}
 
 /* ─── Elementos base: botão, input, card ──────────────────────────────────
    Aplicado por seletor de elemento/classe (não por componente) porque o

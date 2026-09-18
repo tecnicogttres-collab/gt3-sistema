@@ -367,13 +367,16 @@ function CicloAgregadoCard({ ciclo }: { ciclo: CicloAgregado }) {
         <div style={{ marginTop: 8, background: '#fff', borderRadius: 10, border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
             {(['diretiva', 'auto', 'ambicao'] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{
-                padding: '10px 20px', border: 'none', background: 'transparent',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                color: tab === t ? tabColor[t] : '#94A3B8',
-                borderBottom: tab === t ? `2px solid ${tabColor[t]}` : '2px solid transparent',
-                transition: 'all 0.15s',
-              }}>
+              <button key={t} onClick={() => setTab(t)}
+                className={`gt3-tab${tab === t ? ' gt3-tab-active' : ''}`}
+                style={{
+                  padding: '10px 20px', border: 'none', background: 'transparent',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  color: tab === t ? tabColor[t] : '#94A3B8',
+                  borderBottom: '2px solid transparent',
+                  transition: 'color 200ms var(--ease-gt3)',
+                  ['--tab-active-color' as string]: tabColor[t],
+                } as React.CSSProperties}>
                 {tabLabel[t]}
               </button>
             ))}
@@ -382,16 +385,16 @@ function CicloAgregadoCard({ ciclo }: { ciclo: CicloAgregado }) {
           <div style={{ overflowX: 'auto', padding: '16px' }}>
             <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 700 }}>
               <thead>
-                <tr>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', color: '#6B7A99', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #E2E8F0' }}>
+                <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-mute)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap', borderBottom: '2px solid var(--border-soft)' }}>
                     Colaborador
                   </th>
                   {ciclo.competencias.map(c => (
-                    <th key={c} style={{ padding: '8px 6px', textAlign: 'center', color: '#6B7A99', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #E2E8F0' }}>
+                    <th key={c} style={{ padding: '8px 6px', textAlign: 'center', color: 'var(--text-mute)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap', borderBottom: '2px solid var(--border-soft)' }}>
                       {c}
                     </th>
                   ))}
-                  <th style={{ padding: '8px 12px', textAlign: 'center', color: '#1E293B', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', borderBottom: '2px solid #E2E8F0', whiteSpace: 'nowrap' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', color: '#1E293B', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', borderBottom: '2px solid var(--border-soft)', whiteSpace: 'nowrap' }}>
                     Total
                   </th>
                 </tr>
@@ -402,7 +405,7 @@ function CicloAgregadoCard({ ciclo }: { ciclo: CicloAgregado }) {
                   const total = scores.reduce((a, b) => a + b, 0)
                   const hasData = scores.length > 0
                   return (
-                    <tr key={p.nome} style={{ borderBottom: pi < ciclo.pessoas.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                    <tr key={p.nome} style={{ borderBottom: pi < ciclo.pessoas.length - 1 ? '1px solid var(--border-soft)' : 'none' }}>
                       <td style={{ padding: '9px 12px', fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap' }}>{p.nome}</td>
                       {ciclo.competencias.map((_, ci) => {
                         const v = scores[ci]
@@ -734,8 +737,8 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
 
       {/* Create Modal */}
       {modal.open && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
             {/* Header */}
             <div style={{ background: 'linear-gradient(135deg, #2A4F96 0%, #1E3A6E 100%)', padding: '18px 24px', borderRadius: '16px 16px 0 0' }}>
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>＋ Novo PDI</h2>
@@ -845,8 +848,8 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
 
       {/* Edit Modal */}
       {editModal.open && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 440 }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 440 }}>
             <div style={{ background: 'linear-gradient(135deg, #2A4F96 0%, #1E3A6E 100%)', padding: '18px 24px', borderRadius: '16px 16px 0 0' }}>
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>✏️ Editar PDI</h2>
             </div>

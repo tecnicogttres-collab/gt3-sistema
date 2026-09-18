@@ -27,8 +27,8 @@ export function ScheduleTable({ sheet, people, readOnly, onPersonChange }: {
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13 }}>
         <thead>
           <tr>
-            <th style={{ background: PRIMARY_LIGHT, color: PRIMARY, fontWeight: 600, padding: '9px 14px', textAlign: 'center', fontSize: 12, borderTopLeftRadius: 8, width: 100, border: `1px solid ${BORDER}` }}>DIA</th>
-            <th style={{ background: PRIMARY_LIGHT, color: PRIMARY, fontWeight: 600, padding: '9px 14px', textAlign: 'center', fontSize: 12, borderTopRightRadius: 8, border: `1px solid ${BORDER}`, borderLeft: 'none' }}>REVISOR</th>
+            <th style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', color: 'var(--text-mute)', fontWeight: 700, padding: '9px 14px', textAlign: 'center', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', borderTopLeftRadius: 8, width: 100, border: `1px solid var(--border-soft)` }}>DIA</th>
+            <th style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', color: 'var(--text-mute)', fontWeight: 700, padding: '9px 14px', textAlign: 'center', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', borderTopRightRadius: 8, border: `1px solid var(--border-soft)`, borderLeft: 'none' }}>REVISOR</th>
           </tr>
         </thead>
         <tbody>
@@ -40,10 +40,10 @@ export function ScheduleTable({ sheet, people, readOnly, onPersonChange }: {
             const dateStr = `${pad(row.day)}/${MONTHS_SHORT[sheet.monthIdx]}`
             return (
               <tr key={row.day}>
-                <td style={{ background: bg, border: `1px solid ${BORDER}`, height: 34, textAlign: 'center', padding: '0 14px' }}>
+                <td style={{ background: bg, border: `1px solid var(--border-soft)`, height: 34, textAlign: 'center', padding: '0 14px' }}>
                   <span style={{ fontSize: 13, fontWeight: 500, color: dayClr }}>{dateStr}</span>
                 </td>
-                <td style={{ background: bg, border: `1px solid ${BORDER}`, borderLeft: 'none', height: 34, padding: 0 }}>
+                <td style={{ background: bg, border: `1px solid var(--border-soft)`, borderLeft: 'none', height: 34, padding: 0 }}>
                   {isWknd || isHol ? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: isWknd ? WEEKEND_TEXT : HOLIDAY_TEXT }}>{row.label || 'FERIADO'}</span>

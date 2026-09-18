@@ -452,10 +452,11 @@ export default function CalendarioFeriasClient() {
       {/* Modal */}
       {modalOpen && (
         <div
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, background: 'rgba(20,30,60,0.4)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}
           onClick={e => { if (e.target === e.currentTarget) closeModal() }}
         >
-          <div style={{ background: '#fff', border: '1px solid rgba(42,79,150,0.12)', borderRadius: 16, padding: '1.75rem', width: 380, maxWidth: '94vw', boxShadow: '0 8px 32px rgba(42,79,150,0.14)' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', border: '1px solid rgba(42,79,150,0.12)', borderRadius: 16, padding: '1.75rem', width: 380, maxWidth: '94vw', boxShadow: '0 8px 32px rgba(42,79,150,0.14)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
               <h3 style={{ fontSize: 18, fontWeight: 600, color: '#2A4F96', margin: 0 }}>
                 {editingId ? (mTipo === 'folga' ? 'Editar folga' : 'Editar férias') : (mTipo === 'folga' ? 'Registrar folga' : 'Registrar férias')}

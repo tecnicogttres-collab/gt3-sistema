@@ -375,9 +375,9 @@ export default function EmailsClient() {
     <>
       {/* Modal */}
       {modal.open && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,0.5)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '40px 20px', overflowY: 'auto' }}
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,0.5)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '40px 20px', overflowY: 'auto' }}
           onClick={e => { if (e.target === e.currentTarget) closeModal() }}>
-          <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 680, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', margin: 'auto' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 680, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', margin: 'auto' }}>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: '0 0 4px' }}>
               {modal.editId ? 'Editar Template' : 'Novo Template'}
             </h2>

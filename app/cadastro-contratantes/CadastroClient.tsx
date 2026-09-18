@@ -683,12 +683,13 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      className="gt3-overlay-fade"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998,
       }}
     >
-      <div style={{
+      <div className="gt3-drop-in" style={{
         background: '#fff', borderRadius: 12, padding: '24px 28px',
         minWidth: 360, maxWidth: 480, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
       }}>
@@ -989,7 +990,7 @@ function TableFieldView({ field: f, onCopy, onUpdateCell, onUpdateHeader, onRemo
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
-          <tr style={{ background: '#EDF2F7' }}>
+          <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
             {f.headers.map((h, hi) => (
               <EditableHeader key={hi} value={h} onSave={val => onUpdateHeader(hi, val)} />
             ))}
@@ -998,7 +999,7 @@ function TableFieldView({ field: f, onCopy, onUpdateCell, onUpdateHeader, onRemo
         </thead>
         <tbody>
           {f.rows.map((row, ri) => (
-            <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#F7F9FC' }}>
+            <tr key={ri} className="gt3-fade-up" style={{ background: ri % 2 === 0 ? '#fff' : '#F7F9FC', transition: 'background-color 200ms var(--ease-gt3)' }}>
               {Array.from({ length: f.headers.length }).map((_, ci) => (
                 <EditableCell
                   key={ci}
@@ -1034,9 +1035,9 @@ function EditableHeader({ value, onSave }: { value: string; onSave: (v: string) 
       onBlur={() => onSave(ref.current?.textContent?.trim() ?? '')}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ref.current?.blur() } }}
       style={{
-        padding: '3px 6px', border: '1px solid #E2E8F0', textAlign: 'left',
-        fontWeight: 600, color: '#4A5568', cursor: 'text', outline: 'none',
-        fontSize: 10, letterSpacing: '0.04em',
+        padding: '3px 6px', border: '1px solid var(--border-soft)', textAlign: 'left',
+        fontWeight: 700, color: 'var(--text-mute)', cursor: 'text', outline: 'none',
+        fontSize: 10, letterSpacing: '.9px', textTransform: 'uppercase',
       }}
     >
       {value}

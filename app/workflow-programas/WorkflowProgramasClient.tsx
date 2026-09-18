@@ -2415,9 +2415,10 @@ export default function WorkflowProgramasClient() {
       {dupEmpresa && (
         <div
           onClick={e => { if (e.target === e.currentTarget) setDupEmpresa(null) }}
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
         >
-          <div style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 440, padding: 22, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 440, padding: 22, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TX, marginBottom: 8 }}>Empresa já está no banco de dados</div>
             <div style={{ fontSize: 13, color: MU, lineHeight: 1.6, marginBottom: 18 }}>
               Já existe uma análise para <b>{dupEmpresa.empresa}</b> ({dupEmpresa.finalizada ? 'finalizada' : 'em andamento'}, criada em {new Date(dupEmpresa.created_at).toLocaleDateString('pt-BR')}).
@@ -2517,12 +2518,12 @@ function ModalShell({ title, onClose, onSave, saveLabel = 'Salvar', children, wi
   title: string; onClose: () => void; onSave: () => void; saveLabel?: string; children: React.ReactNode; wide?: boolean
 }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(20,28,42,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto', zIndex: 9999 }}
+    <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(20,28,42,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto', zIndex: 9999 }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: wide ? 900 : 640, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: wide ? 900 : 640, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <b style={{ fontSize: 16 }}>{title}</b>
-          <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: MU, lineHeight: 1 }}>×</button>
+          <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: MU, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ padding: '18px 20px', maxHeight: '66vh', overflow: 'auto' }}>{children}</div>
         <div style={{ padding: '14px 20px', borderTop: `1px solid ${LINE}`, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -2554,9 +2555,9 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr>
+                <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
                   {['Empresa prestadora', 'Contratante', 'Documentos', 'Análise', 'Situação', ''].map((h, i) => (
-                    <th key={i} style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: MU, textAlign: 'left', padding: '9px 10px', borderBottom: `1px solid ${LINE}` }}>{h}</th>
+                    <th key={i} style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.9px', color: 'var(--text-mute)', textAlign: 'left', padding: '9px 10px', borderBottom: '1px solid var(--border-soft)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -2564,20 +2565,20 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
                 {lista.slice().sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || '')).map(a => {
                   const s = statusAnalise(a)
                   return (
-                    <tr key={a.id}>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
+                    <tr key={a.id} className="gt3-table-row-hover">
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>
                         <b>{a.empresa || '(sem nome)'}</b>
                         <div style={{ color: MU, fontSize: 12 }}>{a.cnpj}</div>
                       </td>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>{nomesContratantes(a.dados.contratanteIds)}</td>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>{nomesContratantes(a.dados.contratanteIds)}</td>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>
                         {(a.dados.documentos || []).map(d => <span key={d} style={{ marginRight: 4 }}><Tag>{d}</Tag></span>)}
                       </td>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>
                         {fmtD(a.dados.data)}<div style={{ color: MU, fontSize: 12 }}>prazo {fmtD(a.dados.prazo)}</div>
                       </td>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone={s.c}>{s.t}</Tag></td>
-                      <td style={{ padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right' }}>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone={s.c}>{s.t}</Tag></td>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)', textAlign: 'right' }}>
                         <Btn small onClick={() => onAbrir(a)}>Abrir</Btn>{' '}
                         <Btn small variant="gho" onClick={() => onDel(a.id)}>Excluir</Btn>
                       </td>
@@ -3157,8 +3158,8 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
             <Card>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead><tr>{['Item avaliado', 'Conforme', 'Reprovação', 'Restrição', 'N/A', 'Taxa de conformidade'].map(h => (
-                    <th key={h} style={{ fontSize: 11, textTransform: 'uppercase', color: MU, textAlign: 'left', padding: '9px 10px', borderBottom: `1px solid ${LINE}` }}>{h}</th>
+                  <thead><tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>{['Item avaliado', 'Conforme', 'Reprovação', 'Restrição', 'N/A', 'Taxa de conformidade'].map(h => (
+                    <th key={h} style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.9px', color: 'var(--text-mute)', textAlign: 'left', padding: '9px 10px', borderBottom: '1px solid var(--border-soft)' }}>{h}</th>
                   ))}</tr></thead>
                   <tbody>
                     {linhas.map(l => {
@@ -3166,15 +3167,15 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                       const open = itemAberto === l.i.id
                       return (
                         <Fragment key={l.i.id}>
-                          <tr style={{ cursor: 'pointer' }} onClick={() => setItemAberto(open ? null : l.i.id)}>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
+                          <tr className="gt3-table-row-hover" style={{ cursor: 'pointer' }} onClick={() => setItemAberto(open ? null : l.i.id)}>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>
                               <b>{l.i.titulo}</b> <Tag>{l.i.documento}</Tag> {l.i.escopo === 'especifico' && <Tag tone="acc">específico</Tag>}
                             </td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone="ok">{l.ok}</Tag></td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone="no">{l.nao}</Tag></td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone="acc">{l.restr}</Tag></td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}><Tag tone="na">{l.na}</Tag></td>
-                            <td style={{ padding: 10, borderBottom: `1px solid ${LINE}` }}>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="ok">{l.ok}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="no">{l.nao}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="acc">{l.restr}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="na">{l.na}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>
                               <div style={{ height: 6, background: NOS, borderRadius: 99, minWidth: 90, overflow: 'hidden' }}><div style={{ height: '100%', width: p + '%', background: OK }} /></div>
                               <span style={{ color: MU, fontSize: 11.5 }}>{p}% de {l.tot} avaliações</span>
                             </td>
@@ -3358,11 +3359,12 @@ function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, modo, o
 
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
+      className="gt3-overlay-fade"
       style={{ position: 'fixed', inset: 0, background: 'rgba(20,28,42,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto', zIndex: 9999 }}>
-      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 720, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 720, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <b style={{ fontSize: 16 }}>Gerar relatórios</b>
-          <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: MU, lineHeight: 1 }}>×</button>
+          <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: MU, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ padding: '18px 20px', maxHeight: '60vh', overflow: 'auto' }}>
           <div style={{ fontSize: 13, color: MU, marginBottom: 14 }}>
@@ -3660,7 +3662,7 @@ function InspectorPanel({ item, campo, texto, onAbrir, onClose }: {
   const info = CAMPO_INFO[campo]
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999 }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(20,28,42,.35)' }} />
+      <div onClick={onClose} className="gt3-overlay-fade" style={{ position: 'absolute', inset: 0, background: 'rgba(20,28,42,.35)' }} />
       <div style={{
         position: 'absolute', top: 0, right: 0, bottom: 0, width: 400, maxWidth: '92vw',
         background: CARD, boxShadow: '-6px 0 24px rgba(0,0,0,.15)', display: 'flex', flexDirection: 'column',
@@ -3670,7 +3672,7 @@ function InspectorPanel({ item, campo, texto, onAbrir, onClose }: {
             <div style={{ fontSize: 11, textTransform: 'uppercase', color: MU, marginBottom: 4 }}>{item.documento} · {item.titulo}</div>
             <Tag tone={info.tone}>{info.label}</Tag>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: MU, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 20, color: MU, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
         <div style={{ padding: 22, overflowY: 'auto', flex: 1 }}>
           {texto ? (

@@ -391,11 +391,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '32px 16px' }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 640, padding: '28px 32px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+    <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '32px 16px' }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 640, padding: '28px 32px', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: INK }}>Nova Enquete</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: MUTED, lineHeight: 1 }}>×</button>
+          <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: MUTED, lineHeight: 1 }}>×</button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

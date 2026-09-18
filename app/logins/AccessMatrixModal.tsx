@@ -101,10 +101,11 @@ export default function AccessMatrixModal({
 
   return (
     <div
+      className="gt3-overlay-fade"
       style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div style={{
+      <div className="gt3-drop-in" style={{
         backgroundColor: '#fff', borderRadius: 12, padding: '22px 24px', width: '100%', maxWidth: '95vw',
         maxHeight: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.20)',
       }}>

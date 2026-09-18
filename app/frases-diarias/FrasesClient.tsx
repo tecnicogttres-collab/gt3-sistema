@@ -342,12 +342,12 @@ export default function FrasesClient() {
     <>
       {/* Modal */}
       {modal.open && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) closeModal() }}>
-          <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px', borderBottom: `1px solid ${BORDER}` }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: INK }}>{modal.editId ? 'Editar frase' : 'Adicionar frase'}</span>
-              <button onClick={closeModal} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: MUTED }}>×</button>
+              <button onClick={closeModal} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: MUTED }}>×</button>
             </div>
             <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>Frase

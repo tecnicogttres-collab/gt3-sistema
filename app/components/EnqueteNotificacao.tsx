@@ -8,12 +8,12 @@ type Props = {
 
 export default function EnqueteNotificacao({ titulo, onResponderAgora, onVerDepois }: Props) {
   return (
-    <div style={{
+    <div className="gt3-overlay-fade" style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       backgroundColor: 'rgba(0,0,0,0.55)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div style={{
+      <div className="gt3-toast-in" style={{
         background: '#fff', borderRadius: 16, padding: '36px 40px',
         maxWidth: 420, width: '100%', textAlign: 'center',
         boxShadow: '0 8px 32px rgba(0,0,0,0.22)',

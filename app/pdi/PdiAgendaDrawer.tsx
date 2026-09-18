@@ -200,7 +200,7 @@ export default function PdiAgendaDrawer({ open, onClose, onCountChange }: Props)
       <style>{`@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
       {open && (
         <>
-          <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 1000 }} />
+          <div onClick={onClose} className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 1000 }} />
           <div style={{
             position: 'fixed', top: 0, right: 0, bottom: 0, width: 420,
             backgroundColor: '#fff', zIndex: 1001, display: 'flex', flexDirection: 'column',
@@ -211,7 +211,7 @@ export default function PdiAgendaDrawer({ open, onClose, onCountChange }: Props)
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#1E293B' }}>📅 Agenda PDI</div>
                 <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>Todas as conversas agendadas</div>
               </div>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9CA3AF', lineHeight: 1, padding: '2px 6px' }}>×</button>
+              <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9CA3AF', lineHeight: 1, padding: '2px 6px' }}>×</button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>

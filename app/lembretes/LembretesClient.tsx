@@ -917,9 +917,10 @@ export default function LembretesClient() {
       {outrosOpen && (
         <div
           onClick={e => { if (e.target === e.currentTarget) setOutrosOpen(false) }}
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,24,0.55)', zIndex: 300, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '2rem 1rem' }}
         >
-          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 860, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 16px 60px rgba(0,0,0,0.18)' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 860, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 16px 60px rgba(0,0,0,0.18)' }}>
 
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
@@ -929,7 +930,7 @@ export default function LembretesClient() {
                   {papel === 'gestor' ? 'Você pode ver lembretes de colaboradores e trainees.' : 'Você pode ver lembretes de todos os usuários.'}
                 </div>
               </div>
-              <button onClick={() => setOutrosOpen(false)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              <button onClick={() => setOutrosOpen(false)} className="gt3-close-btn" style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
             </div>
 
             {/* Body — dois painéis */}
@@ -1096,14 +1097,15 @@ export default function LembretesClient() {
       {modalOpen && (
         <div
           onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,24,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
         >
-          <div style={{ background: '#fff', borderRadius: 14, width: 500, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, width: 500, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: `1px solid ${BORDER}` }}>
               <h2 style={{ fontWeight: 700, fontSize: 18, color: TEXT, letterSpacing: -0.3, margin: 0 }}>
                 {editingId ? 'Editar lembrete' : 'Novo lembrete'}
               </h2>
-              <button onClick={() => setModalOpen(false)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => setModalOpen(false)} className="gt3-close-btn" style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 ×
               </button>
             </div>

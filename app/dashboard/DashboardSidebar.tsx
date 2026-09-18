@@ -516,7 +516,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#6D28D9', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>📝 Observações a validar</span>
-              <span style={{ background: '#7C3AED', color: '#fff', borderRadius: 9, padding: '0 7px', fontSize: 11 }}>{obsPendentes.length}</span>
+              <span key={obsPendentes.length} className="gt3-pop-in" style={{ background: '#7C3AED', color: '#fff', borderRadius: 9, padding: '0 7px', fontSize: 11 }}>{obsPendentes.length}</span>
             </div>
             {obsPendentes.map((o, i) => (
               <Link

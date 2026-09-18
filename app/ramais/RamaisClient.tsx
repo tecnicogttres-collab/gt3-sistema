@@ -23,6 +23,7 @@ type ModalState =
 function Backdrop({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
     <div
+      className="gt3-overlay-fade"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(14,20,37,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -153,7 +154,7 @@ export default function RamaisClient() {
       {/* Modals */}
       {modal.type !== 'closed' && (
         <Backdrop onClose={closeModal}>
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 10, width: '100%', maxWidth: 380,
             boxShadow: '0 16px 48px rgba(30,37,61,0.2)', overflow: 'hidden',
           }}>
@@ -294,15 +295,15 @@ export default function RamaisClient() {
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#F8FAFC', borderBottom: `1px solid ${BORDER}` }}>
-                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', width: '65%' }}>Nome</th>
-                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', width: '15%' }}>Ramal</th>
+                <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', borderBottom: '1px solid var(--border-soft)' }}>
+                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 700, fontSize: 10, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', width: '65%' }}>Nome</th>
+                  <th style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 700, fontSize: 10, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', width: '15%' }}>Ramal</th>
                   <th style={{ width: '20%' }} />
                 </tr>
               </thead>
               <tbody>
                 {items.map((r, idx) => (
-                  <tr key={r.id} style={{ borderTop: idx > 0 ? `1px solid ${BORDER}` : undefined }}>
+                  <tr key={r.id} style={{ borderTop: idx > 0 ? '1px solid var(--border-soft)' : undefined }}>
                     <td style={{ padding: '6px 12px', color: INK, fontWeight: 400 }}>{r.nome}</td>
                     <td style={{ padding: '6px 12px', color: PRIMARY, fontFamily: 'monospace', fontWeight: 600 }}>{r.ramal}</td>
                     <td style={{ padding: '4px 10px' }}>

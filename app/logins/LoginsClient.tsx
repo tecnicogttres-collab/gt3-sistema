@@ -418,9 +418,9 @@ export default function LoginsClient() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+              <tr style={{ borderBottom: '1px solid var(--border-soft)', background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
                 {['Nome', 'Usuário', 'Papel', 'PDI vinculado', 'Status', 'Último acesso', 'Ações'].map((col) => (
-                  <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                  <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap' }}>
                     {col}
                   </th>
                 ))}
@@ -566,9 +566,9 @@ export default function LoginsClient() {
             <div style={{ overflowX: 'auto', borderTop: '1px solid #F1F5F9' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #E2E8F0' }}>
+                  <tr style={{ borderBottom: '1px solid var(--border-soft)', background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
                     {['Nome', 'Usuário', 'Papel', 'Último acesso', 'Ações'].map((col) => (
-                      <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                      <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap' }}>
                         {col}
                       </th>
                     ))}
@@ -620,13 +620,14 @@ export default function LoginsClient() {
       {/* ── Modal: Novo usuário ────────────────────────────────── */}
       {createOpen && (
         <div
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setCreateOpen(false) }}
         >
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Novo usuário</h2>
-              <button onClick={() => setCreateOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+              <button onClick={() => setCreateOpen(false)} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
             </div>
 
             <form onSubmit={handleCreate}>
@@ -726,13 +727,14 @@ export default function LoginsClient() {
       {/* ── Modal: Editar usuário ─────────────────────────────── */}
       {editUser && (
         <div
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setEditUser(null) }}
         >
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 500, maxHeight: 'calc(100vh - 80px)', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 500, maxHeight: 'calc(100vh - 80px)', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Editar usuário</h2>
-              <button onClick={() => setEditUser(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+              <button onClick={() => setEditUser(null)} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
             </div>
 
             <form onSubmit={handleEditSave}>
@@ -910,13 +912,14 @@ export default function LoginsClient() {
       {/* ── Modal: Resetar senha ───────────────────────────────── */}
       {resetUser && (
         <div
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) { setResetUser(null); setResetMsg('') } }}
         >
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Resetar senha</h2>
-              <button onClick={() => { setResetUser(null); setResetMsg('') }} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+              <button onClick={() => { setResetUser(null); setResetMsg('') }} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
             </div>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>{resetUser.nome ?? resetUser.email}</p>
 

@@ -933,7 +933,7 @@ export default function CadastroTerceirasClient() {
       {/* ── Drawer ── */}
       {selectedId && (
         <>
-          <div onClick={() => setSelectedId(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 90 }} />
+          <div onClick={() => setSelectedId(null)} className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 90 }} />
           <aside style={{
             position: 'fixed', top: 0, right: 0, bottom: 0, width: 560, maxWidth: '100%',
             background: S.surface, boxShadow: '0 12px 32px rgba(15,23,42,0.15)', zIndex: 100,
@@ -959,8 +959,8 @@ export default function CadastroTerceirasClient() {
       {/* ── Modal Confirmar ── */}
       {modalConfirm.open && (
         <div onClick={e => { if (e.target === e.currentTarget) setModalConfirm(p => ({ ...p, open: false })) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120, padding: 20 }}>
-          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 480, width: '100%', padding: 20 }}>
+          className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120, padding: 20 }}>
+          <div className="gt3-drop-in" style={{ background: S.surface, borderRadius: S.radius, maxWidth: 480, width: '100%', padding: 20 }}>
             <h3 style={{ fontSize: 16, color: S.danger, marginBottom: 10 }}>⚠ Confirmar arquivamento</h3>
             <div style={{ background: S.dangerBg, border: `1px solid #fca5a5`, color: S.danger, padding: '12px 14px', borderRadius: S.radiusSm, fontSize: 13, lineHeight: 1.55 }}
               dangerouslySetInnerHTML={{ __html: modalConfirm.texto }} />
@@ -975,8 +975,8 @@ export default function CadastroTerceirasClient() {
       {/* ── Modal Relatório ── */}
       {reportOpen && (
         <div onClick={e => { if (e.target === e.currentTarget) setReportOpen(false) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 130, padding: 20 }}>
-          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 8px 32px rgba(0,0,0,.18)' }}>
+          className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 130, padding: 20 }}>
+          <div className="gt3-drop-in" style={{ background: S.surface, borderRadius: S.radius, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 8px 32px rgba(0,0,0,.18)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: S.primary, marginBottom: 18 }}>📊 Gerar Relatório</h3>
 
             {/* Contratante */}
@@ -1052,8 +1052,8 @@ export default function CadastroTerceirasClient() {
       {/* ── Modal Nova Terceira ── */}
       {modalNova && (
         <div onClick={e => { if (e.target === e.currentTarget) setModalNova(false) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: 20 }}>
-          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 640, width: '100%', padding: 20, maxHeight: '90vh', overflowY: 'auto' }}>
+          className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: 20 }}>
+          <div className="gt3-drop-in" style={{ background: S.surface, borderRadius: S.radius, maxWidth: 640, width: '100%', padding: 20, maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ fontSize: 16, color: S.primary, marginBottom: 4 }}>Nova terceira</h3>
             <p style={{ fontSize: 12, color: S.textMuted, marginBottom: 14 }}>Cadastre uma terceira para começar o acompanhamento.</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
@@ -1120,8 +1120,8 @@ export default function CadastroTerceirasClient() {
       {/* ── Modal Contratantes ── */}
       {modalContratantes && (
         <div onClick={e => { if (e.target === e.currentTarget) { setModalContratantes(false); setModoEdicao(false) } }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: 20 }}>
-          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 580, width: '100%', padding: 20, maxHeight: '90vh', overflowY: 'auto' }}>
+          className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: 20 }}>
+          <div className="gt3-drop-in" style={{ background: S.surface, borderRadius: S.radius, maxWidth: 580, width: '100%', padding: 20, maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ fontSize: 16, color: S.primary, marginBottom: 4 }}>Gerenciar contratantes</h3>
             <p style={{ fontSize: 12, color: S.textMuted, marginBottom: 14 }}>
               {modoEdicao ? 'Edite os nomes diretamente. Salvo ao sair do campo.' : 'Marque "Requer CC" para contratantes que precisam da etapa "CC / Notificação".'}
@@ -1179,8 +1179,8 @@ export default function CadastroTerceirasClient() {
       {/* ── Aviso: enviar e-mail padrão da contratante ── */}
       {emailPrompt && (
         <div onClick={e => { if (e.target === e.currentTarget) setEmailPrompt(null) }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 140, padding: 20 }}>
-          <div style={{ background: S.surface, borderRadius: S.radius, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 8px 32px rgba(0,0,0,.18)' }}>
+          className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 140, padding: 20 }}>
+          <div className="gt3-drop-in" style={{ background: S.surface, borderRadius: S.radius, maxWidth: 520, width: '100%', padding: 24, boxShadow: '0 8px 32px rgba(0,0,0,.18)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: S.primary, marginBottom: 4 }}>📧 Enviar e-mail padrão?</h3>
             <p style={{ fontSize: 13, color: S.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
               Enviar o e-mail padrão de <strong style={{ color: S.text }}>{emailPrompt.contratante}</strong>?
@@ -1329,9 +1329,9 @@ function TabelaAtivos({
   ]
 
   const thBase: React.CSSProperties = {
-    padding: 0, fontSize: 10, fontWeight: 700, color: S.textMuted,
-    textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap',
-    borderBottom: `2px solid ${S.border}`, background: '#f8f9fc', userSelect: 'none',
+    padding: 0, fontSize: 10, fontWeight: 700, color: 'var(--text-mute)',
+    textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap',
+    borderBottom: `2px solid var(--border-soft)`, background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', userSelect: 'none',
   }
 
   const totalWidth = cols.reduce((a, c) => a + widthOf(c.key), 0)
@@ -1436,7 +1436,7 @@ function TerceiraRow({
   const diasParado = diasDesde(t.data)
   const baseBg = ni?.bg ?? ''
   const hoverBg = ni?.bgHover ?? '#fafbfd'
-  const tdSt: React.CSSProperties = { padding: '6px 10px', borderBottom: `1px solid ${S.border}`, verticalAlign: 'middle' }
+  const tdSt: React.CSSProperties = { padding: '6px 10px', borderBottom: `1px solid var(--border-soft)`, verticalAlign: 'middle' }
   const inp: React.CSSProperties = {
     width: '100%', padding: '4px 7px', border: `1px solid ${S.border}`, borderRadius: 4,
     fontSize: 12, fontFamily: 'inherit', background: S.surface, outline: 'none', color: S.text,
@@ -1445,7 +1445,7 @@ function TerceiraRow({
 
   return (
     <tr
-      style={{ background: baseBg, boxShadow: ni ? `inset 3px 0 0 ${ni.border}` : undefined }}
+      style={{ background: baseBg, boxShadow: ni ? `inset 3px 0 0 ${ni.border}` : undefined, transition: 'background-color 200ms var(--ease-gt3)' }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = hoverBg }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = baseBg }}
     >
@@ -1593,10 +1593,10 @@ function TabelaHistorico({ terceiras, selectedId, onSelect, onReativar }: { terc
     <div style={{ background: S.surface, border: `1px solid ${S.border}`, borderRadius: S.radius, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead style={{ background: '#f8f9fc' }}>
+          <thead style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
             <tr>
               {['Contratante', 'Razão social', 'Resultado', 'Progresso', 'Data ref.', 'Ações'].map((h, i) => (
-                <th key={h} style={{ textAlign: [2, 5].includes(i) ? 'center' : 'left', padding: '9px 12px', fontSize: 11, fontWeight: 700, color: S.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: `1px solid ${S.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+                <th key={h} style={{ textAlign: [2, 5].includes(i) ? 'center' : 'left', padding: '9px 12px', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', borderBottom: `1px solid var(--border-soft)`, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -1611,21 +1611,21 @@ function TabelaHistorico({ terceiras, selectedId, onSelect, onReativar }: { terc
               const dataRef = isAtivo ? `Cadastrada em ${fmtData(t.data)}` : `Arquivada em ${fmtDataHora(t.arquivado_em)}`
               const rowBg = isConcluido ? '#f6fdf8' : isNaoEvoluiu ? '#fef9f9' : '#fffbf2'
               return (
-                <tr key={t.id} onClick={() => onSelect(t.id)} style={{ cursor: 'pointer', background: t.id === selectedId ? S.primaryLight : rowBg, transition: 'background 0.12s' }}>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}` }}>
+                <tr key={t.id} onClick={() => onSelect(t.id)} style={{ cursor: 'pointer', background: t.id === selectedId ? S.primaryLight : rowBg, transition: 'background-color 200ms var(--ease-gt3)' }}>
+                  <td style={{ padding: '9px 12px', borderBottom: `1px solid var(--border-soft)` }}>
                     <span style={{ background: S.primaryLight, color: S.primary, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{t.contratante?.nome ?? '—'}</span>
                   </td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, maxWidth: 260 }}>
+                  <td style={{ padding: '9px 12px', borderBottom: `1px solid var(--border-soft)`, maxWidth: 260 }}>
                     <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.razao_social}</div>
                   </td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, textAlign: 'center' }}>
+                  <td style={{ padding: '9px 12px', borderBottom: `1px solid var(--border-soft)`, textAlign: 'center' }}>
                     {isConcluido && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700, textTransform: 'uppercase', background: S.okBg, color: S.ok }}>✓ Evoluiu</span>}
                     {isNaoEvoluiu && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700, textTransform: 'uppercase', background: S.dangerBg, color: S.danger }}>✕ Não evoluiu</span>}
                     {isAtivo && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700, textTransform: 'uppercase', background: S.pendenteBg, color: S.pendente }}>● Pendente</span>}
                   </td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}` }}><ProgBar pct={prog} danger={isNaoEvoluiu} /></td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, fontSize: 12, color: S.textMuted, whiteSpace: 'nowrap' }}>{dataRef}</td>
-                  <td style={{ padding: '9px 12px', borderBottom: `1px solid ${S.border}`, textAlign: 'center' }}>
+                  <td style={{ padding: '9px 12px', borderBottom: `1px solid var(--border-soft)` }}><ProgBar pct={prog} danger={isNaoEvoluiu} /></td>
+                  <td style={{ padding: '9px 12px', borderBottom: `1px solid var(--border-soft)`, fontSize: 12, color: S.textMuted, whiteSpace: 'nowrap' }}>{dataRef}</td>
+                  <td style={{ padding: '9px 12px', borderBottom: `1px solid var(--border-soft)`, textAlign: 'center' }}>
                     {(isConcluido || isNaoEvoluiu) && (
                       <button style={btnSm} onClick={e => { e.stopPropagation(); onReativar(t.id) }}>↺ Reativar</button>
                     )}

@@ -294,16 +294,17 @@ export default function AniversariosClient() {
       {/* Modal */}
       {selectedDay !== null && (
         <div
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, background: 'rgba(26,25,22,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) setSelectedDay(null) }}
         >
-          <div style={{ background: '#fff', borderRadius: 14, width: 380, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, width: 380, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
             {/* Modal header */}
             <div style={{ background: '#2A4F96', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h2 style={{ fontWeight: 600, fontSize: 17, color: '#fff', letterSpacing: -0.2, margin: 0 }}>
                 {selectedDay} de {MONTHS[cm]}
               </h2>
-              <button onClick={() => setSelectedDay(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: '0 2px' }}>
+              <button onClick={() => setSelectedDay(null)} className="gt3-close-btn" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: '0 2px' }}>
                 ×
               </button>
             </div>

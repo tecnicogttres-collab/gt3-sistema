@@ -94,8 +94,8 @@ function GenerateModal({ onClose, onGenerate }: {
   const [year, setYear] = useState(now.getFullYear())
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1, now.getFullYear() + 2]
   return (
-    <div onClick={e => e.target === e.currentTarget && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+    <div onClick={e => e.target === e.currentTarget && onClose()} className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600, color: INK }}>Gerar nova planilha</h3>
         <p style={{ margin: '0 0 18px', fontSize: 13, color: MUTED }}>Fins de semana marcados automaticamente. Feriados podem ser adicionados depois.</p>
         <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: MUTED, marginBottom: 4 }}>Mês</label>
@@ -128,8 +128,8 @@ function HolidayModal({ mode, sheet, onClose, onConfirm }: {
   const [name, setName] = useState('')
   const holidays = sheet.schedule.filter(r => r.type === 'holiday')
   return (
-    <div onClick={e => e.target === e.currentTarget && onClose()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+    <div onClick={e => e.target === e.currentTarget && onClose()} className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 600, color: INK }}>
           {mode === 'mark' ? '⭐ Marcar feriado' : '↺ Desmarcar feriado'}
         </h3>
@@ -570,7 +570,7 @@ export default function ControleRevisaoClient() {
               <div style={{ overflowX: 'auto', marginBottom: 20, background: '#fff', borderRadius: 8, border: `1px solid ${BORDER}` }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead><tr>{['Data','Documento','Empresa','Responsável','Inconsistência','Resolvido'].map(h => (
-                    <th key={h} style={{ background: PRIMARY_LIGHT, color: PRIMARY, fontWeight: 600, padding: '9px 10px', textAlign: 'left', fontSize: 12, borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', color: 'var(--text-mute)', fontWeight: 700, padding: '9px 10px', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', borderBottom: `1px solid var(--border-soft)`, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}</tr></thead>
                   <tbody>
                     {sheet.revisions.length === 0 ? (

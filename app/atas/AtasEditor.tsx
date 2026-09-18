@@ -996,8 +996,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
 
       {/* ── Notification Modal ── */}
       {notifModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 420, maxWidth: '90vw', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 420, maxWidth: '90vw', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
             <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1E253D' }}>Notificar a equipe?</h3>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>A ata será salva como Validada. Deseja notificar alguém?</p>
 

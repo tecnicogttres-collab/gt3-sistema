@@ -260,7 +260,7 @@ const MODAL_INIT: ModalState = {
 
 function Backdrop({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
+    <div className="gt3-overlay-fade" style={{
       position: 'fixed', inset: 0, background: 'rgba(30,37,61,0.45)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 1000, padding: 16,
@@ -1056,7 +1056,7 @@ export default function ObservacoesClient() {
         const currentColor = colColors[cpKey]
         return (
           <Backdrop>
-            <div style={{
+            <div className="gt3-drop-in" style={{
               background: '#fff', borderRadius: 16, width: '100%', maxWidth: 540,
               boxShadow: '0 20px 60px rgba(30,37,61,0.22)', overflow: 'hidden',
             }}>
@@ -1124,7 +1124,7 @@ export default function ObservacoesClient() {
 
       {modal.open && (
         <Backdrop>
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 12, width: '100%', maxWidth: 480,
             boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
           }}>
@@ -1264,7 +1264,7 @@ export default function ObservacoesClient() {
 
       {confirm.open && (
         <Backdrop>
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 12, width: '100%', maxWidth: 380,
             boxShadow: '0 20px 60px rgba(30,37,61,0.2)', padding: 24,
             display: 'flex', flexDirection: 'column', gap: 16,
@@ -1306,7 +1306,7 @@ export default function ObservacoesClient() {
 
       {subtabModal.open && (
         <Backdrop>
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 12, width: '100%', maxWidth: 400,
             boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
           }}>
@@ -1376,7 +1376,7 @@ export default function ObservacoesClient() {
 
       {configCopiaOpen && (
         <Backdrop>
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 12, width: '100%', maxWidth: 480,
             boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
           }}>
@@ -1459,7 +1459,7 @@ export default function ObservacoesClient() {
 
       {avulsaOpen && (
         <Backdrop>
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 12, width: '100%', maxWidth: 480,
             boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
           }}>

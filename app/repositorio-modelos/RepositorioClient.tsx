@@ -429,14 +429,15 @@ export default function RepositorioClient() {
       {modalOpen && (
         <div
           onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
+          className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
         >
-          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: `1px solid ${BORDER}` }}>
               <h2 style={{ fontWeight: 700, fontSize: 18, color: TEXT, margin: 0 }}>
                 {editingId ? 'Editar arquivo' : `Adicionar em ${tipo === 'empresas' ? 'Empresas' : 'Funcionários'}`}
               </h2>
-              <button onClick={() => setModalOpen(false)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              <button onClick={() => setModalOpen(false)} className="gt3-close-btn" style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', fontSize: 18, color: TEXT_MID, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
             </div>
 
             <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>

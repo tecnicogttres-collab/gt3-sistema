@@ -1164,8 +1164,8 @@ export default function AtasContratantesClient() {
 
       {/* ── Modal: notificação ao validar (via dropdown de status) ── */}
       {statusNotifModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>Validar ata</div>
             <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 20 }}>Deseja notificar usuários sobre esta ata validada?</p>
 
@@ -1201,8 +1201,8 @@ export default function AtasContratantesClient() {
         const origin = typeof window !== 'undefined' ? window.location.origin : ''
         const url = selected.share_enabled && selected.share_token ? `${origin}/ata/${selected.share_token}` : ''
         return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShareOpen(false)}>
-            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 520, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+          <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShareOpen(false)}>
+            <div onClick={e => e.stopPropagation()} className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 520, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>🔗 Compartilhar ata por link</div>
               <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 20, lineHeight: 1.55 }}>
                 O cliente abre o link no navegador e vê a ata formatada (somente leitura), sem precisar de login.
@@ -1264,8 +1264,8 @@ export default function AtasContratantesClient() {
 
       {/* ── Modal: configurações do "Gerar e-mail" (diretório + modelo) ── */}
       {emailConfigOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEmailConfigOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 560, maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEmailConfigOpen(false)}>
+          <div onClick={e => e.stopPropagation()} className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 560, maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>⚙ Configurar &quot;Gerar e-mail&quot;</div>
             <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 20, lineHeight: 1.5 }}>
               Cadastre o e-mail de cada pessoa (o nome precisa bater com o nome usado nos participantes da ata), organizado por empresa —
@@ -1398,8 +1398,8 @@ export default function AtasContratantesClient() {
 
       {/* ── Modal: gerar e-mail de uma ata (destinatários + PDF anexado) ── */}
       {emailModalOpen && selected && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEmailModalOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 500, maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEmailModalOpen(false)}>
+          <div onClick={e => e.stopPropagation()} className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 500, maxWidth: '92vw', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 6 }}>✉ Gerar e-mail</div>
             <p style={{ fontSize: 13, color: '#5a6178', marginBottom: 18, lineHeight: 1.5 }}>
               Baixa um e-mail (.eml) já com destinatários, assunto e a ata em PDF anexada. Abra o arquivo pra revisar e enviar pelo seu cliente de e-mail.

@@ -102,7 +102,7 @@ function ToggleCell({ checked, onClick, color = '#c0392b' }: {
     <td onClick={onClick} style={{ textAlign: 'center', cursor: 'pointer', padding: 6, userSelect: 'none' }}>
       <div style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 36, height: 36, borderRadius: 8, margin: 'auto', transition: 'all .15s',
+        width: 36, height: 36, borderRadius: 8, margin: 'auto', transition: 'background-color .15s, border-color .15s',
         border: checked ? `2px solid ${color}` : '2px solid #dce3ef',
         background: checked ? color : '#f9fafc', color: '#fff',
       }}>
@@ -663,9 +663,9 @@ export default function RevisaoDocsClient() {
 
       {/* ── Modal Nova Revisão ── */}
       {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onMouseDown={e => { if (e.target === e.currentTarget) resetModal() }}>
-          <div style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 500, maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: 0, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
+          <div className="gt3-drop-in" style={{ background: BG_SURF, borderRadius: 14, padding: '24px 26px', width: 500, maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: 0, boxShadow: '0 8px 30px rgba(42,79,150,0.18)' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: PRIMARY, marginBottom: 18 }}>📋 Nova revisão</div>
 
             <div style={{ marginBottom: 16 }}>
@@ -932,7 +932,7 @@ export default function RevisaoDocsClient() {
                 const temPendencia = hasPendencia(reg)
                 return (
                   <tr key={reg.id}
-                    style={{ borderBottom: '1px solid #f0f3f8', background: reg.corrigido ? '#f0fdf4' : temPendencia ? '#fff8f0' : 'transparent', transition: 'background .1s' }}
+                    style={{ borderBottom: '1px solid var(--border-soft)', background: reg.corrigido ? '#f0fdf4' : temPendencia ? '#fff8f0' : 'transparent', transition: 'background-color 200ms var(--ease-gt3)' }}
                     onMouseEnter={e => { if (!reg.corrigido && !temPendencia) (e.currentTarget as HTMLElement).style.background = '#f7f9fd' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = reg.corrigido ? '#f0fdf4' : temPendencia ? '#fff8f0' : 'transparent' }}>
                     <td style={{ padding: '10px 14px', textAlign: 'center', color: '#aab2c2', fontSize: 11 }}>{idx + 1}</td>
@@ -1033,9 +1033,9 @@ export default function RevisaoDocsClient() {
 
       {/* ── Modal: Finalizar dia ── */}
       {modalFinalDay && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(26,31,46,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onMouseDown={e => { if (e.target === e.currentTarget) setModalFinalDay(false) }}>
-          <div style={{ background: '#fff', borderRadius: 14, width: 460, boxShadow: '0 8px 30px rgba(0,0,0,.18)', overflow: 'hidden' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, width: 460, boxShadow: '0 8px 30px rgba(0,0,0,.18)', overflow: 'hidden' }}>
             <div style={{ height: 4, background: 'linear-gradient(90deg, #D1AE6E, #F0C97F)' }} />
             <div style={{ padding: '20px 24px' }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#92550A', marginBottom: 6 }}>📍 Finalizar dia</div>

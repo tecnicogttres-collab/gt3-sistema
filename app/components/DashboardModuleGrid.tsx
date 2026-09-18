@@ -145,7 +145,7 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
   return (
     <div style={{ position: 'relative' }}>
       {reordering && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 40 }} />
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 40 }} />
       )}
 
       <div style={{

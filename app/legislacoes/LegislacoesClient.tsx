@@ -450,14 +450,16 @@ export default function LegislacoesClient() {
       {/* ── Modal: confirmação de leitura ──────────────────────────────────────── */}
       {confirmarOpen && (
         <>
-          <div onClick={() => setConfirmarOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 50 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: SURF, borderRadius: 16, width: 620, maxWidth: '92vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', zIndex: 51, boxShadow: SHADOW_MD }}>
+          <div onClick={() => setConfirmarOpen(false)} className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 50 }} />
+          {/* gt3-overlay-fade (não gt3-drop-in) aqui — esse painel já tem transform próprio pra centralizar
+              (translate -50%,-50%), e a animação de drop-in reseta transform no final, o que quebraria a centralização. */}
+          <div className="gt3-overlay-fade" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: SURF, borderRadius: 16, width: 620, maxWidth: '92vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', zIndex: 51, boxShadow: SHADOW_MD }}>
             <div style={{ padding: '18px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Confirmação de leitura</h3>
                 {pendentes.length > 0 && <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{pendentes.length} pendente{pendentes.length > 1 ? 's' : ''}</div>}
               </div>
-              <button onClick={() => setConfirmarOpen(false)} style={{ border: 'none', background: BG, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 16, color: MUTED }}>✕</button>
+              <button onClick={() => setConfirmarOpen(false)} className="gt3-close-btn" style={{ border: 'none', background: BG, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 16, color: MUTED }}>✕</button>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '14px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {pendentes.length === 0 ? (
@@ -490,11 +492,11 @@ export default function LegislacoesClient() {
       {/* ── Modal: gerenciar categorias ──────────────────────────────────────── */}
       {catOpen && (
         <>
-          <div onClick={() => { setCatOpen(false); setEditingCatId(null); setAddingCat(false) }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 50 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: SURF, borderRadius: 16, width: 520, maxWidth: '92vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', zIndex: 51, boxShadow: SHADOW_MD }}>
+          <div onClick={() => { setCatOpen(false); setEditingCatId(null); setAddingCat(false) }} className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 50 }} />
+          <div className="gt3-overlay-fade" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: SURF, borderRadius: 16, width: 520, maxWidth: '92vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', zIndex: 51, boxShadow: SHADOW_MD }}>
             <div style={{ padding: '18px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Gerenciar Categorias</h3>
-              <button onClick={() => { setCatOpen(false); setEditingCatId(null); setAddingCat(false) }} style={{ border: 'none', background: BG, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 16, color: MUTED }}>✕</button>
+              <button onClick={() => { setCatOpen(false); setEditingCatId(null); setAddingCat(false) }} className="gt3-close-btn" style={{ border: 'none', background: BG, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 16, color: MUTED }}>✕</button>
             </div>
 
             <div style={{ overflowY: 'auto', flex: 1, padding: '14px 22px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -581,12 +583,12 @@ export default function LegislacoesClient() {
 
       {/* ── Drawer: nova legislação ───────────────────────────────────────────── */}
       {drawerOpen && (
-        <div onClick={() => setDrawerOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 30 }} />
+        <div onClick={() => setDrawerOpen(false)} className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 30 }} />
       )}
-      <div style={{ position: 'fixed', top: 0, right: 0, height: '100%', width: 420, maxWidth: '92vw', background: SURF, boxShadow: SHADOW_MD, zIndex: 31, transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .25s ease', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'fixed', top: 0, right: 0, height: '100%', width: 420, maxWidth: '92vw', background: SURF, boxShadow: SHADOW_MD, zIndex: 31, transform: drawerOpen ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 320ms var(--ease-gt3-out)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '18px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Nova legislação</h3>
-          <button onClick={() => setDrawerOpen(false)} style={{ border: 'none', background: BG, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 16, color: MUTED }}>✕</button>
+          <button onClick={() => setDrawerOpen(false)} className="gt3-close-btn" style={{ border: 'none', background: BG, width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 16, color: MUTED }}>✕</button>
         </div>
         <div style={{ padding: '20px 22px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>

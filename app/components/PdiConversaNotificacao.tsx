@@ -15,12 +15,12 @@ export default function PdiConversaNotificacao({ dataConversa, onCiente }: Props
   const hora = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
   return (
-    <div style={{
+    <div className="gt3-overlay-fade" style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       backgroundColor: 'rgba(0,0,0,0.55)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div style={{
+      <div className="gt3-toast-in" style={{
         background: '#fff', borderRadius: 16, padding: '36px 40px',
         maxWidth: 460, width: '100%',
         boxShadow: '0 8px 32px rgba(0,0,0,0.22)',

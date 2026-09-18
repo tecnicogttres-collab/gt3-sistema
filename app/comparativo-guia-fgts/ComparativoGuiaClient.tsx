@@ -923,12 +923,13 @@ export default function ComparativoGuiaClient() {
         {modalCfgAberto && (
           <div
             onClick={e => { if (e.target === e.currentTarget) setModalCfgAberto(false) }}
+            className="gt3-overlay-fade"
             style={{ position: 'fixed', inset: 0, background: 'rgba(20,28,45,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 1200, overflow: 'auto' }}
           >
-            <div style={{ background: '#fff', borderRadius: 10, maxWidth: 820, width: '100%', boxShadow: '0 18px 50px rgba(20,28,45,.3)' }}>
+            <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 10, maxWidth: 820, width: '100%', boxShadow: '0 18px 50px rgba(20,28,45,.3)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${BORDER}` }}>
                 <h2 style={{ margin: 0, fontSize: 16, color: PRIMARY }}>Configurações</h2>
-                <button onClick={() => setModalCfgAberto(false)} aria-label="Fechar" style={{ border: 0, background: 'none', fontSize: 24, lineHeight: 1, cursor: 'pointer', color: MUTED }}>×</button>
+                <button onClick={() => setModalCfgAberto(false)} aria-label="Fechar" className="gt3-close-btn" style={{ border: 0, background: 'none', fontSize: 24, lineHeight: 1, cursor: 'pointer', color: MUTED }}>×</button>
               </div>
               <div style={{ padding: '18px 20px 22px' }}>
                 <div style={{ marginBottom: 22, paddingBottom: 20, borderBottom: `1px solid ${BORDER}` }}>
@@ -1074,7 +1075,7 @@ export default function ComparativoGuiaClient() {
                   <thead>
                     <tr>
                       {['Situação', 'Pessoa', 'CPF', 'Atividade', 'Vínculo', 'Admissão', 'Cadastro', 'Onde consta na guia'].map(h => (
-                        <th key={h} style={{ textAlign: 'left', padding: '9px 8px', background: '#eef1f7', borderBottom: `2px solid ${BORDER}`, fontWeight: 600, fontSize: 12.5, color: PRIMARY }}>{h}</th>
+                        <th key={h} style={{ textAlign: 'left', padding: '9px 8px', background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', borderBottom: `2px solid var(--border-soft)`, fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', color: 'var(--text-mute)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1088,7 +1089,7 @@ export default function ComparativoGuiaClient() {
                       const grifo = (campo: string): React.CSSProperties => r.campo === campo
                         ? { background: '#fdf1d6', boxShadow: `inset 0 0 0 2px ${ACCENT}`, borderRadius: 4, fontWeight: 600, color: NEUTRO }
                         : {}
-                      const tdBase: React.CSSProperties = { padding: 8, borderBottom: `1px solid ${BORDER}`, verticalAlign: 'top', background: rowBg, color: rowColor }
+                      const tdBase: React.CSSProperties = { padding: 8, borderBottom: `1px solid var(--border-soft)`, verticalAlign: 'top', background: rowBg, color: rowColor }
                       // admissão posterior ao cadastro: destaca as duas colunas, a admissão com mais força
                       const cadastroDestaque: React.CSSProperties = r.admissaoPosterior
                         ? { background: '#fdf1d6', boxShadow: `inset 0 0 0 2px ${ACCENT}`, borderRadius: 4, fontWeight: 600, color: NEUTRO }

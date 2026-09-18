@@ -41,11 +41,11 @@ export const RevisionRow = memo(function RevisionRow({ rev, people, suggestions,
     return (
       <tr style={{ background: rowBg }}>
         {(['data','documento','empresa','responsavel','inconsistencia'] as const).map(f => (
-          <td key={f} style={{ padding: '8px 10px', border: `1px solid ${BORDER}`, fontSize: 13, color: rev.resolvido ? SUCCESS_TEXT : INK, textDecoration: rev.resolvido ? 'line-through' : 'none' }}>
+          <td key={f} style={{ padding: '8px 10px', border: `1px solid var(--border-soft)`, fontSize: 13, color: rev.resolvido ? SUCCESS_TEXT : INK, textDecoration: rev.resolvido ? 'line-through' : 'none' }}>
             {String(rev[f] ?? '')}
           </td>
         ))}
-        <td style={{ padding: '8px 10px', border: `1px solid ${BORDER}`, textAlign: 'center' }}>
+        <td style={{ padding: '8px 10px', border: `1px solid var(--border-soft)`, textAlign: 'center' }}>
           <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: rev.resolvido ? '#D1FAE5' : '#FEF2F2', color: rev.resolvido ? '#065F46' : '#991B1B' }}>
             {rev.resolvido ? 'Resolvido' : 'Pendente'}
           </span>
@@ -55,7 +55,7 @@ export const RevisionRow = memo(function RevisionRow({ rev, people, suggestions,
   }
 
   const cellStyle: React.CSSProperties = {
-    border: `1px solid ${BORDER}`, padding: 0, height: 36, background: rowBg,
+    border: `1px solid var(--border-soft)`, padding: 0, height: 36, background: rowBg,
   }
   const editInput = (field: keyof Revision, placeholder: string, listId?: string): React.ReactNode => (
     <input
@@ -182,7 +182,7 @@ export function RevisaoTable({ filteredRevisions, search, people, suggestions, o
           <thead>
             <tr>
               {['Data','Documento','Empresa','Responsável','Inconsistência','Resolvido',''].map((h, i) => (
-                <th key={i} style={{ background: PRIMARY_LIGHT, color: PRIMARY, fontWeight: 600, padding: '10px 10px', textAlign: i === 5 ? 'center' : 'left', fontSize: 12, whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}` }}>
+                <th key={i} style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', color: 'var(--text-mute)', fontWeight: 700, padding: '10px 10px', textAlign: i === 5 ? 'center' : 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap', borderBottom: `1px solid var(--border-soft)` }}>
                   {h}
                 </th>
               ))}

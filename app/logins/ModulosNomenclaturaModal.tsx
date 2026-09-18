@@ -78,13 +78,14 @@ export default function ModulosNomenclaturaModal({ onClose }: { onClose: () => v
 
   return (
     <div
+      className="gt3-overlay-fade"
       style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '24px 28px', width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
+      <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '24px 28px', width: '100%', maxWidth: 560, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>⚙️ Nomenclatura dos módulos</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+          <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
         </div>
         <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#6B7A99' }}>
           Edite o nome e a cor de cada módulo. As mudanças são salvas e aplicadas automaticamente para todos, em tempo real.

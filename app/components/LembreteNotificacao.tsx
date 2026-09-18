@@ -22,12 +22,12 @@ export default function LembreteNotificacao({ count, onVerAgora, onAdiar, onDesc
   const [dataCustom, setDataCustom] = useState(addDaysIso(1))
 
   return (
-    <div style={{
+    <div className="gt3-overlay-fade" style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       backgroundColor: 'rgba(0,0,0,0.55)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div style={{
+      <div className="gt3-toast-in" style={{
         position: 'relative', background: '#fff', borderRadius: 16, padding: '36px 40px',
         maxWidth: 420, width: '100%', textAlign: 'center',
         boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
@@ -36,6 +36,7 @@ export default function LembreteNotificacao({ count, onVerAgora, onAdiar, onDesc
           onClick={onDescartar}
           title="Fechar só este aviso — os lembretes continuam normalmente no Dashboard"
           aria-label="Fechar aviso"
+          className="gt3-close-btn"
           style={{
             position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: 8,
             border: 'none', background: 'transparent', color: '#9CA3AF', fontSize: 18, lineHeight: 1,

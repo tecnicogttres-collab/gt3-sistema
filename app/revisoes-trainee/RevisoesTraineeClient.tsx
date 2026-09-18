@@ -934,7 +934,9 @@ export default function RevisoesTraineeClient() {
             const tFlagged = tRecs.filter(r => r.status === 'red' || r.status === 'yellow').length
             const isActive = activeTraineeId === t.id
             return (
-              <button key={t.id} onClick={() => setActiveTraineeId(t.id)} style={{ background: 'none', border: 'none', padding: '11px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', color: isActive ? '#1E293B' : '#6B7A99', borderBottom: isActive ? '2px solid #2A4F96' : '2px solid transparent', marginBottom: -1, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <button key={t.id} onClick={() => setActiveTraineeId(t.id)}
+                className={`gt3-tab${isActive ? ' gt3-tab-active' : ''}`}
+                style={{ background: 'none', border: 'none', padding: '11px 18px', fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', color: isActive ? '#1E293B' : '#6B7A99', borderBottom: '2px solid transparent', marginBottom: -1, display: 'flex', alignItems: 'center', gap: 7, transition: 'color 200ms var(--ease-gt3)', ['--tab-active-color' as string]: '#2A4F96' } as React.CSSProperties}>
                 {t.nome.split(' ')[0]}
                 {tFlagged > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#DC2626', display: 'inline-block' }} />}
                 <span style={{ backgroundColor: isActive ? '#1E3A6E' : '#E2E8F0', color: isActive ? '#D1AE6E' : '#6B7A99', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10 }}>
@@ -966,7 +968,7 @@ export default function RevisoesTraineeClient() {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC' }}>
+                  <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
                     {(isTrainee
                       ? [
                           { key: 'created_at',     label: 'Hora' },
@@ -992,7 +994,7 @@ export default function RevisoesTraineeClient() {
                         <th
                           key={i}
                           onClick={() => canSort && toggleSort(col.key as SortKey)}
-                          style={{ padding: '8px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: isActive ? '#1E293B' : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: canSort ? 'pointer' : 'default', userSelect: 'none' }}
+                          style={{ padding: '8px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: isActive ? '#1E293B' : 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', borderBottom: '1px solid var(--border-soft)', whiteSpace: 'nowrap', cursor: canSort ? 'pointer' : 'default', userSelect: 'none' }}
                         >
                           {col.label}
                           {isActive && <span style={{ marginLeft: 4, fontSize: 9 }}>{sortDir === 'asc' ? '▲' : '▼'}</span>}
@@ -1003,7 +1005,7 @@ export default function RevisoesTraineeClient() {
                 </thead>
                 <tbody>
                   {(isTrainee ? activeRecords : sortedRecords).map(rec => (
-                    <tr key={rec.id} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: rowBg(rec.status), borderLeft: rowBorderLeft(rec.status) }}>
+                    <tr key={rec.id} style={{ borderBottom: '1px solid var(--border-soft)', backgroundColor: rowBg(rec.status), borderLeft: rowBorderLeft(rec.status), transition: 'background-color 200ms var(--ease-gt3)' }}>
                       <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#6B7A99', fontSize: 12 }}>{formatTime(rec.created_at)}</td>
                       <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'empresa')}</td>
                       <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'colaborador')}</td>
@@ -1210,8 +1212,8 @@ export default function RevisoesTraineeClient() {
 
       {/* ── Modal: Flag ───────────────────────────────────────────── */}
       {flagModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setFlagModal(null) }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setFlagModal(null) }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>
                 {flagModal.status === 'red' ? 'Marcar como erro' : 'Sinalizar para discussão'}
@@ -1234,8 +1236,8 @@ export default function RevisoesTraineeClient() {
 
       {/* ── Modal: Finalizar ──────────────────────────────────────── */}
       {finalizarOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setFinalizarOpen(false) }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 540, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setFinalizarOpen(false) }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 540, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Finalizar dia</h2>
             <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6B7A99' }}>
               {activeDate ? `Finalizar ${formatDateLong(activeDate)}? Os registros vão para o histórico.` : ''}
@@ -1291,8 +1293,8 @@ export default function RevisoesTraineeClient() {
 
       {/* ── Modal: Relatório ─────────────────────────────────────── */}
       {reportOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '32px 16px', overflowY: 'auto' }} onClick={e => { if (e.target === e.currentTarget) setReportOpen(false) }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: 820, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '32px 16px', overflowY: 'auto' }} onClick={e => { if (e.target === e.currentTarget) setReportOpen(false) }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: 820, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
             {/* Header */}
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FAFAFA' }}>
               <div>
@@ -1444,8 +1446,8 @@ export default function RevisoesTraineeClient() {
 
       {/* ── Modal: Banco de Documentos ──────────────────────────────── */}
       {docBancoOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setDocBancoOpen(false) }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setDocBancoOpen(false) }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>📋 Banco de Documentos</h2>
               <button onClick={() => setDocBancoOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#94A3B8', lineHeight: 1, padding: 0 }}>×</button>
@@ -1500,8 +1502,8 @@ export default function RevisoesTraineeClient() {
 
       {/* ── Modal: Nova data ──────────────────────────────────────── */}
       {novaDataOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setNovaDataOpen(false) }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) setNovaDataOpen(false) }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Nova data</h2>
             <p style={{ margin: '0 0 14px', fontSize: 13, color: '#6B7A99' }}>Selecione a data a ser ativada.</p>
             <input type="date" value={novaDataInput} onChange={e => setNovaDataInput(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />

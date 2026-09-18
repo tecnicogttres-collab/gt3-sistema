@@ -217,7 +217,7 @@ export default function RevisaoNRClient() {
         style={{ textAlign: 'center', cursor: 'pointer', padding: 8, userSelect: 'none' }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 38, height: 38, borderRadius: 8, margin: 'auto', transition: 'all .15s',
+          width: 38, height: 38, borderRadius: 8, margin: 'auto', transition: 'background-color .15s, border-color .15s',
           border: checked ? `2px solid ${color}` : '2px solid #dce3ef',
           background: checked ? color : '#f9fafc',
           color: '#fff',
@@ -327,7 +327,7 @@ export default function RevisaoNRClient() {
                     </tr>
                   ) : filtered.map((reg, idx) => (
                     <tr key={reg.id}
-                      style={{ borderBottom: '1px solid #f0f3f8', background: reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi_capacete || reg.epi_cinto ? '#fff8f0' : 'transparent', transition: 'background .1s' }}
+                      style={{ borderBottom: '1px solid var(--border-soft)', background: reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi_capacete || reg.epi_cinto ? '#fff8f0' : 'transparent', transition: 'background-color 200ms var(--ease-gt3)' }}
                       onMouseEnter={e => { if (!reg.corrigido && !(reg.aso || reg.epi_capacete || reg.epi_cinto)) (e.currentTarget as HTMLElement).style.background = '#f7f9fd' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = reg.corrigido ? '#f0fdf4' : reg.aso || reg.epi_capacete || reg.epi_cinto ? '#fff8f0' : 'transparent' }}>
                       <td style={{ padding: '11px 16px', textAlign: 'center', color: '#aab2c2', fontSize: 11 }}>{idx + 1}</td>

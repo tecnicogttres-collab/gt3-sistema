@@ -342,12 +342,13 @@ export default function ManuaisClient() {
       {addModal && (
         <div
           onClick={e => { if (e.target === e.currentTarget) setAddModal(false) }}
+          className="gt3-overlay-fade"
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998,
           }}
         >
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 12, padding: '24px 28px',
             width: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
           }}>
@@ -474,13 +475,14 @@ function DocModal({
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      className="gt3-overlay-fade"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
         padding: '3rem 1rem', zIndex: 9998, overflowY: 'auto',
       }}
     >
-      <div style={{
+      <div className="gt3-drop-in" style={{
         background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640,
         boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
         border: '1px solid #E2E8F0',
@@ -766,13 +768,13 @@ function NRsView({
         <div style={{ overflowX: 'auto', maxHeight: '52vh', overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 900 }}>
             <thead>
-              <tr style={{ background: '#F7F9FC' }}>
+              <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
                 {['Origem', 'Treinamento', 'CH formação', 'Periodicidade', 'CH reciclagem', 'Qualif. instrutor', 'Resp. técnico', ''].map((h, i) => (
                   <th key={i} style={{
-                    padding: '10px 12px', borderBottom: '1px solid #E2E8F0',
-                    textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#718096',
-                    textTransform: 'uppercase', letterSpacing: '0.4px',
-                    whiteSpace: 'nowrap', position: 'sticky', top: 0, background: '#F7F9FC', zIndex: 1,
+                    padding: '10px 12px', borderBottom: '1px solid var(--border-soft)',
+                    textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)',
+                    textTransform: 'uppercase', letterSpacing: '.9px',
+                    whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', zIndex: 1,
                     ...(i === 7 ? { width: 36 } : {}),
                   }}>{h}</th>
                 ))}
@@ -845,8 +847,8 @@ function NRRow({ row, realIdx, origemStyle, onUpdate, onDelete }: {
   const refs = useRef<(HTMLTableCellElement | null)[]>([])
 
   return (
-    <tr style={{ borderBottom: '1px solid #EDF2F7' }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F7F9FC' }}
+    <tr style={{ borderBottom: '1px solid var(--border-soft)', transition: 'background-color 200ms var(--ease-gt3)' }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FAFCFF' }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
     >
       {/* Origem tag */}

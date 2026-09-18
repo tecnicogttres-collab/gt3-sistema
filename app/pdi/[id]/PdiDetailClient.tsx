@@ -306,9 +306,9 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
         <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #E2E8F0' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
+              <tr style={{ borderBottom: '1px solid var(--border-soft)', background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
                 {['Competência', 'A desenvolver', 'Ações', 'Resultados esperados', 'Início', 'Status'].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
                 ))}
@@ -319,7 +319,7 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
               {activeAcoes.map((a, i) => {
                 const st = STATUS_STYLE[a.status] ?? STATUS_STYLE['Não iniciado']
                 return (
-                  <tr key={a.id ?? i} style={{ borderBottom: i < activeAcoes.length - 1 ? '1px solid rgba(42,79,150,0.18)' : 'none' }}>
+                  <tr key={a.id ?? i} style={{ borderBottom: i < activeAcoes.length - 1 ? '1px solid var(--border-soft)' : 'none' }}>
                     <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap' }}>{a.competencia}</td>
                     <td style={{ padding: '11px 14px', color: '#374151', maxWidth: 200 }}>{a.desenvolver || '—'}</td>
                     <td style={{ padding: '11px 14px', color: '#374151', maxWidth: 240 }}>{a.acoes || '—'}</td>
@@ -378,7 +378,7 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
                 </thead>
                 <tbody>
                   {historico.map((a, i) => (
-                    <tr key={a.id ?? i} style={{ borderBottom: i < historico.length - 1 ? '1px solid rgba(42,79,150,0.18)' : 'none' }}>
+                    <tr key={a.id ?? i} style={{ borderBottom: i < historico.length - 1 ? '1px solid var(--border-soft)' : 'none' }}>
                       <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap' }}>{a.competencia}</td>
                       <td style={{ padding: '11px 14px', color: '#374151', maxWidth: 300 }}>{a.resultadosEsperados || '—'}</td>
                       <td style={{ padding: '11px 14px', color: '#166534', fontWeight: 500, whiteSpace: 'nowrap' }}>{a.concluido_em ? formatDate(a.concluido_em) : '—'}</td>
@@ -398,8 +398,8 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
 
       {/* Create/Edit Modal */}
       {modal.open && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', padding: '28px 32px' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', padding: '28px 32px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>
                 {modal.mode === 'create' ? '＋ Nova ação' : '✎ Editar ação'}
@@ -462,8 +462,8 @@ function AcoesTab({ pdi, canEdit }: { pdi: PdiColaborador; canEdit: boolean }) {
 
       {/* Delete confirmation */}
       {deleteId !== null && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 14, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 360, padding: '28px 30px', textAlign: 'center' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="gt3-drop-in" style={{ backgroundColor: '#fff', borderRadius: 14, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 360, padding: '28px 30px', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 14 }}>🗑</div>
             <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Excluir ação</h3>
             <p style={{ margin: '0 0 24px', fontSize: 13, color: '#6B7A99' }}>Esta ação será removida permanentemente.</p>
@@ -795,16 +795,16 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
               <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '8px 14px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#6B7A99', textTransform: 'uppercase' }}>Competência</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#2A4F96', textTransform: 'uppercase' }}>Diretiva</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#92400E', textTransform: 'uppercase' }}>Auto</th>
-                      <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#166534', textTransform: 'uppercase' }}>Ambição</th>
+                    <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)', borderBottom: '1px solid var(--border-soft)' }}>
+                      <th style={{ padding: '8px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px' }}>Competência</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase', letterSpacing: '.9px' }}>Diretiva</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '.9px' }}>Auto</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '.9px' }}>Ambição</th>
                     </tr>
                   </thead>
                   <tbody>
                     {competencias.map((comp, i) => (
-                      <tr key={i} style={{ borderBottom: i < competencias.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                      <tr key={i} style={{ borderBottom: i < competencias.length - 1 ? '1px solid var(--border-soft)' : 'none' }}>
                         <td style={{ padding: '8px 14px', color: '#1E293B', fontWeight: 500 }}>{shorten(comp)}</td>
                         <ScoreCells
                           scores={[diretiva[i] ?? 0]}
@@ -973,8 +973,8 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
       )}
 
       {confirmDelete && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '28px 30px', maxWidth: 360, textAlign: 'center' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, padding: '28px 30px', maxWidth: 360, textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>🗑</div>
             <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Excluir {formatCicloPeriodo(ciclo.data_inicio, ciclo.data_fim)}?</h3>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>Todos os dados deste ciclo serão removidos permanentemente.</p>
@@ -1003,8 +1003,8 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
         ]
         const quem = nomes.length === 1 ? nomes[0] : nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1]
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: '#fff', borderRadius: 14, padding: '28px 30px', maxWidth: 380, textAlign: 'center' }}>
+          <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, padding: '28px 30px', maxWidth: 380, textAlign: 'center' }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
               <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#1E293B' }}>Este ciclo tem rascunho salvo</h3>
               <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6B7A99' }}>
@@ -1140,8 +1140,8 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
       ))}
 
       {showNovoCicloModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: '32px 36px', maxWidth: 420, textAlign: 'center' }}>
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, padding: '32px 36px', maxWidth: 420, textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>🔄</div>
             <h3 style={{ margin: '0 0 10px', fontSize: 17, fontWeight: 700, color: '#1E293B' }}>Iniciar novo ciclo?</h3>
             <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6B7A99', lineHeight: 1.6 }}>
@@ -1766,7 +1766,9 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
       <div style={{ borderBottom: '1px solid #E2E8F0', marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 0 }}>
           {visibleTabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: '10px 18px', border: 'none', borderBottom: `2px solid ${activeTab === tab.id ? '#2A4F96' : 'transparent'}`, backgroundColor: 'transparent', color: activeTab === tab.id ? '#2A4F96' : '#6B7A99', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400, cursor: 'pointer', transition: 'color 0.15s', marginBottom: -1 }}>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`gt3-tab${activeTab === tab.id ? ' gt3-tab-active' : ''}`}
+              style={{ padding: '10px 18px', border: 'none', borderBottom: '2px solid transparent', backgroundColor: 'transparent', color: activeTab === tab.id ? '#2A4F96' : '#6B7A99', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400, cursor: 'pointer', transition: 'color 200ms var(--ease-gt3)', marginBottom: -1 }}>
               {tab.label}
             </button>
           ))}

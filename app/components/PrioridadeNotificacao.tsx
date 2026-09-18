@@ -8,6 +8,7 @@ type Props = {
 export default function PrioridadeNotificacao({ empresa, onOk }: Props) {
   return (
     <div
+      className="gt3-overlay-fade"
       style={{
         position: 'fixed',
         inset: 0,
@@ -20,6 +21,7 @@ export default function PrioridadeNotificacao({ empresa, onOk }: Props) {
       }}
     >
       <div
+        className="gt3-toast-in"
         style={{
           background: '#fff',
           borderRadius: 14,

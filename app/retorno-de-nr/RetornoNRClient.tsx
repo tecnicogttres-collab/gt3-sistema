@@ -290,7 +290,7 @@ const S = {
   callout: { background: ACCENT_SOFT, border: '1px solid #EBD8B2', borderRadius: 9, padding: '12px 14px', fontSize: 13.5, color: '#6B5320', marginBottom: 16 } as React.CSSProperties,
   divider: { height: 1, background: BORDER, margin: '20px 0' } as React.CSSProperties,
   mono: { fontFamily: 'Consolas,"Courier New",monospace', fontSize: 13, background: '#EEF1F7', padding: '1px 5px', borderRadius: 4 } as React.CSSProperties,
-  cell: { padding: '9px 10px', borderBottom: '1px solid #F0F2F7', verticalAlign: 'top' } as React.CSSProperties,
+  cell: { padding: '9px 10px', borderBottom: '1px solid var(--border-soft)', verticalAlign: 'top' } as React.CSSProperties,
   secao: { fontSize: 13, fontWeight: 600, color: MUTED, margin: '26px 0 12px' } as React.CSSProperties,
   cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 15 } as React.CSSProperties,
 }
@@ -835,15 +835,15 @@ export default function RetornoNRClient() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                     <thead>
-                      <tr>
+                      <tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
                         {cols.map(([h, w]) => (
-                          <th key={h} style={{ textAlign: 'left', fontSize: 12.5, color: MUTED, fontWeight: 600, padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, width: w }}>{h}</th>
+                          <th key={h} style={{ textAlign: 'left', fontSize: 10, color: 'var(--text-mute)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.9px', padding: '8px 10px', borderBottom: '1px solid var(--border-soft)', width: w }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {historico.map(r => (
-                        <tr key={r.id}>
+                        <tr key={r.id} className="gt3-table-row-hover">
                           <td style={S.cell}>{dataBR(r.data)}</td>
                           <td style={S.cell}>{r.alvo}</td>
                           <td style={S.cell}>{r.acao}</td>

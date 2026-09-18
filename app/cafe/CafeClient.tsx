@@ -121,13 +121,14 @@ function GenerateModal({
   return (
     <div
       onClick={e => e.target === e.currentTarget && onClose()}
+      className="gt3-overlay-fade"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 1000, padding: 24,
       }}
     >
-      <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600, color: INK }}>Gerar nova planilha</h3>
         <p style={{ margin: '0 0 18px', fontSize: 13, color: MUTED }}>
           Todas as semanas do mês (segunda a sexta) já ficam disponíveis para preencher.

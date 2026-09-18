@@ -46,15 +46,16 @@ export default function AtaTextoEditor({ initial, onSave, onClose }: {
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      className="gt3-overlay-fade"
       style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
     >
-      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 720, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 720, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         {/* Header */}
         <div style={{ padding: '18px 24px', borderBottom: '1px solid #F0F4FA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2340' }}>
             {initial ? 'Editar ata' : 'Nova ata'}
           </h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+          <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 'none', fontSize: 22, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
         </div>
 
         {/* Body */}

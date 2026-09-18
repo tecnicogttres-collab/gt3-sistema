@@ -695,16 +695,17 @@ function Modal({ title, onClose, footer, children, maxWidth = 720 }: {
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      className="gt3-overlay-fade"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100,
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
         padding: '40px 16px', overflowY: 'auto',
       }}
     >
-      <div style={{ background: '#fff', borderRadius: 8, maxWidth, width: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 8, maxWidth, width: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: C.text }}>{title}</h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: C.muted, padding: 0, lineHeight: 1 }}>×</button>
+          <button onClick={onClose} className="gt3-close-btn" style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: C.muted, padding: 0, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ padding: 20 }}>{children}</div>
         <div style={{ padding: '12px 20px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>{footer}</div>

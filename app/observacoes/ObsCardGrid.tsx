@@ -110,6 +110,7 @@ function ObsCard({
         {lightbox && card._imagem_url && (
           <div
             onClick={() => setLightbox(false)}
+            className="gt3-overlay-fade"
             style={{
               position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -120,10 +121,12 @@ function ObsCard({
               src={card._imagem_url}
               alt=""
               onClick={e => e.stopPropagation()}
+              className="gt3-drop-in"
               style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, cursor: 'default' }}
             />
             <button
               onClick={() => setLightbox(false)}
+              className="gt3-close-btn"
               style={{
                 position: 'fixed', top: 18, right: 18, background: 'rgba(255,255,255,0.15)',
                 border: 'none', borderRadius: '50%', color: '#fff', fontSize: 18,
@@ -328,6 +331,7 @@ function ObsCard({
       {diffOpen && card._parecer_anterior != null && (
         <div
           onClick={e => e.stopPropagation()}
+          className="gt3-overlay-fade"
           style={{
             position: 'fixed', inset: 0, background: 'rgba(30,37,61,0.55)',
             zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -335,7 +339,7 @@ function ObsCard({
           }}
           onMouseDown={e => { if (e.target === e.currentTarget) setDiffOpen(false) }}
         >
-          <div style={{
+          <div className="gt3-drop-in" style={{
             background: '#fff', borderRadius: 14, width: '100%', maxWidth: 760,
             boxShadow: '0 8px 40px rgba(30,37,61,0.22)', overflow: 'hidden',
           }}>
