@@ -277,6 +277,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'comparador_comprovantes',
+    label: 'Comparador de Comprovantes',
+    color: '#4A90D9',
+    path: '/comparador-comprovantes',
+    description: 'Confere comprovantes de depósito contra o relatório do Portal GT3, por competência',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'coisas-a-fazer',
     label: 'Melhorias',
     color: '#4A90D9',
