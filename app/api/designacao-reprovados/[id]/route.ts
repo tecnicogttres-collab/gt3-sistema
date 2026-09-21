@@ -4,7 +4,7 @@ import { getCaller } from '../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
-const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, criado_por, created_at, updated_at'
+const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, criado_por, created_at, updated_at'
 
 const TRAT_LABEL: Record<string, string> = {
   aguardando: 'Aguardando ciência',
@@ -63,6 +63,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     update = { tratativa: novo }
     acaoHistorico = `Tratativa → ${TRAT_LABEL[novo] ?? novo}`
+  } else if (action === 'retorno') {
+    // Marcador independente da tratativa — a empresa respondeu ao e-mail, mesmo que o
+    // caso ainda não esteja resolvido. Alterna (permite desmarcar se foi engano).
+    const ligar = body?.retorno !== false
+    update = { retorno_recebido: ligar, retorno_em: ligar ? new Date().toISOString() : null }
+    acaoHistorico = ligar ? 'Empresa retornou' : 'Retorno da empresa desmarcado'
   } else {
     return Response.json({ error: 'Ação inválida' }, { status: 400 })
   }

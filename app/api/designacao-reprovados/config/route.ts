@@ -7,6 +7,7 @@ const DEFAULTS = {
   assunto_template: 'Portal GT3 - Acompanhamento de documentação - {{empresa}}',
   saudacao_template: 'Olá! Identificamos que você possui documentos de {{setores}} reprovados no Portal GT3.',
   fechamento_template: 'Você precisa de alguma ajuda com este(s) documento(s)?',
+  historico_dias: 15,
 }
 
 export async function GET() {
@@ -25,9 +26,12 @@ export async function PATCH(req: NextRequest) {
   if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json()
-  const patch: Record<string, string> = {}
+  const patch: Record<string, string | number> = {}
   for (const k of ['assunto_template', 'saudacao_template', 'fechamento_template'] as const) {
     if (typeof body[k] === 'string') patch[k] = body[k]
+  }
+  if (typeof body.historico_dias === 'number' && body.historico_dias > 0) {
+    patch.historico_dias = Math.floor(body.historico_dias)
   }
 
   const admin = createAdminClient()

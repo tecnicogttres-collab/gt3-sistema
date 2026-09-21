@@ -11,7 +11,10 @@ type Situacao = { id: string; nome: string; cor: string; ativo: boolean; created
 type Empresa = { id: string; nome: string; contratante: string; email: string; created_at: string }
 type Pertinencia = { setor_id: string; usuario_id: string }
 type UsuarioRow = { id: string; nome: string | null; papel: string | null }
-type EmailConfig = { id: string; assunto_template: string; saudacao_template: string; fechamento_template: string }
+type EmailConfig = {
+  id: string; assunto_template: string; saudacao_template: string; fechamento_template: string
+  historico_dias: number
+}
 
 type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido'
 
@@ -27,6 +30,8 @@ type Designacao = {
   data_verificacao: string
   tratativa: Tratativa
   ciencia_por: string[]
+  retorno_recebido: boolean
+  retorno_em: string | null
   criado_por: string
   created_at: string
   updated_at: string
@@ -131,6 +136,34 @@ const CONFIG_PADRAO: EmailConfig = {
   assunto_template: 'Portal GT3 - Acompanhamento de documentação - {{empresa}}',
   saudacao_template: 'Olá! Identificamos que você possui documentos de {{setores}} reprovados no Portal GT3.',
   fechamento_template: 'Você precisa de alguma ajuda com este(s) documento(s)?',
+  historico_dias: 15,
+}
+
+/** Dias corridos entre a data de verificação (YYYY-MM-DD) e hoje. */
+function diasDesde(dataIso: string): number {
+  const [y, m, d] = dataIso.split('-').map(Number)
+  const dia = new Date(y, (m || 1) - 1, d || 1)
+  const hj = new Date(); hj.setHours(0, 0, 0, 0)
+  return Math.round((hj.getTime() - dia.getTime()) / 86400000)
+}
+
+type GrupoDiaEmpresa = { key: string; data: string; empresa: string; itens: Designacao[] }
+
+/** Agrupa uma lista de designações por dia + empresa, mais recente primeiro — dá o
+ *  "workflow" visual (Minha Caixa / Visão geral): fica claro que dia e que empresa é
+ *  cada bloco, em vez de uma lista solta de documentos. */
+function agruparPorDiaEmpresa(lista: Designacao[]): GrupoDiaEmpresa[] {
+  const ordenados = [...lista].sort((a, b) =>
+    b.data_verificacao.localeCompare(a.data_verificacao) || a.empresa.localeCompare(b.empresa, 'pt-BR'))
+  const grupos: GrupoDiaEmpresa[] = []
+  const map = new Map<string, GrupoDiaEmpresa>()
+  for (const d of ordenados) {
+    const key = d.data_verificacao + '|' + d.empresa.trim().toLowerCase()
+    let g = map.get(key)
+    if (!g) { g = { key, data: d.data_verificacao, empresa: d.empresa, itens: [] }; map.set(key, g); grupos.push(g) }
+    g.itens.push(d)
+  }
+  return grupos
 }
 
 /** Monta o e-mail de designação (assunto + corpo HTML) a partir dos setores/documentos
@@ -321,7 +354,13 @@ export default function DesignacaoReprovadosClient() {
   const [usuarios, setUsuarios]       = useState<UsuarioRow[]>([])
   const [loading, setLoading]         = useState(true)
 
-  const [tab, setTab] = useState<'designacoes' | 'caixa' | 'config'>('designacoes')
+  const [tab, setTab] = useState<'designacoes' | 'caixa' | 'geral' | 'config'>('designacoes')
+
+  // ── Minha Caixa / Visão geral: sub-view e acordeão (abre sozinho no mais recente) ──
+  const [caixaSub, setCaixaSub]   = useState<'ativas' | 'historico'>('ativas')
+  const [geralSub, setGeralSub]   = useState<'ativas' | 'historico'>('ativas')
+  const [caixaAberto, setCaixaAberto] = useState<string | null>(null)
+  const [geralAberto, setGeralAberto] = useState<string | null>(null)
 
   // ── Formulário inline ──
   const [formOpen, setFormOpen]           = useState(false)
@@ -331,7 +370,6 @@ export default function DesignacaoReprovadosClient() {
   const [fDocumentos, setFDocumentos]     = useState<string[]>([])
   const [fSituacao, setFSituacao]         = useState('')
   const [fResponsaveis, setFResponsaveis] = useState<string[]>([])
-  const [fMotivo, setFMotivo]             = useState('')
   const [saving, setSaving]               = useState(false)
   const [qtdSessao, setQtdSessao]         = useState(0)
   const empresaInputRef = useRef<HTMLInputElement>(null)
@@ -363,6 +401,7 @@ export default function DesignacaoReprovadosClient() {
   const [cfgAssunto, setCfgAssunto]       = useState('')
   const [cfgSaudacao, setCfgSaudacao]     = useState('')
   const [cfgFechamento, setCfgFechamento] = useState('')
+  const [cfgHistoricoDias, setCfgHistoricoDias] = useState(15)
   const [savingConfig, setSavingConfig]   = useState(false)
 
   const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
@@ -405,6 +444,7 @@ export default function DesignacaoReprovadosClient() {
       setDesignacoes(des); setSetores(set); setDocumentos(doc); setSituacoes(sit)
       setEmpresas(emp); setPertinencia(pert); setUsuarios(usr)
       setEmailConfig(cfg); setCfgAssunto(cfg.assunto_template); setCfgSaudacao(cfg.saudacao_template); setCfgFechamento(cfg.fechamento_template)
+      setCfgHistoricoDias(cfg.historico_dias ?? 15)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -483,29 +523,42 @@ export default function DesignacaoReprovadosClient() {
   const minhaCaixa = useMemo(() => designacoes.filter(d => d.responsaveis.includes(userId)), [designacoes, userId])
   const minhaCaixaPendentes = minhaCaixa.filter(d => d.tratativa === 'aguardando').length
 
-  // Agrupada por dia + empresa — fica visualmente claro de qual empresa/dia é cada bloco
-  // quando o mesmo responsável tem designações de empresas diferentes na caixa.
-  const minhaCaixaAgrupada = useMemo(() => {
-    const ordenados = [...minhaCaixa].sort((a, b) =>
-      b.data_verificacao.localeCompare(a.data_verificacao) || a.empresa.localeCompare(b.empresa, 'pt-BR'))
-    const grupos: { key: string; data: string; empresa: string; itens: Designacao[] }[] = []
-    const map = new Map<string, { key: string; data: string; empresa: string; itens: Designacao[] }>()
-    for (const d of ordenados) {
-      const key = d.data_verificacao + '|' + d.empresa.trim().toLowerCase()
-      let g = map.get(key)
-      if (!g) { g = { key, data: d.data_verificacao, empresa: d.empresa, itens: [] }; map.set(key, g); grupos.push(g) }
-      g.itens.push(d)
-    }
-    return grupos
-  }, [minhaCaixa])
+  // Agrupada por dia + empresa — fica visualmente claro de qual empresa/dia é cada bloco.
+  // Dividida em Ativas/Histórico pelo prazo configurável (padrão 15 dias); Visão geral usa
+  // a mesma lógica mas com TODAS as designações, não só as minhas.
+  const minhaGrupos = useMemo(() => agruparPorDiaEmpresa(minhaCaixa), [minhaCaixa])
+  const minhaAtivas = useMemo(() => minhaGrupos.filter(g => diasDesde(g.data) <= emailConfig.historico_dias), [minhaGrupos, emailConfig.historico_dias])
+  const minhaHistorico = useMemo(() => minhaGrupos.filter(g => diasDesde(g.data) > emailConfig.historico_dias), [minhaGrupos, emailConfig.historico_dias])
+  const minhaAtual = caixaSub === 'ativas' ? minhaAtivas : minhaHistorico
 
-  // ── Pré-visualização do e-mail (formulário "+ Novo") — monta sozinha conforme
-  // setor(es)/documento(s) vão sendo marcados, igual ao parecer do workflow-programas.
-  const previewEmail = useMemo(
-    () => buildDesignacaoEmail(fEmpresa.trim(), fSetores, fDocumentos, fMotivo, setores, documentos, emailConfig),
-    [fEmpresa, fSetores, fDocumentos, fMotivo, setores, documentos, emailConfig],
-  )
-  const previewEmpresaEmail = getEmpresaEmail(fEmpresa)
+  const todasGrupos = useMemo(() => agruparPorDiaEmpresa(designacoes), [designacoes])
+  const todasAtivas = useMemo(() => todasGrupos.filter(g => diasDesde(g.data) <= emailConfig.historico_dias), [todasGrupos, emailConfig.historico_dias])
+  const todasHistorico = useMemo(() => todasGrupos.filter(g => diasDesde(g.data) > emailConfig.historico_dias), [todasGrupos, emailConfig.historico_dias])
+  const geralAtual = geralSub === 'ativas' ? todasAtivas : todasHistorico
+
+  // Acordeão: abre sozinho o grupo mais recente sempre que a lista/sub-view mudar —
+  // e volta pro topo se o grupo que estava aberto sumir (ex.: foi resolvido/mudou de dia).
+  useEffect(() => {
+    if (minhaAtual.length === 0) { setCaixaAberto(null); return }
+    setCaixaAberto(prev => (prev && minhaAtual.some(g => g.key === prev)) ? prev : minhaAtual[0].key)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minhaAtual, caixaSub])
+  useEffect(() => {
+    if (geralAtual.length === 0) { setGeralAberto(null); return }
+    setGeralAberto(prev => (prev && geralAtual.some(g => g.key === prev)) ? prev : geralAtual[0].key)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geralAtual, geralSub])
+
+  /** Contagem por tratativa + retorno dentro de um grupo — resumo no cabeçalho do
+   *  acordeão pra bater o olho e saber o que está pendente sem abrir. */
+  function resumoGrupo(itens: Designacao[]) {
+    return {
+      aguardando: itens.filter(d => d.tratativa === 'aguardando').length,
+      andamento: itens.filter(d => d.tratativa === 'andamento').length,
+      resolvido: itens.filter(d => d.tratativa === 'resolvido').length,
+      retornou: itens.filter(d => d.retorno_recebido).length,
+    }
+  }
 
   // ── Duplicidade (form) ──
   const duplicidade = useMemo(() => {
@@ -528,7 +581,7 @@ export default function DesignacaoReprovadosClient() {
   function limparCamposItem() {
     setFSetores([]); setFDocumentos([])
     setFSituacao(situacoes.find(s => s.ativo)?.id ?? '')
-    setFResponsaveis([]); setFMotivo('')
+    setFResponsaveis([])
   }
 
   function abrirForm() {
@@ -576,7 +629,6 @@ export default function DesignacaoReprovadosClient() {
         documentos: fDocumentos,
         situacao_id: fSituacao,
         responsaveis: fResponsaveis,
-        motivo: fMotivo,
       }),
     })
     setSaving(false)
@@ -631,6 +683,20 @@ export default function DesignacaoReprovadosClient() {
       const updated: Designacao = await res.json()
       setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
       showToast('Atualizado para ' + TRAT_LABEL[novo] + '.')
+    } else {
+      const e = await res.json().catch(() => ({}))
+      showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
+    }
+  }
+  /** Marcador independente da tratativa — a empresa respondeu ao e-mail. Alterna. */
+  async function marcarRetorno(id: string, ligar: boolean) {
+    const res = await fetch(`/api/designacao-reprovados/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'retorno', retorno: ligar }),
+    })
+    if (res.ok) {
+      const updated: Designacao = await res.json()
+      setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
+      showToast(ligar ? 'Marcado: empresa retornou.' : 'Retorno desmarcado.')
     } else {
       const e = await res.json().catch(() => ({}))
       showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
@@ -767,7 +833,10 @@ export default function DesignacaoReprovadosClient() {
     setSavingConfig(true)
     const res = await fetch('/api/designacao-reprovados/config', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assunto_template: cfgAssunto, saudacao_template: cfgSaudacao, fechamento_template: cfgFechamento }),
+      body: JSON.stringify({
+        assunto_template: cfgAssunto, saudacao_template: cfgSaudacao, fechamento_template: cfgFechamento,
+        historico_dias: cfgHistoricoDias,
+      }),
     })
     setSavingConfig(false)
     if (res.ok) { const updated = await res.json(); setEmailConfig(updated); showToast('Estrutura do e-mail salva.') }
@@ -782,6 +851,117 @@ export default function DesignacaoReprovadosClient() {
 
   const setoresAtivos = setores.filter(s => s.ativo)
   const situacoesAtivas = situacoes.filter(s => s.ativo)
+
+  // ── Minha Caixa / Visão geral: card de item + bloco de grupo (acordeão) ──
+  function renderCardDesignacao(d: Designacao, opts: { mostrarResponsaveis: boolean }) {
+    const souResponsavel = d.responsaveis.includes(userId)
+    const jaCiente = d.ciencia_por.includes(userId)
+    const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, d.motivo, setores, documentos, emailConfig)
+    const destinoEmail = getEmpresaEmail(d.empresa)
+    return (
+      <div key={d.id} style={{
+        background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
+        borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
+        opacity: d.tratativa === 'resolvido' ? .78 : 1,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 12, color: MUTED, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}
+            {sitTag(d.situacao_id)}
+            <span>· por {getUsuarioNome(d.criado_por)}</span>
+            {opts.mostrarResponsaveis && (
+              <>
+                <span>· para</span>
+                {d.responsaveis.map(u => (
+                  <span key={u} style={respChipStyle}><span style={avatarStyle}>{iniciais(getUsuarioNome(u))}</span>{getUsuarioNome(u)}</span>
+                ))}
+              </>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            {d.retorno_recebido && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#0A7A5E', background: '#EDFBF6', border: '1px solid #A9E6D2', borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+                🔁 Empresa retornou
+              </span>
+            )}
+            <TratativaBadge t={d.tratativa} />
+          </div>
+        </div>
+        <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
+          <b>{d.documentos.map(getDocNome).join(' · ')}</b>
+          {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
+        </div>
+
+        {/* E-mail pronto para encaminhar à empresa — só quem recebe a designação vê isso montado */}
+        {email.corpo && (
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+            <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>✉️ E-mail pronto</span>
+              <span style={{ marginLeft: 'auto', fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: destinoEmail ? '#16A34A' : '#B45309' }}>
+                Para: {destinoEmail || 'não cadastrado'}
+              </span>
+            </div>
+            <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT, background: '#FCFDFF' }}
+              dangerouslySetInnerHTML={{ __html: email.corpo }} />
+            <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => copiarEmailHtml(email.corpo)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+              <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={sm(btnGhost)}>⬇ Baixar .eml</button>
+            </div>
+          </div>
+        )}
+
+        {souResponsavel && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {!jaCiente ? (
+              <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Dar ciência</button>
+            ) : (
+              <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
+            )}
+            {jaCiente && d.tratativa !== 'resolvido' && (
+              <>
+                <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
+                <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
+              </>
+            )}
+            <button onClick={() => marcarRetorno(d.id, !d.retorno_recebido)} style={sm(btnGhost)}>
+              {d.retorno_recebido ? '↺ Desmarcar retorno' : '🔁 Marcar retorno da empresa'}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderGrupoAcordeao(grupo: GrupoDiaEmpresa, opts: { aberto: string | null; setAberto: (k: string | null) => void; mostrarResponsaveis: boolean }) {
+    const isOpen = opts.aberto === grupo.key
+    const r = resumoGrupo(grupo.itens)
+    return (
+      <div key={grupo.key} style={{ marginBottom: 14, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
+        <div onClick={() => opts.setAberto(isOpen ? null : grupo.key)} style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer',
+          background: isOpen ? PRIMARY_SOFT : '#FAFCFE', flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 11, transition: 'transform .15s', transform: isOpen ? 'rotate(90deg)' : 'none', color: MUTED }}>▶</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: PRIMARY, color: '#fff', borderRadius: 999, padding: '5px 13px 5px 11px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            📅 {fmtData(grupo.data)}
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>🏢 {grupo.empresa}</span>
+          <span style={{ fontSize: 11, color: MUTED }}>{grupo.itens.length} item(ns)</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+            {r.aguardando > 0 && <span style={{ color: TRAT_COLORS.aguardando }}>⏳ {r.aguardando} aguardando</span>}
+            {r.andamento > 0 && <span style={{ color: TRAT_COLORS.andamento }}>▶ {r.andamento} em andamento</span>}
+            {r.retornou > 0 && <span style={{ color: '#0A7A5E' }}>🔁 {r.retornou} retornou</span>}
+            {r.resolvido > 0 && <span style={{ color: TRAT_COLORS.resolvido }}>✔ {r.resolvido} resolvido</span>}
+          </div>
+        </div>
+        {isOpen && (
+          <div style={{ padding: '14px 16px', borderTop: `1px solid ${BORDER}` }}>
+            {grupo.itens.map(d => renderCardDesignacao(d, { mostrarResponsaveis: opts.mostrarResponsaveis }))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -799,6 +979,7 @@ export default function DesignacaoReprovadosClient() {
         {[
           { id: 'designacoes' as const, label: '📋 Designações' },
           { id: 'caixa' as const, label: `📥 Minha Caixa${minhaCaixaPendentes ? ` (${minhaCaixaPendentes})` : ''}` },
+          { id: 'geral' as const, label: '🌐 Visão geral' },
           { id: 'config' as const, label: '⚙️ Configurações' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -956,41 +1137,6 @@ export default function DesignacaoReprovadosClient() {
                     })}
                   </div>
 
-                  {/* Observação */}
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 10 }}>Observação / orientação para a empresa</div>
-                    <textarea value={fMotivo} onChange={e => setFMotivo(e.target.value)} rows={3}
-                      placeholder="Ex.: ASO do João vencido desde 10/09 — solicitar reagendamento e reenvio pelo portal..."
-                      style={inputStyle({ width: '100%', resize: 'vertical' })} />
-                  </div>
-
-                  {/* Pré-visualização do e-mail — monta sozinha conforme setor/documento vão sendo marcados */}
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      ✉️ Pré-visualização do e-mail
-                      <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0, fontSize: 11, opacity: .75 }}>vai sendo escrito conforme você marca acima</span>
-                    </div>
-                    {previewEmail.corpo ? (
-                      <div style={{ border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: '#FCFDFF' }}>
-                        <div style={{ padding: '9px 16px', borderBottom: `1px solid ${BORDER}`, background: '#F6F9FC', fontSize: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          <span><b>Assunto:</b> {previewEmail.assunto}</span>
-                          <span style={{ marginLeft: 'auto', color: previewEmpresaEmail ? '#16A34A' : '#B45309' }}>
-                            <b>Para:</b> {previewEmpresaEmail || 'e-mail da empresa não cadastrado'}
-                          </span>
-                        </div>
-                        <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT }}
-                          dangerouslySetInnerHTML={{ __html: previewEmail.corpo }} />
-                        <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                          <button onClick={() => copiarEmailHtml(previewEmail.corpo)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
-                          <button onClick={() => baixarEml(previewEmail.assunto, previewEmail.corpo, previewEmpresaEmail, fEmpresa.trim())} style={sm(btnGhost)}>⬇ Baixar .eml</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 12.5, color: MUTED, background: '#FAFBFD', border: '1.5px dashed #DFE7F1', borderRadius: RADIUS, padding: 17, textAlign: 'center' }}>
-                        Marque setor e documento acima para o e-mail ser montado automaticamente.
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 <div style={{ padding: '16px 22px', background: '#FBFCFE', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1112,7 +1258,7 @@ export default function DesignacaoReprovadosClient() {
             </div>
           </>
         ) : tab === 'caixa' ? (
-          <div style={{ maxWidth: 820 }}>
+          <div style={{ maxWidth: 900 }}>
             {minhaCaixaPendentes > 0 && (
               <div style={{
                 background: 'linear-gradient(135deg,#FEF4F3,#FDEDEC)', border: '1px solid #F7CDCA', borderLeft: '4px solid #C53030',
@@ -1121,83 +1267,42 @@ export default function DesignacaoReprovadosClient() {
                 ⚠️ <span><b>{minhaCaixaPendentes}</b> item(ns) aguardando sua ciência. O aviso permanece no dashboard até você dar ciência aqui dentro.</span>
               </div>
             )}
-            {minhaCaixa.length === 0 ? (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setCaixaSub('ativas')} style={caixaSub === 'ativas' ? btnPrimary : btnGhost}>
+                Ativas {minhaAtivas.length ? `(${minhaAtivas.length})` : ''}
+              </button>
+              <button onClick={() => setCaixaSub('historico')} style={caixaSub === 'historico' ? btnPrimary : btnGhost}>
+                🕘 Histórico {minhaHistorico.length ? `(${minhaHistorico.length})` : ''}
+              </button>
+            </div>
+            {minhaAtual.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
-                <p style={{ fontWeight: 600, margin: 0 }}>Nenhum item designado para você.</p>
+                <p style={{ fontWeight: 600, margin: 0 }}>
+                  {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : `Nada no histórico (mais de ${emailConfig.historico_dias} dias).`}
+                </p>
               </div>
-            ) : minhaCaixaAgrupada.map(grupo => (
-              <div key={grupo.key} style={{ marginBottom: 22 }}>
-                {/* Divisor visual: dia + empresa — fica claro de qual bloco é cada item quando há mais de uma empresa/dia */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 10px', paddingTop: 4 }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 7, background: PRIMARY, color: '#fff',
-                    borderRadius: 999, padding: '5px 13px 5px 11px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                  }}>📅 {fmtData(grupo.data)}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>🏢 {grupo.empresa}</span>
-                  <div style={{ flex: 1, height: 1, background: BORDER }} />
-                  <span style={{ fontSize: 11, color: MUTED }}>{grupo.itens.length} item(ns)</span>
-                </div>
-
-                {grupo.itens.map(d => {
-                  const jaCiente = d.ciencia_por.includes(userId)
-                  const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, d.motivo, setores, documentos, emailConfig)
-                  const destinoEmail = getEmpresaEmail(d.empresa)
-                  return (
-                    <div key={d.id} style={{
-                      background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
-                      borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
-                      opacity: d.tratativa === 'resolvido' ? .78 : 1,
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-                        <div style={{ fontSize: 12, color: MUTED, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                          {d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}
-                          {sitTag(d.situacao_id)}
-                          <span>· por {getUsuarioNome(d.criado_por)}</span>
-                        </div>
-                        <TratativaBadge t={d.tratativa} />
-                      </div>
-                      <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
-                        <b>{d.documentos.map(getDocNome).join(' · ')}</b>
-                        {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
-                      </div>
-
-                      {/* E-mail pronto para encaminhar à empresa, já montado a partir do setor/documentos desta designação */}
-                      {email.corpo && (
-                        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-                          <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span>✉️ E-mail pronto</span>
-                            <span style={{ marginLeft: 'auto', fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: destinoEmail ? '#16A34A' : '#B45309' }}>
-                              Para: {destinoEmail || 'não cadastrado'}
-                            </span>
-                          </div>
-                          <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT, background: '#FCFDFF' }}
-                            dangerouslySetInnerHTML={{ __html: email.corpo }} />
-                          <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                            <button onClick={() => copiarEmailHtml(email.corpo)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
-                            <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={sm(btnGhost)}>⬇ Baixar .eml</button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {!jaCiente ? (
-                          <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Dar ciência</button>
-                        ) : (
-                          <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
-                        )}
-                        {jaCiente && d.tratativa !== 'resolvido' && (
-                          <>
-                            <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
-                            <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+            ) : minhaAtual.map(grupo => renderGrupoAcordeao(grupo, { aberto: caixaAberto, setAberto: setCaixaAberto, mostrarResponsaveis: false }))}
+          </div>
+        ) : tab === 'geral' ? (
+          <div style={{ maxWidth: 900 }}>
+            <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 14 }}>Designações de todos os usuários — mesmo workflow da Minha Caixa, mas sem filtrar por responsável.</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setGeralSub('ativas')} style={geralSub === 'ativas' ? btnPrimary : btnGhost}>
+                Ativas {todasAtivas.length ? `(${todasAtivas.length})` : ''}
+              </button>
+              <button onClick={() => setGeralSub('historico')} style={geralSub === 'historico' ? btnPrimary : btnGhost}>
+                🕘 Histórico {todasHistorico.length ? `(${todasHistorico.length})` : ''}
+              </button>
+            </div>
+            {geralAtual.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+                <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
+                <p style={{ fontWeight: 600, margin: 0 }}>
+                  {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : `Nada no histórico (mais de ${emailConfig.historico_dias} dias).`}
+                </p>
               </div>
-            ))}
+            ) : geralAtual.map(grupo => renderGrupoAcordeao(grupo, { aberto: geralAberto, setAberto: setGeralAberto, mostrarResponsaveis: true }))}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
@@ -1390,6 +1495,17 @@ export default function DesignacaoReprovadosClient() {
                 </div>
                 <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>
                   O bloco de setor/documentos (título em negrito+sublinhado com os tópicos) é montado automaticamente a partir do que foi marcado e não é editável aqui.
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>
+                    Prazo do histórico (Minha Caixa / Visão geral)
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input type="number" min={1} value={cfgHistoricoDias}
+                      onChange={e => setCfgHistoricoDias(Math.max(1, Number(e.target.value) || 1))}
+                      style={inputStyle({ width: 90 })} />
+                    <span style={{ fontSize: 12.5, color: MUTED }}>dias — passado isso, o item sai da lista principal e vai para o Histórico (continua acionável lá)</span>
+                  </div>
                 </div>
                 <div>
                   <button onClick={salvarEmailConfig} disabled={savingConfig} style={{ ...btnAccent, opacity: savingConfig ? .6 : 1 }}>
