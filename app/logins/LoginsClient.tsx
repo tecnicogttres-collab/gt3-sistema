@@ -314,6 +314,28 @@ export default function LoginsClient() {
     setUsers((prev) => prev.map((r) => (r.id === u.id ? { ...r, banned: !r.banned } : r)))
   }
 
+  // ── Excluir login (definitivo) ──────────────────────────────────
+  // Só é oferecido pra quem já está arquivado (inativo) — exige desativar antes.
+  // O login some de tudo (aniversários, mapa de acessos, listas de responsável etc.),
+  // exceto o PDI: ele foi feito pra sobreviver sem o login vinculado.
+  async function handleDeleteUser(u: UserRow) {
+    const nome = u.nome || u.usuario || u.email
+    const ok = confirm(
+      `Excluir DEFINITIVAMENTE o login de "${nome}"?\n\n` +
+      `Essa ação não pode ser desfeita. O login some de tudo (aniversários, mapa de acessos, ` +
+      `designações etc.). O PDI é preservado — fica sem o vínculo de login, mas nome, ciclos ` +
+      `e ações continuam intactos.`
+    )
+    if (!ok) return
+    const res = await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}))
+      alert((e as { error?: string }).error ?? 'Erro ao excluir usuário.')
+      return
+    }
+    setUsers((prev) => prev.filter((r) => r.id !== u.id))
+  }
+
   // ── Mapa de acessos (matriz usuário × módulo) ──────────────────
   async function toggleUserModulo(u: UserRow, modId: string) {
     const currentList = u.modulos_permitidos ?? CONFIGURABLE_MODULES.map(m => m.id)
@@ -624,12 +646,21 @@ export default function LoginsClient() {
                         <td style={{ padding: '13px 16px', fontSize: 13, color: '#6B7A99', whiteSpace: 'nowrap' }}>{formatDate(u.last_sign_in)}</td>
                         <td style={{ padding: '13px 16px' }}>
                           {canManageThisRow && (
-                            <button
-                              onClick={() => handleToggleBan(u)}
-                              style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #BBF7D0', backgroundColor: '#F0FFF4', color: '#16A34A', fontSize: 12, cursor: 'pointer' }}
-                            >
-                              Reativar
-                            </button>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={() => handleToggleBan(u)}
+                                style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #BBF7D0', backgroundColor: '#F0FFF4', color: '#16A34A', fontSize: 12, cursor: 'pointer' }}
+                              >
+                                Reativar
+                              </button>
+                              <button
+                                onClick={() => void handleDeleteUser(u)}
+                                title="Excluir definitivamente (PDI é preservado)"
+                                style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#DC2626', fontSize: 12, cursor: 'pointer' }}
+                              >
+                                🗑 Excluir
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
