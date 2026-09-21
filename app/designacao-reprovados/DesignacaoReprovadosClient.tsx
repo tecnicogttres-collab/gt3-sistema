@@ -1713,12 +1713,17 @@ export default function DesignacaoReprovadosClient() {
                           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditPastaId('') }}
                           style={inputStyle({ flex: 1, padding: '4px 8px', fontSize: 13, fontWeight: 700 })} />
                       ) : (
-                        <b
-                          onClick={() => { if (podeEditar) { setEditPastaId(pastaId as string); setEditPastaNome(nome) } }}
-                          title={podeEditar ? 'Clique para renomear' : undefined}
-                          style={{ flex: 1, fontSize: 13, color: TEXT, cursor: podeEditar ? 'text' : 'default' }}>
-                          {podeEditar ? '🗂 ' : ''}{nome}
-                        </b>
+                        <>
+                          <b
+                            onClick={() => { if (podeEditar) { setEditPastaId(pastaId as string); setEditPastaNome(nome) } }}
+                            title={podeEditar ? 'Clique para renomear' : undefined}
+                            style={{ flex: 1, fontSize: 13, color: TEXT, cursor: podeEditar ? 'text' : 'default' }}>
+                            {podeEditar ? '🗂 ' : ''}{nome}
+                          </b>
+                          {podeEditar && (
+                            <button onClick={() => { setEditPastaId(pastaId as string); setEditPastaNome(nome) }} title="Renomear pasta" style={{ ...btnDangerIcon, color: PRIMARY }}>✏️</button>
+                          )}
+                        </>
                       )}
                       <span style={{ fontSize: 11, color: MUTED }}>{docs.length}</span>
                       {podeEditar && <button onClick={() => removerPasta(pastaId as string)} title="Excluir pasta" style={btnDangerIcon}>🗑</button>}
