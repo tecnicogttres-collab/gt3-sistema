@@ -9,7 +9,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('desig_empresas')
-    .select('id, nome, contratante, created_at')
+    .select('id, nome, contratante, email, created_at')
     .order('nome', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
@@ -20,14 +20,14 @@ export async function POST(req: NextRequest) {
   const caller = await requireGestorAdmin()
   if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
-  const { nome, contratante } = await req.json()
+  const { nome, contratante, email } = await req.json()
   if (!nome?.trim()) return Response.json({ error: 'Nome obrigatório' }, { status: 400 })
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('desig_empresas')
-    .insert({ nome: nome.trim(), contratante: contratante?.trim() || '' })
-    .select('id, nome, contratante, created_at')
+    .insert({ nome: nome.trim(), contratante: contratante?.trim() || '', email: email?.trim() || '' })
+    .select('id, nome, contratante, email, created_at')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

@@ -8,9 +8,10 @@ import { useUser } from '../components/UserContext'
 type Setor = { id: string; nome: string; ativo: boolean; created_at: string }
 type Documento = { id: string; setor_id: string; nome: string; ativo: boolean; created_at: string }
 type Situacao = { id: string; nome: string; cor: string; ativo: boolean; created_at: string }
-type Empresa = { id: string; nome: string; contratante: string; created_at: string }
+type Empresa = { id: string; nome: string; contratante: string; email: string; created_at: string }
 type Pertinencia = { setor_id: string; usuario_id: string }
 type UsuarioRow = { id: string; nome: string | null; papel: string | null }
+type EmailConfig = { id: string; assunto_template: string; saudacao_template: string; fechamento_template: string }
 
 type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido'
 
@@ -107,17 +108,46 @@ function joinComE(itens: string[]): string {
   return a.slice(0, -1).join(', ') + ' e ' + a[a.length - 1]
 }
 
-/** Monta o corpo (HTML) do e-mail de designação a partir dos setores/documentos marcados —
- *  usado tanto na pré-visualização ao vivo do formulário "+ Novo" quanto no card de cada
- *  item na Minha Caixa. Um bloco em negrito+sublinhado por setor, com os documentos dele
- *  listados em tópicos — texto se adapta sozinho a 1 ou mais setores/documentos. */
-function buildDesignacaoEmailHtml(
-  setorIds: string[], docIds: string[], motivo: string, setores: Setor[], documentos: Documento[],
-): string {
-  const setoresSel = setorIds.map(id => setores.find(s => s.id === id)).filter((s): s is Setor => !!s)
-  if (setoresSel.length === 0 || docIds.length === 0) return ''
+/** Substitui {{variavel}} por valor num texto puro — usado no assunto (sem HTML). */
+function aplicaVars(txt: string, vars: Record<string, string>): string {
+  return (txt || '').replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? '')
+}
 
-  const saudacao = `<div>Olá! Identificamos que você possui documentos de <b>${joinComE(setoresSel.map(s => escapeHtml(s.nome)))}</b> reprovados no Portal GT3.</div>`
+/** Escapa o template (texto livre digitado pelo gestor) e injeta {{var}} em negrito —
+ *  deixa o texto adaptável a 1 ou mais setores sem o gestor precisar digitar HTML. */
+function montaComVariavelDestacada(template: string, varName: string, valorTexto: string): string {
+  const marcador = `{{${varName}}}`
+  return template.split(marcador).map(escapeHtml).join(`<b>${escapeHtml(valorTexto)}</b>`).replace(/\n/g, '<br>')
+}
+
+/** "E-mail" da empresa aceita vários endereços separados por ";" — mailto: e o cabeçalho
+ *  To: do .eml exigem vírgula, então convertemos aqui na hora de enviar. */
+function emailsParaEnvio(destino: string): string {
+  return destino.split(';').map(e => e.trim()).filter(Boolean).join(', ')
+}
+
+const CONFIG_PADRAO: EmailConfig = {
+  id: 'default',
+  assunto_template: 'Portal GT3 - Acompanhamento de documentação - {{empresa}}',
+  saudacao_template: 'Olá! Identificamos que você possui documentos de {{setores}} reprovados no Portal GT3.',
+  fechamento_template: 'Você precisa de alguma ajuda com este(s) documento(s)?',
+}
+
+/** Monta o e-mail de designação (assunto + corpo HTML) a partir dos setores/documentos
+ *  marcados e da estrutura configurável (saudação/fechamento/assunto) — usado tanto na
+ *  pré-visualização ao vivo do formulário "+ Novo" quanto no card de cada item na Minha
+ *  Caixa. Um bloco em negrito+sublinhado por setor, com os documentos dele listados em
+ *  tópicos — texto se adapta sozinho a 1 ou mais setores/documentos. */
+function buildDesignacaoEmail(
+  empresaNome: string, setorIds: string[], docIds: string[], motivo: string,
+  setores: Setor[], documentos: Documento[], cfg: EmailConfig,
+): { assunto: string; corpo: string } {
+  const setoresSel = setorIds.map(id => setores.find(s => s.id === id)).filter((s): s is Setor => !!s)
+  const assunto = aplicaVars(cfg.assunto_template, { empresa: empresaNome })
+  if (setoresSel.length === 0 || docIds.length === 0) return { assunto, corpo: '' }
+
+  const setoresTxt = joinComE(setoresSel.map(s => s.nome))
+  const saudacao = `<div>${montaComVariavelDestacada(cfg.saudacao_template, 'setores', setoresTxt)}</div>`
 
   const blocosSetor = setoresSel.map(s => {
     const docs = documentos.filter(d => d.setor_id === s.id && docIds.includes(d.id))
@@ -128,10 +158,9 @@ function buildDesignacaoEmailHtml(
 
   const motivoBloco = motivo.trim() ? `<div style="margin-top:12px">${escapeHtml(motivo.trim()).replace(/\n/g, '<br>')}</div>` : ''
 
-  const totalDocs = docIds.length
-  const fechamento = `<div style="margin-top:12px">Você precisa de alguma ajuda com ${totalDocs > 1 ? 'estes documentos' : 'este documento'}?</div>`
+  const fechamento = `<div style="margin-top:12px">${escapeHtml(cfg.fechamento_template).replace(/\n/g, '<br>')}</div>`
 
-  return saudacao + blocosSetor + motivoBloco + fechamento
+  return { assunto, corpo: saudacao + blocosSetor + motivoBloco + fechamento }
 }
 
 // ─── Estilos reutilizáveis ─────────────────────────────────────────────────────
@@ -322,6 +351,19 @@ export default function DesignacaoReprovadosClient() {
   const [novoDocNome, setNovoDocNome]         = useState('')
   const [novaEmpresaNome, setNovaEmpresaNome] = useState('')
   const [novaEmpresaContratante, setNovaEmpresaContratante] = useState('')
+  const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
+  const [empresaBusca, setEmpresaBusca]       = useState('')
+  const [editEmpresaId, setEditEmpresaId]     = useState('')
+  const [editNome, setEditNome]               = useState('')
+  const [editContratante, setEditContratante] = useState('')
+  const [editEmail, setEditEmail]             = useState('')
+
+  // ── Estrutura do e-mail ──
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>(CONFIG_PADRAO)
+  const [cfgAssunto, setCfgAssunto]       = useState('')
+  const [cfgSaudacao, setCfgSaudacao]     = useState('')
+  const [cfgFechamento, setCfgFechamento] = useState('')
+  const [savingConfig, setSavingConfig]   = useState(false)
 
   const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -358,9 +400,11 @@ export default function DesignacaoReprovadosClient() {
       fetch('/api/designacao-reprovados/empresas').then(r => r.ok ? r.json() : []),
       fetch('/api/designacao-reprovados/pertinencia').then(r => r.ok ? r.json() : []),
       fetch('/api/designacao-reprovados/usuarios').then(r => r.ok ? r.json() : []),
-    ]).then(([des, set, doc, sit, emp, pert, usr]) => {
+      fetch('/api/designacao-reprovados/config').then(r => r.ok ? r.json() : CONFIG_PADRAO),
+    ]).then(([des, set, doc, sit, emp, pert, usr, cfg]) => {
       setDesignacoes(des); setSetores(set); setDocumentos(doc); setSituacoes(sit)
       setEmpresas(emp); setPertinencia(pert); setUsuarios(usr)
+      setEmailConfig(cfg); setCfgAssunto(cfg.assunto_template); setCfgSaudacao(cfg.saudacao_template); setCfgFechamento(cfg.fechamento_template)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -375,6 +419,30 @@ export default function DesignacaoReprovadosClient() {
   const getDocNome    = (id: string) => documentos.find(d => d.id === id)?.nome ?? '—'
   const getSituacao   = (id: string | null) => situacoes.find(s => s.id === id) ?? { id: '', nome: '—', cor: '#64748B', ativo: true, created_at: '' }
   const getUsuarioNome = (id: string) => usuarios.find(u => u.id === id)?.nome?.trim() || 'Usuário'
+
+  /** E-mail cadastrado da empresa — comparação tolerante a espaço/maiúscula, igual ao
+   *  match usado no hint do formulário. Editável a qualquer momento em Configurações → Empresas. */
+  function getEmpresaEmail(nomeEmpresa: string): string {
+    const alvo = nomeEmpresa.trim().toLowerCase()
+    return empresas.find(e => e.nome.trim().toLowerCase() === alvo)?.email ?? ''
+  }
+
+  /** Baixa um .eml já endereçado (To:) e com o assunto padrão configurado — abre pronto
+   *  para envio em qualquer cliente de e-mail (Outlook, etc.), sem precisar copiar/colar. */
+  function baixarEml(assunto: string, corpoHtml: string, destinoEmail: string, empresaNome: string) {
+    const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)))
+    const html = `<html><head><meta charset="utf-8"></head><body>${corpoHtml}</body></html>`
+    const linhas = ['Subject: =?UTF-8?B?' + b64(assunto) + '?=']
+    if (destinoEmail) linhas.unshift('To: ' + emailsParaEnvio(destinoEmail))
+    linhas.push('X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', html)
+    const eml = linhas.join('\r\n')
+    const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
+    const el = document.createElement('a')
+    el.href = url
+    el.download = ('GT3 - ' + (empresaNome || 'empresa')).replace(/[\\/:*?"<>|]/g, '') + '.eml'
+    el.click(); URL.revokeObjectURL(url)
+    showToast(destinoEmail ? 'Arquivo .eml gerado, já endereçado.' : 'Arquivo .eml gerado — e-mail da empresa não cadastrado, To: em branco.')
+  }
 
   function sitTag(id: string | null) {
     const s = getSituacao(id)
@@ -433,10 +501,11 @@ export default function DesignacaoReprovadosClient() {
 
   // ── Pré-visualização do e-mail (formulário "+ Novo") — monta sozinha conforme
   // setor(es)/documento(s) vão sendo marcados, igual ao parecer do workflow-programas.
-  const previewEmailHtml = useMemo(
-    () => buildDesignacaoEmailHtml(fSetores, fDocumentos, fMotivo, setores, documentos),
-    [fSetores, fDocumentos, fMotivo, setores, documentos],
+  const previewEmail = useMemo(
+    () => buildDesignacaoEmail(fEmpresa.trim(), fSetores, fDocumentos, fMotivo, setores, documentos, emailConfig),
+    [fEmpresa, fSetores, fDocumentos, fMotivo, setores, documentos, emailConfig],
   )
+  const previewEmpresaEmail = getEmpresaEmail(fEmpresa)
 
   // ── Duplicidade (form) ──
   const duplicidade = useMemo(() => {
@@ -489,8 +558,8 @@ export default function DesignacaoReprovadosClient() {
 
   const empresaMatch = empresas.find(e => e.nome.trim().toLowerCase() === fEmpresa.trim().toLowerCase())
   const hintEmpresa = empresaMatch
-    ? `✓ Contratante: ${empresaMatch.contratante || '—'}`
-    : (fEmpresa.trim() ? '⚠ Não cadastrada — será salva como texto livre.' : '')
+    ? `✓ Contratante: ${empresaMatch.contratante || '—'} · E-mail: ${empresaMatch.email || '— não cadastrado'}`
+    : (fEmpresa.trim() ? '⚠ Não cadastrada — será salva como texto livre, sem e-mail para o .eml.' : '')
 
   const formValido = fEmpresa.trim().length > 1 && fSetores.length > 0 && fDocumentos.length > 0 && fResponsaveis.length > 0 && !!fSituacao
 
@@ -659,12 +728,13 @@ export default function DesignacaoReprovadosClient() {
   async function addEmpresa() {
     if (!novaEmpresaNome.trim()) { showToast('Informe a empresa.'); return }
     const res = await fetch('/api/designacao-reprovados/empresas', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: novaEmpresaNome, contratante: novaEmpresaContratante }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: novaEmpresaNome, contratante: novaEmpresaContratante, email: novaEmpresaEmail }),
     })
     if (res.ok) {
       const created = await res.json()
       setEmpresas(prev => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
-      setNovaEmpresaNome(''); setNovaEmpresaContratante('')
+      setNovaEmpresaNome(''); setNovaEmpresaContratante(''); setNovaEmpresaEmail('')
       showToast('Empresa adicionada.')
     } else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao adicionar empresa.') }
   }
@@ -674,6 +744,41 @@ export default function DesignacaoReprovadosClient() {
     if (res.ok) { setEmpresas(prev => prev.filter(e => e.id !== id)); showToast('Empresa removida.') }
     else showToast('Erro ao remover empresa.')
   }
+  function iniciarEdicaoEmpresa(e: Empresa) {
+    setEditEmpresaId(e.id); setEditNome(e.nome); setEditContratante(e.contratante); setEditEmail(e.email)
+  }
+  function cancelarEdicaoEmpresa() { setEditEmpresaId('') }
+  async function salvarEdicaoEmpresa() {
+    if (!editNome.trim()) { showToast('Informe a empresa.'); return }
+    const res = await fetch(`/api/designacao-reprovados/empresas/${editEmpresaId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: editNome, contratante: editContratante, email: editEmail }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setEmpresas(prev => prev.map(e => e.id === updated.id ? updated : e).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
+      setEditEmpresaId('')
+      showToast('Empresa atualizada.')
+    } else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao salvar empresa.') }
+  }
+
+  // ── Config: estrutura do e-mail ──
+  async function salvarEmailConfig() {
+    setSavingConfig(true)
+    const res = await fetch('/api/designacao-reprovados/config', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assunto_template: cfgAssunto, saudacao_template: cfgSaudacao, fechamento_template: cfgFechamento }),
+    })
+    setSavingConfig(false)
+    if (res.ok) { const updated = await res.json(); setEmailConfig(updated); showToast('Estrutura do e-mail salva.') }
+    else showToast('Erro ao salvar estrutura do e-mail.')
+  }
+
+  const empresasFiltradas = useMemo(() => {
+    const b = empresaBusca.trim().toLowerCase()
+    if (!b) return empresas
+    return empresas.filter(e => (e.nome + ' ' + e.contratante + ' ' + e.email).toLowerCase().includes(b))
+  }, [empresas, empresaBusca])
 
   const setoresAtivos = setores.filter(s => s.ativo)
   const situacoesAtivas = situacoes.filter(s => s.ativo)
@@ -865,12 +970,19 @@ export default function DesignacaoReprovadosClient() {
                       ✉️ Pré-visualização do e-mail
                       <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0, fontSize: 11, opacity: .75 }}>vai sendo escrito conforme você marca acima</span>
                     </div>
-                    {previewEmailHtml ? (
+                    {previewEmail.corpo ? (
                       <div style={{ border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: '#FCFDFF' }}>
+                        <div style={{ padding: '9px 16px', borderBottom: `1px solid ${BORDER}`, background: '#F6F9FC', fontSize: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          <span><b>Assunto:</b> {previewEmail.assunto}</span>
+                          <span style={{ marginLeft: 'auto', color: previewEmpresaEmail ? '#16A34A' : '#B45309' }}>
+                            <b>Para:</b> {previewEmpresaEmail || 'e-mail da empresa não cadastrado'}
+                          </span>
+                        </div>
                         <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT }}
-                          dangerouslySetInnerHTML={{ __html: previewEmailHtml }} />
-                        <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end' }}>
-                          <button onClick={() => copiarEmailHtml(previewEmailHtml)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+                          dangerouslySetInnerHTML={{ __html: previewEmail.corpo }} />
+                        <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                          <button onClick={() => copiarEmailHtml(previewEmail.corpo)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+                          <button onClick={() => baixarEml(previewEmail.assunto, previewEmail.corpo, previewEmpresaEmail, fEmpresa.trim())} style={sm(btnGhost)}>⬇ Baixar .eml</button>
                         </div>
                       </div>
                     ) : (
@@ -1029,7 +1141,8 @@ export default function DesignacaoReprovadosClient() {
 
                 {grupo.itens.map(d => {
                   const jaCiente = d.ciencia_por.includes(userId)
-                  const emailHtml = buildDesignacaoEmailHtml(d.setores, d.documentos, d.motivo, setores, documentos)
+                  const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, d.motivo, setores, documentos, emailConfig)
+                  const destinoEmail = getEmpresaEmail(d.empresa)
                   return (
                     <div key={d.id} style={{
                       background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
@@ -1050,15 +1163,19 @@ export default function DesignacaoReprovadosClient() {
                       </div>
 
                       {/* E-mail pronto para encaminhar à empresa, já montado a partir do setor/documentos desta designação */}
-                      {emailHtml && (
+                      {email.corpo && (
                         <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-                          <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}` }}>
-                            ✉️ E-mail pronto
+                          <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span>✉️ E-mail pronto</span>
+                            <span style={{ marginLeft: 'auto', fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: destinoEmail ? '#16A34A' : '#B45309' }}>
+                              Para: {destinoEmail || 'não cadastrado'}
+                            </span>
                           </div>
                           <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT, background: '#FCFDFF' }}
-                            dangerouslySetInnerHTML={{ __html: emailHtml }} />
-                          <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end' }}>
-                            <button onClick={() => copiarEmailHtml(emailHtml)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+                            dangerouslySetInnerHTML={{ __html: email.corpo }} />
+                          <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                            <button onClick={() => copiarEmailHtml(email.corpo)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+                            <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={sm(btnGhost)}>⬇ Baixar .eml</button>
                           </div>
                         </div>
                       )}
@@ -1216,23 +1333,69 @@ export default function DesignacaoReprovadosClient() {
             </ConfigPanel>
 
             {/* Painel 5: Empresas */}
-            <ConfigPanel title="Empresas / Prestadoras" subtitle="Lista própria deste módulo, usada no autocomplete da designação" wide>
-              <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 14 }}>
-                {empresas.map(e => (
-                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${BORDER}` }}>
-                    <div>
+            <ConfigPanel title="Empresas / Prestadoras" subtitle={`Lista própria deste módulo (${empresas.length}) — e-mail usado no .eml e no "Copiar e-mail"`} wide>
+              <input value={empresaBusca} onChange={e => setEmpresaBusca(e.target.value)} placeholder="🔍 Buscar por empresa, contratante ou e-mail..."
+                style={inputStyle({ width: '100%', marginBottom: 10 })} />
+              <div style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 14, border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+                {empresasFiltradas.map(e => editEmpresaId === e.id ? (
+                  <div key={e.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: '#FCFDFF', flexWrap: 'wrap' }}>
+                    <input value={editNome} onChange={ev => setEditNome(ev.target.value)} placeholder="Razão social / fantasia" style={inputStyle({ flex: 2, minWidth: 160 })} />
+                    <input value={editContratante} onChange={ev => setEditContratante(ev.target.value)} placeholder="Contratante" style={inputStyle({ flex: 1, minWidth: 110 })} />
+                    <input value={editEmail} onChange={ev => setEditEmail(ev.target.value)} placeholder="e-mail1@x.com;e-mail2@x.com" style={inputStyle({ flex: 2, minWidth: 160 })} />
+                    <button onClick={salvarEdicaoEmpresa} style={sm(btnAccent)}>✓ Salvar</button>
+                    <button onClick={cancelarEdicaoEmpresa} style={sm(btnGhost)}>Cancelar</button>
+                  </div>
+                ) : (
+                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '9px 10px', borderBottom: `1px solid ${BORDER}` }}>
+                    <div style={{ minWidth: 0 }}>
                       <b style={{ fontSize: 13.5 }}>{e.nome}</b>
-                      <div style={{ fontSize: 11.5, color: MUTED }}>{e.contratante || '—'}</div>
+                      <div style={{ fontSize: 11.5, color: MUTED, overflowWrap: 'break-word' }}>
+                        {e.contratante || '—'} {e.email ? <>· {e.email}</> : <span style={{ color: '#B45309' }}>· e-mail não cadastrado</span>}
+                      </div>
                     </div>
-                    <button onClick={() => removerEmpresa(e.id)} style={btnDangerIcon} title="Excluir">🗑</button>
+                    <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                      <button onClick={() => iniciarEdicaoEmpresa(e)} title="Editar" style={{ ...btnDangerIcon, color: PRIMARY }}>✏️</button>
+                      <button onClick={() => removerEmpresa(e.id)} style={btnDangerIcon} title="Excluir">🗑</button>
+                    </div>
                   </div>
                 ))}
-                {empresas.length === 0 && <div style={{ fontSize: 12.5, color: MUTED }}>Nenhuma empresa cadastrada.</div>}
+                {empresasFiltradas.length === 0 && <div style={{ fontSize: 12.5, color: MUTED, padding: '10px' }}>Nenhuma empresa encontrada.</div>}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input value={novaEmpresaNome} onChange={e => setNovaEmpresaNome(e.target.value)} placeholder="Razão social / fantasia" style={inputStyle({ flex: 2, minWidth: 180 })} />
                 <input value={novaEmpresaContratante} onChange={e => setNovaEmpresaContratante(e.target.value)} placeholder="Contratante" style={inputStyle({ flex: 1, minWidth: 130 })} />
+                <input value={novaEmpresaEmail} onChange={e => setNovaEmpresaEmail(e.target.value)} placeholder="e-mail1@x.com;e-mail2@x.com" style={inputStyle({ flex: 2, minWidth: 180 })} />
                 <button onClick={addEmpresa} style={sm(btnAccent)}>＋ Add</button>
+              </div>
+            </ConfigPanel>
+
+            {/* Painel 6: Estrutura do e-mail */}
+            <ConfigPanel title="Estrutura do e-mail" subtitle="Assunto, saudação e fechamento — editáveis a qualquer momento, valem para todo e-mail montado pelo módulo" wide>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>
+                    Assunto <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>— variável: <code>{'{{empresa}}'}</code></span>
+                  </div>
+                  <input value={cfgAssunto} onChange={e => setCfgAssunto(e.target.value)} style={inputStyle({ width: '100%' })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>
+                    Saudação (abertura) <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>— variável: <code>{'{{setores}}'}</code> (fica em negrito, se adapta a 1 ou mais)</span>
+                  </div>
+                  <textarea value={cfgSaudacao} onChange={e => setCfgSaudacao(e.target.value)} rows={2} style={inputStyle({ width: '100%', resize: 'vertical' })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Fechamento</div>
+                  <textarea value={cfgFechamento} onChange={e => setCfgFechamento(e.target.value)} rows={2} style={inputStyle({ width: '100%', resize: 'vertical' })} />
+                </div>
+                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>
+                  O bloco de setor/documentos (título em negrito+sublinhado com os tópicos) é montado automaticamente a partir do que foi marcado e não é editável aqui.
+                </div>
+                <div>
+                  <button onClick={salvarEmailConfig} disabled={savingConfig} style={{ ...btnAccent, opacity: savingConfig ? .6 : 1 }}>
+                    {savingConfig ? 'Salvando...' : '💾 Salvar estrutura'}
+                  </button>
+                </div>
               </div>
             </ConfigPanel>
 
