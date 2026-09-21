@@ -7,7 +7,7 @@ const DEFAULTS = {
   assunto_template: 'Portal GT3 - Acompanhamento de documentação - {{empresa}}',
   saudacao_template: 'Olá! Identificamos que você possui documentos de {{setores}} reprovados no Portal GT3.',
   fechamento_template: 'Você precisa de alguma ajuda com este(s) documento(s)?',
-  historico_dias: 15,
+  historico_dias: 2,
 }
 
 export async function GET() {

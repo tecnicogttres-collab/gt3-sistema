@@ -137,7 +137,7 @@ const CONFIG_PADRAO: EmailConfig = {
   assunto_template: 'Portal GT3 - Acompanhamento de documentação - {{empresa}}',
   saudacao_template: 'Olá! Identificamos que você possui documentos de {{setores}} reprovados no Portal GT3.',
   fechamento_template: 'Você precisa de alguma ajuda com este(s) documento(s)?',
-  historico_dias: 15,
+  historico_dias: 2,
 }
 
 /** Dias corridos entre a data de verificação (YYYY-MM-DD) e hoje. */
@@ -408,7 +408,7 @@ export default function DesignacaoReprovadosClient() {
   const [cfgAssunto, setCfgAssunto]       = useState('')
   const [cfgSaudacao, setCfgSaudacao]     = useState('')
   const [cfgFechamento, setCfgFechamento] = useState('')
-  const [cfgHistoricoDias, setCfgHistoricoDias] = useState(15)
+  const [cfgHistoricoDias, setCfgHistoricoDias] = useState(2)
   const [savingConfig, setSavingConfig]   = useState(false)
 
   const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
@@ -451,7 +451,7 @@ export default function DesignacaoReprovadosClient() {
       setDesignacoes(des); setSetores(set); setDocumentos(doc); setSituacoes(sit)
       setEmpresas(emp); setPertinencia(pert); setUsuarios(usr)
       setEmailConfig(cfg); setCfgAssunto(cfg.assunto_template); setCfgSaudacao(cfg.saudacao_template); setCfgFechamento(cfg.fechamento_template)
-      setCfgHistoricoDias(cfg.historico_dias ?? 15)
+      setCfgHistoricoDias(cfg.historico_dias ?? 2)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -530,10 +530,19 @@ export default function DesignacaoReprovadosClient() {
   const minhaCaixa = useMemo(() => designacoes.filter(d => d.responsaveis.includes(userId)), [designacoes, userId])
   const minhaCaixaPendentes = minhaCaixa.filter(d => d.tratativa === 'aguardando').length
 
-  // Recorte por prazo (padrão 15 dias, configurável) ANTES de agrupar — reaproveitado
-  // também nas estatísticas por colaborador da Visão geral.
-  const designacoesAtivas    = useMemo(() => designacoes.filter(d => diasDesde(d.data_verificacao) <= emailConfig.historico_dias), [designacoes, emailConfig.historico_dias])
-  const designacoesHistorico = useMemo(() => designacoes.filter(d => diasDesde(d.data_verificacao) > emailConfig.historico_dias), [designacoes, emailConfig.historico_dias])
+  // Recorte por prazo ANTES de agrupar — reaproveitado também nas estatísticas por
+  // colaborador da Visão geral. Só quem já foi RESOLVIDO entra nessa conta: enquanto não
+  // tiver ciência/resolução, o item fica ativo pra sempre, não importa a idade. Resolvido,
+  // continua ativo por N dias (padrão 2, configurável) a partir da data de verificação —
+  // passado isso, some da lista principal e vai pro Histórico.
+  const designacoesAtivas = useMemo(
+    () => designacoes.filter(d => d.tratativa !== 'resolvido' || diasDesde(d.data_verificacao) <= emailConfig.historico_dias),
+    [designacoes, emailConfig.historico_dias],
+  )
+  const designacoesHistorico = useMemo(
+    () => designacoes.filter(d => d.tratativa === 'resolvido' && diasDesde(d.data_verificacao) > emailConfig.historico_dias),
+    [designacoes, emailConfig.historico_dias],
+  )
 
   const minhaAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas.filter(d => d.responsaveis.includes(userId))), [designacoesAtivas, userId])
   const minhaHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico.filter(d => d.responsaveis.includes(userId))), [designacoesHistorico, userId])
@@ -1320,7 +1329,7 @@ export default function DesignacaoReprovadosClient() {
               <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                 <p style={{ fontWeight: 600, margin: 0 }}>
-                  {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : `Nada no histórico (mais de ${emailConfig.historico_dias} dias).`}
+                  {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : `Nada no histórico (resolvido há mais de ${emailConfig.historico_dias} dia(s)).`}
                 </p>
               </div>
             ) : minhaAtual.map(grupo => renderGrupoAcordeao(grupo, { aberto: caixaAbertoEfetivo, setAberto: setCaixaAberto, mostrarResponsaveis: false }))}
@@ -1348,7 +1357,7 @@ export default function DesignacaoReprovadosClient() {
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                   <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                   <p style={{ fontWeight: 600, margin: 0 }}>
-                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : `Nada no histórico (mais de ${emailConfig.historico_dias} dias).`}
+                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : `Nada no histórico (resolvido há mais de ${emailConfig.historico_dias} dia(s)).`}
                   </p>
                 </div>
               ) : (
@@ -1591,7 +1600,10 @@ export default function DesignacaoReprovadosClient() {
                     <input type="number" min={1} value={cfgHistoricoDias}
                       onChange={e => setCfgHistoricoDias(Math.max(1, Number(e.target.value) || 1))}
                       style={inputStyle({ width: 90 })} />
-                    <span style={{ fontSize: 12.5, color: MUTED }}>dias — passado isso, o item sai da lista principal e vai para o Histórico (continua acionável lá)</span>
+                    <span style={{ fontSize: 12.5, color: MUTED }}>
+                      dias contados a partir da verificação — só vale pra item já <b>resolvido</b>. Passado isso, sai da lista principal
+                      e vai pro Histórico (continua acionável lá). Enquanto não tiver ciência/resolução, o item fica ativo indefinidamente.
+                    </span>
                   </div>
                 </div>
                 <div>
