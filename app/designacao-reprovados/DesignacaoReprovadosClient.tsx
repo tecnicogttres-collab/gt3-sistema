@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 
@@ -1382,7 +1382,14 @@ export default function DesignacaoReprovadosClient() {
                   {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : `Nada no histórico (resolvido há mais de ${emailConfig.historico_dias} dia(s)).`}
                 </p>
               </div>
-            ) : minhaAtual.map(grupo => renderGrupoAcordeao(grupo, { aberto: caixaAbertoEfetivo, setAberto: setCaixaAberto, mostrarResponsaveis: false }))}
+            ) : minhaAtual.map((grupo, i) => (
+              <Fragment key={grupo.key}>
+                {i > 0 && minhaAtual[i - 1].data !== grupo.data && (
+                  <div style={{ height: 1, background: BORDER, margin: '2px 0 16px' }} />
+                )}
+                {renderGrupoAcordeao(grupo, { aberto: caixaAbertoEfetivo, setAberto: setCaixaAberto, mostrarResponsaveis: false })}
+              </Fragment>
+            ))}
           </div>
         ) : tab === 'geral' ? (
           <div style={{ maxWidth: 1100 }}>
