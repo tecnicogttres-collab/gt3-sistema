@@ -22,7 +22,13 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const update: Record<string, unknown> = {}
   if (body.titulo !== undefined) update.titulo = String(body.titulo).trim()
   if (body.descricao !== undefined) update.descricao = body.descricao?.trim() || null
-  if (body.periodo !== undefined) update.periodo = body.periodo
+  if (body.periodo !== undefined) {
+    update.periodo = body.periodo
+    // dia_semana/semana_ordinal só fazem sentido pra 'mensal_dia_semana' — qualquer
+    // outro período limpa os dois (evita sobrar lixo de uma periodicidade antiga).
+    update.dia_semana = body.periodo === 'mensal_dia_semana' ? (body.dia_semana ?? null) : null
+    update.semana_ordinal = body.periodo === 'mensal_dia_semana' ? (body.semana_ordinal ?? null) : null
+  }
   if (body.data_inicio !== undefined) update.data_inicio = body.data_inicio
   if (body.hora_inicio !== undefined) update.hora_inicio = body.hora_inicio ?? null
   if (body.concluido !== undefined) update.concluido = body.concluido
@@ -37,7 +43,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     .from('lembretes')
     .update(update)
     .eq('id', id)
-    .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
+    .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, dia_semana, semana_ordinal, concluido, criado_por, created_at, visibilidade, destinatarios')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

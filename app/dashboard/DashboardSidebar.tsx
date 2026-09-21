@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '../lib/supabase'
+import { nthWeekdayOfMonth } from '../lib/lembretes'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,12 +92,21 @@ function fmtConversaLabel(iso: string): { primary: string; urgent: boolean } {
   return { primary: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} às ${time}`, urgent: false }
 }
 
-function nextOccStr(periodo: string, dataInicio: string): Date {
+function nextOccStr(periodo: string, dataInicio: string, diaSemana: number | null, semanaOrdinal: number | null): Date {
   const parse = (s: string) => new Date(s + 'T00:00:00')
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const start = parse(dataInicio)
   if (periodo === 'unico') return start
   if (periodo === 'diario') return today < start ? start : today
+  if (periodo === 'mensal_dia_semana' && diaSemana != null && semanaOrdinal != null) {
+    let y = today.getFullYear(), m = today.getMonth()
+    let occ = nthWeekdayOfMonth(y, m, diaSemana, semanaOrdinal)
+    while (!occ || occ < today || occ < start) {
+      m++; if (m > 11) { m = 0; y++ }
+      occ = nthWeekdayOfMonth(y, m, diaSemana, semanaOrdinal)
+    }
+    return occ
+  }
   const d = new Date(start)
   if (periodo === 'semanal') { while (d < today) d.setDate(d.getDate() + 7) }
   else if (periodo === 'mensal') { while (d < today) d.setMonth(d.getMonth() + 1) }
@@ -271,13 +281,13 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!res.ok) { setLembreteItems([]); return }
-        const data: Array<{ id: string; titulo: string; periodo: string; data_inicio: string; concluido: boolean; confirmado: boolean }> = await res.json()
+        const data: Array<{ id: string; titulo: string; periodo: string; data_inicio: string; dia_semana: number | null; semana_ordinal: number | null; concluido: boolean; confirmado: boolean }> = await res.json()
         const todayBase = new Date(); todayBase.setHours(0, 0, 0, 0)
         const items: LembreteItem[] = []
         for (const r of data) {
           if (r.confirmado) continue
           if (r.concluido && r.periodo === 'unico') continue
-          const next = nextOccStr(r.periodo, r.data_inicio)
+          const next = nextOccStr(r.periodo, r.data_inicio, r.dia_semana, r.semana_ordinal)
           const diff = Math.round((next.getTime() - todayBase.getTime()) / 86400000)
           if (diff >= 0 && diff <= 3) {
             items.push({ id: r.id, titulo: r.titulo, daysLeft: diff })

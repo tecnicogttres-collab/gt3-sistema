@@ -11,10 +11,14 @@ import { PERIODS, type Period, findMonthOccurrence, currentMonthOccurrence, isLe
 const PERIOD_LABEL: Record<Period, string> = {
   unico: 'Único', diario: 'Diário', semanal: 'Semanal', mensal: 'Mensal',
   trimestral: 'Trimestral', semestral: 'Semestral', anual: 'Anual',
+  mensal_dia_semana: 'Mensal (dia da semana)',
 }
+const ORDINAL_LABEL: Record<number, string> = { 1: '1ª', 2: '2ª', 3: '3ª', 4: '4ª', [-1]: 'Última' }
+const ORDINAL_OPTIONS = [1, 2, 3, 4, -1]
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+const WEEKDAY_FULL = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']
 
 type Visibilidade = 'todos' | 'proprio' | 'selecionados'
 
@@ -25,6 +29,8 @@ type Lembrete = {
   periodo: Period
   data_inicio: string
   hora_inicio: string | null
+  dia_semana: number | null
+  semana_ordinal: number | null
   concluido: boolean
   criado_por: string | null
   created_at: string
@@ -83,7 +89,11 @@ function formatDatetime(iso: string): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const emptyForm = { titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()), hora_inicio: '', visibilidade: 'proprio' as Visibilidade, destinatarios: [] as string[] }
+const emptyForm = {
+  titulo: '', descricao: '', periodo: 'unico' as Period, data_inicio: fmtDateStr(new Date()), hora_inicio: '',
+  dia_semana: 1 as number, semana_ordinal: 1 as number,
+  visibilidade: 'proprio' as Visibilidade, destinatarios: [] as string[],
+}
 
 export default function LembretesClient() {
   const { profile } = useUser()
@@ -269,7 +279,12 @@ export default function LembretesClient() {
         const res = await fetch(`/api/lembretes/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, hora_inicio: form.hora_inicio || null, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
+          body: JSON.stringify({
+            titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, hora_inicio: form.hora_inicio || null,
+            dia_semana: form.periodo === 'mensal_dia_semana' ? form.dia_semana : null,
+            semana_ordinal: form.periodo === 'mensal_dia_semana' ? form.semana_ordinal : null,
+            visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null,
+          }),
         })
         if (res.ok) {
           const updated: Lembrete = await res.json()
@@ -279,7 +294,12 @@ export default function LembretesClient() {
         const res = await fetch('/api/lembretes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, hora_inicio: form.hora_inicio || null, visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null }),
+          body: JSON.stringify({
+            titulo: form.titulo, descricao: form.descricao, periodo: form.periodo, data_inicio: form.data_inicio, hora_inicio: form.hora_inicio || null,
+            dia_semana: form.periodo === 'mensal_dia_semana' ? form.dia_semana : null,
+            semana_ordinal: form.periodo === 'mensal_dia_semana' ? form.semana_ordinal : null,
+            visibilidade: form.visibilidade, destinatarios: form.visibilidade === 'selecionados' ? form.destinatarios : null,
+          }),
         })
         if (res.ok) {
           const created: Lembrete = await res.json()
@@ -364,7 +384,11 @@ export default function LembretesClient() {
 
   function openEdit(r: Lembrete) {
     setEditingId(r.id)
-    setForm({ titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio, hora_inicio: r.hora_inicio ?? '', visibilidade: r.visibilidade ?? 'todos', destinatarios: r.destinatarios ?? [] })
+    setForm({
+      titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio, hora_inicio: r.hora_inicio ?? '',
+      dia_semana: r.dia_semana ?? 1, semana_ordinal: r.semana_ordinal ?? 1,
+      visibilidade: r.visibilidade ?? 'todos', destinatarios: r.destinatarios ?? [],
+    })
     setUserSearch('')
     setModalOpen(true)
     void loadUsers()
@@ -1169,14 +1193,42 @@ export default function LembretesClient() {
                 </Field>
               </div>
 
+              {form.periodo === 'mensal_dia_semana' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <Field label="Qual ocorrência">
+                    <select
+                      value={form.semana_ordinal}
+                      onChange={e => setForm(f => ({ ...f, semana_ordinal: Number(e.target.value) }))}
+                      style={{ ...inputStyle, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A8A59D' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: 32, appearance: 'none' }}
+                      onFocus={e => { (e.target as HTMLSelectElement).style.borderColor = INK }}
+                      onBlur={e => { (e.target as HTMLSelectElement).style.borderColor = BORDER }}
+                    >
+                      {ORDINAL_OPTIONS.map(o => <option key={o} value={o}>{ORDINAL_LABEL[o]}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Dia da semana">
+                    <select
+                      value={form.dia_semana}
+                      onChange={e => setForm(f => ({ ...f, dia_semana: Number(e.target.value) }))}
+                      style={{ ...inputStyle, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A8A59D' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: 32, appearance: 'none' }}
+                      onFocus={e => { (e.target as HTMLSelectElement).style.borderColor = INK }}
+                      onBlur={e => { (e.target as HTMLSelectElement).style.borderColor = BORDER }}
+                    >
+                      {WEEKDAY_FULL.map((d, i) => <option key={d} value={i}>{d}</option>)}
+                    </select>
+                  </Field>
+                </div>
+              )}
+
               {form.periodo !== 'unico' && (
                 <div style={{ background: SURFACE2, borderRadius: 6, padding: 12, fontSize: 13, color: TEXT_MID }}>
                   {form.periodo === 'diario'      && 'O lembrete aparecerá todos os dias a partir da data de início.'}
-                  {form.periodo === 'semanal'     && 'O lembrete será repetido semanalmente na mesma data de início.'}
+                  {form.periodo === 'semanal'     && `O lembrete será repetido toda ${WEEKDAY_FULL[parseDate(form.data_inicio).getDay()]}, a partir da data de início.`}
                   {form.periodo === 'mensal'      && 'O lembrete será repetido mensalmente na mesma data de início.'}
                   {form.periodo === 'trimestral'  && 'O lembrete será repetido a cada 3 meses.'}
                   {form.periodo === 'semestral'   && 'O lembrete será repetido a cada 6 meses.'}
                   {form.periodo === 'anual'       && 'O lembrete será repetido anualmente na mesma data de início.'}
+                  {form.periodo === 'mensal_dia_semana' && `O lembrete será repetido toda ${ORDINAL_LABEL[form.semana_ordinal].toLowerCase()} ${WEEKDAY_FULL[form.dia_semana]} do mês.`}
                 </div>
               )}
 
