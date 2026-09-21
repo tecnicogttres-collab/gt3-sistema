@@ -267,6 +267,19 @@ body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
   background-color: #FAFCFF;
 }
 
+/* Card clicável que não é <button> (BI, acordeão em bloco etc.) — só <button> ganha
+   elevação no hover pela regra genérica acima; isto cobre um <div onClick> que funciona
+   como cartão. */
+.gt3-card-hover {
+  transition: box-shadow var(--duration-gt3) var(--ease-gt3), transform var(--duration-gt3) var(--ease-gt3),
+    border-color var(--duration-gt3) var(--ease-gt3);
+}
+.gt3-card-hover:hover {
+  box-shadow: var(--sh-md);
+  transform: translateY(-2px);
+  border-color: #C7D2E8;
+}
+
 /* ─── Elementos base: botão, input, card ──────────────────────────────────
    Aplicado por seletor de elemento/classe (não por componente) porque o
    projeto não tem Button/Card/Input compartilhado — todo botão e input é

@@ -317,21 +317,35 @@ function ConfigPanel({ title, subtitle, wide, children }: {
 function TratativaBadge({ t }: { t: Tratativa }) {
   const color = TRAT_COLORS[t]
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color, whiteSpace: 'nowrap' }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color,
+      whiteSpace: 'nowrap', background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 999, padding: '4px 11px 4px 8px',
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
       {TRAT_LABEL[t]}
     </span>
   )
 }
 
-function Kpi({ label, value, color }: { label: string; value: number; color: string }) {
+const KPI_ICON: Record<string, string> = {
+  aguardando: '⏳', ciente: '👁', andamento: '▶', resolvido: '✔', total: '📊',
+}
+
+function Kpi({ label, value, color, icon }: { label: string; value: number; color: string; icon?: string }) {
   return (
-    <div style={{
-      background: SURF, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: RADIUS,
-      padding: '14px 16px', boxShadow: SHADOW, minWidth: 140, flex: '1 1 140px',
+    <div className="gt3-fade-up" style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS,
+      padding: '13px 16px', boxShadow: SHADOW, minWidth: 150, flex: '1 1 150px',
     }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px' }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: TEXT, marginTop: 6 }}>{value}</div>
+      <span style={{
+        width: 38, height: 38, borderRadius: 11, background: `${color}16`, color, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+      }}>{icon ?? '●'}</span>
+      <div>
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px' }}>{label}</div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: TEXT, marginTop: 2, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      </div>
     </div>
   )
 }
@@ -1012,12 +1026,15 @@ export default function DesignacaoReprovadosClient() {
     const isOpen = opts.aberto === grupo.key
     const r = resumoGrupo(grupo.itens)
     return (
-      <div key={grupo.key} style={{ marginBottom: 14, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
-        <div onClick={() => opts.setAberto(isOpen ? null : grupo.key)} style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer',
-          background: isOpen ? PRIMARY_SOFT : '#FAFCFE', flexWrap: 'wrap',
-        }}>
-          <span style={{ fontSize: 11, transition: 'transform .15s', transform: isOpen ? 'rotate(90deg)' : 'none', color: MUTED }}>▶</span>
+      <div key={grupo.key} className="gt3-fade-up" style={{ marginBottom: 14, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
+        <div onClick={() => opts.setAberto(isOpen ? null : grupo.key)}
+          onMouseEnter={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = '#F0F4FA' }}
+          onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = '#FAFCFE' }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer',
+            background: isOpen ? PRIMARY_SOFT : '#FAFCFE', flexWrap: 'wrap', transition: 'background-color 180ms var(--ease-gt3)',
+          }}>
+          <span style={{ fontSize: 11, transition: 'transform 220ms var(--ease-gt3)', transform: isOpen ? 'rotate(90deg)' : 'none', color: MUTED }}>▶</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: PRIMARY, color: '#fff', borderRadius: 999, padding: '5px 13px 5px 11px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
             📅 {fmtData(grupo.data)}
           </span>
@@ -1031,7 +1048,7 @@ export default function DesignacaoReprovadosClient() {
           </div>
         </div>
         {isOpen && (
-          <div style={{ padding: '14px 16px', borderTop: `1px solid ${BORDER}` }}>
+          <div className="gt3-slide-down" style={{ padding: '14px 16px', borderTop: `1px solid ${BORDER}` }}>
             {grupo.itens.map(d => renderCardDesignacao(d, { mostrarResponsaveis: opts.mostrarResponsaveis }))}
           </div>
         )}
@@ -1045,16 +1062,23 @@ export default function DesignacaoReprovadosClient() {
     <div style={{ minHeight: '100vh', background: BG, fontFamily: "'Inter',system-ui,sans-serif", color: TEXT }}>
 
       {/* Header */}
-      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '18px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT }}>Designação de Reprovados / Pendências</div>
-          <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
+      <div style={{ background: SURF, boxShadow: '0 1px 0 rgba(20,30,60,.05), 0 2px 10px rgba(20,30,60,.03)', padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <span style={{
+            width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg, ${PRIMARY}, #4A6FB5)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0,
+            boxShadow: '0 4px 12px rgba(42,79,150,.28)',
+          }}>📋</span>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: TEXT }}>Designação de Reprovados / Pendências</div>
+            <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
+          </div>
         </div>
         <button onClick={abrirNovaDesignacao} style={btnPrimary}>＋ Nova designação</button>
       </div>
 
       {/* Tabs */}
-      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '0 28px', display: 'flex', gap: 4 }}>
+      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '0 28px', display: 'flex', gap: 4, position: 'relative', zIndex: 1 }}>
         {[
           { id: 'geral' as const, label: '🌐 Visão geral' },
           { id: 'caixa' as const, label: `📥 Minha Caixa${minhaCaixaPendentes ? ` (${minhaCaixaPendentes})` : ''}` },
@@ -1347,11 +1371,11 @@ export default function DesignacaoReprovadosClient() {
 
             {/* KPIs — refletem Ativas/Histórico + filtros ativos */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-              <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} />
-              <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} />
-              <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} />
-              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} />
-              <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} />
+              <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} icon={KPI_ICON.aguardando} />
+              <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} icon={KPI_ICON.ciente} />
+              <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} icon={KPI_ICON.andamento} />
+              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} icon={KPI_ICON.resolvido} />
+              <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} icon={KPI_ICON.total} />
             </div>
 
             {!geralColaborador ? (
@@ -1364,25 +1388,37 @@ export default function DesignacaoReprovadosClient() {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
-                  {statsColaboradores.map(s => {
+                  {statsColaboradores.map((s, i) => {
                     const pct = s.total ? Math.round((s.resolvido / s.total) * 100) : 0
                     return (
                       <div key={s.userId} onClick={() => setGeralColaborador(s.userId)}
-                        style={{ cursor: 'pointer', background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '14px 16px', boxShadow: SHADOW }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-                          <span style={avatarStyle}>{iniciais(getUsuarioNome(s.userId))}</span>
-                          <b style={{ fontSize: 13.5, color: PRIMARY, textDecoration: 'underline', textUnderlineOffset: 3 }}>{getUsuarioNome(s.userId)}</b>
+                        className="gt3-card-hover gt3-fade-up"
+                        style={{
+                          cursor: 'pointer', background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS,
+                          padding: '15px 16px', boxShadow: SHADOW, animationDelay: `${Math.min(i, 10) * 25}ms`,
+                        }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                          <span style={{ ...avatarStyle, width: 32, height: 32, fontSize: 12, borderRadius: 10, background: `linear-gradient(135deg, ${PRIMARY}, #4A6FB5)` }}>
+                            {iniciais(getUsuarioNome(s.userId))}
+                          </span>
+                          <b style={{ fontSize: 13.5, color: TEXT, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {getUsuarioNome(s.userId)}
+                          </b>
+                          <span style={{ color: MUTED, fontSize: 13, flexShrink: 0 }}>→</span>
                         </div>
-                        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', fontSize: 11, fontWeight: 700, marginBottom: 12, minHeight: 16 }}>
-                          {s.aguardando > 0 && <span style={{ color: TRAT_COLORS.aguardando }}>⏳ {s.aguardando}</span>}
-                          {s.andamento > 0 && <span style={{ color: TRAT_COLORS.andamento }}>▶ {s.andamento}</span>}
-                          {s.retornou > 0 && <span style={{ color: '#0A7A5E' }}>🔁 {s.retornou}</span>}
-                          {s.resolvido > 0 && <span style={{ color: TRAT_COLORS.resolvido }}>✔ {s.resolvido}</span>}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 13, minHeight: 22 }}>
+                          {s.aguardando > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.aguardando, background: `${TRAT_COLORS.aguardando}14`, border: `1px solid ${TRAT_COLORS.aguardando}33`, borderRadius: 999, padding: '2.5px 8px' }}>⏳ {s.aguardando}</span>}
+                          {s.andamento > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.andamento, background: `${TRAT_COLORS.andamento}14`, border: `1px solid ${TRAT_COLORS.andamento}33`, borderRadius: 999, padding: '2.5px 8px' }}>▶ {s.andamento}</span>}
+                          {s.retornou > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0A7A5E', background: '#0A7A5E14', border: '1px solid #0A7A5E33', borderRadius: 999, padding: '2.5px 8px' }}>🔁 {s.retornou}</span>}
+                          {s.resolvido > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.resolvido, background: `${TRAT_COLORS.resolvido}14`, border: `1px solid ${TRAT_COLORS.resolvido}33`, borderRadius: 999, padding: '2.5px 8px' }}>✔ {s.resolvido}</span>}
                         </div>
-                        <div style={{ height: 6, borderRadius: 3, background: BG, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: TRAT_COLORS.resolvido, borderRadius: 3 }} />
+                        <div style={{ height: 6, borderRadius: 999, background: BG, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: TRAT_COLORS.resolvido, borderRadius: 999, transition: 'width .4s var(--ease-gt3)' }} />
                         </div>
-                        <div style={{ fontSize: 10.5, color: MUTED, marginTop: 5 }}>{pct}% resolvido · {s.total} no total</div>
+                        <div style={{ fontSize: 10.5, color: MUTED, marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{pct}% resolvido</span>
+                          <span>{s.total} no total</span>
+                        </div>
                       </div>
                     )
                   })}
@@ -1549,7 +1585,7 @@ export default function DesignacaoReprovadosClient() {
                     <button onClick={cancelarEdicaoEmpresa} style={sm(btnGhost)}>Cancelar</button>
                   </div>
                 ) : (
-                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '9px 10px', borderBottom: `1px solid ${BORDER}` }}>
+                  <div key={e.id} className="gt3-table-row-hover" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '9px 10px', borderBottom: `1px solid ${BORDER}` }}>
                     <div style={{ minWidth: 0 }}>
                       <b style={{ fontSize: 13.5 }}>{e.nome}</b>
                       <div style={{ fontSize: 11.5, color: MUTED, overflowWrap: 'break-word' }}>
