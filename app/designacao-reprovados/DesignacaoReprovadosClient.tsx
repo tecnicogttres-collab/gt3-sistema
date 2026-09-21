@@ -7,7 +7,8 @@ import { useUser } from '../components/UserContext'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Setor = { id: string; nome: string; ativo: boolean; created_at: string }
-type Documento = { id: string; setor_id: string; nome: string; ativo: boolean; created_at: string }
+type Documento = { id: string; setor_id: string; pasta_id: string | null; nome: string; ativo: boolean; created_at: string }
+type PastaDocumento = { id: string; setor_id: string; nome: string; ordem: number; created_at: string }
 type Situacao = { id: string; nome: string; cor: string; ativo: boolean; created_at: string }
 type Empresa = { id: string; nome: string; contratante: string; email: string; created_at: string }
 type Pertinencia = { setor_id: string; usuario_id: string }
@@ -359,6 +360,7 @@ export default function DesignacaoReprovadosClient() {
   const [designacoes, setDesignacoes] = useState<Designacao[]>([])
   const [setores, setSetores]         = useState<Setor[]>([])
   const [documentos, setDocumentos]   = useState<Documento[]>([])
+  const [pastasDoc, setPastasDoc]     = useState<PastaDocumento[]>([])
   const [situacoes, setSituacoes]     = useState<Situacao[]>([])
   const [empresas, setEmpresas]       = useState<Empresa[]>([])
   const [pertinencia, setPertinencia] = useState<Pertinencia[]>([])
@@ -415,6 +417,13 @@ export default function DesignacaoReprovadosClient() {
   const [corSelecionada, setCorSelecionada]   = useState(CORES_SITUACAO[0])
   const [cfgSetorAtual, setCfgSetorAtual]     = useState('')
   const [novoDocNome, setNovoDocNome]         = useState('')
+  const [modalPastasAberto, setModalPastasAberto] = useState(false)
+  const [novaPastaNome, setNovaPastaNome]     = useState('')
+  const [editPastaId, setEditPastaId]         = useState('')
+  const [editPastaNome, setEditPastaNome]     = useState('')
+  const [dragDocId, setDragDocId]             = useState<string | null>(null)
+  const [dragSobrePasta, setDragSobrePasta]   = useState<string | null>(null)
+  const [novoDocPorPasta, setNovoDocPorPasta] = useState<Record<string, string>>({})
   const [novaEmpresaNome, setNovaEmpresaNome] = useState('')
   const [novaEmpresaContratante, setNovaEmpresaContratante] = useState('')
   const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
@@ -468,9 +477,10 @@ export default function DesignacaoReprovadosClient() {
       fetch('/api/designacao-reprovados/pertinencia').then(r => r.ok ? r.json() : []),
       fetch('/api/designacao-reprovados/usuarios').then(r => r.ok ? r.json() : []),
       fetch('/api/designacao-reprovados/config').then(r => r.ok ? r.json() : CONFIG_PADRAO),
-    ]).then(([des, set, doc, sit, emp, pert, usr, cfg]) => {
+      fetch('/api/designacao-reprovados/pastas-documento').then(r => r.ok ? r.json() : []),
+    ]).then(([des, set, doc, sit, emp, pert, usr, cfg, pastas]) => {
       setDesignacoes(des); setSetores(set); setDocumentos(doc); setSituacoes(sit)
-      setEmpresas(emp); setPertinencia(pert); setUsuarios(usr)
+      setEmpresas(emp); setPertinencia(pert); setUsuarios(usr); setPastasDoc(pastas)
       setEmailConfig(cfg); setCfgAssunto(cfg.assunto_template); setCfgSaudacao(cfg.saudacao_template); setCfgFechamento(cfg.fechamento_template)
       setCfgHistoricoDias(cfg.historico_dias ?? 2)
     }).finally(() => setLoading(false))
@@ -851,6 +861,57 @@ export default function DesignacaoReprovadosClient() {
     else showToast('Erro ao remover documento.')
   }
 
+  // ── Config: pastas de documento (subdivisão dentro do setor) ──
+  async function addPasta() {
+    if (!novaPastaNome.trim()) { showToast('Informe o nome da pasta.'); return }
+    if (!cfgSetorEfetivo) { showToast('Selecione um setor.'); return }
+    const res = await fetch('/api/designacao-reprovados/pastas-documento', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setor_id: cfgSetorEfetivo, nome: novaPastaNome }),
+    })
+    if (res.ok) { const created = await res.json(); setPastasDoc(prev => [...prev, created]); setNovaPastaNome(''); showToast('Pasta criada.') }
+    else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao criar pasta.') }
+  }
+  async function renomearPasta(id: string, nome: string) {
+    if (!nome.trim()) return
+    const res = await fetch(`/api/designacao-reprovados/pastas-documento/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }),
+    })
+    if (res.ok) { const updated = await res.json(); setPastasDoc(prev => prev.map(p => p.id === id ? updated : p)) }
+    else showToast('Erro ao renomear pasta.')
+  }
+  async function removerPasta(id: string) {
+    if (!confirm('Remover esta pasta? Os documentos dentro dela não são excluídos — ficam sem pasta.')) return
+    const res = await fetch(`/api/designacao-reprovados/pastas-documento/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setPastasDoc(prev => prev.filter(p => p.id !== id))
+      setDocumentos(prev => prev.map(d => d.pasta_id === id ? { ...d, pasta_id: null } : d))
+      showToast('Pasta removida.')
+    } else showToast('Erro ao remover pasta.')
+  }
+  async function moverDocParaPasta(docId: string, pastaId: string | null) {
+    const res = await fetch(`/api/designacao-reprovados/documentos/${docId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pasta_id: pastaId }),
+    })
+    if (res.ok) { const updated = await res.json(); setDocumentos(prev => prev.map(d => d.id === docId ? updated : d)) }
+    else showToast('Erro ao mover documento.')
+  }
+  async function addDocumentoEmPasta(pastaId: string | null) {
+    const key = pastaId ?? 'sem-pasta'
+    const nome = (novoDocPorPasta[key] || '').trim()
+    if (!nome) { showToast('Informe o documento.'); return }
+    if (!cfgSetorEfetivo) { showToast('Selecione um setor.'); return }
+    const res = await fetch('/api/designacao-reprovados/documentos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setor_id: cfgSetorEfetivo, nome, pasta_id: pastaId }),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      setDocumentos(prev => [...prev, created])
+      setNovoDocPorPasta(prev => ({ ...prev, [key]: '' }))
+      showToast('Documento adicionado.')
+    } else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao adicionar documento.') }
+  }
+
   // ── Config: matriz de pertinência ──
   async function togglePertinencia(setorId: string, usuarioId: string) {
     const res = await fetch('/api/designacao-reprovados/pertinencia', {
@@ -922,6 +983,18 @@ export default function DesignacaoReprovadosClient() {
     if (!b) return empresas
     return empresas.filter(e => (e.nome + ' ' + e.contratante + ' ' + e.email).toLowerCase().includes(b))
   }, [empresas, empresaBusca])
+
+  // Nomes de documento repetidos dentro do setor atual (entre pastas ou sem pasta) —
+  // avisa no modal "Alterar conteúdo das pastas" em vez de deixar passar batido.
+  const duplicatasNomesSetor = useMemo(() => {
+    const contagem = new Map<string, number>()
+    for (const d of documentos) {
+      if (d.setor_id !== cfgSetorEfetivo) continue
+      const key = d.nome.trim().toLowerCase()
+      contagem.set(key, (contagem.get(key) ?? 0) + 1)
+    }
+    return new Set([...contagem.entries()].filter(([, n]) => n > 1).map(([k]) => k))
+  }, [documentos, cfgSetorEfetivo])
 
   const setoresAtivos = setores.filter(s => s.ativo)
   const situacoesAtivas = situacoes.filter(s => s.ativo)
@@ -1181,13 +1254,40 @@ export default function DesignacaoReprovadosClient() {
                       </div>
                     ) : fSetores.map(sId => {
                       const docs = documentos.filter(d => d.setor_id === sId && d.ativo)
+                      const pastasDoSetor = pastasDoc.filter(p => p.setor_id === sId).sort((a, b) => a.ordem - b.ordem)
+                      const semPasta = docs.filter(d => !d.pasta_id || !pastasDoSetor.some(p => p.id === d.pasta_id))
                       return (
                         <SubBlock key={sId} title={getSetorNome(sId)} hint={`${docs.length} documento(s)`}>
-                          {docs.length === 0
-                            ? <Alerta>Nenhum documento cadastrado para &quot;{getSetorNome(sId)}&quot;. Cadastre em ⚙️ Configurações → Documentos por setor.</Alerta>
-                            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                {docs.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
-                              </div>}
+                          {docs.length === 0 ? (
+                            <Alerta>Nenhum documento cadastrado para &quot;{getSetorNome(sId)}&quot;. Cadastre em ⚙️ Configurações → Documentos por setor.</Alerta>
+                          ) : pastasDoSetor.length === 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                              {docs.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {pastasDoSetor.map(p => {
+                                const docsPasta = docs.filter(d => d.pasta_id === p.id)
+                                if (docsPasta.length === 0) return null
+                                return (
+                                  <div key={p.id}>
+                                    <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, marginBottom: 6 }}>🗂 {p.nome}</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                      {docsPasta.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              {semPasta.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, marginBottom: 6 }}>Sem pasta</div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    {semPasta.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </SubBlock>
                       )
                     })}
@@ -1495,15 +1595,20 @@ export default function DesignacaoReprovadosClient() {
             </ConfigPanel>
 
             {/* Painel 3: Documentos por setor */}
-            <ConfigPanel title="Documentos por setor" subtitle="O que é solicitado dentro de cada tipo de setor" wide>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Setor</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {setores.map(s => (
-                    <Flag key={s.id} small label={s.nome} on={cfgSetorEfetivo === s.id} onClick={() => setCfgSetorAtual(s.id)} />
-                  ))}
-                  {setores.length === 0 && <span style={{ fontSize: 12.5, color: MUTED }}>Cadastre um setor primeiro.</span>}
+            <ConfigPanel title="Documentos por setor" subtitle="O que é solicitado dentro de cada tipo de setor — organizado em pastas" wide>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Setor</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {setores.map(s => (
+                      <Flag key={s.id} small label={s.nome} on={cfgSetorEfetivo === s.id} onClick={() => setCfgSetorAtual(s.id)} />
+                    ))}
+                    {setores.length === 0 && <span style={{ fontSize: 12.5, color: MUTED }}>Cadastre um setor primeiro.</span>}
+                  </div>
                 </div>
+                {cfgSetorEfetivo && (
+                  <button onClick={() => setModalPastasAberto(true)} style={sm(btnGhost)}>🗂 Alterar conteúdo das pastas</button>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                 <input value={novoDocNome} onChange={e => setNovoDocNome(e.target.value)}
@@ -1516,23 +1621,158 @@ export default function DesignacaoReprovadosClient() {
                   <div style={{ fontSize: 12.5, color: MUTED, background: '#FAFBFD', border: '1.5px dashed #DFE7F1', borderRadius: RADIUS, padding: 17, textAlign: 'center' }}>
                     Nenhum documento cadastrado neste setor ainda.
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {documentos.filter(d => d.setor_id === cfgSetorEfetivo).map(d => (
-                      <div key={d.id} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 8, border: `1.5px solid ${BORDER}`, borderRadius: 10,
-                        padding: '7px 10px 7px 12px', fontSize: 12.5, fontWeight: 600, color: TEXT, opacity: d.ativo ? 1 : .45,
-                      }}>
-                        {d.nome}
-                        <Switch on={d.ativo} onClick={() => toggleDocAtivo(d)} />
-                        <span onClick={() => removerDocumento(d.id)} style={{ cursor: 'pointer', color: '#C53030', fontWeight: 700 }}>✕</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                ) : (() => {
+                  const pastasDoSetor = pastasDoc.filter(p => p.setor_id === cfgSetorEfetivo).sort((a, b) => a.ordem - b.ordem)
+                  const docsDoSetor = documentos.filter(d => d.setor_id === cfgSetorEfetivo)
+                  const chip = (d: Documento) => (
+                    <div key={d.id} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8, border: `1.5px solid ${BORDER}`, borderRadius: 10,
+                      padding: '7px 10px 7px 12px', fontSize: 12.5, fontWeight: 600, color: TEXT, opacity: d.ativo ? 1 : .45,
+                    }}>
+                      {d.nome}
+                      <Switch on={d.ativo} onClick={() => toggleDocAtivo(d)} />
+                      <span onClick={() => removerDocumento(d.id)} style={{ cursor: 'pointer', color: '#C53030', fontWeight: 700 }}>✕</span>
+                    </div>
+                  )
+                  if (pastasDoSetor.length === 0) {
+                    return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{docsDoSetor.map(chip)}</div>
+                  }
+                  const semPasta = docsDoSetor.filter(d => !d.pasta_id || !pastasDoSetor.some(p => p.id === d.pasta_id))
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {pastasDoSetor.map(p => {
+                        const docs = docsDoSetor.filter(d => d.pasta_id === p.id)
+                        if (docs.length === 0) return null
+                        return (
+                          <div key={p.id}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: PRIMARY, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              🗂 {p.nome} <span style={{ color: MUTED, fontWeight: 500 }}>({docs.length})</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{docs.map(chip)}</div>
+                          </div>
+                        )
+                      })}
+                      {semPasta.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 7 }}>Sem pasta ({semPasta.length})</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{semPasta.map(chip)}</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
               <div style={{ fontSize: 11.5, color: MUTED, marginTop: 10, lineHeight: 1.5 }}>Ao flegar o setor na designação, só os documentos ativos deste setor aparecem como flag.</div>
             </ConfigPanel>
+
+            {/* Modal: alterar conteúdo das pastas — arrastar documento entre cards ou "+" dentro de um deles */}
+            {modalPastasAberto && cfgSetorEfetivo && (() => {
+              const pastasDoSetor = pastasDoc.filter(p => p.setor_id === cfgSetorEfetivo).sort((a, b) => a.ordem - b.ordem)
+              const docsDoSetor = documentos.filter(d => d.setor_id === cfgSetorEfetivo)
+              const semPasta = docsDoSetor.filter(d => !d.pasta_id || !pastasDoSetor.some(p => p.id === d.pasta_id))
+              const isDuplicado = (d: Documento) => duplicatasNomesSetor.has(d.nome.trim().toLowerCase())
+
+              function renderDocChip(d: Documento) {
+                return (
+                  <div
+                    key={d.id}
+                    draggable
+                    onDragStart={() => setDragDocId(d.id)}
+                    onDragEnd={() => { setDragDocId(null); setDragSobrePasta(null) }}
+                    style={{
+                      cursor: 'grab', display: 'flex', alignItems: 'center', gap: 6, background: '#fff',
+                      border: `1px solid ${isDuplicado(d) ? '#F0B429' : BORDER}`, borderRadius: 8,
+                      padding: '6px 9px', fontSize: 12, fontWeight: 600, opacity: d.ativo ? 1 : .5,
+                    }}>
+                    <span style={{ color: MUTED, fontSize: 11 }}>⠿</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nome}</span>
+                    {isDuplicado(d) && <span title="Nome repetido em outra pasta deste setor" style={{ color: '#B45309', flexShrink: 0 }}>⚠</span>}
+                  </div>
+                )
+              }
+
+              function renderPastaCard({ pastaId, nome, docs, podeEditar }: { pastaId: string | null; nome: string; docs: Documento[]; podeEditar: boolean }) {
+                const key = pastaId ?? 'sem-pasta'
+                const emDrag = dragSobrePasta === key
+                return (
+                  <div
+                    key={key}
+                    onDragOver={e => { e.preventDefault(); setDragSobrePasta(key) }}
+                    onDragLeave={() => setDragSobrePasta(prev => prev === key ? null : prev)}
+                    onDrop={() => { if (dragDocId) moverDocParaPasta(dragDocId, pastaId); setDragDocId(null); setDragSobrePasta(null) }}
+                    style={{
+                      border: `1.5px ${emDrag ? 'dashed' : 'solid'} ${emDrag ? PRIMARY : BORDER}`, borderRadius: RADIUS,
+                      background: emDrag ? PRIMARY_SOFT : '#FAFCFE', padding: '12px 14px',
+                      transition: 'background-color 150ms var(--ease-gt3), border-color 150ms var(--ease-gt3)',
+                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                      {podeEditar && editPastaId === pastaId ? (
+                        <input autoFocus value={editPastaNome} onChange={e => setEditPastaNome(e.target.value)}
+                          onBlur={() => { renomearPasta(pastaId as string, editPastaNome); setEditPastaId('') }}
+                          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditPastaId('') }}
+                          style={inputStyle({ flex: 1, padding: '4px 8px', fontSize: 13, fontWeight: 700 })} />
+                      ) : (
+                        <b
+                          onClick={() => { if (podeEditar) { setEditPastaId(pastaId as string); setEditPastaNome(nome) } }}
+                          title={podeEditar ? 'Clique para renomear' : undefined}
+                          style={{ flex: 1, fontSize: 13, color: TEXT, cursor: podeEditar ? 'text' : 'default' }}>
+                          {podeEditar ? '🗂 ' : ''}{nome}
+                        </b>
+                      )}
+                      <span style={{ fontSize: 11, color: MUTED }}>{docs.length}</span>
+                      {podeEditar && <button onClick={() => removerPasta(pastaId as string)} title="Excluir pasta" style={btnDangerIcon}>🗑</button>}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10, minHeight: 34 }}>
+                      {docs.length === 0
+                        ? <div style={{ fontSize: 11.5, color: MUTED, fontStyle: 'italic', padding: '6px 2px' }}>Arraste documentos pra cá</div>
+                        : docs.map(d => renderDocChip(d))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input value={novoDocPorPasta[key] || ''} onChange={e => setNovoDocPorPasta(prev => ({ ...prev, [key]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') addDocumentoEmPasta(pastaId) }}
+                        placeholder="+ documento..." style={inputStyle({ flex: 1, fontSize: 12, padding: '6px 9px' })} />
+                      <button onClick={() => addDocumentoEmPasta(pastaId)} style={sm(btnGhost)}>＋</button>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="gt3-overlay-fade" onClick={e => { if (e.target === e.currentTarget) setModalPastasAberto(false) }}
+                  style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
+                  <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 1040, boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
+                    <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: PRIMARY }}>🗂 Pastas de {getSetorNome(cfgSetorEfetivo)}</h3>
+                        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>Arraste um documento de uma pasta pra outra, ou use o &quot;＋&quot; dentro de uma delas</div>
+                      </div>
+                      <button onClick={() => setModalPastasAberto(false)} className="gt3-close-btn" style={{ border: 'none', background: BG, width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 15, color: MUTED, flexShrink: 0 }}>✕</button>
+                    </div>
+                    <div style={{ padding: '20px 24px', maxHeight: '72vh', overflowY: 'auto' }}>
+                      {duplicatasNomesSetor.size > 0 && (
+                        <div style={{
+                          background: '#FFFBF0', border: '1px solid #F0DDB4', borderLeft: '4px solid #D97706', borderRadius: RADIUS,
+                          padding: '11px 14px', fontSize: 12.5, color: '#7A5814', marginBottom: 16, display: 'flex', gap: 9, alignItems: 'flex-start',
+                        }}>
+                          <span>⚠</span>
+                          <span>Documento(s) com o mesmo nome em mais de uma pasta: <b>{[...duplicatasNomesSetor].join(', ')}</b>. Considere manter em uma só.</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                        <input value={novaPastaNome} onChange={e => setNovaPastaNome(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') addPasta() }}
+                          placeholder="Nome da nova pasta (ex.: Anuais)" style={inputStyle({ flex: 1 })} />
+                        <button onClick={addPasta} style={btnAccent}>＋ Nova pasta</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
+                        {pastasDoSetor.map(p => renderPastaCard({ pastaId: p.id, nome: p.nome, docs: docsDoSetor.filter(d => d.pasta_id === p.id), podeEditar: true }))}
+                        {renderPastaCard({ pastaId: null, nome: 'Sem pasta', docs: semPasta, podeEditar: false })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Painel 4: Matriz de pertinência */}
             <ConfigPanel title="Matriz de pertinência · usuário × setor" subtitle="Define quem é liberado como responsável ao flegar cada setor" wide>

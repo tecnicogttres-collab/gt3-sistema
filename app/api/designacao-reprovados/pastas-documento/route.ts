@@ -8,8 +8,9 @@ export async function GET() {
 
   const admin = createAdminClient()
   const { data, error } = await admin
-    .from('desig_documentos')
-    .select('id, setor_id, pasta_id, nome, ativo, created_at')
+    .from('desig_pastas_documento')
+    .select('id, setor_id, nome, ordem, created_at')
+    .order('ordem', { ascending: true })
     .order('created_at', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
@@ -20,15 +21,21 @@ export async function POST(req: NextRequest) {
   const caller = await requireGestorAdmin()
   if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
-  const { setor_id, nome, pasta_id } = await req.json()
+  const { setor_id, nome } = await req.json()
   if (!setor_id) return Response.json({ error: 'Setor obrigatório' }, { status: 400 })
   if (!nome?.trim()) return Response.json({ error: 'Nome obrigatório' }, { status: 400 })
 
   const admin = createAdminClient()
+
+  const { count } = await admin
+    .from('desig_pastas_documento')
+    .select('id', { count: 'exact', head: true })
+    .eq('setor_id', setor_id)
+
   const { data, error } = await admin
-    .from('desig_documentos')
-    .insert({ setor_id, nome: nome.trim(), pasta_id: pasta_id || null })
-    .select('id, setor_id, pasta_id, nome, ativo, created_at')
+    .from('desig_pastas_documento')
+    .insert({ setor_id, nome: nome.trim(), ordem: count ?? 0 })
+    .select('id, setor_id, nome, ordem, created_at')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
