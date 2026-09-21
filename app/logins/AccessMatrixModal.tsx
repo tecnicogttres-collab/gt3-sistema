@@ -201,8 +201,9 @@ export default function AccessMatrixModal({
                       style={{
                         position: 'sticky', top: 0, zIndex: 2, backgroundColor: selected ? '#EBF0FA' : '#F9FAFB',
                         borderBottom: `1px solid ${selected ? PRIMARY : '#E2E8F0'}`, borderRight: '1px solid #F1F5F9',
-                        padding: '8px 4px 10px', height: 150, width: 30, minWidth: 30, verticalAlign: 'bottom',
+                        padding: '8px 4px 10px', height: 180, width: 30, minWidth: 30, verticalAlign: 'bottom',
                         cursor: 'pointer', opacity: dimmed ? 0.25 : 1, transition: 'opacity .15s, background-color .15s',
+                        overflow: 'hidden',
                       }}>
                       {selected && canManage && (
                         <button
@@ -220,9 +221,10 @@ export default function AccessMatrixModal({
                         writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap',
                         fontSize: 11, fontWeight: selected ? 700 : 500, color: selected ? PRIMARY : '#374151', margin: '0 auto',
                         display: 'flex', alignItems: 'center', gap: 5,
+                        maxHeight: 140, overflow: 'hidden', textOverflow: 'ellipsis',
                       }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: mod.color, flexShrink: 0 }} />
-                        {mod.label}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{mod.label}</span>
                       </div>
                     </th>
                   )
