@@ -1687,6 +1687,7 @@ export default function DesignacaoReprovadosClient() {
                     <span style={{ color: MUTED, fontSize: 11 }}>⠿</span>
                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nome}</span>
                     {isDuplicado(d) && <span title="Nome repetido em outra pasta deste setor" style={{ color: '#B45309', flexShrink: 0 }}>⚠</span>}
+                    <button onClick={() => removerDocumento(d.id)} title="Excluir documento" style={{ ...btnDangerIcon, padding: '2px 4px', fontSize: 12, flexShrink: 0 }}>🗑</button>
                   </div>
                 )
               }
