@@ -65,6 +65,13 @@ type ObsPendente = {
   quando: string | null
 }
 
+type DesigPendente = {
+  id: string
+  empresa: string
+  data_verificacao: string
+  setores: string[]
+}
+
 function fmtDateShort(iso: string) {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -143,6 +150,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
   const [pdiConversaColaborador, setPdiConversaColaborador] = useState<PdiConversaColaborador | null>(null)
   const [obsPendentes, setObsPendentes] = useState<ObsPendente[]>([])
+  const [desigPendentes, setDesigPendentes] = useState<DesigPendente[]>([])
 
   async function loadPrioridades() {
     const supabase = createClient()
@@ -410,6 +418,33 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       .subscribe()
     return () => { cancelled = true; void supabase.removeChannel(ch) }
   }, [role])
+
+  // Designação de Reprovados — itens aguardando MINHA ciência. Some daqui na hora que
+  // eu dou ciência (ação local otimista) e também reage a mudanças feitas em outra aba/
+  // dispositivo via realtime na tabela designacoes.
+  useEffect(() => {
+    let cancelled = false
+    const load = () => {
+      fetch('/api/designacao-reprovados/pendentes')
+        .then(r => r.ok ? r.json() : [])
+        .then((d: DesigPendente[]) => { if (!cancelled) setDesigPendentes(Array.isArray(d) ? d : []) })
+        .catch(() => {})
+    }
+    load()
+    const supabase = createClient()
+    const ch = supabase
+      .channel(`dashboard-desig-rt-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'designacoes' }, () => load())
+      .subscribe()
+    return () => { cancelled = true; void supabase.removeChannel(ch) }
+  }, [])
+
+  async function darCienciaGrupoDesig(ids: string[]) {
+    setDesigPendentes(prev => prev.filter(d => !ids.includes(d.id)))
+    await Promise.all(ids.map(id => fetch(`/api/designacao-reprovados/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ciencia' }),
+    })))
+  }
 
   const sidebarWidth = Math.max(
     priorities.length <= 4 ? 380 : priorities.length <= 8 ? 440 : priorities.length <= 14 ? 500 : 560,
@@ -737,6 +772,66 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                 </Link>
               ))
             )}
+          </div>
+        )}
+
+        {/* ── Block 4b: Designação de Reprovados — aguardando minha ciência ── */}
+        {desigPendentes.length > 0 && (
+          <div style={{
+            background: '#EFF6FF',
+            borderRadius: 8,
+            borderLeft: '4px solid #2A4F96',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#2A4F96' }}>
+                📋 Designação de Reprovados
+              </div>
+              <span key={desigPendentes.length} className="gt3-pop-in" style={{ background: '#2A4F96', color: '#fff', borderRadius: 9, padding: '0 7px', fontSize: 11 }}>{desigPendentes.length}</span>
+            </div>
+            {(() => {
+              const ordenados = [...desigPendentes].sort((a, b) =>
+                b.data_verificacao.localeCompare(a.data_verificacao) || a.empresa.localeCompare(b.empresa, 'pt-BR'))
+              type Grupo = { key: string; empresa: string; data: string; itens: DesigPendente[] }
+              const grupos: Grupo[] = []
+              const map = new Map<string, Grupo>()
+              for (const d of ordenados) {
+                const key = d.data_verificacao + '|' + d.empresa.trim().toLowerCase()
+                let g = map.get(key)
+                if (!g) { g = { key, empresa: d.empresa, data: d.data_verificacao, itens: [] }; map.set(key, g); grupos.push(g) }
+                g.itens.push(d)
+              }
+              return grupos.map((g, i) => {
+                const [y, m, dd] = g.data.split('-')
+                const setoresUnicos = [...new Set(g.itens.flatMap(x => x.setores))]
+                return (
+                  <div key={g.key} style={{
+                    padding: '7px 0', borderBottom: i < grupos.length - 1 ? '1px solid #DBEAFE' : 'none',
+                    display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between',
+                  }}>
+                    <Link href="/designacao-reprovados?caixa=1" style={{ textDecoration: 'none', minWidth: 0, flex: 1 }}>
+                      <span style={{ fontWeight: 500, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
+                        {g.empresa}
+                      </span>
+                      <span style={{ color: '#6B7280', fontSize: 11 }}>
+                        {dd}/{m}/{y.slice(2)} · {setoresUnicos.join(', ')}
+                      </span>
+                    </Link>
+                    <button
+                      onClick={() => void darCienciaGrupoDesig(g.itens.map(x => x.id))}
+                      title="Dar ciência e tirar daqui"
+                      style={{
+                        flexShrink: 0, fontSize: 11, fontWeight: 600, color: '#2A4F96', background: '#fff',
+                        border: '1px solid #C7D2E8', borderRadius: 6, padding: '4px 9px', cursor: 'pointer',
+                      }}
+                    >
+                      ✓ Ciência
+                    </button>
+                  </div>
+                )
+              })
+            })()}
           </div>
         )}
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -354,13 +355,19 @@ export default function DesignacaoReprovadosClient() {
   const [usuarios, setUsuarios]       = useState<UsuarioRow[]>([])
   const [loading, setLoading]         = useState(true)
 
-  const [tab, setTab] = useState<'designacoes' | 'caixa' | 'geral' | 'config'>('designacoes')
+  // Deep-link do widget do dashboard (/designacao-reprovados?caixa=1) — cai direto na Minha
+  // Caixa. Lido no estado inicial (não em efeito) porque só importa no primeiro carregamento.
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState<'designacoes' | 'caixa' | 'geral' | 'config'>(
+    () => (searchParams.get('caixa') === '1' ? 'caixa' : 'designacoes')
+  )
 
-  // ── Minha Caixa / Visão geral: sub-view e acordeão (abre sozinho no mais recente) ──
+  // ── Minha Caixa / Visão geral: sub-view e acordeão (nunca abre sozinho, só no clique) ──
   const [caixaSub, setCaixaSub]   = useState<'ativas' | 'historico'>('ativas')
   const [geralSub, setGeralSub]   = useState<'ativas' | 'historico'>('ativas')
   const [caixaAberto, setCaixaAberto] = useState<string | null>(null)
   const [geralAberto, setGeralAberto] = useState<string | null>(null)
+  const [geralColaborador, setGeralColaborador] = useState<string | null>(null)
 
   // ── Formulário inline ──
   const [formOpen, setFormOpen]           = useState(false)
@@ -523,31 +530,25 @@ export default function DesignacaoReprovadosClient() {
   const minhaCaixa = useMemo(() => designacoes.filter(d => d.responsaveis.includes(userId)), [designacoes, userId])
   const minhaCaixaPendentes = minhaCaixa.filter(d => d.tratativa === 'aguardando').length
 
-  // Agrupada por dia + empresa — fica visualmente claro de qual empresa/dia é cada bloco.
-  // Dividida em Ativas/Histórico pelo prazo configurável (padrão 15 dias); Visão geral usa
-  // a mesma lógica mas com TODAS as designações, não só as minhas.
-  const minhaGrupos = useMemo(() => agruparPorDiaEmpresa(minhaCaixa), [minhaCaixa])
-  const minhaAtivas = useMemo(() => minhaGrupos.filter(g => diasDesde(g.data) <= emailConfig.historico_dias), [minhaGrupos, emailConfig.historico_dias])
-  const minhaHistorico = useMemo(() => minhaGrupos.filter(g => diasDesde(g.data) > emailConfig.historico_dias), [minhaGrupos, emailConfig.historico_dias])
+  // Recorte por prazo (padrão 15 dias, configurável) ANTES de agrupar — reaproveitado
+  // também nas estatísticas por colaborador da Visão geral.
+  const designacoesAtivas    = useMemo(() => designacoes.filter(d => diasDesde(d.data_verificacao) <= emailConfig.historico_dias), [designacoes, emailConfig.historico_dias])
+  const designacoesHistorico = useMemo(() => designacoes.filter(d => diasDesde(d.data_verificacao) > emailConfig.historico_dias), [designacoes, emailConfig.historico_dias])
+
+  const minhaAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas.filter(d => d.responsaveis.includes(userId))), [designacoesAtivas, userId])
+  const minhaHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico.filter(d => d.responsaveis.includes(userId))), [designacoesHistorico, userId])
   const minhaAtual = caixaSub === 'ativas' ? minhaAtivas : minhaHistorico
 
-  const todasGrupos = useMemo(() => agruparPorDiaEmpresa(designacoes), [designacoes])
-  const todasAtivas = useMemo(() => todasGrupos.filter(g => diasDesde(g.data) <= emailConfig.historico_dias), [todasGrupos, emailConfig.historico_dias])
-  const todasHistorico = useMemo(() => todasGrupos.filter(g => diasDesde(g.data) > emailConfig.historico_dias), [todasGrupos, emailConfig.historico_dias])
+  const todasAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas), [designacoesAtivas])
+  const todasHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico), [designacoesHistorico])
   const geralAtual = geralSub === 'ativas' ? todasAtivas : todasHistorico
+  const itensGeralAtual = geralSub === 'ativas' ? designacoesAtivas : designacoesHistorico
 
-  // Acordeão: abre sozinho o grupo mais recente sempre que a lista/sub-view mudar —
-  // e volta pro topo se o grupo que estava aberto sumir (ex.: foi resolvido/mudou de dia).
-  useEffect(() => {
-    if (minhaAtual.length === 0) { setCaixaAberto(null); return }
-    setCaixaAberto(prev => (prev && minhaAtual.some(g => g.key === prev)) ? prev : minhaAtual[0].key)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minhaAtual, caixaSub])
-  useEffect(() => {
-    if (geralAtual.length === 0) { setGeralAberto(null); return }
-    setGeralAberto(prev => (prev && geralAtual.some(g => g.key === prev)) ? prev : geralAtual[0].key)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geralAtual, geralSub])
+  // Acordeão: nunca abre sozinho (só no clique) — e se o grupo que estava aberto sumir da
+  // lista atual (ex.: mudou de sub-view, ou foi resolvido/saiu do prazo), o valor "efetivo"
+  // cai pra null sozinho em vez de deixar um painel vazio pendurado (calculado no render,
+  // não via efeito corretivo, pra não disparar um re-render extra a cada troca de lista).
+  const caixaAbertoEfetivo = (caixaAberto && minhaAtual.some(g => g.key === caixaAberto)) ? caixaAberto : null
 
   /** Contagem por tratativa + retorno dentro de um grupo — resumo no cabeçalho do
    *  acordeão pra bater o olho e saber o que está pendente sem abrir. */
@@ -559,6 +560,31 @@ export default function DesignacaoReprovadosClient() {
       retornou: itens.filter(d => d.retorno_recebido).length,
     }
   }
+
+  // ── Visão geral: BI por colaborador (grade de cards; clicar no nome abre o detalhe) ──
+  const statsColaboradores = useMemo(() => {
+    const map = new Map<string, { userId: string; total: number; aguardando: number; ciente: number; andamento: number; resolvido: number; retornou: number }>()
+    for (const d of itensGeralAtual) {
+      for (const uid of d.responsaveis) {
+        let s = map.get(uid)
+        if (!s) { s = { userId: uid, total: 0, aguardando: 0, ciente: 0, andamento: 0, resolvido: 0, retornou: 0 }; map.set(uid, s) }
+        s.total++
+        s[d.tratativa]++
+        if (d.retorno_recebido) s.retornou++
+      }
+    }
+    return [...map.values()].sort((a, b) => getUsuarioNome(a.userId).localeCompare(getUsuarioNome(b.userId), 'pt-BR'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itensGeralAtual, usuarios])
+
+  const geralGruposColaborador = useMemo(
+    () => geralColaborador ? agruparPorDiaEmpresa(itensGeralAtual.filter(d => d.responsaveis.includes(geralColaborador))) : [],
+    [itensGeralAtual, geralColaborador],
+  )
+  // Mesma lógica do caixaAbertoEfetivo, mas considerando qual das duas listas da Visão
+  // geral está visível no momento (grade por colaborador ou o drill-down de um só).
+  const geralListaVisivel = geralColaborador ? geralGruposColaborador : geralAtual
+  const geralAbertoEfetivo = (geralAberto && geralListaVisivel.some(g => g.key === geralAberto)) ? geralAberto : null
 
   // ── Duplicidade (form) ──
   const duplicidade = useMemo(() => {
@@ -892,7 +918,8 @@ export default function DesignacaoReprovadosClient() {
           {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
         </div>
 
-        {/* E-mail pronto para encaminhar à empresa — só quem recebe a designação vê isso montado */}
+        {/* E-mail pronto para encaminhar à empresa — só quem recebe a designação vê isso montado.
+            Clique no assunto ou no corpo copia — não tem botão "Copiar" separado. */}
         {email.corpo && (
           <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
             <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -901,10 +928,24 @@ export default function DesignacaoReprovadosClient() {
                 Para: {destinoEmail || 'não cadastrado'}
               </span>
             </div>
-            <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT, background: '#FCFDFF' }}
+            <div
+              onClick={() => { navigator.clipboard.writeText(email.assunto); showToast('Assunto copiado.') }}
+              title="Clique para copiar o assunto"
+              style={{ padding: '8px 16px', fontSize: 12.5, color: TEXT, background: '#FCFDFF', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F0F4FA' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FCFDFF' }}
+            >
+              <b>Assunto:</b> {email.assunto}
+            </div>
+            <div
+              onClick={() => copiarEmailHtml(email.corpo)}
+              title="Clique para copiar o e-mail"
+              style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT, background: '#FCFDFF', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F0F4FA' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FCFDFF' }}
               dangerouslySetInnerHTML={{ __html: email.corpo }} />
-            <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => copiarEmailHtml(email.corpo)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+            <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: MUTED }}>🖱 clique no assunto ou no e-mail para copiar</span>
               <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={sm(btnGhost)}>⬇ Baixar .eml</button>
             </div>
           </div>
@@ -1282,27 +1323,73 @@ export default function DesignacaoReprovadosClient() {
                   {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : `Nada no histórico (mais de ${emailConfig.historico_dias} dias).`}
                 </p>
               </div>
-            ) : minhaAtual.map(grupo => renderGrupoAcordeao(grupo, { aberto: caixaAberto, setAberto: setCaixaAberto, mostrarResponsaveis: false }))}
+            ) : minhaAtual.map(grupo => renderGrupoAcordeao(grupo, { aberto: caixaAbertoEfetivo, setAberto: setCaixaAberto, mostrarResponsaveis: false }))}
           </div>
         ) : tab === 'geral' ? (
-          <div style={{ maxWidth: 900 }}>
-            <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 14 }}>Designações de todos os usuários — mesmo workflow da Minha Caixa, mas sem filtrar por responsável.</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              <button onClick={() => setGeralSub('ativas')} style={geralSub === 'ativas' ? btnPrimary : btnGhost}>
-                Ativas {todasAtivas.length ? `(${todasAtivas.length})` : ''}
-              </button>
-              <button onClick={() => setGeralSub('historico')} style={geralSub === 'historico' ? btnPrimary : btnGhost}>
-                🕘 Histórico {todasHistorico.length ? `(${todasHistorico.length})` : ''}
-              </button>
-            </div>
-            {geralAtual.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
-                <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
-                <p style={{ fontWeight: 600, margin: 0 }}>
-                  {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : `Nada no histórico (mais de ${emailConfig.historico_dias} dias).`}
-                </p>
+          <div style={{ maxWidth: 1100 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+              {geralColaborador ? (
+                <button onClick={() => setGeralColaborador(null)} style={sm(btnGhost)}>← Voltar para todos</button>
+              ) : (
+                <div style={{ fontSize: 12.5, color: MUTED }}>Por colaborador — clique no nome para ver as designações dele(a).</div>
+              )}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button onClick={() => setGeralSub('ativas')} style={geralSub === 'ativas' ? btnPrimary : btnGhost}>
+                  Ativas {todasAtivas.length ? `(${todasAtivas.length})` : ''}
+                </button>
+                <button onClick={() => setGeralSub('historico')} style={geralSub === 'historico' ? btnPrimary : btnGhost}>
+                  🕘 Histórico {todasHistorico.length ? `(${todasHistorico.length})` : ''}
+                </button>
               </div>
-            ) : geralAtual.map(grupo => renderGrupoAcordeao(grupo, { aberto: geralAberto, setAberto: setGeralAberto, mostrarResponsaveis: true }))}
+            </div>
+
+            {!geralColaborador ? (
+              statsColaboradores.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+                  <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
+                  <p style={{ fontWeight: 600, margin: 0 }}>
+                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : `Nada no histórico (mais de ${emailConfig.historico_dias} dias).`}
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
+                  {statsColaboradores.map(s => {
+                    const pct = s.total ? Math.round((s.resolvido / s.total) * 100) : 0
+                    return (
+                      <div key={s.userId} onClick={() => setGeralColaborador(s.userId)}
+                        style={{ cursor: 'pointer', background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '14px 16px', boxShadow: SHADOW }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+                          <span style={avatarStyle}>{iniciais(getUsuarioNome(s.userId))}</span>
+                          <b style={{ fontSize: 13.5, color: PRIMARY, textDecoration: 'underline', textUnderlineOffset: 3 }}>{getUsuarioNome(s.userId)}</b>
+                        </div>
+                        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', fontSize: 11, fontWeight: 700, marginBottom: 12, minHeight: 16 }}>
+                          {s.aguardando > 0 && <span style={{ color: TRAT_COLORS.aguardando }}>⏳ {s.aguardando}</span>}
+                          {s.andamento > 0 && <span style={{ color: TRAT_COLORS.andamento }}>▶ {s.andamento}</span>}
+                          {s.retornou > 0 && <span style={{ color: '#0A7A5E' }}>🔁 {s.retornou}</span>}
+                          {s.resolvido > 0 && <span style={{ color: TRAT_COLORS.resolvido }}>✔ {s.resolvido}</span>}
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: BG, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: TRAT_COLORS.resolvido, borderRadius: 3 }} />
+                        </div>
+                        <div style={{ fontSize: 10.5, color: MUTED, marginTop: 5 }}>{pct}% resolvido · {s.total} no total</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            ) : geralGruposColaborador.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+                <p style={{ fontWeight: 600, margin: 0 }}>Nenhuma designação de {getUsuarioNome(geralColaborador)} nesta visão.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={avatarStyle}>{iniciais(getUsuarioNome(geralColaborador))}</span>
+                  {getUsuarioNome(geralColaborador)}
+                </div>
+                {geralGruposColaborador.map(grupo => renderGrupoAcordeao(grupo, { aberto: geralAbertoEfetivo, setAberto: setGeralAberto, mostrarResponsaveis: false }))}
+              </>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
