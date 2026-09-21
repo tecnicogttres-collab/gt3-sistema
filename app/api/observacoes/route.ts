@@ -17,15 +17,28 @@ export async function GET(req: NextRequest) {
   if (!categoria) return Response.json({ error: 'categoria obrigatório' }, { status: 400 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('observacoes')
-    .select('id, categoria, subtab, coluna, motivo, parecer, parecer_anterior, group_name, imagem_url, criado_por, editado_por, atualizado_por, atualizado_em, status_edicao, created_at, updated_at')
-    .eq('categoria', categoria)
-    .order('created_at', { ascending: true })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  type ObsRow = {
+    id: string; categoria: string; subtab: string; coluna: string; motivo: string
+    parecer: string | null; parecer_anterior: string | null; group_name: string | null
+    imagem_url: string | null; criado_por: string | null; editado_por: string | null
+    atualizado_por: string | null; atualizado_em: string | null; status_edicao: string | null
+    created_at: string; updated_at: string
+  }
+  const PAGE = 1000
+  let rows: ObsRow[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('observacoes')
+      .select('id, categoria, subtab, coluna, motivo, parecer, parecer_anterior, group_name, imagem_url, criado_por, editado_por, atualizado_por, atualizado_em, status_edicao, created_at, updated_at')
+      .eq('categoria', categoria)
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    rows = rows.concat(data ?? [])
+    if (!data || data.length < PAGE) break
+  }
 
-  const rows = data ?? []
   const ids = [...new Set(rows.map(r => r.atualizado_por).filter(Boolean))] as string[]
   let nameMap: Record<string, string> = {}
   if (ids.length > 0) {

@@ -7,13 +7,21 @@ export async function GET() {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('revisao_nr_registros')
-    .select('*')
-    .order('created_at', { ascending: true })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(data ?? [])
+  const PAGE = 1000
+  let all: Record<string, unknown>[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('revisao_nr_registros')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    all = all.concat(data ?? [])
+    if (!data || data.length < PAGE) break
+  }
+
+  return Response.json(all)
 }
 
 export async function POST(req: NextRequest) {

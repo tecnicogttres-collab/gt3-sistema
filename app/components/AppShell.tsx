@@ -524,10 +524,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     let pollTimer: ReturnType<typeof setInterval> | null = null
     function startPoll() {
       if (pollTimer !== null) return
+      // Backstop pro realtime abaixo (que já cobre pdi_ciclos ao vivo) — não precisa ser tão frequente.
       pollTimer = setInterval(() => {
         checkUnseenPdiConversa()
         checkPdiNotif()
-      }, 30_000)
+      }, 120_000)
     }
     function stopPoll() {
       if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null }

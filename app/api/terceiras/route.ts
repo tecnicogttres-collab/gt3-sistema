@@ -40,18 +40,26 @@ export async function GET() {
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data: terceiras, error } = await admin
-    .from('terceiras')
-    .select(`
-      id, contratante_id, razao_social, contato, data, tem_sub, subcontratante,
-      observacao, sem_prazo, status, arquivado_em, etapas, created_at,
-      contratante:terceiras_contratantes(id, nome, requer_cc),
-      historico:terceiras_historico(id, ts, who, what)
-    `)
-    .order('created_at', { ascending: false })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(terceiras ?? [])
+  const PAGE = 1000
+  let terceiras: Record<string, unknown>[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('terceiras')
+      .select(`
+        id, contratante_id, razao_social, contato, data, tem_sub, subcontratante,
+        observacao, sem_prazo, status, arquivado_em, etapas, created_at,
+        contratante:terceiras_contratantes(id, nome, requer_cc),
+        historico:terceiras_historico(id, ts, who, what)
+      `)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    terceiras = terceiras.concat(data ?? [])
+    if (!data || data.length < PAGE) break
+  }
+
+  return Response.json(terceiras)
 }
 
 export async function POST(req: NextRequest) {
