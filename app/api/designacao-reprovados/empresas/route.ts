@@ -7,13 +7,25 @@ export async function GET() {
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('desig_empresas')
-    .select('id, nome, contratante, email, created_at')
-    .order('nome', { ascending: true })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(data ?? [])
+  // O PostgREST corta em 1000 linhas por página por padrão — com 1700+ empresas
+  // cadastradas, um único select() truncava a lista (ficava faltando N em diante).
+  // Pagina com .range() até esgotar.
+  const PAGE = 1000
+  const all: Record<string, unknown>[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('desig_empresas')
+      .select('id, nome, contratante, email, created_at')
+      .order('nome', { ascending: true })
+      .range(from, from + PAGE - 1)
+
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    all.push(...(data ?? []))
+    if (!data || data.length < PAGE) break
+  }
+
+  return Response.json(all)
 }
 
 export async function POST(req: NextRequest) {
