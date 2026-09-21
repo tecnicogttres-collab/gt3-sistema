@@ -358,9 +358,19 @@ export default function DesignacaoReprovadosClient() {
   // Deep-link do widget do dashboard (/designacao-reprovados?caixa=1) — cai direto na Minha
   // Caixa. Lido no estado inicial (não em efeito) porque só importa no primeiro carregamento.
   const searchParams = useSearchParams()
+  const vemDeDeepLink = searchParams.get('caixa') === '1'
   const [tab, setTab] = useState<'designacoes' | 'caixa' | 'geral' | 'config'>(
-    () => (searchParams.get('caixa') === '1' ? 'caixa' : 'designacoes')
+    () => (vemDeDeepLink ? 'caixa' : 'designacoes')
   )
+  // Aba padrão por papel — gestor/admin cai em Visão geral, colaborador em Minha Caixa.
+  // Só decide isso uma vez, assim que o perfil chega (é async); o deep-link acima tem
+  // prioridade e nunca é sobrescrito por isso.
+  const tabPadraoAplicada = useRef(false)
+  useEffect(() => {
+    if (vemDeDeepLink || tabPadraoAplicada.current || !profile?.papel) return
+    tabPadraoAplicada.current = true
+    setTab(['gestor', 'admin'].includes(profile.papel) ? 'geral' : 'caixa')
+  }, [profile?.papel, vemDeDeepLink])
 
   // ── Minha Caixa / Visão geral: sub-view e acordeão (nunca abre sozinho, só no clique) ──
   const [caixaSub, setCaixaSub]   = useState<'ativas' | 'historico'>('ativas')
@@ -627,6 +637,13 @@ export default function DesignacaoReprovadosClient() {
     setTimeout(() => empresaInputRef.current?.focus(), 120)
   }
   function fecharForm() { setFormOpen(false) }
+
+  /** Botão "＋ Nova designação" do cabeçalho — disponível em qualquer aba. O formulário
+   *  em si só existe dentro da aba Designações, então troca pra lá e já abre. */
+  function abrirNovaDesignacao() {
+    setTab('designacoes')
+    if (!formOpen) abrirForm()
+  }
 
   function toggleFormSetor(id: string) {
     const on = fSetores.includes(id)
@@ -1019,9 +1036,12 @@ export default function DesignacaoReprovadosClient() {
     <div style={{ minHeight: '100vh', background: BG, fontFamily: "'Inter',system-ui,sans-serif", color: TEXT }}>
 
       {/* Header */}
-      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '18px 28px' }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: TEXT }}>Designação de Reprovados / Pendências</div>
-        <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
+      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '18px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT }}>Designação de Reprovados / Pendências</div>
+          <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
+        </div>
+        <button onClick={abrirNovaDesignacao} style={btnPrimary}>＋ Nova designação</button>
       </div>
 
       {/* Tabs */}
@@ -1220,7 +1240,6 @@ export default function DesignacaoReprovadosClient() {
                 <input type="text" placeholder="🔍 Buscar por empresa, documento ou responsável..." value={busca} onChange={e => setBusca(e.target.value)}
                   style={inputStyle({ flex: 1, minWidth: 240 })} />
                 <button onClick={limparFiltros} style={sm(btnGhost)}>Limpar filtros</button>
-                {!formOpen && <button onClick={abrirForm} style={{ ...btnPrimary, marginLeft: 'auto' }}>＋ Novo</button>}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -1277,7 +1296,7 @@ export default function DesignacaoReprovadosClient() {
                     {listaFiltrada.length === 0 ? (
                       <tr><td colSpan={7} style={{ padding: '50px 20px', textAlign: 'center', color: MUTED }}>
                         Nenhuma designação encontrada.<br />
-                        <small>Use &quot;＋ Novo&quot; após a verificação diária no Portal GT3.</small>
+                        <small>Use &quot;＋ Nova designação&quot; após a verificação diária no Portal GT3.</small>
                       </td></tr>
                     ) : listaFiltrada.map(d => (
                       <tr key={d.id} style={{ borderBottom: `1px solid ${BORDER}` }}>
