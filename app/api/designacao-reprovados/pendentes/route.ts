@@ -12,7 +12,7 @@ export async function GET() {
   const { data, error } = await admin
     .from('designacoes')
     .select('id, empresa, setores, data_verificacao, ciencia_por')
-    .contains('responsaveis', [caller.user.id])
+    .contains('responsaveis', JSON.stringify([caller.user.id]))
     .order('data_verificacao', { ascending: false })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
