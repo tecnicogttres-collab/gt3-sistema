@@ -334,6 +334,30 @@ export default function LoginsClient() {
     }
   }
 
+  /** Igual ao toggle de acesso acima, mas pro "aparece no Dashboard" — parte do que o
+   *  usuário já tem permitido (não de todos os módulos), já que não faz sentido mostrar
+   *  no dashboard algo que ele nem pode acessar. */
+  async function toggleUserModuloDashboard(u: UserRow, modId: string) {
+    const permitidos = u.modulos_permitidos ?? CONFIGURABLE_MODULES.map(m => m.id)
+    const currentList = u.modulos_dashboard ?? permitidos
+    const isRemoving = currentList.includes(modId)
+    const nextList = isRemoving ? currentList.filter(id => id !== modId) : [...currentList, modId]
+    const isFullSet = nextList.length === permitidos.length && permitidos.every(id => nextList.includes(id))
+    const next = isFullSet ? null : nextList
+
+    setUsers(prev => prev.map(row => (row.id === u.id ? { ...row, modulos_dashboard: next } : row)))
+
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modulos_dashboard: next }),
+    })
+    if (!res.ok) {
+      setUsers(prev => prev.map(row => (row.id === u.id ? { ...row, modulos_dashboard: u.modulos_dashboard } : row)))
+      alert('Erro ao atualizar dashboard — verifique sua conexão e permissões.')
+    }
+  }
+
   // ── Loading / seeding state ───────────────────────────────────
   if (seeding || profileLoading) {
     return (
@@ -392,6 +416,7 @@ export default function LoginsClient() {
           isAdmin={isAdmin}
           canManage={canManage}
           onToggle={toggleUserModulo}
+          onToggleDashboard={toggleUserModuloDashboard}
           onClose={() => setMatrixOpen(false)}
         />
       )}
