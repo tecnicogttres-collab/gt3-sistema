@@ -224,10 +224,6 @@ const tagSetorStyle: React.CSSProperties = {
   display: 'inline-block', background: PRIMARY_SOFT, color: PRIMARY, borderRadius: 999,
   padding: '3px 10px', fontSize: 11, fontWeight: 600, margin: '1.5px 3px 1.5px 0', whiteSpace: 'nowrap',
 }
-const tagDocStyle: React.CSSProperties = {
-  display: 'inline-block', background: BG, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 7,
-  padding: '3px 9px', fontSize: 11, margin: '1.5px 3px 1.5px 0', whiteSpace: 'nowrap',
-}
 const respChipStyle: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, background: BG, border: `1px solid ${BORDER}`,
   borderRadius: 999, padding: '3px 10px 3px 3px', fontSize: 12, margin: '2px 4px 2px 0',
@@ -359,8 +355,8 @@ export default function DesignacaoReprovadosClient() {
   // Caixa. Lido no estado inicial (não em efeito) porque só importa no primeiro carregamento.
   const searchParams = useSearchParams()
   const vemDeDeepLink = searchParams.get('caixa') === '1'
-  const [tab, setTab] = useState<'designacoes' | 'caixa' | 'geral' | 'config'>(
-    () => (vemDeDeepLink ? 'caixa' : 'designacoes')
+  const [tab, setTab] = useState<'geral' | 'caixa' | 'config'>(
+    () => (vemDeDeepLink ? 'caixa' : 'geral')
   )
   // Aba padrão por papel — gestor/admin cai em Visão geral, colaborador em Minha Caixa.
   // Só decide isso uma vez, assim que o perfil chega (é async); o deep-link acima tem
@@ -375,6 +371,7 @@ export default function DesignacaoReprovadosClient() {
   // ── Minha Caixa / Visão geral: sub-view e acordeão (nunca abre sozinho, só no clique) ──
   const [caixaSub, setCaixaSub]   = useState<'ativas' | 'historico'>('ativas')
   const [geralSub, setGeralSub]   = useState<'ativas' | 'historico'>('ativas')
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [caixaAberto, setCaixaAberto] = useState<string | null>(null)
   const [geralAberto, setGeralAberto] = useState<string | null>(null)
   const [geralColaborador, setGeralColaborador] = useState<string | null>(null)
@@ -506,35 +503,24 @@ export default function DesignacaoReprovadosClient() {
     return <span style={{ display: 'inline-block', background: `${s.cor}1A`, color: s.cor, borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>{s.nome}</span>
   }
 
-  // ── KPIs ──
-  const kpis = useMemo(() => ({
-    aguardando: designacoes.filter(d => d.tratativa === 'aguardando').length,
-    ciente:     designacoes.filter(d => d.tratativa === 'ciente').length,
-    andamento:  designacoes.filter(d => d.tratativa === 'andamento').length,
-    resolvido:  designacoes.filter(d => d.tratativa === 'resolvido').length,
-    total: designacoes.length,
-  }), [designacoes])
-
-  // ── Lista filtrada (Designações) ──
-  const listaFiltrada = useMemo(() => {
+  /** Filtros da Visão geral (setor/status/tratativa/responsável + busca livre) — usados
+   *  só ali, nunca afetam a Minha Caixa (que é pessoal, sem esses filtros). */
+  function passaFiltrosGeral(d: Designacao): boolean {
+    if (filtroSetores.length && !d.setores.some(s => filtroSetores.includes(s))) return false
+    if (filtroSituacoes.length && !(d.situacao_id && filtroSituacoes.includes(d.situacao_id))) return false
+    if (filtroTratativas.length && !filtroTratativas.includes(d.tratativa)) return false
+    if (filtroResponsaveis.length && !d.responsaveis.some(u => filtroResponsaveis.includes(u))) return false
     const b = busca.trim().toLowerCase()
-    return designacoes.filter(d => {
-      if (filtroSetores.length && !d.setores.some(s => filtroSetores.includes(s))) return false
-      if (filtroSituacoes.length && !(d.situacao_id && filtroSituacoes.includes(d.situacao_id))) return false
-      if (filtroTratativas.length && !filtroTratativas.includes(d.tratativa)) return false
-      if (filtroResponsaveis.length && !d.responsaveis.some(u => filtroResponsaveis.includes(u))) return false
-      if (b) {
-        const alvo = (
-          d.empresa + ' ' + d.motivo + ' ' +
-          d.documentos.map(getDocNome).join(' ') + ' ' +
-          d.responsaveis.map(getUsuarioNome).join(' ')
-        ).toLowerCase()
-        if (!alvo.includes(b)) return false
-      }
-      return true
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [designacoes, busca, filtroSetores, filtroSituacoes, filtroTratativas, filtroResponsaveis, documentos, usuarios])
+    if (b) {
+      const alvo = (
+        d.empresa + ' ' + d.motivo + ' ' +
+        d.documentos.map(getDocNome).join(' ') + ' ' +
+        d.responsaveis.map(getUsuarioNome).join(' ')
+      ).toLowerCase()
+      if (!alvo.includes(b)) return false
+    }
+    return true
+  }
 
   // ── Minha caixa ──
   const minhaCaixa = useMemo(() => designacoes.filter(d => d.responsaveis.includes(userId)), [designacoes, userId])
@@ -558,10 +544,33 @@ export default function DesignacaoReprovadosClient() {
   const minhaHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico.filter(d => d.responsaveis.includes(userId))), [designacoesHistorico, userId])
   const minhaAtual = caixaSub === 'ativas' ? minhaAtivas : minhaHistorico
 
-  const todasAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas), [designacoesAtivas])
-  const todasHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico), [designacoesHistorico])
+  // Visão geral: mesmo recorte por prazo, mas passando pelos filtros (setor/status/
+  // tratativa/responsável/busca) antes de agrupar — só essa aba é filtrável, não a Minha Caixa.
+  const designacoesAtivasFiltradas = useMemo(
+    () => designacoesAtivas.filter(passaFiltrosGeral),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [designacoesAtivas, filtroSetores, filtroSituacoes, filtroTratativas, filtroResponsaveis, busca, documentos, usuarios],
+  )
+  const designacoesHistoricoFiltradas = useMemo(
+    () => designacoesHistorico.filter(passaFiltrosGeral),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [designacoesHistorico, filtroSetores, filtroSituacoes, filtroTratativas, filtroResponsaveis, busca, documentos, usuarios],
+  )
+  const todasAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivasFiltradas), [designacoesAtivasFiltradas])
+  const todasHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistoricoFiltradas), [designacoesHistoricoFiltradas])
   const geralAtual = geralSub === 'ativas' ? todasAtivas : todasHistorico
-  const itensGeralAtual = geralSub === 'ativas' ? designacoesAtivas : designacoesHistorico
+  const itensGeralAtual = geralSub === 'ativas' ? designacoesAtivasFiltradas : designacoesHistoricoFiltradas
+
+  const filtrosGeralAtivosCount = filtroSetores.length + filtroSituacoes.length + filtroTratativas.length + filtroResponsaveis.length + (busca.trim() ? 1 : 0)
+
+  // KPIs da Visão geral — refletem o mesmo recorte (Ativas/Histórico + filtros) do resto da aba.
+  const kpis = useMemo(() => ({
+    aguardando: itensGeralAtual.filter(d => d.tratativa === 'aguardando').length,
+    ciente:     itensGeralAtual.filter(d => d.tratativa === 'ciente').length,
+    andamento:  itensGeralAtual.filter(d => d.tratativa === 'andamento').length,
+    resolvido:  itensGeralAtual.filter(d => d.tratativa === 'resolvido').length,
+    total: itensGeralAtual.length,
+  }), [itensGeralAtual])
 
   // Acordeão: nunca abre sozinho (só no clique) — e se o grupo que estava aberto sumir da
   // lista atual (ex.: mudou de sub-view, ou foi resolvido/saiu do prazo), o valor "efetivo"
@@ -639,9 +648,8 @@ export default function DesignacaoReprovadosClient() {
   function fecharForm() { setFormOpen(false) }
 
   /** Botão "＋ Nova designação" do cabeçalho — disponível em qualquer aba. O formulário
-   *  em si só existe dentro da aba Designações, então troca pra lá e já abre. */
+   *  aparece por cima do conteúdo da aba atual, não precisa trocar de aba pra abrir. */
   function abrirNovaDesignacao() {
-    setTab('designacoes')
     if (!formOpen) abrirForm()
   }
 
@@ -937,6 +945,7 @@ export default function DesignacaoReprovadosClient() {
               </span>
             )}
             <TratativaBadge t={d.tratativa} />
+            <button onClick={() => excluirDesignacao(d.id)} title="Excluir designação" style={btnDangerIcon}>🗑</button>
           </div>
         </div>
         <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
@@ -1047,9 +1056,8 @@ export default function DesignacaoReprovadosClient() {
       {/* Tabs */}
       <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '0 28px', display: 'flex', gap: 4 }}>
         {[
-          { id: 'designacoes' as const, label: '📋 Designações' },
-          { id: 'caixa' as const, label: `📥 Minha Caixa${minhaCaixaPendentes ? ` (${minhaCaixaPendentes})` : ''}` },
           { id: 'geral' as const, label: '🌐 Visão geral' },
+          { id: 'caixa' as const, label: `📥 Minha Caixa${minhaCaixaPendentes ? ` (${minhaCaixaPendentes})` : ''}` },
           { id: 'config' as const, label: '⚙️ Configurações' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -1065,18 +1073,9 @@ export default function DesignacaoReprovadosClient() {
       <div style={{ maxWidth: 1320, margin: '0 auto', padding: '24px 24px 60px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED }}>Carregando...</div>
-        ) : tab === 'designacoes' ? (
+        ) : (
           <>
-            {/* KPIs */}
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-              <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} />
-              <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} />
-              <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} />
-              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} />
-              <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} />
-            </div>
-
-            {/* Form inline */}
+            {/* Form inline — aparece por cima do conteúdo de qualquer aba, não existe mais uma aba própria pra isso */}
             {formOpen && (
               <div style={{ background: SURF, border: `1px solid ${BORDER}`, borderRadius: 16, boxShadow: '0 8px 24px rgba(20,30,60,.12)', marginBottom: 18, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1234,99 +1233,7 @@ export default function DesignacaoReprovadosClient() {
               </div>
             )}
 
-            {/* Toolbar */}
-            <div style={{ background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 14, marginBottom: 16, boxShadow: SHADOW }}>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-                <input type="text" placeholder="🔍 Buscar por empresa, documento ou responsável..." value={busca} onChange={e => setBusca(e.target.value)}
-                  style={inputStyle({ flex: 1, minWidth: 240 })} />
-                <button onClick={limparFiltros} style={sm(btnGhost)}>Limpar filtros</button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Setor</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {setoresAtivos.map(s => (
-                      <Flag key={s.id} small label={s.nome} on={filtroSetores.includes(s.id)}
-                        onClick={() => setFiltroSetores(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Status doc.</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {situacoesAtivas.map(s => (
-                      <Flag key={s.id} small label={s.nome} colorOn={s.cor} on={filtroSituacoes.includes(s.id)}
-                        onClick={() => setFiltroSituacoes(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Tratativa</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {TRAT_OPTIONS.map(t => (
-                      <Flag key={t.id} small label={t.label} colorOn={TRAT_COLORS[t.id]} on={filtroTratativas.includes(t.id)}
-                        onClick={() => setFiltroTratativas(prev => prev.includes(t.id) ? prev.filter(x => x !== t.id) : [...prev, t.id])} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Responsável</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {usuarios.map(u => (
-                      <Flag key={u.id} small label={u.nome?.trim() || 'Usuário'} on={filtroResponsaveis.includes(u.id)}
-                        onClick={() => setFiltroResponsaveis(prev => prev.includes(u.id) ? prev.filter(x => x !== u.id) : [...prev, u.id])} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tabela */}
-            <div style={{ background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', boxShadow: SHADOW }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#FAFCFE' }}>
-                      {['Empresa', 'Setor', 'Documentos', 'Status doc.', 'Responsáveis', 'Tratativa', ''].map(h => (
-                        <th key={h} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, fontWeight: 700, borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {listaFiltrada.length === 0 ? (
-                      <tr><td colSpan={7} style={{ padding: '50px 20px', textAlign: 'center', color: MUTED }}>
-                        Nenhuma designação encontrada.<br />
-                        <small>Use &quot;＋ Nova designação&quot; após a verificação diária no Portal GT3.</small>
-                      </td></tr>
-                    ) : listaFiltrada.map(d => (
-                      <tr key={d.id} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>
-                          <div style={{ fontWeight: 650 }}>{d.empresa}</div>
-                          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>{d.contratante ? d.contratante + ' · ' : ''}verif. {fmtData(d.data_verificacao)}</div>
-                        </td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>{d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}</td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>
-                          {d.documentos.map(x => <span key={x} style={tagDocStyle}>{getDocNome(x)}</span>)}
-                          {d.motivo && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>{d.motivo.slice(0, 70)}{d.motivo.length > 70 ? '…' : ''}</div>}
-                        </td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>{sitTag(d.situacao_id)}</td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>
-                          {d.responsaveis.map(u => (
-                            <span key={u} style={respChipStyle}><span style={avatarStyle}>{iniciais(getUsuarioNome(u))}</span>{getUsuarioNome(u)}</span>
-                          ))}
-                        </td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}><TratativaBadge t={d.tratativa} /></td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top', textAlign: 'right' }}>
-                          <button onClick={() => excluirDesignacao(d.id)} title="Excluir" style={btnDangerIcon}>🗑</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        ) : tab === 'caixa' ? (
+            {tab === 'caixa' ? (
           <div style={{ maxWidth: 900 }}>
             {minhaCaixaPendentes > 0 && (
               <div style={{
@@ -1362,6 +1269,18 @@ export default function DesignacaoReprovadosClient() {
                 <div style={{ fontSize: 12.5, color: MUTED }}>Por colaborador — clique no nome para ver as designações dele(a).</div>
               )}
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button onClick={() => setFiltrosAbertos(v => !v)} style={{
+                  ...(filtrosAbertos || filtrosGeralAtivosCount > 0 ? btnPrimary : btnGhost),
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                }}>
+                  ⚙ Filtros
+                  {filtrosGeralAtivosCount > 0 && (
+                    <span style={{
+                      background: filtrosAbertos || filtrosGeralAtivosCount > 0 ? 'rgba(255,255,255,.25)' : PRIMARY,
+                      color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 10.5, fontWeight: 700,
+                    }}>{filtrosGeralAtivosCount}</span>
+                  )}
+                </button>
                 <button onClick={() => setGeralSub('ativas')} style={geralSub === 'ativas' ? btnPrimary : btnGhost}>
                   Ativas {todasAtivas.length ? `(${todasAtivas.length})` : ''}
                 </button>
@@ -1369,6 +1288,70 @@ export default function DesignacaoReprovadosClient() {
                   🕘 Histórico {todasHistorico.length ? `(${todasHistorico.length})` : ''}
                 </button>
               </div>
+            </div>
+
+            {/* Painel de filtros — gavetinhas lado a lado, abre suave e filtra ao vivo (sem botão "aplicar") */}
+            {filtrosAbertos && (
+              <div className="gt3-slide-down" style={{
+                background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, boxShadow: SHADOW,
+                padding: 14, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12,
+              }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="text" placeholder="🔍 Buscar por empresa, documento ou responsável..." value={busca} onChange={e => setBusca(e.target.value)}
+                    style={inputStyle({ flex: 1, minWidth: 240 })} />
+                  {filtrosGeralAtivosCount > 0 && <button onClick={limparFiltros} style={sm(btnGhost)}>Limpar filtros</button>}
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Setor</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {setoresAtivos.map(s => (
+                        <Flag key={s.id} small label={s.nome} on={filtroSetores.includes(s.id)}
+                          onClick={() => setFiltroSetores(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
+                      ))}
+                      {setoresAtivos.length === 0 && <span style={{ fontSize: 11.5, color: MUTED }}>—</span>}
+                    </div>
+                  </div>
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Status do documento</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {situacoesAtivas.map(s => (
+                        <Flag key={s.id} small label={s.nome} colorOn={s.cor} on={filtroSituacoes.includes(s.id)}
+                          onClick={() => setFiltroSituacoes(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
+                      ))}
+                      {situacoesAtivas.length === 0 && <span style={{ fontSize: 11.5, color: MUTED }}>—</span>}
+                    </div>
+                  </div>
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Tratativa</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {TRAT_OPTIONS.map(t => (
+                        <Flag key={t.id} small label={t.label} colorOn={TRAT_COLORS[t.id]} on={filtroTratativas.includes(t.id)}
+                          onClick={() => setFiltroTratativas(prev => prev.includes(t.id) ? prev.filter(x => x !== t.id) : [...prev, t.id])} />
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Responsável</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {usuarios.map(u => (
+                        <Flag key={u.id} small label={u.nome?.trim() || 'Usuário'} on={filtroResponsaveis.includes(u.id)}
+                          onClick={() => setFiltroResponsaveis(prev => prev.includes(u.id) ? prev.filter(x => x !== u.id) : [...prev, u.id])} />
+                      ))}
+                      {usuarios.length === 0 && <span style={{ fontSize: 11.5, color: MUTED }}>—</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* KPIs — refletem Ativas/Histórico + filtros ativos */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+              <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} />
+              <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} />
+              <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} />
+              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} />
+              <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} />
             </div>
 
             {!geralColaborador ? (
@@ -1634,6 +1617,8 @@ export default function DesignacaoReprovadosClient() {
             </ConfigPanel>
 
           </div>
+            )}
+          </>
         )}
       </div>
 
