@@ -84,6 +84,56 @@ function iniciais(nome: string) {
   return nome.split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?'
 }
 
+/** Escapa um valor antes de injetá-lo em corpo HTML — evita que &/</> num nome de
+ *  empresa, setor ou documento corrompa a marcação ao montar o e-mail. */
+function escapeHtml(s: string): string {
+  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** Converte o corpo HTML do e-mail para texto puro — fallback ao copiar (text/plain)
+ *  para clientes que não aceitam o text/html do clipboard. */
+function htmlToPlainText(html: string): string {
+  if (typeof document === 'undefined') return html.replace(/<[^>]+>/g, '')
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return (div.innerText ?? div.textContent ?? '').trim()
+}
+
+/** "A", "A e B", "A, B e C" — usado na saudação do e-mail para listar os setores marcados. */
+function joinComE(itens: string[]): string {
+  const a = itens.filter(Boolean)
+  if (a.length === 0) return ''
+  if (a.length === 1) return a[0]
+  return a.slice(0, -1).join(', ') + ' e ' + a[a.length - 1]
+}
+
+/** Monta o corpo (HTML) do e-mail de designação a partir dos setores/documentos marcados —
+ *  usado tanto na pré-visualização ao vivo do formulário "+ Novo" quanto no card de cada
+ *  item na Minha Caixa. Um bloco em negrito+sublinhado por setor, com os documentos dele
+ *  listados em tópicos — texto se adapta sozinho a 1 ou mais setores/documentos. */
+function buildDesignacaoEmailHtml(
+  setorIds: string[], docIds: string[], motivo: string, setores: Setor[], documentos: Documento[],
+): string {
+  const setoresSel = setorIds.map(id => setores.find(s => s.id === id)).filter((s): s is Setor => !!s)
+  if (setoresSel.length === 0 || docIds.length === 0) return ''
+
+  const saudacao = `<div>Olá! Identificamos que você possui documentos de <b>${joinComE(setoresSel.map(s => escapeHtml(s.nome)))}</b> reprovados no Portal GT3.</div>`
+
+  const blocosSetor = setoresSel.map(s => {
+    const docs = documentos.filter(d => d.setor_id === s.id && docIds.includes(d.id))
+    if (!docs.length) return ''
+    const itens = docs.map(d => `<li>${escapeHtml(d.nome)}</li>`).join('')
+    return `<div style="font-weight:700;text-decoration:underline;margin-top:12px">${escapeHtml(s.nome)}</div><ul style="margin:6px 0 0 18px;padding:0">${itens}</ul>`
+  }).join('')
+
+  const motivoBloco = motivo.trim() ? `<div style="margin-top:12px">${escapeHtml(motivo.trim()).replace(/\n/g, '<br>')}</div>` : ''
+
+  const totalDocs = docIds.length
+  const fechamento = `<div style="margin-top:12px">Você precisa de alguma ajuda com ${totalDocs > 1 ? 'estes documentos' : 'este documento'}?</div>`
+
+  return saudacao + blocosSetor + motivoBloco + fechamento
+}
+
 // ─── Estilos reutilizáveis ─────────────────────────────────────────────────────
 
 function inputStyle(extra: React.CSSProperties = {}): React.CSSProperties {
@@ -282,6 +332,22 @@ export default function DesignacaoReprovadosClient() {
     toastTimer.current = setTimeout(() => setToast(t => ({ ...t, show: false })), 2800)
   }
 
+  /** Copia com formatação (text/html) e fallback em texto puro (text/plain) — preserva
+   *  negrito/sublinhado ao colar no cliente de e-mail. */
+  async function copiarEmailHtml(html: string) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([htmlToPlainText(html)], { type: 'text/plain' }),
+        }),
+      ])
+    } catch {
+      await navigator.clipboard.writeText(htmlToPlainText(html))
+    }
+    showToast('E-mail copiado.')
+  }
+
   // ── Load ──
   useEffect(() => {
     Promise.all([
@@ -348,6 +414,29 @@ export default function DesignacaoReprovadosClient() {
   // ── Minha caixa ──
   const minhaCaixa = useMemo(() => designacoes.filter(d => d.responsaveis.includes(userId)), [designacoes, userId])
   const minhaCaixaPendentes = minhaCaixa.filter(d => d.tratativa === 'aguardando').length
+
+  // Agrupada por dia + empresa — fica visualmente claro de qual empresa/dia é cada bloco
+  // quando o mesmo responsável tem designações de empresas diferentes na caixa.
+  const minhaCaixaAgrupada = useMemo(() => {
+    const ordenados = [...minhaCaixa].sort((a, b) =>
+      b.data_verificacao.localeCompare(a.data_verificacao) || a.empresa.localeCompare(b.empresa, 'pt-BR'))
+    const grupos: { key: string; data: string; empresa: string; itens: Designacao[] }[] = []
+    const map = new Map<string, { key: string; data: string; empresa: string; itens: Designacao[] }>()
+    for (const d of ordenados) {
+      const key = d.data_verificacao + '|' + d.empresa.trim().toLowerCase()
+      let g = map.get(key)
+      if (!g) { g = { key, data: d.data_verificacao, empresa: d.empresa, itens: [] }; map.set(key, g); grupos.push(g) }
+      g.itens.push(d)
+    }
+    return grupos
+  }, [minhaCaixa])
+
+  // ── Pré-visualização do e-mail (formulário "+ Novo") — monta sozinha conforme
+  // setor(es)/documento(s) vão sendo marcados, igual ao parecer do workflow-programas.
+  const previewEmailHtml = useMemo(
+    () => buildDesignacaoEmailHtml(fSetores, fDocumentos, fMotivo, setores, documentos),
+    [fSetores, fDocumentos, fMotivo, setores, documentos],
+  )
 
   // ── Duplicidade (form) ──
   const duplicidade = useMemo(() => {
@@ -769,6 +858,27 @@ export default function DesignacaoReprovadosClient() {
                       placeholder="Ex.: ASO do João vencido desde 10/09 — solicitar reagendamento e reenvio pelo portal..."
                       style={inputStyle({ width: '100%', resize: 'vertical' })} />
                   </div>
+
+                  {/* Pré-visualização do e-mail — monta sozinha conforme setor/documento vão sendo marcados */}
+                  <div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      ✉️ Pré-visualização do e-mail
+                      <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0, fontSize: 11, opacity: .75 }}>vai sendo escrito conforme você marca acima</span>
+                    </div>
+                    {previewEmailHtml ? (
+                      <div style={{ border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: '#FCFDFF' }}>
+                        <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT }}
+                          dangerouslySetInnerHTML={{ __html: previewEmailHtml }} />
+                        <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end' }}>
+                          <button onClick={() => copiarEmailHtml(previewEmailHtml)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12.5, color: MUTED, background: '#FAFBFD', border: '1.5px dashed #DFE7F1', borderRadius: RADIUS, padding: 17, textAlign: 'center' }}>
+                        Marque setor e documento acima para o e-mail ser montado automaticamente.
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ padding: '16px 22px', background: '#FBFCFE', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -904,45 +1014,73 @@ export default function DesignacaoReprovadosClient() {
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                 <p style={{ fontWeight: 600, margin: 0 }}>Nenhum item designado para você.</p>
               </div>
-            ) : minhaCaixa.map(d => {
-              const jaCiente = d.ciencia_por.includes(userId)
-              return (
-                <div key={d.id} style={{
-                  background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
-                  borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
-                  opacity: d.tratativa === 'resolvido' ? .78 : 1,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700 }}>{d.empresa}</div>
-                      <div style={{ fontSize: 12, color: MUTED, marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}
-                        {sitTag(d.situacao_id)}
-                        <span>· verif. {fmtData(d.data_verificacao)} · por {getUsuarioNome(d.criado_por)}</span>
+            ) : minhaCaixaAgrupada.map(grupo => (
+              <div key={grupo.key} style={{ marginBottom: 22 }}>
+                {/* Divisor visual: dia + empresa — fica claro de qual bloco é cada item quando há mais de uma empresa/dia */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 10px', paddingTop: 4 }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 7, background: PRIMARY, color: '#fff',
+                    borderRadius: 999, padding: '5px 13px 5px 11px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                  }}>📅 {fmtData(grupo.data)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>🏢 {grupo.empresa}</span>
+                  <div style={{ flex: 1, height: 1, background: BORDER }} />
+                  <span style={{ fontSize: 11, color: MUTED }}>{grupo.itens.length} item(ns)</span>
+                </div>
+
+                {grupo.itens.map(d => {
+                  const jaCiente = d.ciencia_por.includes(userId)
+                  const emailHtml = buildDesignacaoEmailHtml(d.setores, d.documentos, d.motivo, setores, documentos)
+                  return (
+                    <div key={d.id} style={{
+                      background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
+                      borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
+                      opacity: d.tratativa === 'resolvido' ? .78 : 1,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, color: MUTED, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}
+                          {sitTag(d.situacao_id)}
+                          <span>· por {getUsuarioNome(d.criado_por)}</span>
+                        </div>
+                        <TratativaBadge t={d.tratativa} />
+                      </div>
+                      <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
+                        <b>{d.documentos.map(getDocNome).join(' · ')}</b>
+                        {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
+                      </div>
+
+                      {/* E-mail pronto para encaminhar à empresa, já montado a partir do setor/documentos desta designação */}
+                      {emailHtml && (
+                        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+                          <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}` }}>
+                            ✉️ E-mail pronto
+                          </div>
+                          <div style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT, background: '#FCFDFF' }}
+                            dangerouslySetInnerHTML={{ __html: emailHtml }} />
+                          <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button onClick={() => copiarEmailHtml(emailHtml)} style={sm(btnGhost)}>📋 Copiar e-mail</button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {!jaCiente ? (
+                          <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Dar ciência</button>
+                        ) : (
+                          <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
+                        )}
+                        {jaCiente && d.tratativa !== 'resolvido' && (
+                          <>
+                            <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
+                            <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
+                          </>
+                        )}
                       </div>
                     </div>
-                    <TratativaBadge t={d.tratativa} />
-                  </div>
-                  <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
-                    <b>{d.documentos.map(getDocNome).join(' · ')}</b>
-                    {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {!jaCiente ? (
-                      <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Dar ciência</button>
-                    ) : (
-                      <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
-                    )}
-                    {jaCiente && d.tratativa !== 'resolvido' && (
-                      <>
-                        <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
-                        <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            ))}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
