@@ -17,11 +17,15 @@ export async function GET() {
   if (!['colaborador', 'trainee'].includes(profile?.papel ?? ''))
     return Response.json(null)
 
+  const now = new Date().toISOString()
+
   const { data } = await admin
     .from('pdi_ciclos')
     .select('id, pdi_id, data_conversa')
     .eq('colaborador_id', user.id)
+    .eq('status', 'ativo')
     .not('data_conversa', 'is', null)
+    .gte('data_conversa', now)
     .or('autoavaliacao_salva.is.null,autoavaliacao_salva.eq.false')
     .limit(1)
 
