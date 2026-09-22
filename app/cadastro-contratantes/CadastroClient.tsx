@@ -894,7 +894,7 @@ function FieldCard({
 
       <div style={{ padding: f.type === 'table' ? 0 : '8px 12px' }}>
         {f.type === 'text' ? (
-          <TextFieldLines label={f.label} value={f.value} onCopy={onCopy} />
+          <TextFieldLines value={f.value} onCopy={onCopy} />
         ) : (
           <TableFieldView
             field={f}
@@ -911,7 +911,7 @@ function FieldCard({
 
 // ── Text lines ─────────────────────────────────────────────────────────────
 
-function TextFieldLines({ label, value, onCopy }: { label: string; value: string; onCopy: (t: string) => void }) {
+function TextFieldLines({ value, onCopy }: { value: string; onCopy: (t: string) => void }) {
   if (!value || value.trim() === '') {
     return (
       <span style={{ color: '#CBD5E0', fontStyle: 'italic', fontSize: 13 }}>
@@ -932,9 +932,8 @@ function TextFieldLines({ label, value, onCopy }: { label: string; value: string
     }
   })
 
-  const isEmailField = /E[- ]?MAIL/i.test(label) || /AUTORIZA/i.test(label)
   const allEmails = parts.filter(p => p.isMail).map(p => p.text)
-  const showCopyAll = isEmailField && allEmails.length >= 2
+  const showCopyAll = allEmails.length >= 2
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
