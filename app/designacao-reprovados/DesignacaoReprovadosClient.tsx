@@ -424,6 +424,7 @@ export default function DesignacaoReprovadosClient() {
   const [dragDocId, setDragDocId]             = useState<string | null>(null)
   const [dragSobrePasta, setDragSobrePasta]   = useState<string | null>(null)
   const [novoDocPorPasta, setNovoDocPorPasta] = useState<Record<string, string>>({})
+  const [novoDocInline, setNovoDocInline]     = useState<Record<string, string>>({})
   const [novaEmpresaNome, setNovaEmpresaNome] = useState('')
   const [novaEmpresaContratante, setNovaEmpresaContratante] = useState('')
   const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
@@ -847,6 +848,25 @@ export default function DesignacaoReprovadosClient() {
     if (res.ok) { const created = await res.json(); setDocumentos(prev => [...prev, created]); setNovoDocNome(''); showToast('Documento adicionado a ' + getSetorNome(cfgSetorEfetivo) + '.') }
     else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao adicionar documento.') }
   }
+  /** Cadastra um documento novo direto do formulário de Nova designação (sem passar por
+   *  Configurações) e já marca ele como flegado, pra seguir o preenchimento sem interrupção. */
+  async function addDocumentoInlineForm(setorId: string) {
+    const nome = (novoDocInline[setorId] || '').trim()
+    if (!nome) { showToast('Informe o documento.'); return }
+    const res = await fetch('/api/designacao-reprovados/documentos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setor_id: setorId, nome }),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      setDocumentos(prev => [...prev, created])
+      setNovoDocInline(prev => ({ ...prev, [setorId]: '' }))
+      setFDocumentos(prev => [...prev, created.id])
+      showToast('Documento "' + nome + '" cadastrado e adicionado.')
+    } else {
+      const e = await res.json().catch(() => ({}))
+      showToast((e as { error?: string }).error ?? 'Erro ao adicionar documento.')
+    }
+  }
   async function toggleDocAtivo(d: Documento) {
     const res = await fetch(`/api/designacao-reprovados/documentos/${d.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !d.ativo }),
@@ -1256,14 +1276,32 @@ export default function DesignacaoReprovadosClient() {
                       const docs = documentos.filter(d => d.setor_id === sId && d.ativo)
                       const pastasDoSetor = pastasDoc.filter(p => p.setor_id === sId).sort((a, b) => a.ordem - b.ordem)
                       const semPasta = docs.filter(d => !d.pasta_id || !pastasDoSetor.some(p => p.id === d.pasta_id))
+                      const addDocInlineRow = (
+                        <div style={{ display: 'flex', gap: 8, marginTop: docs.length > 0 ? 10 : 0 }}>
+                          <input
+                            value={novoDocInline[sId] || ''}
+                            onChange={e => setNovoDocInline(prev => ({ ...prev, [sId]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') addDocumentoInlineForm(sId) }}
+                            placeholder="Novo documento neste setor..."
+                            style={inputStyle({ flex: 1, fontSize: 12.5, padding: '7px 10px' })}
+                          />
+                          <button onClick={() => addDocumentoInlineForm(sId)} style={sm(btnAccent)}>＋ Add</button>
+                        </div>
+                      )
                       return (
                         <SubBlock key={sId} title={getSetorNome(sId)} hint={`${docs.length} documento(s)`}>
                           {docs.length === 0 ? (
-                            <Alerta>Nenhum documento cadastrado para &quot;{getSetorNome(sId)}&quot;. Cadastre em ⚙️ Configurações → Documentos por setor.</Alerta>
+                            <>
+                              <Alerta>Nenhum documento cadastrado para &quot;{getSetorNome(sId)}&quot;. Cadastre abaixo ou em ⚙️ Configurações → Documentos por setor.</Alerta>
+                              {addDocInlineRow}
+                            </>
                           ) : pastasDoSetor.length === 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                              {docs.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
-                            </div>
+                            <>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                {docs.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
+                              </div>
+                              {addDocInlineRow}
+                            </>
                           ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                               {pastasDoSetor.map(p => {
@@ -1286,6 +1324,7 @@ export default function DesignacaoReprovadosClient() {
                                   </div>
                                 </div>
                               )}
+                              {addDocInlineRow}
                             </div>
                           )}
                         </SubBlock>
