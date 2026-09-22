@@ -35,6 +35,7 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    let cleanup = () => {}
 
     async function load() {
       try {
@@ -48,32 +49,40 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
     }
     load()
 
-    const channel = supabase
-      .channel('modulos-config-realtime')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'modulos_config' },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            const oldId = (payload.old as { id?: string })?.id
-            if (!oldId) return
-            setOverrides(prev => {
-              if (!(oldId in prev)) return prev
-              const next = { ...prev }
-              delete next[oldId]
-              return next
-            })
-          } else {
-            const row = payload.new as { id?: string; label: string | null; color: string | null }
-            if (!row?.id) return
-            setOverrides(prev => ({ ...prev, [row.id!]: { label: row.label, color: row.color } }))
+    // O RLS de modulos_config só libera pra role "authenticated" — assinar o canal antes da
+    // sessão estar anexada ao socket deixa ele "SUBSCRIBED" mas nunca entrega evento nenhum
+    // (broadcast fica bloqueado em silêncio). Por isso espera a sessão carregar primeiro,
+    // igual já é feito em outros canais do sistema (ex.: DashboardSidebar).
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user || !mounted) return
+      const channel = supabase
+        .channel('modulos-config-realtime')
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'modulos_config' },
+          (payload) => {
+            if (payload.eventType === 'DELETE') {
+              const oldId = (payload.old as { id?: string })?.id
+              if (!oldId) return
+              setOverrides(prev => {
+                if (!(oldId in prev)) return prev
+                const next = { ...prev }
+                delete next[oldId]
+                return next
+              })
+            } else {
+              const row = payload.new as { id?: string; label: string | null; color: string | null }
+              if (!row?.id) return
+              setOverrides(prev => ({ ...prev, [row.id!]: { label: row.label, color: row.color } }))
+            }
           }
-        }
-      )
-      .subscribe()
+        )
+        .subscribe()
+      cleanup = () => { supabase.removeChannel(channel) }
+    })
 
     return () => {
       mounted = false
-      supabase.removeChannel(channel)
+      cleanup()
     }
   }, [supabase])
 
