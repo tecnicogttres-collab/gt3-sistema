@@ -13,13 +13,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const update: Record<string, unknown> = {}
   if (body.nome !== undefined) update.nome = String(body.nome).trim()
   if (body.ativo !== undefined) update.ativo = Boolean(body.ativo)
+  if (body.pasta_id !== undefined) update.pasta_id = body.pasta_id || null
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('desig_documentos')
     .update(update)
     .eq('id', id)
-    .select('id, setor_id, nome, ativo, created_at')
+    .select('id, setor_id, pasta_id, nome, ativo, created_at')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

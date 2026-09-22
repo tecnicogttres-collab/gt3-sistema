@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
@@ -606,7 +606,7 @@ export default function AtasContratantesClient() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  const tree = buildTree(atas)
+  const tree = useMemo(() => buildTree(atas), [atas])
   const arquivadasCount = tree.filter(c => arquivados.has(c.cliente)).length
   const visibleTree = showArquivados ? tree : tree.filter(c => !arquivados.has(c.cliente))
   const isSearchActive = searchQuery.trim().length > 0

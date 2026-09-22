@@ -9,14 +9,21 @@ export async function GET() {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('revisoes_docs')
-    .select('id, nome, criado_por, criado_por_nome, created_at, dados')
-    .order('created_at', { ascending: false })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  const PAGE = 1000
+  let data: { id: string; nome: string; criado_por: string; criado_por_nome: string | null; created_at: string; dados: { registros?: RegRow[]; campos?: unknown[]; onde_parei?: string; onde_parei_at?: string; status?: 'ativa' | 'finalizada'; finalizada_at?: string } | null }[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data: page, error } = await admin
+      .from('revisoes_docs')
+      .select('id, nome, criado_por, criado_por_nome, created_at, dados')
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    data = data.concat(page ?? [])
+    if (!page || page.length < PAGE) break
+  }
 
-  const result = (data ?? []).map(r => {
+  const result = data.map(r => {
     const registros: RegRow[] = (r.dados?.registros ?? [])
     return {
       id: r.id, nome: r.nome,

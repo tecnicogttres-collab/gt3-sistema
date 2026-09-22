@@ -2,20 +2,28 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import { getCaller } from '../../lib/api-helpers'
 
-const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, criado_por, created_at, updated_at'
+const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, criado_por, created_at, updated_at'
 
 export async function GET() {
   const caller = await getCaller()
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('designacoes')
-    .select(SELECT)
-    .order('created_at', { ascending: false })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(data ?? [])
+  const PAGE = 1000
+  let all: Record<string, unknown>[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('designacoes')
+      .select(SELECT)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    all = all.concat(data ?? [])
+    if (!data || data.length < PAGE) break
+  }
+
+  return Response.json(all)
 }
 
 export async function POST(req: NextRequest) {

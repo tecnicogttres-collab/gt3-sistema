@@ -2,13 +2,18 @@
 // de Lembretes e pelo aviso diário no AppShell, para os dois concordarem sobre
 // o que conta como "atrasado".
 
-export const PERIODS = ['unico', 'diario', 'semanal', 'mensal', 'trimestral', 'semestral', 'anual'] as const
+export const PERIODS = ['unico', 'diario', 'semanal', 'mensal', 'trimestral', 'semestral', 'anual', 'mensal_dia_semana'] as const
 export type Period = typeof PERIODS[number]
 
 export type LembreteOcorrencia = {
   periodo: Period
   data_inicio: string
   hora_inicio?: string | null
+  // Só usados quando periodo === 'mensal_dia_semana' (ex.: 3ª segunda-feira do mês).
+  // "Toda segunda-feira" simples é só 'semanal' com data_inicio numa segunda — não
+  // precisa desses campos.
+  dia_semana?: number | null     // 0=Domingo ... 6=Sábado
+  semana_ordinal?: number | null // 1,2,3,4 ou -1 (última ocorrência do mês)
 }
 
 function parseDate(s: string): Date {
@@ -20,6 +25,23 @@ function fmtDateStr(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/** Data do N-ésimo dia da semana de um mês (ex.: 3ª segunda-feira) — ordinal 1 a 4, ou
+ *  -1 para a última ocorrência daquele dia da semana no mês. Retorna null se o ordinal
+ *  pedido não existir nesse mês (ex.: 5ª semana). */
+export function nthWeekdayOfMonth(year: number, month: number, weekday: number, ordinal: number): Date | null {
+  if (ordinal === -1) {
+    const last = new Date(year, month + 1, 0)
+    const diff = (last.getDay() - weekday + 7) % 7
+    last.setDate(last.getDate() - diff)
+    return last
+  }
+  const first = new Date(year, month, 1)
+  const diff = (weekday - first.getDay() + 7) % 7
+  const day = 1 + diff + (ordinal - 1) * 7
+  const result = new Date(year, month, day)
+  return result.getMonth() === month ? result : null
 }
 
 // Data (YYYY-MM-DD) em que este lembrete ocorre no mês/ano informado, ou null
@@ -36,6 +58,12 @@ export function findMonthOccurrence(r: LembreteOcorrencia, year: number, month: 
   if (r.periodo === 'diario') {
     const day = start > mStart ? start : new Date(mStart)
     return day <= mEnd ? fmtDateStr(day) : null
+  }
+  if (r.periodo === 'mensal_dia_semana') {
+    if (r.dia_semana == null || r.semana_ordinal == null) return null
+    const occ = nthWeekdayOfMonth(year, month, r.dia_semana, r.semana_ordinal)
+    if (!occ || occ < start) return null
+    return fmtDateStr(occ)
   }
 
   const cur = new Date(start)

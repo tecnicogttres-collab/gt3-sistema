@@ -1,4 +1,4 @@
-import { getAuthUser } from '../../../lib/api-helpers'
+import { getAuthUser, getActiveProfileIds } from '../../../lib/api-helpers'
 import { createAdminClient } from '../../../lib/supabase-admin'
 
 export async function GET() {
@@ -6,11 +6,11 @@ export async function GET() {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('profiles')
-    .select('id, nome, usuario, papel')
-    .order('nome', { ascending: true })
+  const [{ data, error }, ativos] = await Promise.all([
+    admin.from('profiles').select('id, nome, usuario, papel').order('nome', { ascending: true }),
+    getActiveProfileIds(admin),
+  ])
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json(data ?? [])
+  return Response.json((data ?? []).filter(p => ativos.has(p.id)))
 }

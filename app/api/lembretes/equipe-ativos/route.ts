@@ -16,7 +16,7 @@ export async function GET() {
 
   const [{ data: profiles }, { data: lembretes }, { data: historico }] = await Promise.all([
     admin.from('profiles').select('id, papel'),
-    admin.from('lembretes').select('id, periodo, data_inicio, hora_inicio, concluido, criado_por'),
+    admin.from('lembretes').select('id, periodo, data_inicio, hora_inicio, dia_semana, semana_ordinal, concluido, criado_por'),
     admin.from('lembretes_historico').select('lembrete_id, usuario_id').eq('mes_referencia', mesRef),
   ])
 

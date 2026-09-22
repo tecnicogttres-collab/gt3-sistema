@@ -59,3 +59,32 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   return Response.json({ success: true })
 }
+
+/** Exclusão definitiva do login — apaga o usuário do Supabase Auth, o que já
+ *  derruba junto (ON DELETE CASCADE) a linha em profiles e tudo que depende
+ *  dela (histórico, notificações, vínculo de aniversário etc.). PDI é o único
+ *  módulo desenhado pra sobreviver a isso: pdis.colaborador_id e
+ *  pdi_ciclos.colaborador_id são ON DELETE SET NULL, então o conteúdo do PDI
+ *  (nome, ciclos, ações) continua intacto, só perde o vínculo com o login. */
+export async function DELETE(_request: NextRequest, context: RouteContext) {
+  const caller = await getCaller()
+  if (!caller.role || !['gestor', 'admin'].includes(caller.role)) {
+    return Response.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { id } = await context.params
+  const admin = createAdminClient()
+
+  const { data: targetProfile } = await admin.from('profiles').select('papel').eq('id', id).single()
+  if (targetProfile?.papel === 'admin' && caller.id !== id) {
+    return Response.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (caller.id === id) {
+    return Response.json({ error: 'Você não pode excluir sua própria conta' }, { status: 400 })
+  }
+
+  const { error } = await admin.auth.admin.deleteUser(id)
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  return Response.json({ success: true })
+}

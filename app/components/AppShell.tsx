@@ -493,7 +493,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!mounted || !res.ok) return
-        const data: Array<{ data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual'; hora_inicio: string | null; concluido: boolean; confirmado?: boolean; criado_por: string | null }> = await res.json()
+        const data: Array<{ data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'mensal_dia_semana'; hora_inicio: string | null; dia_semana?: number | null; semana_ordinal?: number | null; concluido: boolean; confirmado?: boolean; criado_por: string | null }> = await res.json()
         const today = new Date().toISOString().split('T')[0]
         const snoozedAte = getLembreteSnoozedAte(userId)
         if (snoozedAte && today <= snoozedAte) return
@@ -524,10 +524,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     let pollTimer: ReturnType<typeof setInterval> | null = null
     function startPoll() {
       if (pollTimer !== null) return
+      // Backstop pro realtime abaixo (que já cobre pdi_ciclos ao vivo) — não precisa ser tão frequente.
       pollTimer = setInterval(() => {
         checkUnseenPdiConversa()
         checkPdiNotif()
-      }, 30_000)
+      }, 120_000)
     }
     function stopPoll() {
       if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null }

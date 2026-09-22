@@ -10,20 +10,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json()
-  const patch: Record<string, string> = {}
+  const update: Record<string, unknown> = {}
   if (typeof body.nome === 'string') {
     if (!body.nome.trim()) return Response.json({ error: 'Nome obrigatório' }, { status: 400 })
-    patch.nome = body.nome.trim()
+    update.nome = body.nome.trim()
   }
-  if (typeof body.contratante === 'string') patch.contratante = body.contratante.trim()
-  if (typeof body.email === 'string') patch.email = body.email.trim()
+  if (typeof body.ordem === 'number') update.ordem = body.ordem
 
   const admin = createAdminClient()
   const { data, error } = await admin
-    .from('desig_empresas')
-    .update(patch)
+    .from('desig_pastas_documento')
+    .update(update)
     .eq('id', id)
-    .select('id, nome, contratante, email, created_at')
+    .select('id, setor_id, nome, ordem, created_at')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
@@ -35,8 +34,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const caller = await requireGestorAdmin()
   if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
+  // Documentos dentro da pasta não são excluídos — ficam "sem pasta" (ON DELETE SET NULL).
   const admin = createAdminClient()
-  const { error } = await admin.from('desig_empresas').delete().eq('id', id)
+  const { error } = await admin.from('desig_pastas_documento').delete().eq('id', id)
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return new Response(null, { status: 204 })
 }

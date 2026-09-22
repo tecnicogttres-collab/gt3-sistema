@@ -7,13 +7,21 @@ export async function GET() {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('workflow_programas_analises')
-    .select('id, empresa, cnpj, finalizada, data_final, criado_por, criado_por_nome, created_at, updated_at, dados')
-    .order('updated_at', { ascending: false })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json((data ?? []).map(r => ({ ...r, minha: r.criado_por === user.id })))
+  const PAGE = 1000
+  let all: Record<string, unknown>[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from('workflow_programas_analises')
+      .select('id, empresa, cnpj, finalizada, data_final, criado_por, criado_por_nome, created_at, updated_at, dados')
+      .order('updated_at', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    all = all.concat(data ?? [])
+    if (!data || data.length < PAGE) break
+  }
+
+  return Response.json(all.map(r => ({ ...r, minha: r.criado_por === user.id })))
 }
 
 export async function POST(req: NextRequest) {

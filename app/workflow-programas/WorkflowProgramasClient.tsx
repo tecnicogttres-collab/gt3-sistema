@@ -1236,6 +1236,17 @@ export default function WorkflowProgramasClient() {
     setView(v)
   }
 
+  // Abre direto em "Nova análise" ao entrar no módulo — assim que o catálogo carrega
+  // (novaAnalise() depende dele). Só na entrada: não mexe mais depois que a pessoa navega.
+  const abriuEmNovaAnalise = useRef(false)
+  useEffect(() => {
+    if (abriuEmNovaAnalise.current || !catalog) return
+    abriuEmNovaAnalise.current = true
+    novaAnalise()
+    setView('nova')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog])
+
   /** Ao sair do campo "Empresa prestadora" numa análise nova (ainda sem draftId), avisa se
    *  já existe empresa com o mesmo nome no banco (ignorando espaço e maiúscula/minúscula) —
    *  pra não ficar a mesma empresa duplicada no banco de dados. */
@@ -2252,18 +2263,20 @@ export default function WorkflowProgramasClient() {
 
   if (loading || !catalog) return <div style={{ padding: 40, textAlign: 'center', color: MU }}>Carregando…</div>
 
-  const MENU: { g?: string; k?: View; t?: string; i?: string }[] = [
-    { g: 'Operação' },
+  // Tela inicial só com o que é produtivo no dia a dia — Contratantes/Itens/Textos/
+  // Configurações viraram um grupo à parte, acessado pela engrenagem no canto.
+  const MENU_PRINCIPAL: { k: View; t: string; i: string }[] = [
     { k: 'analises', t: 'Em andamento', i: '📋' },
     { k: 'nova', t: 'Nova análise', i: '✚' },
     { k: 'banco', t: 'Banco de dados', i: '🗄️' },
-    { g: 'Bases' },
+  ]
+  const MENU_CONFIG: { k: View; t: string; i: string }[] = [
+    { k: 'config', t: 'Padrões', i: '⚙️' },
     { k: 'contratantes', t: 'Contratantes', i: '🏭' },
     { k: 'itens', t: 'Itens de checklist', i: '☑️' },
     { k: 'textos', t: 'Textos', i: '✉️' },
-    { g: 'Sistema' },
-    { k: 'config', t: 'Configurações', i: '⚙️' },
   ]
+  const dentroDaConfig = (['config', 'contratantes', 'itens', 'textos'] as View[]).includes(view)
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'inherit', color: TX }}>
@@ -2284,17 +2297,26 @@ export default function WorkflowProgramasClient() {
           Isso tira qualquer ambiguidade sobre "sticky relativo a quê". */}
       <div style={{ flexShrink: 0, background: '#F4F6FA', borderBottom: `1px solid ${LINE}` }}>
         <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 28px 18px' }}>
-          <div style={{ marginBottom: 18 }}>
-            <h1 style={{ margin: '0 0 3px', fontSize: 21, fontWeight: 700 }}>Workflow Programas</h1>
-            <p style={{ margin: 0, color: MU, fontSize: 13 }}>Acompanhamento de análise documental PGR / PCMSO / LTCAT por contratante.</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
+            <div>
+              <h1 style={{ margin: '0 0 3px', fontSize: 21, fontWeight: 700 }}>Workflow Programas</h1>
+              <p style={{ margin: 0, color: MU, fontSize: 13 }}>Acompanhamento de análise documental PGR / PCMSO / LTCAT por contratante.</p>
+            </div>
+            <button onClick={() => go('config')} title="Configurações — Contratantes, Itens de checklist, Textos e Padrões"
+              style={{
+                flexShrink: 0, width: 38, height: 38, borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 16,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: dentroDaConfig ? P : '#fff', color: dentroDaConfig ? '#fff' : TX,
+                boxShadow: dentroDaConfig ? 'none' : `inset 0 0 0 1px ${LINE}`,
+              }}>
+              ⚙️
+            </button>
           </div>
 
-          {/* sub-nav */}
+          {/* sub-nav — só o produtivo do dia a dia */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-            {MENU.map((m, idx) => m.g ? (
-              <span key={idx} style={{ fontSize: 10.5, letterSpacing: '.1em', color: MU, textTransform: 'uppercase', padding: '0 8px', marginLeft: idx ? 8 : 0 }}>{m.g}</span>
-            ) : (
-              <button key={idx} onClick={() => go(m.k as View)} style={{
+            {MENU_PRINCIPAL.map(m => (
+              <button key={m.k} onClick={() => go(m.k)} style={{
                 border: 'none', cursor: 'pointer', padding: '7px 13px', borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
                 background: view === m.k ? P : '#fff', color: view === m.k ? '#fff' : TX,
                 fontWeight: view === m.k ? 600 : 400, boxShadow: view === m.k ? 'none' : `inset 0 0 0 1px ${LINE}`,
@@ -2303,6 +2325,22 @@ export default function WorkflowProgramasClient() {
               </button>
             ))}
           </div>
+
+          {/* sub-nav interno de Configurações — só aparece quando você entra por lá */}
+          {dentroDaConfig && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${LINE}` }}>
+              <span style={{ fontSize: 10.5, letterSpacing: '.1em', color: MU, textTransform: 'uppercase', padding: '0 8px 0 0' }}>Configurações</span>
+              {MENU_CONFIG.map(m => (
+                <button key={m.k} onClick={() => go(m.k)} style={{
+                  border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 8, fontSize: 12.5, fontFamily: 'inherit',
+                  background: view === m.k ? P : '#fff', color: view === m.k ? '#fff' : TX,
+                  fontWeight: view === m.k ? 600 : 400, boxShadow: view === m.k ? 'none' : `inset 0 0 0 1px ${LINE}`,
+                }}>
+                  <span style={{ marginRight: 5 }}>{m.i}</span>{m.t}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

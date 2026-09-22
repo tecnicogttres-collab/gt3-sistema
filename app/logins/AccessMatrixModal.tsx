@@ -21,7 +21,7 @@ const PAPEL_COLORS: Record<string, { bg: string; color: string }> = {
 }
 
 export default function AccessMatrixModal({
-  users, modules, currentUserId, isAdmin, canManage, onToggle, onClose,
+  users, modules, currentUserId, isAdmin, canManage, onToggle, onToggleDashboard, onClose,
 }: {
   users: UserRow[]
   modules: Module[]
@@ -29,8 +29,14 @@ export default function AccessMatrixModal({
   isAdmin: boolean
   canManage: boolean
   onToggle: (user: UserRow, modId: string) => Promise<void>
+  onToggleDashboard: (user: UserRow, modId: string) => Promise<void>
   onClose: () => void
 }) {
+  // "Acesso" edita modulos_permitidos (quem pode entrar no módulo); "Dashboard" edita
+  // modulos_dashboard (quais módulos aparecem no mapa de cards da Home) — mesma matriz,
+  // só troca qual campo é lido/gravado, pra dar pra fazer os dois de uma vez sem sair daqui.
+  const [modo, setModo] = useState<'acesso' | 'dashboard'>('acesso')
+  const onToggleAtivo = modo === 'acesso' ? onToggle : onToggleDashboard
   const [search, setSearch] = useState('')
   const [pending, setPending] = useState<string | null>(null) // `${userId}|${modId}` em voo
   // Destaque: clicar no nome de um usuário ou no cabeçalho de um módulo deixa
@@ -70,7 +76,16 @@ export default function AccessMatrixModal({
 
   const [grantAllPending, setGrantAllPending] = useState<string | null>(null)
 
-  /** Concede um módulo pra todo mundo que ainda não tem — não mexe em quem já tem nem em admin protegido. */
+  /** Conjunto habilitado pro modo atual — acesso (modulos_permitidos) ou dashboard
+   *  (modulos_dashboard, caindo pro que já é permitido quando null). */
+  function enabledIdsFor(u: UserRow): string[] {
+    const permitidos = u.modulos_permitidos ?? orderedModules.map(m => m.id)
+    if (modo === 'acesso') return permitidos
+    return u.modulos_dashboard ?? permitidos
+  }
+
+  /** Concede/mostra um módulo pra todo mundo que ainda não tem — não mexe em quem já tem
+   *  nem em admin protegido. Vale tanto pra "acesso" quanto pra "dashboard", conforme o modo. */
   async function grantModuleToAll(modId: string) {
     if (!canManage) return
     setGrantAllPending(modId)
@@ -78,10 +93,9 @@ export default function AccessMatrixModal({
       const targets = users.filter(u => {
         const isProtectedAdmin = u.papel === 'admin' && currentUserId !== u.id
         if (isProtectedAdmin) return false
-        const enabledIds = u.modulos_permitidos ?? orderedModules.map(m => m.id)
-        return !enabledIds.includes(modId)
+        return !enabledIdsFor(u).includes(modId)
       })
-      await Promise.all(targets.map(u => onToggle(u, modId)))
+      await Promise.all(targets.map(u => onToggleAtivo(u, modId)))
     } finally {
       setGrantAllPending(prev => (prev === modId ? null : prev))
     }
@@ -93,7 +107,7 @@ export default function AccessMatrixModal({
     const key = `${u.id}|${modId}`
     setPending(key)
     try {
-      await onToggle(u, modId)
+      await onToggleAtivo(u, modId)
     } finally {
       setPending(prev => (prev === key ? null : prev))
     }
@@ -111,12 +125,36 @@ export default function AccessMatrixModal({
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 12 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>🗂️ Mapa de acessos por módulo</h2>
-            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: '#6B7A99' }}>
-              Quem tem acesso a cada módulo. {canManage ? 'Clique numa célula para conceder ou revogar o acesso.' : 'Somente visualização.'}
+            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>
+              🗂️ {modo === 'acesso' ? 'Mapa de acessos por módulo' : 'Módulos no Dashboard por usuário'}
+            </h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: '#6B7A90' }}>
+              {modo === 'acesso'
+                ? 'Quem tem acesso a cada módulo.'
+                : 'Quais módulos aparecem no mapa de cards da Home de cada um — não muda quem pode acessar, só o que aparece lá.'}
+              {' '}{canManage ? 'Clique numa célula para conceder/mostrar ou revogar/ocultar, ou use a bolinha no topo da coluna pra fazer isso de uma vez para todo mundo.' : 'Somente visualização.'}
             </p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: 8, padding: 3, margin: '12px 0 2px', width: 'fit-content' }}>
+          {([['acesso', '🔓 Acesso ao módulo'], ['dashboard', '🖥️ Aparece no Dashboard']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setModo(id)}
+              style={{
+                padding: '7px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                fontSize: 12.5, fontWeight: modo === id ? 700 : 500,
+                color: modo === id ? PRIMARY : '#6B7A99',
+                backgroundColor: modo === id ? '#fff' : 'transparent',
+                boxShadow: modo === id ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+                transition: 'all .15s',
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 14px' }}>
@@ -163,13 +201,14 @@ export default function AccessMatrixModal({
                       style={{
                         position: 'sticky', top: 0, zIndex: 2, backgroundColor: selected ? '#EBF0FA' : '#F9FAFB',
                         borderBottom: `1px solid ${selected ? PRIMARY : '#E2E8F0'}`, borderRight: '1px solid #F1F5F9',
-                        padding: '8px 4px 10px', height: 150, width: 30, minWidth: 30, verticalAlign: 'bottom',
+                        padding: '8px 4px 10px', height: 180, width: 30, minWidth: 30, verticalAlign: 'bottom',
                         cursor: 'pointer', opacity: dimmed ? 0.25 : 1, transition: 'opacity .15s, background-color .15s',
+                        overflow: 'hidden',
                       }}>
                       {selected && canManage && (
                         <button
                           onClick={(e) => { e.stopPropagation(); if (!granting) void grantModuleToAll(mod.id) }}
-                          title={`Conceder ${mod.label} para todo mundo`}
+                          title={modo === 'acesso' ? `Conceder ${mod.label} para todo mundo` : `Mostrar ${mod.label} no Dashboard de todo mundo`}
                           disabled={granting}
                           style={{
                             position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
@@ -182,9 +221,10 @@ export default function AccessMatrixModal({
                         writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap',
                         fontSize: 11, fontWeight: selected ? 700 : 500, color: selected ? PRIMARY : '#374151', margin: '0 auto',
                         display: 'flex', alignItems: 'center', gap: 5,
+                        maxHeight: 140, overflow: 'hidden', textOverflow: 'ellipsis',
                       }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: mod.color, flexShrink: 0 }} />
-                        {mod.label}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{mod.label}</span>
                       </div>
                     </th>
                   )
@@ -196,7 +236,7 @@ export default function AccessMatrixModal({
                 const colors = PAPEL_COLORS[u.papel ?? ''] ?? { bg: '#F3F4F6', color: '#374151' }
                 const isProtectedAdmin = u.papel === 'admin' && currentUserId !== u.id
                 const editableRow = canManage && !isProtectedAdmin
-                const enabledIds = u.modulos_permitidos ?? orderedModules.map(m => m.id)
+                const enabledIds = enabledIdsFor(u)
                 const rowSelected = focusUsers.has(u.id)
                 const rowDimmed = focusUsers.size > 0 && !rowSelected
                 const rowBg = rowSelected ? '#EBF0FA' : (i % 2 === 1 ? '#FBFCFE' : '#fff')
@@ -228,7 +268,7 @@ export default function AccessMatrixModal({
                         <td
                           key={mod.id}
                           onClick={() => handleClick(u, mod.id)}
-                          title={`${u.nome || u.usuario || u.email} · ${mod.label}${editableRow ? ' — clique para ' + (checked ? 'revogar' : 'conceder') : ''}`}
+                          title={`${u.nome || u.usuario || u.email} · ${mod.label}${editableRow ? ' — clique para ' + (checked ? (modo === 'acesso' ? 'revogar' : 'ocultar') : (modo === 'acesso' ? 'conceder' : 'mostrar')) : ''}`}
                           style={{
                             borderBottom: '1px solid #F1F5F9', borderRight: '1px solid #F8FAFC',
                             textAlign: 'center', cursor: editableRow ? 'pointer' : 'default',

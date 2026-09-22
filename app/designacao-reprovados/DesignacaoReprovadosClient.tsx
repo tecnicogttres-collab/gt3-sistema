@@ -1,16 +1,22 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Setor = { id: string; nome: string; ativo: boolean; created_at: string }
-type Documento = { id: string; setor_id: string; nome: string; ativo: boolean; created_at: string }
+type Documento = { id: string; setor_id: string; pasta_id: string | null; nome: string; ativo: boolean; created_at: string }
+type PastaDocumento = { id: string; setor_id: string; nome: string; ordem: number; created_at: string }
 type Situacao = { id: string; nome: string; cor: string; ativo: boolean; created_at: string }
-type Empresa = { id: string; nome: string; contratante: string; created_at: string }
+type Empresa = { id: string; nome: string; contratante: string; email: string; created_at: string }
 type Pertinencia = { setor_id: string; usuario_id: string }
 type UsuarioRow = { id: string; nome: string | null; papel: string | null }
+type EmailConfig = {
+  id: string; assunto_template: string; saudacao_template: string; fechamento_template: string
+  historico_dias: number
+}
 
 type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido'
 
@@ -26,6 +32,8 @@ type Designacao = {
   data_verificacao: string
   tratativa: Tratativa
   ciencia_por: string[]
+  retorno_recebido: boolean
+  retorno_em: string | null
   criado_por: string
   created_at: string
   updated_at: string
@@ -84,6 +92,112 @@ function iniciais(nome: string) {
   return nome.split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?'
 }
 
+/** Escapa um valor antes de injetá-lo em corpo HTML — evita que &/</> num nome de
+ *  empresa, setor ou documento corrompa a marcação ao montar o e-mail. */
+function escapeHtml(s: string): string {
+  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** Converte o corpo HTML do e-mail para texto puro — fallback ao copiar (text/plain)
+ *  para clientes que não aceitam o text/html do clipboard. */
+function htmlToPlainText(html: string): string {
+  if (typeof document === 'undefined') return html.replace(/<[^>]+>/g, '')
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return (div.innerText ?? div.textContent ?? '').trim()
+}
+
+/** "A", "A e B", "A, B e C" — usado na saudação do e-mail para listar os setores marcados. */
+function joinComE(itens: string[]): string {
+  const a = itens.filter(Boolean)
+  if (a.length === 0) return ''
+  if (a.length === 1) return a[0]
+  return a.slice(0, -1).join(', ') + ' e ' + a[a.length - 1]
+}
+
+/** Substitui {{variavel}} por valor num texto puro — usado no assunto (sem HTML). */
+function aplicaVars(txt: string, vars: Record<string, string>): string {
+  return (txt || '').replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? '')
+}
+
+/** Escapa o template (texto livre digitado pelo gestor) e injeta {{var}} em negrito —
+ *  deixa o texto adaptável a 1 ou mais setores sem o gestor precisar digitar HTML. */
+function montaComVariavelDestacada(template: string, varName: string, valorTexto: string): string {
+  const marcador = `{{${varName}}}`
+  return template.split(marcador).map(escapeHtml).join(`<b>${escapeHtml(valorTexto)}</b>`).replace(/\n/g, '<br>')
+}
+
+/** "E-mail" da empresa aceita vários endereços separados por ";" — mailto: e o cabeçalho
+ *  To: do .eml exigem vírgula, então convertemos aqui na hora de enviar. */
+function emailsParaEnvio(destino: string): string {
+  return destino.split(';').map(e => e.trim()).filter(Boolean).join(', ')
+}
+
+const CONFIG_PADRAO: EmailConfig = {
+  id: 'default',
+  assunto_template: 'Portal GT3 - Acompanhamento de documentação - {{empresa}}',
+  saudacao_template: 'Olá! Identificamos que você possui documentos de {{setores}} reprovados no Portal GT3.',
+  fechamento_template: 'Você precisa de alguma ajuda com este(s) documento(s)?',
+  historico_dias: 2,
+}
+
+/** Dias corridos entre a data de verificação (YYYY-MM-DD) e hoje. */
+function diasDesde(dataIso: string): number {
+  const [y, m, d] = dataIso.split('-').map(Number)
+  const dia = new Date(y, (m || 1) - 1, d || 1)
+  const hj = new Date(); hj.setHours(0, 0, 0, 0)
+  return Math.round((hj.getTime() - dia.getTime()) / 86400000)
+}
+
+type GrupoDiaEmpresa = { key: string; data: string; empresa: string; itens: Designacao[] }
+
+/** Agrupa uma lista de designações por dia + empresa, mais recente primeiro — dá o
+ *  "workflow" visual (Minha Caixa / Visão geral): fica claro que dia e que empresa é
+ *  cada bloco, em vez de uma lista solta de documentos. */
+function agruparPorDiaEmpresa(lista: Designacao[]): GrupoDiaEmpresa[] {
+  const ordenados = [...lista].sort((a, b) =>
+    b.data_verificacao.localeCompare(a.data_verificacao) || a.empresa.localeCompare(b.empresa, 'pt-BR'))
+  const grupos: GrupoDiaEmpresa[] = []
+  const map = new Map<string, GrupoDiaEmpresa>()
+  for (const d of ordenados) {
+    const key = d.data_verificacao + '|' + d.empresa.trim().toLowerCase()
+    let g = map.get(key)
+    if (!g) { g = { key, data: d.data_verificacao, empresa: d.empresa, itens: [] }; map.set(key, g); grupos.push(g) }
+    g.itens.push(d)
+  }
+  return grupos
+}
+
+/** Monta o e-mail de designação (assunto + corpo HTML) a partir dos setores/documentos
+ *  marcados e da estrutura configurável (saudação/fechamento/assunto) — usado tanto na
+ *  pré-visualização ao vivo do formulário "+ Novo" quanto no card de cada item na Minha
+ *  Caixa. Um bloco em negrito+sublinhado por setor, com os documentos dele listados em
+ *  tópicos — texto se adapta sozinho a 1 ou mais setores/documentos. */
+function buildDesignacaoEmail(
+  empresaNome: string, setorIds: string[], docIds: string[], motivo: string,
+  setores: Setor[], documentos: Documento[], cfg: EmailConfig,
+): { assunto: string; corpo: string } {
+  const setoresSel = setorIds.map(id => setores.find(s => s.id === id)).filter((s): s is Setor => !!s)
+  const assunto = aplicaVars(cfg.assunto_template, { empresa: empresaNome })
+  if (setoresSel.length === 0 || docIds.length === 0) return { assunto, corpo: '' }
+
+  const setoresTxt = joinComE(setoresSel.map(s => s.nome))
+  const saudacao = `<div>${montaComVariavelDestacada(cfg.saudacao_template, 'setores', setoresTxt)}</div>`
+
+  const blocosSetor = setoresSel.map(s => {
+    const docs = documentos.filter(d => d.setor_id === s.id && docIds.includes(d.id))
+    if (!docs.length) return ''
+    const itens = docs.map(d => `<li>${escapeHtml(d.nome)}</li>`).join('')
+    return `<div style="font-weight:700;text-decoration:underline;margin-top:12px">${escapeHtml(s.nome)}</div><ul style="margin:6px 0 0 18px;padding:0">${itens}</ul>`
+  }).join('')
+
+  const motivoBloco = motivo.trim() ? `<div style="margin-top:12px">${escapeHtml(motivo.trim()).replace(/\n/g, '<br>')}</div>` : ''
+
+  const fechamento = `<div style="margin-top:12px">${escapeHtml(cfg.fechamento_template).replace(/\n/g, '<br>')}</div>`
+
+  return { assunto, corpo: saudacao + blocosSetor + motivoBloco + fechamento }
+}
+
 // ─── Estilos reutilizáveis ─────────────────────────────────────────────────────
 
 function inputStyle(extra: React.CSSProperties = {}): React.CSSProperties {
@@ -110,10 +224,6 @@ function sm(extra: React.CSSProperties): React.CSSProperties {
 const tagSetorStyle: React.CSSProperties = {
   display: 'inline-block', background: PRIMARY_SOFT, color: PRIMARY, borderRadius: 999,
   padding: '3px 10px', fontSize: 11, fontWeight: 600, margin: '1.5px 3px 1.5px 0', whiteSpace: 'nowrap',
-}
-const tagDocStyle: React.CSSProperties = {
-  display: 'inline-block', background: BG, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 7,
-  padding: '3px 9px', fontSize: 11, margin: '1.5px 3px 1.5px 0', whiteSpace: 'nowrap',
 }
 const respChipStyle: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, background: BG, border: `1px solid ${BORDER}`,
@@ -208,21 +318,35 @@ function ConfigPanel({ title, subtitle, wide, children }: {
 function TratativaBadge({ t }: { t: Tratativa }) {
   const color = TRAT_COLORS[t]
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color, whiteSpace: 'nowrap' }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color,
+      whiteSpace: 'nowrap', background: `${color}14`, border: `1px solid ${color}33`, borderRadius: 999, padding: '4px 11px 4px 8px',
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
       {TRAT_LABEL[t]}
     </span>
   )
 }
 
-function Kpi({ label, value, color }: { label: string; value: number; color: string }) {
+const KPI_ICON: Record<string, string> = {
+  aguardando: '⏳', ciente: '👁', andamento: '▶', resolvido: '✔', total: '📊',
+}
+
+function Kpi({ label, value, color, icon }: { label: string; value: number; color: string; icon?: string }) {
   return (
-    <div style={{
-      background: SURF, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: RADIUS,
-      padding: '14px 16px', boxShadow: SHADOW, minWidth: 140, flex: '1 1 140px',
+    <div className="gt3-fade-up" style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS,
+      padding: '13px 16px', boxShadow: SHADOW, minWidth: 150, flex: '1 1 150px',
     }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px' }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: TEXT, marginTop: 6 }}>{value}</div>
+      <span style={{
+        width: 38, height: 38, borderRadius: 11, background: `${color}16`, color, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+      }}>{icon ?? '●'}</span>
+      <div>
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px' }}>{label}</div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: TEXT, marginTop: 2, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      </div>
     </div>
   )
 }
@@ -236,13 +360,37 @@ export default function DesignacaoReprovadosClient() {
   const [designacoes, setDesignacoes] = useState<Designacao[]>([])
   const [setores, setSetores]         = useState<Setor[]>([])
   const [documentos, setDocumentos]   = useState<Documento[]>([])
+  const [pastasDoc, setPastasDoc]     = useState<PastaDocumento[]>([])
   const [situacoes, setSituacoes]     = useState<Situacao[]>([])
   const [empresas, setEmpresas]       = useState<Empresa[]>([])
   const [pertinencia, setPertinencia] = useState<Pertinencia[]>([])
   const [usuarios, setUsuarios]       = useState<UsuarioRow[]>([])
   const [loading, setLoading]         = useState(true)
 
-  const [tab, setTab] = useState<'designacoes' | 'caixa' | 'config'>('designacoes')
+  // Deep-link do widget do dashboard (/designacao-reprovados?caixa=1) — cai direto na Minha
+  // Caixa. Lido no estado inicial (não em efeito) porque só importa no primeiro carregamento.
+  const searchParams = useSearchParams()
+  const vemDeDeepLink = searchParams.get('caixa') === '1'
+  const [tab, setTab] = useState<'geral' | 'caixa' | 'config'>(
+    () => (vemDeDeepLink ? 'caixa' : 'geral')
+  )
+  // Aba padrão por papel — gestor/admin cai em Visão geral, colaborador em Minha Caixa.
+  // Só decide isso uma vez, assim que o perfil chega (é async); o deep-link acima tem
+  // prioridade e nunca é sobrescrito por isso.
+  const tabPadraoAplicada = useRef(false)
+  useEffect(() => {
+    if (vemDeDeepLink || tabPadraoAplicada.current || !profile?.papel) return
+    tabPadraoAplicada.current = true
+    setTab(['gestor', 'admin'].includes(profile.papel) ? 'geral' : 'caixa')
+  }, [profile?.papel, vemDeDeepLink])
+
+  // ── Minha Caixa / Visão geral: sub-view e acordeão (nunca abre sozinho, só no clique) ──
+  const [caixaSub, setCaixaSub]   = useState<'ativas' | 'historico'>('ativas')
+  const [geralSub, setGeralSub]   = useState<'ativas' | 'historico'>('ativas')
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  const [caixaAberto, setCaixaAberto] = useState<string | null>(null)
+  const [geralAberto, setGeralAberto] = useState<string | null>(null)
+  const [geralColaborador, setGeralColaborador] = useState<string | null>(null)
 
   // ── Formulário inline ──
   const [formOpen, setFormOpen]           = useState(false)
@@ -252,7 +400,6 @@ export default function DesignacaoReprovadosClient() {
   const [fDocumentos, setFDocumentos]     = useState<string[]>([])
   const [fSituacao, setFSituacao]         = useState('')
   const [fResponsaveis, setFResponsaveis] = useState<string[]>([])
-  const [fMotivo, setFMotivo]             = useState('')
   const [saving, setSaving]               = useState(false)
   const [qtdSessao, setQtdSessao]         = useState(0)
   const empresaInputRef = useRef<HTMLInputElement>(null)
@@ -270,8 +417,29 @@ export default function DesignacaoReprovadosClient() {
   const [corSelecionada, setCorSelecionada]   = useState(CORES_SITUACAO[0])
   const [cfgSetorAtual, setCfgSetorAtual]     = useState('')
   const [novoDocNome, setNovoDocNome]         = useState('')
+  const [modalPastasAberto, setModalPastasAberto] = useState(false)
+  const [novaPastaNome, setNovaPastaNome]     = useState('')
+  const [editPastaId, setEditPastaId]         = useState('')
+  const [editPastaNome, setEditPastaNome]     = useState('')
+  const [dragDocId, setDragDocId]             = useState<string | null>(null)
+  const [dragSobrePasta, setDragSobrePasta]   = useState<string | null>(null)
+  const [novoDocPorPasta, setNovoDocPorPasta] = useState<Record<string, string>>({})
   const [novaEmpresaNome, setNovaEmpresaNome] = useState('')
   const [novaEmpresaContratante, setNovaEmpresaContratante] = useState('')
+  const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
+  const [empresaBusca, setEmpresaBusca]       = useState('')
+  const [editEmpresaId, setEditEmpresaId]     = useState('')
+  const [editNome, setEditNome]               = useState('')
+  const [editContratante, setEditContratante] = useState('')
+  const [editEmail, setEditEmail]             = useState('')
+
+  // ── Estrutura do e-mail ──
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>(CONFIG_PADRAO)
+  const [cfgAssunto, setCfgAssunto]       = useState('')
+  const [cfgSaudacao, setCfgSaudacao]     = useState('')
+  const [cfgFechamento, setCfgFechamento] = useState('')
+  const [cfgHistoricoDias, setCfgHistoricoDias] = useState(2)
+  const [savingConfig, setSavingConfig]   = useState(false)
 
   const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -280,6 +448,22 @@ export default function DesignacaoReprovadosClient() {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast({ msg, show: true })
     toastTimer.current = setTimeout(() => setToast(t => ({ ...t, show: false })), 2800)
+  }
+
+  /** Copia com formatação (text/html) e fallback em texto puro (text/plain) — preserva
+   *  negrito/sublinhado ao colar no cliente de e-mail. */
+  async function copiarEmailHtml(html: string) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([htmlToPlainText(html)], { type: 'text/plain' }),
+        }),
+      ])
+    } catch {
+      await navigator.clipboard.writeText(htmlToPlainText(html))
+    }
+    showToast('E-mail copiado.')
   }
 
   // ── Load ──
@@ -292,9 +476,13 @@ export default function DesignacaoReprovadosClient() {
       fetch('/api/designacao-reprovados/empresas').then(r => r.ok ? r.json() : []),
       fetch('/api/designacao-reprovados/pertinencia').then(r => r.ok ? r.json() : []),
       fetch('/api/designacao-reprovados/usuarios').then(r => r.ok ? r.json() : []),
-    ]).then(([des, set, doc, sit, emp, pert, usr]) => {
+      fetch('/api/designacao-reprovados/config').then(r => r.ok ? r.json() : CONFIG_PADRAO),
+      fetch('/api/designacao-reprovados/pastas-documento').then(r => r.ok ? r.json() : []),
+    ]).then(([des, set, doc, sit, emp, pert, usr, cfg, pastas]) => {
       setDesignacoes(des); setSetores(set); setDocumentos(doc); setSituacoes(sit)
-      setEmpresas(emp); setPertinencia(pert); setUsuarios(usr)
+      setEmpresas(emp); setPertinencia(pert); setUsuarios(usr); setPastasDoc(pastas)
+      setEmailConfig(cfg); setCfgAssunto(cfg.assunto_template); setCfgSaudacao(cfg.saudacao_template); setCfgFechamento(cfg.fechamento_template)
+      setCfgHistoricoDias(cfg.historico_dias ?? 2)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -310,44 +498,145 @@ export default function DesignacaoReprovadosClient() {
   const getSituacao   = (id: string | null) => situacoes.find(s => s.id === id) ?? { id: '', nome: '—', cor: '#64748B', ativo: true, created_at: '' }
   const getUsuarioNome = (id: string) => usuarios.find(u => u.id === id)?.nome?.trim() || 'Usuário'
 
+  /** E-mail cadastrado da empresa — comparação tolerante a espaço/maiúscula, igual ao
+   *  match usado no hint do formulário. Editável a qualquer momento em Configurações → Empresas. */
+  function getEmpresaEmail(nomeEmpresa: string): string {
+    const alvo = nomeEmpresa.trim().toLowerCase()
+    return empresas.find(e => e.nome.trim().toLowerCase() === alvo)?.email ?? ''
+  }
+
+  /** Baixa um .eml já endereçado (To:) e com o assunto padrão configurado — abre pronto
+   *  para envio em qualquer cliente de e-mail (Outlook, etc.), sem precisar copiar/colar. */
+  function baixarEml(assunto: string, corpoHtml: string, destinoEmail: string, empresaNome: string) {
+    const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)))
+    const html = `<html><head><meta charset="utf-8"></head><body>${corpoHtml}</body></html>`
+    const linhas = ['Subject: =?UTF-8?B?' + b64(assunto) + '?=']
+    if (destinoEmail) linhas.unshift('To: ' + emailsParaEnvio(destinoEmail))
+    linhas.push('X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', html)
+    const eml = linhas.join('\r\n')
+    const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
+    const el = document.createElement('a')
+    el.href = url
+    el.download = ('GT3 - ' + (empresaNome || 'empresa')).replace(/[\\/:*?"<>|]/g, '') + '.eml'
+    el.click(); URL.revokeObjectURL(url)
+    showToast(destinoEmail ? 'Arquivo .eml gerado, já endereçado.' : 'Arquivo .eml gerado — e-mail da empresa não cadastrado, To: em branco.')
+  }
+
   function sitTag(id: string | null) {
     const s = getSituacao(id)
     return <span style={{ display: 'inline-block', background: `${s.cor}1A`, color: s.cor, borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>{s.nome}</span>
   }
 
-  // ── KPIs ──
-  const kpis = useMemo(() => ({
-    aguardando: designacoes.filter(d => d.tratativa === 'aguardando').length,
-    ciente:     designacoes.filter(d => d.tratativa === 'ciente').length,
-    andamento:  designacoes.filter(d => d.tratativa === 'andamento').length,
-    resolvido:  designacoes.filter(d => d.tratativa === 'resolvido').length,
-    total: designacoes.length,
-  }), [designacoes])
-
-  // ── Lista filtrada (Designações) ──
-  const listaFiltrada = useMemo(() => {
+  /** Filtros da Visão geral (setor/status/tratativa/responsável + busca livre) — usados
+   *  só ali, nunca afetam a Minha Caixa (que é pessoal, sem esses filtros). */
+  function passaFiltrosGeral(d: Designacao): boolean {
+    if (filtroSetores.length && !d.setores.some(s => filtroSetores.includes(s))) return false
+    if (filtroSituacoes.length && !(d.situacao_id && filtroSituacoes.includes(d.situacao_id))) return false
+    if (filtroTratativas.length && !filtroTratativas.includes(d.tratativa)) return false
+    if (filtroResponsaveis.length && !d.responsaveis.some(u => filtroResponsaveis.includes(u))) return false
     const b = busca.trim().toLowerCase()
-    return designacoes.filter(d => {
-      if (filtroSetores.length && !d.setores.some(s => filtroSetores.includes(s))) return false
-      if (filtroSituacoes.length && !(d.situacao_id && filtroSituacoes.includes(d.situacao_id))) return false
-      if (filtroTratativas.length && !filtroTratativas.includes(d.tratativa)) return false
-      if (filtroResponsaveis.length && !d.responsaveis.some(u => filtroResponsaveis.includes(u))) return false
-      if (b) {
-        const alvo = (
-          d.empresa + ' ' + d.motivo + ' ' +
-          d.documentos.map(getDocNome).join(' ') + ' ' +
-          d.responsaveis.map(getUsuarioNome).join(' ')
-        ).toLowerCase()
-        if (!alvo.includes(b)) return false
-      }
-      return true
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [designacoes, busca, filtroSetores, filtroSituacoes, filtroTratativas, filtroResponsaveis, documentos, usuarios])
+    if (b) {
+      const alvo = (
+        d.empresa + ' ' + d.motivo + ' ' +
+        d.documentos.map(getDocNome).join(' ') + ' ' +
+        d.responsaveis.map(getUsuarioNome).join(' ')
+      ).toLowerCase()
+      if (!alvo.includes(b)) return false
+    }
+    return true
+  }
 
   // ── Minha caixa ──
   const minhaCaixa = useMemo(() => designacoes.filter(d => d.responsaveis.includes(userId)), [designacoes, userId])
   const minhaCaixaPendentes = minhaCaixa.filter(d => d.tratativa === 'aguardando').length
+
+  // Recorte por prazo ANTES de agrupar — reaproveitado também nas estatísticas por
+  // colaborador da Visão geral. Só quem já foi RESOLVIDO entra nessa conta: enquanto não
+  // tiver ciência/resolução, o item fica ativo pra sempre, não importa a idade. Resolvido,
+  // continua ativo por N dias (padrão 2, configurável) a partir da data de verificação —
+  // passado isso, some da lista principal e vai pro Histórico.
+  const designacoesAtivas = useMemo(
+    () => designacoes.filter(d => d.tratativa !== 'resolvido' || diasDesde(d.data_verificacao) <= emailConfig.historico_dias),
+    [designacoes, emailConfig.historico_dias],
+  )
+  const designacoesHistorico = useMemo(
+    () => designacoes.filter(d => d.tratativa === 'resolvido' && diasDesde(d.data_verificacao) > emailConfig.historico_dias),
+    [designacoes, emailConfig.historico_dias],
+  )
+
+  const minhaAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas.filter(d => d.responsaveis.includes(userId))), [designacoesAtivas, userId])
+  const minhaHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico.filter(d => d.responsaveis.includes(userId))), [designacoesHistorico, userId])
+  const minhaAtual = caixaSub === 'ativas' ? minhaAtivas : minhaHistorico
+
+  // Visão geral: mesmo recorte por prazo, mas passando pelos filtros (setor/status/
+  // tratativa/responsável/busca) antes de agrupar — só essa aba é filtrável, não a Minha Caixa.
+  const designacoesAtivasFiltradas = useMemo(
+    () => designacoesAtivas.filter(passaFiltrosGeral),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [designacoesAtivas, filtroSetores, filtroSituacoes, filtroTratativas, filtroResponsaveis, busca, documentos, usuarios],
+  )
+  const designacoesHistoricoFiltradas = useMemo(
+    () => designacoesHistorico.filter(passaFiltrosGeral),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [designacoesHistorico, filtroSetores, filtroSituacoes, filtroTratativas, filtroResponsaveis, busca, documentos, usuarios],
+  )
+  const todasAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivasFiltradas), [designacoesAtivasFiltradas])
+  const todasHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistoricoFiltradas), [designacoesHistoricoFiltradas])
+  const geralAtual = geralSub === 'ativas' ? todasAtivas : todasHistorico
+  const itensGeralAtual = geralSub === 'ativas' ? designacoesAtivasFiltradas : designacoesHistoricoFiltradas
+
+  const filtrosGeralAtivosCount = filtroSetores.length + filtroSituacoes.length + filtroTratativas.length + filtroResponsaveis.length + (busca.trim() ? 1 : 0)
+
+  // KPIs da Visão geral — refletem o mesmo recorte (Ativas/Histórico + filtros) do resto da aba.
+  const kpis = useMemo(() => ({
+    aguardando: itensGeralAtual.filter(d => d.tratativa === 'aguardando').length,
+    ciente:     itensGeralAtual.filter(d => d.tratativa === 'ciente').length,
+    andamento:  itensGeralAtual.filter(d => d.tratativa === 'andamento').length,
+    resolvido:  itensGeralAtual.filter(d => d.tratativa === 'resolvido').length,
+    total: itensGeralAtual.length,
+  }), [itensGeralAtual])
+
+  // Acordeão: nunca abre sozinho (só no clique) — e se o grupo que estava aberto sumir da
+  // lista atual (ex.: mudou de sub-view, ou foi resolvido/saiu do prazo), o valor "efetivo"
+  // cai pra null sozinho em vez de deixar um painel vazio pendurado (calculado no render,
+  // não via efeito corretivo, pra não disparar um re-render extra a cada troca de lista).
+  const caixaAbertoEfetivo = (caixaAberto && minhaAtual.some(g => g.key === caixaAberto)) ? caixaAberto : null
+
+  /** Contagem por tratativa + retorno dentro de um grupo — resumo no cabeçalho do
+   *  acordeão pra bater o olho e saber o que está pendente sem abrir. */
+  function resumoGrupo(itens: Designacao[]) {
+    return {
+      aguardando: itens.filter(d => d.tratativa === 'aguardando').length,
+      andamento: itens.filter(d => d.tratativa === 'andamento').length,
+      resolvido: itens.filter(d => d.tratativa === 'resolvido').length,
+      retornou: itens.filter(d => d.retorno_recebido).length,
+    }
+  }
+
+  // ── Visão geral: BI por colaborador (grade de cards; clicar no nome abre o detalhe) ──
+  const statsColaboradores = useMemo(() => {
+    const map = new Map<string, { userId: string; total: number; aguardando: number; ciente: number; andamento: number; resolvido: number; retornou: number }>()
+    for (const d of itensGeralAtual) {
+      for (const uid of d.responsaveis) {
+        let s = map.get(uid)
+        if (!s) { s = { userId: uid, total: 0, aguardando: 0, ciente: 0, andamento: 0, resolvido: 0, retornou: 0 }; map.set(uid, s) }
+        s.total++
+        s[d.tratativa]++
+        if (d.retorno_recebido) s.retornou++
+      }
+    }
+    return [...map.values()].sort((a, b) => getUsuarioNome(a.userId).localeCompare(getUsuarioNome(b.userId), 'pt-BR'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itensGeralAtual, usuarios])
+
+  const geralGruposColaborador = useMemo(
+    () => geralColaborador ? agruparPorDiaEmpresa(itensGeralAtual.filter(d => d.responsaveis.includes(geralColaborador))) : [],
+    [itensGeralAtual, geralColaborador],
+  )
+  // Mesma lógica do caixaAbertoEfetivo, mas considerando qual das duas listas da Visão
+  // geral está visível no momento (grade por colaborador ou o drill-down de um só).
+  const geralListaVisivel = geralColaborador ? geralGruposColaborador : geralAtual
+  const geralAbertoEfetivo = (geralAberto && geralListaVisivel.some(g => g.key === geralAberto)) ? geralAberto : null
 
   // ── Duplicidade (form) ──
   const duplicidade = useMemo(() => {
@@ -370,7 +659,7 @@ export default function DesignacaoReprovadosClient() {
   function limparCamposItem() {
     setFSetores([]); setFDocumentos([])
     setFSituacao(situacoes.find(s => s.ativo)?.id ?? '')
-    setFResponsaveis([]); setFMotivo('')
+    setFResponsaveis([])
   }
 
   function abrirForm() {
@@ -381,6 +670,12 @@ export default function DesignacaoReprovadosClient() {
     setTimeout(() => empresaInputRef.current?.focus(), 120)
   }
   function fecharForm() { setFormOpen(false) }
+
+  /** Botão "＋ Nova designação" do cabeçalho — disponível em qualquer aba. O formulário
+   *  aparece por cima do conteúdo da aba atual, não precisa trocar de aba pra abrir. */
+  function abrirNovaDesignacao() {
+    if (!formOpen) abrirForm()
+  }
 
   function toggleFormSetor(id: string) {
     const on = fSetores.includes(id)
@@ -400,8 +695,8 @@ export default function DesignacaoReprovadosClient() {
 
   const empresaMatch = empresas.find(e => e.nome.trim().toLowerCase() === fEmpresa.trim().toLowerCase())
   const hintEmpresa = empresaMatch
-    ? `✓ Contratante: ${empresaMatch.contratante || '—'}`
-    : (fEmpresa.trim() ? '⚠ Não cadastrada — será salva como texto livre.' : '')
+    ? `✓ Contratante: ${empresaMatch.contratante || '—'} · E-mail: ${empresaMatch.email || '— não cadastrado'}`
+    : (fEmpresa.trim() ? '⚠ Não cadastrada — será salva como texto livre, sem e-mail para o .eml.' : '')
 
   const formValido = fEmpresa.trim().length > 1 && fSetores.length > 0 && fDocumentos.length > 0 && fResponsaveis.length > 0 && !!fSituacao
 
@@ -418,7 +713,6 @@ export default function DesignacaoReprovadosClient() {
         documentos: fDocumentos,
         situacao_id: fSituacao,
         responsaveis: fResponsaveis,
-        motivo: fMotivo,
       }),
     })
     setSaving(false)
@@ -473,6 +767,20 @@ export default function DesignacaoReprovadosClient() {
       const updated: Designacao = await res.json()
       setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
       showToast('Atualizado para ' + TRAT_LABEL[novo] + '.')
+    } else {
+      const e = await res.json().catch(() => ({}))
+      showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
+    }
+  }
+  /** Marcador independente da tratativa — a empresa respondeu ao e-mail. Alterna. */
+  async function marcarRetorno(id: string, ligar: boolean) {
+    const res = await fetch(`/api/designacao-reprovados/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'retorno', retorno: ligar }),
+    })
+    if (res.ok) {
+      const updated: Designacao = await res.json()
+      setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
+      showToast(ligar ? 'Marcado: empresa retornou.' : 'Retorno desmarcado.')
     } else {
       const e = await res.json().catch(() => ({}))
       showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
@@ -553,6 +861,57 @@ export default function DesignacaoReprovadosClient() {
     else showToast('Erro ao remover documento.')
   }
 
+  // ── Config: pastas de documento (subdivisão dentro do setor) ──
+  async function addPasta() {
+    if (!novaPastaNome.trim()) { showToast('Informe o nome da pasta.'); return }
+    if (!cfgSetorEfetivo) { showToast('Selecione um setor.'); return }
+    const res = await fetch('/api/designacao-reprovados/pastas-documento', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setor_id: cfgSetorEfetivo, nome: novaPastaNome }),
+    })
+    if (res.ok) { const created = await res.json(); setPastasDoc(prev => [...prev, created]); setNovaPastaNome(''); showToast('Pasta criada.') }
+    else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao criar pasta.') }
+  }
+  async function renomearPasta(id: string, nome: string) {
+    if (!nome.trim()) return
+    const res = await fetch(`/api/designacao-reprovados/pastas-documento/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome }),
+    })
+    if (res.ok) { const updated = await res.json(); setPastasDoc(prev => prev.map(p => p.id === id ? updated : p)) }
+    else showToast('Erro ao renomear pasta.')
+  }
+  async function removerPasta(id: string) {
+    if (!confirm('Remover esta pasta? Os documentos dentro dela não são excluídos — ficam sem pasta.')) return
+    const res = await fetch(`/api/designacao-reprovados/pastas-documento/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setPastasDoc(prev => prev.filter(p => p.id !== id))
+      setDocumentos(prev => prev.map(d => d.pasta_id === id ? { ...d, pasta_id: null } : d))
+      showToast('Pasta removida.')
+    } else showToast('Erro ao remover pasta.')
+  }
+  async function moverDocParaPasta(docId: string, pastaId: string | null) {
+    const res = await fetch(`/api/designacao-reprovados/documentos/${docId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pasta_id: pastaId }),
+    })
+    if (res.ok) { const updated = await res.json(); setDocumentos(prev => prev.map(d => d.id === docId ? updated : d)) }
+    else showToast('Erro ao mover documento.')
+  }
+  async function addDocumentoEmPasta(pastaId: string | null) {
+    const key = pastaId ?? 'sem-pasta'
+    const nome = (novoDocPorPasta[key] || '').trim()
+    if (!nome) { showToast('Informe o documento.'); return }
+    if (!cfgSetorEfetivo) { showToast('Selecione um setor.'); return }
+    const res = await fetch('/api/designacao-reprovados/documentos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setor_id: cfgSetorEfetivo, nome, pasta_id: pastaId }),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      setDocumentos(prev => [...prev, created])
+      setNovoDocPorPasta(prev => ({ ...prev, [key]: '' }))
+      showToast('Documento adicionado.')
+    } else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao adicionar documento.') }
+  }
+
   // ── Config: matriz de pertinência ──
   async function togglePertinencia(setorId: string, usuarioId: string) {
     const res = await fetch('/api/designacao-reprovados/pertinencia', {
@@ -570,12 +929,13 @@ export default function DesignacaoReprovadosClient() {
   async function addEmpresa() {
     if (!novaEmpresaNome.trim()) { showToast('Informe a empresa.'); return }
     const res = await fetch('/api/designacao-reprovados/empresas', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: novaEmpresaNome, contratante: novaEmpresaContratante }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: novaEmpresaNome, contratante: novaEmpresaContratante, email: novaEmpresaEmail }),
     })
     if (res.ok) {
       const created = await res.json()
       setEmpresas(prev => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
-      setNovaEmpresaNome(''); setNovaEmpresaContratante('')
+      setNovaEmpresaNome(''); setNovaEmpresaContratante(''); setNovaEmpresaEmail('')
       showToast('Empresa adicionada.')
     } else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao adicionar empresa.') }
   }
@@ -585,9 +945,189 @@ export default function DesignacaoReprovadosClient() {
     if (res.ok) { setEmpresas(prev => prev.filter(e => e.id !== id)); showToast('Empresa removida.') }
     else showToast('Erro ao remover empresa.')
   }
+  function iniciarEdicaoEmpresa(e: Empresa) {
+    setEditEmpresaId(e.id); setEditNome(e.nome); setEditContratante(e.contratante); setEditEmail(e.email)
+  }
+  function cancelarEdicaoEmpresa() { setEditEmpresaId('') }
+  async function salvarEdicaoEmpresa() {
+    if (!editNome.trim()) { showToast('Informe a empresa.'); return }
+    const res = await fetch(`/api/designacao-reprovados/empresas/${editEmpresaId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: editNome, contratante: editContratante, email: editEmail }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setEmpresas(prev => prev.map(e => e.id === updated.id ? updated : e).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
+      setEditEmpresaId('')
+      showToast('Empresa atualizada.')
+    } else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao salvar empresa.') }
+  }
+
+  // ── Config: estrutura do e-mail ──
+  async function salvarEmailConfig() {
+    setSavingConfig(true)
+    const res = await fetch('/api/designacao-reprovados/config', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assunto_template: cfgAssunto, saudacao_template: cfgSaudacao, fechamento_template: cfgFechamento,
+        historico_dias: cfgHistoricoDias,
+      }),
+    })
+    setSavingConfig(false)
+    if (res.ok) { const updated = await res.json(); setEmailConfig(updated); showToast('Estrutura do e-mail salva.') }
+    else showToast('Erro ao salvar estrutura do e-mail.')
+  }
+
+  const empresasFiltradas = useMemo(() => {
+    const b = empresaBusca.trim().toLowerCase()
+    if (!b) return empresas
+    return empresas.filter(e => (e.nome + ' ' + e.contratante + ' ' + e.email).toLowerCase().includes(b))
+  }, [empresas, empresaBusca])
+
+  // Nomes de documento repetidos dentro do setor atual (entre pastas ou sem pasta) —
+  // avisa no modal "Alterar conteúdo das pastas" em vez de deixar passar batido.
+  const duplicatasNomesSetor = useMemo(() => {
+    const contagem = new Map<string, number>()
+    for (const d of documentos) {
+      if (d.setor_id !== cfgSetorEfetivo) continue
+      const key = d.nome.trim().toLowerCase()
+      contagem.set(key, (contagem.get(key) ?? 0) + 1)
+    }
+    return new Set([...contagem.entries()].filter(([, n]) => n > 1).map(([k]) => k))
+  }, [documentos, cfgSetorEfetivo])
 
   const setoresAtivos = setores.filter(s => s.ativo)
   const situacoesAtivas = situacoes.filter(s => s.ativo)
+
+  // ── Minha Caixa / Visão geral: card de item + bloco de grupo (acordeão) ──
+  function renderCardDesignacao(d: Designacao, opts: { mostrarResponsaveis: boolean }) {
+    const souResponsavel = d.responsaveis.includes(userId)
+    const jaCiente = d.ciencia_por.includes(userId)
+    const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, d.motivo, setores, documentos, emailConfig)
+    const destinoEmail = getEmpresaEmail(d.empresa)
+    return (
+      <div key={d.id} style={{
+        background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
+        borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
+        opacity: d.tratativa === 'resolvido' ? .78 : 1,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 12, color: MUTED, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}
+            {sitTag(d.situacao_id)}
+            <span>· por {getUsuarioNome(d.criado_por)}</span>
+            {opts.mostrarResponsaveis && (
+              <>
+                <span>· para</span>
+                {d.responsaveis.map(u => (
+                  <span key={u} style={respChipStyle}><span style={avatarStyle}>{iniciais(getUsuarioNome(u))}</span>{getUsuarioNome(u)}</span>
+                ))}
+              </>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            {d.retorno_recebido && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#0A7A5E', background: '#EDFBF6', border: '1px solid #A9E6D2', borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+                🔁 Empresa retornou
+              </span>
+            )}
+            <TratativaBadge t={d.tratativa} />
+            <button onClick={() => excluirDesignacao(d.id)} title="Excluir designação" style={btnDangerIcon}>🗑</button>
+          </div>
+        </div>
+        <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
+          <b>{d.documentos.map(getDocNome).join(' · ')}</b>
+          {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
+        </div>
+
+        {/* E-mail pronto para encaminhar à empresa — só quem recebe a designação vê isso montado.
+            Clique no assunto ou no corpo copia — não tem botão "Copiar" separado. */}
+        {email.corpo && (
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+            <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>✉️ E-mail pronto</span>
+              <span style={{ marginLeft: 'auto', fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: destinoEmail ? '#16A34A' : '#B45309' }}>
+                Para: {destinoEmail || 'não cadastrado'}
+              </span>
+            </div>
+            <div
+              onClick={() => { navigator.clipboard.writeText(email.assunto); showToast('Assunto copiado.') }}
+              title="Clique para copiar o assunto"
+              style={{ padding: '8px 16px', fontSize: 12.5, color: TEXT, background: '#FCFDFF', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F0F4FA' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FCFDFF' }}
+            >
+              <b>Assunto:</b> {email.assunto}
+            </div>
+            <div
+              onClick={() => copiarEmailHtml(email.corpo)}
+              title="Clique para copiar o e-mail"
+              style={{ padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: TEXT, background: '#FCFDFF', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F0F4FA' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#FCFDFF' }}
+              dangerouslySetInnerHTML={{ __html: email.corpo }} />
+            <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: MUTED }}>🖱 clique no assunto ou no e-mail para copiar</span>
+              <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={sm(btnGhost)}>⬇ Baixar .eml</button>
+            </div>
+          </div>
+        )}
+
+        {souResponsavel && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {!jaCiente ? (
+              <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Dar ciência</button>
+            ) : (
+              <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
+            )}
+            {jaCiente && d.tratativa !== 'resolvido' && (
+              <>
+                <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
+                <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
+              </>
+            )}
+            <button onClick={() => marcarRetorno(d.id, !d.retorno_recebido)} style={sm(btnGhost)}>
+              {d.retorno_recebido ? '↺ Desmarcar retorno' : '🔁 Marcar retorno da empresa'}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderGrupoAcordeao(grupo: GrupoDiaEmpresa, opts: { aberto: string | null; setAberto: (k: string | null) => void; mostrarResponsaveis: boolean }) {
+    const isOpen = opts.aberto === grupo.key
+    const r = resumoGrupo(grupo.itens)
+    return (
+      <div key={grupo.key} className="gt3-fade-up" style={{ marginBottom: 14, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
+        <div onClick={() => opts.setAberto(isOpen ? null : grupo.key)}
+          onMouseEnter={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = '#F0F4FA' }}
+          onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = '#FAFCFE' }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer',
+            background: isOpen ? PRIMARY_SOFT : '#FAFCFE', flexWrap: 'wrap', transition: 'background-color 180ms var(--ease-gt3)',
+          }}>
+          <span style={{ fontSize: 11, transition: 'transform 220ms var(--ease-gt3)', transform: isOpen ? 'rotate(90deg)' : 'none', color: MUTED }}>▶</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: PRIMARY, color: '#fff', borderRadius: 999, padding: '5px 13px 5px 11px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            📅 {fmtData(grupo.data)}
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>🏢 {grupo.empresa}</span>
+          <span style={{ fontSize: 11, color: MUTED }}>{grupo.itens.length} item(ns)</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+            {r.aguardando > 0 && <span style={{ color: TRAT_COLORS.aguardando }}>⏳ {r.aguardando} aguardando</span>}
+            {r.andamento > 0 && <span style={{ color: TRAT_COLORS.andamento }}>▶ {r.andamento} em andamento</span>}
+            {r.retornou > 0 && <span style={{ color: '#0A7A5E' }}>🔁 {r.retornou} retornou</span>}
+            {r.resolvido > 0 && <span style={{ color: TRAT_COLORS.resolvido }}>✔ {r.resolvido} resolvido</span>}
+          </div>
+        </div>
+        {isOpen && (
+          <div className="gt3-slide-down" style={{ padding: '14px 16px', borderTop: `1px solid ${BORDER}` }}>
+            {grupo.itens.map(d => renderCardDesignacao(d, { mostrarResponsaveis: opts.mostrarResponsaveis }))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -595,15 +1135,25 @@ export default function DesignacaoReprovadosClient() {
     <div style={{ minHeight: '100vh', background: BG, fontFamily: "'Inter',system-ui,sans-serif", color: TEXT }}>
 
       {/* Header */}
-      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '18px 28px' }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: TEXT }}>Designação de Reprovados / Pendências</div>
-        <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
+      <div style={{ background: SURF, boxShadow: '0 1px 0 rgba(20,30,60,.05), 0 2px 10px rgba(20,30,60,.03)', padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <span style={{
+            width: 42, height: 42, borderRadius: 12, background: `linear-gradient(135deg, ${PRIMARY}, #4A6FB5)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0,
+            boxShadow: '0 4px 12px rgba(42,79,150,.28)',
+          }}>📋</span>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: TEXT }}>Designação de Reprovados / Pendências</div>
+            <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
+          </div>
+        </div>
+        <button onClick={abrirNovaDesignacao} style={btnPrimary}>＋ Nova designação</button>
       </div>
 
       {/* Tabs */}
-      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '0 28px', display: 'flex', gap: 4 }}>
+      <div style={{ background: SURF, borderBottom: `1px solid ${BORDER}`, padding: '0 28px', display: 'flex', gap: 4, position: 'relative', zIndex: 1 }}>
         {[
-          { id: 'designacoes' as const, label: '📋 Designações' },
+          { id: 'geral' as const, label: '🌐 Visão geral' },
           { id: 'caixa' as const, label: `📥 Minha Caixa${minhaCaixaPendentes ? ` (${minhaCaixaPendentes})` : ''}` },
           { id: 'config' as const, label: '⚙️ Configurações' },
         ].map(t => (
@@ -620,18 +1170,9 @@ export default function DesignacaoReprovadosClient() {
       <div style={{ maxWidth: 1320, margin: '0 auto', padding: '24px 24px 60px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED }}>Carregando...</div>
-        ) : tab === 'designacoes' ? (
+        ) : (
           <>
-            {/* KPIs */}
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-              <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} />
-              <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} />
-              <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} />
-              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} />
-              <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} />
-            </div>
-
-            {/* Form inline */}
+            {/* Form inline — aparece por cima do conteúdo de qualquer aba, não existe mais uma aba própria pra isso */}
             {formOpen && (
               <div style={{ background: SURF, border: `1px solid ${BORDER}`, borderRadius: 16, boxShadow: '0 8px 24px rgba(20,30,60,.12)', marginBottom: 18, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -713,13 +1254,40 @@ export default function DesignacaoReprovadosClient() {
                       </div>
                     ) : fSetores.map(sId => {
                       const docs = documentos.filter(d => d.setor_id === sId && d.ativo)
+                      const pastasDoSetor = pastasDoc.filter(p => p.setor_id === sId).sort((a, b) => a.ordem - b.ordem)
+                      const semPasta = docs.filter(d => !d.pasta_id || !pastasDoSetor.some(p => p.id === d.pasta_id))
                       return (
                         <SubBlock key={sId} title={getSetorNome(sId)} hint={`${docs.length} documento(s)`}>
-                          {docs.length === 0
-                            ? <Alerta>Nenhum documento cadastrado para &quot;{getSetorNome(sId)}&quot;. Cadastre em ⚙️ Configurações → Documentos por setor.</Alerta>
-                            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                {docs.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
-                              </div>}
+                          {docs.length === 0 ? (
+                            <Alerta>Nenhum documento cadastrado para &quot;{getSetorNome(sId)}&quot;. Cadastre em ⚙️ Configurações → Documentos por setor.</Alerta>
+                          ) : pastasDoSetor.length === 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                              {docs.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {pastasDoSetor.map(p => {
+                                const docsPasta = docs.filter(d => d.pasta_id === p.id)
+                                if (docsPasta.length === 0) return null
+                                return (
+                                  <div key={p.id}>
+                                    <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, marginBottom: 6 }}>🗂 {p.nome}</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                      {docsPasta.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              {semPasta.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, marginBottom: 6 }}>Sem pasta</div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    {semPasta.map(d => <Flag key={d.id} small label={d.nome} on={fDocumentos.includes(d.id)} onClick={() => toggleFormDocumento(d.id)} />)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </SubBlock>
                       )
                     })}
@@ -762,13 +1330,6 @@ export default function DesignacaoReprovadosClient() {
                     })}
                   </div>
 
-                  {/* Observação */}
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 10 }}>Observação / orientação para a empresa</div>
-                    <textarea value={fMotivo} onChange={e => setFMotivo(e.target.value)} rows={3}
-                      placeholder="Ex.: ASO do João vencido desde 10/09 — solicitar reagendamento e reenvio pelo portal..."
-                      style={inputStyle({ width: '100%', resize: 'vertical' })} />
-                  </div>
                 </div>
 
                 <div style={{ padding: '16px 22px', background: '#FBFCFE', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -796,101 +1357,8 @@ export default function DesignacaoReprovadosClient() {
               </div>
             )}
 
-            {/* Toolbar */}
-            <div style={{ background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 14, marginBottom: 16, boxShadow: SHADOW }}>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-                <input type="text" placeholder="🔍 Buscar por empresa, documento ou responsável..." value={busca} onChange={e => setBusca(e.target.value)}
-                  style={inputStyle({ flex: 1, minWidth: 240 })} />
-                <button onClick={limparFiltros} style={sm(btnGhost)}>Limpar filtros</button>
-                {!formOpen && <button onClick={abrirForm} style={{ ...btnPrimary, marginLeft: 'auto' }}>＋ Novo</button>}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Setor</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {setoresAtivos.map(s => (
-                      <Flag key={s.id} small label={s.nome} on={filtroSetores.includes(s.id)}
-                        onClick={() => setFiltroSetores(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Status doc.</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {situacoesAtivas.map(s => (
-                      <Flag key={s.id} small label={s.nome} colorOn={s.cor} on={filtroSituacoes.includes(s.id)}
-                        onClick={() => setFiltroSituacoes(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Tratativa</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {TRAT_OPTIONS.map(t => (
-                      <Flag key={t.id} small label={t.label} colorOn={TRAT_COLORS[t.id]} on={filtroTratativas.includes(t.id)}
-                        onClick={() => setFiltroTratativas(prev => prev.includes(t.id) ? prev.filter(x => x !== t.id) : [...prev, t.id])} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, minWidth: 90 }}>Responsável</span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {usuarios.map(u => (
-                      <Flag key={u.id} small label={u.nome?.trim() || 'Usuário'} on={filtroResponsaveis.includes(u.id)}
-                        onClick={() => setFiltroResponsaveis(prev => prev.includes(u.id) ? prev.filter(x => x !== u.id) : [...prev, u.id])} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tabela */}
-            <div style={{ background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', boxShadow: SHADOW }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#FAFCFE' }}>
-                      {['Empresa', 'Setor', 'Documentos', 'Status doc.', 'Responsáveis', 'Tratativa', ''].map(h => (
-                        <th key={h} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, fontWeight: 700, borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {listaFiltrada.length === 0 ? (
-                      <tr><td colSpan={7} style={{ padding: '50px 20px', textAlign: 'center', color: MUTED }}>
-                        Nenhuma designação encontrada.<br />
-                        <small>Use &quot;＋ Novo&quot; após a verificação diária no Portal GT3.</small>
-                      </td></tr>
-                    ) : listaFiltrada.map(d => (
-                      <tr key={d.id} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>
-                          <div style={{ fontWeight: 650 }}>{d.empresa}</div>
-                          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>{d.contratante ? d.contratante + ' · ' : ''}verif. {fmtData(d.data_verificacao)}</div>
-                        </td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>{d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}</td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>
-                          {d.documentos.map(x => <span key={x} style={tagDocStyle}>{getDocNome(x)}</span>)}
-                          {d.motivo && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>{d.motivo.slice(0, 70)}{d.motivo.length > 70 ? '…' : ''}</div>}
-                        </td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>{sitTag(d.situacao_id)}</td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}>
-                          {d.responsaveis.map(u => (
-                            <span key={u} style={respChipStyle}><span style={avatarStyle}>{iniciais(getUsuarioNome(u))}</span>{getUsuarioNome(u)}</span>
-                          ))}
-                        </td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top' }}><TratativaBadge t={d.tratativa} /></td>
-                        <td style={{ padding: '13px 14px', verticalAlign: 'top', textAlign: 'right' }}>
-                          <button onClick={() => excluirDesignacao(d.id)} title="Excluir" style={btnDangerIcon}>🗑</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        ) : tab === 'caixa' ? (
-          <div style={{ maxWidth: 820 }}>
+            {tab === 'caixa' ? (
+          <div style={{ maxWidth: 900 }}>
             {minhaCaixaPendentes > 0 && (
               <div style={{
                 background: 'linear-gradient(135deg,#FEF4F3,#FDEDEC)', border: '1px solid #F7CDCA', borderLeft: '4px solid #C53030',
@@ -899,50 +1367,183 @@ export default function DesignacaoReprovadosClient() {
                 ⚠️ <span><b>{minhaCaixaPendentes}</b> item(ns) aguardando sua ciência. O aviso permanece no dashboard até você dar ciência aqui dentro.</span>
               </div>
             )}
-            {minhaCaixa.length === 0 ? (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setCaixaSub('ativas')} style={caixaSub === 'ativas' ? btnPrimary : btnGhost}>
+                Ativas {minhaAtivas.length ? `(${minhaAtivas.length})` : ''}
+              </button>
+              <button onClick={() => setCaixaSub('historico')} style={caixaSub === 'historico' ? btnPrimary : btnGhost}>
+                🕘 Histórico {minhaHistorico.length ? `(${minhaHistorico.length})` : ''}
+              </button>
+            </div>
+            {minhaAtual.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
-                <p style={{ fontWeight: 600, margin: 0 }}>Nenhum item designado para você.</p>
+                <p style={{ fontWeight: 600, margin: 0 }}>
+                  {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : `Nada no histórico (resolvido há mais de ${emailConfig.historico_dias} dia(s)).`}
+                </p>
               </div>
-            ) : minhaCaixa.map(d => {
-              const jaCiente = d.ciencia_por.includes(userId)
-              return (
-                <div key={d.id} style={{
-                  background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
-                  borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
-                  opacity: d.tratativa === 'resolvido' ? .78 : 1,
+            ) : minhaAtual.map((grupo, i) => (
+              <Fragment key={grupo.key}>
+                {i > 0 && minhaAtual[i - 1].data !== grupo.data && (
+                  <div style={{ height: 1, background: BORDER, margin: '2px 0 16px' }} />
+                )}
+                {renderGrupoAcordeao(grupo, { aberto: caixaAbertoEfetivo, setAberto: setCaixaAberto, mostrarResponsaveis: false })}
+              </Fragment>
+            ))}
+          </div>
+        ) : tab === 'geral' ? (
+          <div style={{ maxWidth: 1100 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+              {geralColaborador ? (
+                <button onClick={() => setGeralColaborador(null)} style={sm(btnGhost)}>← Voltar para todos</button>
+              ) : (
+                <div style={{ fontSize: 12.5, color: MUTED }}>Por colaborador — clique no nome para ver as designações dele(a).</div>
+              )}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button onClick={() => setFiltrosAbertos(v => !v)} style={{
+                  ...(filtrosAbertos || filtrosGeralAtivosCount > 0 ? btnPrimary : btnGhost),
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700 }}>{d.empresa}</div>
-                      <div style={{ fontSize: 12, color: MUTED, marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {d.setores.map(s => <span key={s} style={tagSetorStyle}>{getSetorNome(s)}</span>)}
-                        {sitTag(d.situacao_id)}
-                        <span>· verif. {fmtData(d.data_verificacao)} · por {getUsuarioNome(d.criado_por)}</span>
-                      </div>
+                  ⚙ Filtros
+                  {filtrosGeralAtivosCount > 0 && (
+                    <span style={{
+                      background: filtrosAbertos || filtrosGeralAtivosCount > 0 ? 'rgba(255,255,255,.25)' : PRIMARY,
+                      color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 10.5, fontWeight: 700,
+                    }}>{filtrosGeralAtivosCount}</span>
+                  )}
+                </button>
+                <button onClick={() => setGeralSub('ativas')} style={geralSub === 'ativas' ? btnPrimary : btnGhost}>
+                  Ativas {todasAtivas.length ? `(${todasAtivas.length})` : ''}
+                </button>
+                <button onClick={() => setGeralSub('historico')} style={geralSub === 'historico' ? btnPrimary : btnGhost}>
+                  🕘 Histórico {todasHistorico.length ? `(${todasHistorico.length})` : ''}
+                </button>
+              </div>
+            </div>
+
+            {/* Painel de filtros — gavetinhas lado a lado, abre suave e filtra ao vivo (sem botão "aplicar") */}
+            {filtrosAbertos && (
+              <div className="gt3-slide-down" style={{
+                background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, boxShadow: SHADOW,
+                padding: 14, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12,
+              }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="text" placeholder="🔍 Buscar por empresa, documento ou responsável..." value={busca} onChange={e => setBusca(e.target.value)}
+                    style={inputStyle({ flex: 1, minWidth: 240 })} />
+                  {filtrosGeralAtivosCount > 0 && <button onClick={limparFiltros} style={sm(btnGhost)}>Limpar filtros</button>}
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Setor</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {setoresAtivos.map(s => (
+                        <Flag key={s.id} small label={s.nome} on={filtroSetores.includes(s.id)}
+                          onClick={() => setFiltroSetores(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
+                      ))}
+                      {setoresAtivos.length === 0 && <span style={{ fontSize: 11.5, color: MUTED }}>—</span>}
                     </div>
-                    <TratativaBadge t={d.tratativa} />
                   </div>
-                  <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
-                    <b>{d.documentos.map(getDocNome).join(' · ')}</b>
-                    {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Status do documento</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {situacoesAtivas.map(s => (
+                        <Flag key={s.id} small label={s.nome} colorOn={s.cor} on={filtroSituacoes.includes(s.id)}
+                          onClick={() => setFiltroSituacoes(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])} />
+                      ))}
+                      {situacoesAtivas.length === 0 && <span style={{ fontSize: 11.5, color: MUTED }}>—</span>}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {!jaCiente ? (
-                      <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Dar ciência</button>
-                    ) : (
-                      <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
-                    )}
-                    {jaCiente && d.tratativa !== 'resolvido' && (
-                      <>
-                        <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
-                        <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
-                      </>
-                    )}
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Tratativa</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {TRAT_OPTIONS.map(t => (
+                        <Flag key={t.id} small label={t.label} colorOn={TRAT_COLORS[t.id]} on={filtroTratativas.includes(t.id)}
+                          onClick={() => setFiltroTratativas(prev => prev.includes(t.id) ? prev.filter(x => x !== t.id) : [...prev, t.id])} />
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ flex: '1 1 220px', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 12px', background: '#FAFCFE' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 8 }}>Responsável</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {usuarios.map(u => (
+                        <Flag key={u.id} small label={u.nome?.trim() || 'Usuário'} on={filtroResponsaveis.includes(u.id)}
+                          onClick={() => setFiltroResponsaveis(prev => prev.includes(u.id) ? prev.filter(x => x !== u.id) : [...prev, u.id])} />
+                      ))}
+                      {usuarios.length === 0 && <span style={{ fontSize: 11.5, color: MUTED }}>—</span>}
+                    </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* KPIs — refletem Ativas/Histórico + filtros ativos */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+              <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} icon={KPI_ICON.aguardando} />
+              <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} icon={KPI_ICON.ciente} />
+              <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} icon={KPI_ICON.andamento} />
+              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} icon={KPI_ICON.resolvido} />
+              <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} icon={KPI_ICON.total} />
+            </div>
+
+            {!geralColaborador ? (
+              statsColaboradores.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+                  <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
+                  <p style={{ fontWeight: 600, margin: 0 }}>
+                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : `Nada no histórico (resolvido há mais de ${emailConfig.historico_dias} dia(s)).`}
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
+                  {statsColaboradores.map((s, i) => {
+                    const pct = s.total ? Math.round((s.resolvido / s.total) * 100) : 0
+                    return (
+                      <div key={s.userId} onClick={() => setGeralColaborador(s.userId)}
+                        className="gt3-card-hover gt3-fade-up"
+                        style={{
+                          cursor: 'pointer', background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS,
+                          padding: '15px 16px', boxShadow: SHADOW, animationDelay: `${Math.min(i, 10) * 25}ms`,
+                        }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                          <span style={{ ...avatarStyle, width: 32, height: 32, fontSize: 12, borderRadius: 10, background: `linear-gradient(135deg, ${PRIMARY}, #4A6FB5)` }}>
+                            {iniciais(getUsuarioNome(s.userId))}
+                          </span>
+                          <b style={{ fontSize: 13.5, color: TEXT, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {getUsuarioNome(s.userId)}
+                          </b>
+                          <span style={{ color: MUTED, fontSize: 13, flexShrink: 0 }}>→</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 13, minHeight: 22 }}>
+                          {s.aguardando > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.aguardando, background: `${TRAT_COLORS.aguardando}14`, border: `1px solid ${TRAT_COLORS.aguardando}33`, borderRadius: 999, padding: '2.5px 8px' }}>⏳ {s.aguardando}</span>}
+                          {s.andamento > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.andamento, background: `${TRAT_COLORS.andamento}14`, border: `1px solid ${TRAT_COLORS.andamento}33`, borderRadius: 999, padding: '2.5px 8px' }}>▶ {s.andamento}</span>}
+                          {s.retornou > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0A7A5E', background: '#0A7A5E14', border: '1px solid #0A7A5E33', borderRadius: 999, padding: '2.5px 8px' }}>🔁 {s.retornou}</span>}
+                          {s.resolvido > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.resolvido, background: `${TRAT_COLORS.resolvido}14`, border: `1px solid ${TRAT_COLORS.resolvido}33`, borderRadius: 999, padding: '2.5px 8px' }}>✔ {s.resolvido}</span>}
+                        </div>
+                        <div style={{ height: 6, borderRadius: 999, background: BG, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: TRAT_COLORS.resolvido, borderRadius: 999, transition: 'width .4s var(--ease-gt3)' }} />
+                        </div>
+                        <div style={{ fontSize: 10.5, color: MUTED, marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{pct}% resolvido</span>
+                          <span>{s.total} no total</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               )
-            })}
+            ) : geralGruposColaborador.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+                <p style={{ fontWeight: 600, margin: 0 }}>Nenhuma designação de {getUsuarioNome(geralColaborador)} nesta visão.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={avatarStyle}>{iniciais(getUsuarioNome(geralColaborador))}</span>
+                  {getUsuarioNome(geralColaborador)}
+                </div>
+                {geralGruposColaborador.map(grupo => renderGrupoAcordeao(grupo, { aberto: geralAbertoEfetivo, setAberto: setGeralAberto, mostrarResponsaveis: false }))}
+              </>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
@@ -1001,15 +1602,20 @@ export default function DesignacaoReprovadosClient() {
             </ConfigPanel>
 
             {/* Painel 3: Documentos por setor */}
-            <ConfigPanel title="Documentos por setor" subtitle="O que é solicitado dentro de cada tipo de setor" wide>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Setor</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {setores.map(s => (
-                    <Flag key={s.id} small label={s.nome} on={cfgSetorEfetivo === s.id} onClick={() => setCfgSetorAtual(s.id)} />
-                  ))}
-                  {setores.length === 0 && <span style={{ fontSize: 12.5, color: MUTED }}>Cadastre um setor primeiro.</span>}
+            <ConfigPanel title="Documentos por setor" subtitle="O que é solicitado dentro de cada tipo de setor — organizado em pastas" wide>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Setor</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {setores.map(s => (
+                      <Flag key={s.id} small label={s.nome} on={cfgSetorEfetivo === s.id} onClick={() => setCfgSetorAtual(s.id)} />
+                    ))}
+                    {setores.length === 0 && <span style={{ fontSize: 12.5, color: MUTED }}>Cadastre um setor primeiro.</span>}
+                  </div>
                 </div>
+                {cfgSetorEfetivo && (
+                  <button onClick={() => setModalPastasAberto(true)} style={sm(btnGhost)}>🗂 Alterar conteúdo das pastas</button>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                 <input value={novoDocNome} onChange={e => setNovoDocNome(e.target.value)}
@@ -1022,23 +1628,164 @@ export default function DesignacaoReprovadosClient() {
                   <div style={{ fontSize: 12.5, color: MUTED, background: '#FAFBFD', border: '1.5px dashed #DFE7F1', borderRadius: RADIUS, padding: 17, textAlign: 'center' }}>
                     Nenhum documento cadastrado neste setor ainda.
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {documentos.filter(d => d.setor_id === cfgSetorEfetivo).map(d => (
-                      <div key={d.id} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 8, border: `1.5px solid ${BORDER}`, borderRadius: 10,
-                        padding: '7px 10px 7px 12px', fontSize: 12.5, fontWeight: 600, color: TEXT, opacity: d.ativo ? 1 : .45,
-                      }}>
-                        {d.nome}
-                        <Switch on={d.ativo} onClick={() => toggleDocAtivo(d)} />
-                        <span onClick={() => removerDocumento(d.id)} style={{ cursor: 'pointer', color: '#C53030', fontWeight: 700 }}>✕</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                ) : (() => {
+                  const pastasDoSetor = pastasDoc.filter(p => p.setor_id === cfgSetorEfetivo).sort((a, b) => a.ordem - b.ordem)
+                  const docsDoSetor = documentos.filter(d => d.setor_id === cfgSetorEfetivo)
+                  const chip = (d: Documento) => (
+                    <div key={d.id} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8, border: `1.5px solid ${BORDER}`, borderRadius: 10,
+                      padding: '7px 10px 7px 12px', fontSize: 12.5, fontWeight: 600, color: TEXT, opacity: d.ativo ? 1 : .45,
+                    }}>
+                      {d.nome}
+                      <Switch on={d.ativo} onClick={() => toggleDocAtivo(d)} />
+                      <span onClick={() => removerDocumento(d.id)} style={{ cursor: 'pointer', color: '#C53030', fontWeight: 700 }}>✕</span>
+                    </div>
+                  )
+                  if (pastasDoSetor.length === 0) {
+                    return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{docsDoSetor.map(chip)}</div>
+                  }
+                  const semPasta = docsDoSetor.filter(d => !d.pasta_id || !pastasDoSetor.some(p => p.id === d.pasta_id))
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {pastasDoSetor.map(p => {
+                        const docs = docsDoSetor.filter(d => d.pasta_id === p.id)
+                        if (docs.length === 0) return null
+                        return (
+                          <div key={p.id}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: PRIMARY, marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              🗂 {p.nome} <span style={{ color: MUTED, fontWeight: 500 }}>({docs.length})</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{docs.map(chip)}</div>
+                          </div>
+                        )
+                      })}
+                      {semPasta.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 7 }}>Sem pasta ({semPasta.length})</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{semPasta.map(chip)}</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
               <div style={{ fontSize: 11.5, color: MUTED, marginTop: 10, lineHeight: 1.5 }}>Ao flegar o setor na designação, só os documentos ativos deste setor aparecem como flag.</div>
             </ConfigPanel>
+
+            {/* Modal: alterar conteúdo das pastas — arrastar documento entre cards ou "+" dentro de um deles */}
+            {modalPastasAberto && cfgSetorEfetivo && (() => {
+              const pastasDoSetor = pastasDoc.filter(p => p.setor_id === cfgSetorEfetivo).sort((a, b) => a.ordem - b.ordem)
+              const docsDoSetor = documentos.filter(d => d.setor_id === cfgSetorEfetivo)
+              const semPasta = docsDoSetor.filter(d => !d.pasta_id || !pastasDoSetor.some(p => p.id === d.pasta_id))
+              const isDuplicado = (d: Documento) => duplicatasNomesSetor.has(d.nome.trim().toLowerCase())
+
+              function renderDocChip(d: Documento) {
+                return (
+                  <div
+                    key={d.id}
+                    draggable
+                    onDragStart={() => setDragDocId(d.id)}
+                    onDragEnd={() => { setDragDocId(null); setDragSobrePasta(null) }}
+                    style={{
+                      cursor: 'grab', display: 'flex', alignItems: 'center', gap: 6, background: '#fff',
+                      border: `1px solid ${isDuplicado(d) ? '#F0B429' : BORDER}`, borderRadius: 8,
+                      padding: '6px 9px', fontSize: 12, fontWeight: 600, opacity: d.ativo ? 1 : .5,
+                    }}>
+                    <span style={{ color: MUTED, fontSize: 11 }}>⠿</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nome}</span>
+                    {isDuplicado(d) && <span title="Nome repetido em outra pasta deste setor" style={{ color: '#B45309', flexShrink: 0 }}>⚠</span>}
+                    <button onClick={() => removerDocumento(d.id)} title="Excluir documento" style={{ ...btnDangerIcon, padding: '2px 4px', fontSize: 12, flexShrink: 0 }}>🗑</button>
+                  </div>
+                )
+              }
+
+              function renderPastaCard({ pastaId, nome, docs, podeEditar }: { pastaId: string | null; nome: string; docs: Documento[]; podeEditar: boolean }) {
+                const key = pastaId ?? 'sem-pasta'
+                const emDrag = dragSobrePasta === key
+                return (
+                  <div
+                    key={key}
+                    onDragOver={e => { e.preventDefault(); setDragSobrePasta(key) }}
+                    onDragLeave={() => setDragSobrePasta(prev => prev === key ? null : prev)}
+                    onDrop={() => { if (dragDocId) moverDocParaPasta(dragDocId, pastaId); setDragDocId(null); setDragSobrePasta(null) }}
+                    style={{
+                      border: `1.5px ${emDrag ? 'dashed' : 'solid'} ${emDrag ? PRIMARY : BORDER}`, borderRadius: RADIUS,
+                      background: emDrag ? PRIMARY_SOFT : '#FAFCFE', padding: '12px 14px',
+                      transition: 'background-color 150ms var(--ease-gt3), border-color 150ms var(--ease-gt3)',
+                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                      {podeEditar && editPastaId === pastaId ? (
+                        <input autoFocus value={editPastaNome} onChange={e => setEditPastaNome(e.target.value)}
+                          onBlur={() => { renomearPasta(pastaId as string, editPastaNome); setEditPastaId('') }}
+                          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditPastaId('') }}
+                          style={inputStyle({ flex: 1, padding: '4px 8px', fontSize: 13, fontWeight: 700 })} />
+                      ) : (
+                        <>
+                          <b
+                            onClick={() => { if (podeEditar) { setEditPastaId(pastaId as string); setEditPastaNome(nome) } }}
+                            title={podeEditar ? 'Clique para renomear' : undefined}
+                            style={{ flex: 1, fontSize: 13, color: TEXT, cursor: podeEditar ? 'text' : 'default' }}>
+                            {podeEditar ? '🗂 ' : ''}{nome}
+                          </b>
+                          {podeEditar && (
+                            <button onClick={() => { setEditPastaId(pastaId as string); setEditPastaNome(nome) }} title="Renomear pasta" style={{ ...btnDangerIcon, color: PRIMARY }}>✏️</button>
+                          )}
+                        </>
+                      )}
+                      <span style={{ fontSize: 11, color: MUTED }}>{docs.length}</span>
+                      {podeEditar && <button onClick={() => removerPasta(pastaId as string)} title="Excluir pasta" style={btnDangerIcon}>🗑</button>}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10, minHeight: 34 }}>
+                      {docs.length === 0
+                        ? <div style={{ fontSize: 11.5, color: MUTED, fontStyle: 'italic', padding: '6px 2px' }}>Arraste documentos pra cá</div>
+                        : docs.map(d => renderDocChip(d))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input value={novoDocPorPasta[key] || ''} onChange={e => setNovoDocPorPasta(prev => ({ ...prev, [key]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') addDocumentoEmPasta(pastaId) }}
+                        placeholder="+ documento..." style={inputStyle({ flex: 1, fontSize: 12, padding: '6px 9px' })} />
+                      <button onClick={() => addDocumentoEmPasta(pastaId)} style={sm(btnGhost)}>＋</button>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="gt3-overlay-fade" onClick={e => { if (e.target === e.currentTarget) setModalPastasAberto(false) }}
+                  style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
+                  <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 1040, boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
+                    <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: PRIMARY }}>🗂 Pastas de {getSetorNome(cfgSetorEfetivo)}</h3>
+                        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>Arraste um documento de uma pasta pra outra, ou use o &quot;＋&quot; dentro de uma delas</div>
+                      </div>
+                      <button onClick={() => setModalPastasAberto(false)} className="gt3-close-btn" style={{ border: 'none', background: BG, width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 15, color: MUTED, flexShrink: 0 }}>✕</button>
+                    </div>
+                    <div style={{ padding: '20px 24px', maxHeight: '72vh', overflowY: 'auto' }}>
+                      {duplicatasNomesSetor.size > 0 && (
+                        <div style={{
+                          background: '#FFFBF0', border: '1px solid #F0DDB4', borderLeft: '4px solid #D97706', borderRadius: RADIUS,
+                          padding: '11px 14px', fontSize: 12.5, color: '#7A5814', marginBottom: 16, display: 'flex', gap: 9, alignItems: 'flex-start',
+                        }}>
+                          <span>⚠</span>
+                          <span>Documento(s) com o mesmo nome em mais de uma pasta: <b>{[...duplicatasNomesSetor].join(', ')}</b>. Considere manter em uma só.</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                        <input value={novaPastaNome} onChange={e => setNovaPastaNome(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') addPasta() }}
+                          placeholder="Nome da nova pasta (ex.: Anuais)" style={inputStyle({ flex: 1 })} />
+                        <button onClick={addPasta} style={btnAccent}>＋ Nova pasta</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
+                        {pastasDoSetor.map(p => renderPastaCard({ pastaId: p.id, nome: p.nome, docs: docsDoSetor.filter(d => d.pasta_id === p.id), podeEditar: true }))}
+                        {renderPastaCard({ pastaId: null, nome: 'Sem pasta', docs: semPasta, podeEditar: false })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Painel 4: Matriz de pertinência */}
             <ConfigPanel title="Matriz de pertinência · usuário × setor" subtitle="Define quem é liberado como responsável ao flegar cada setor" wide>
@@ -1078,27 +1825,89 @@ export default function DesignacaoReprovadosClient() {
             </ConfigPanel>
 
             {/* Painel 5: Empresas */}
-            <ConfigPanel title="Empresas / Prestadoras" subtitle="Lista própria deste módulo, usada no autocomplete da designação" wide>
-              <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 14 }}>
-                {empresas.map(e => (
-                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${BORDER}` }}>
-                    <div>
+            <ConfigPanel title="Empresas / Prestadoras" subtitle={`Lista própria deste módulo (${empresas.length}) — e-mail usado no .eml e no "Copiar e-mail"`} wide>
+              <input value={empresaBusca} onChange={e => setEmpresaBusca(e.target.value)} placeholder="🔍 Buscar por empresa, contratante ou e-mail..."
+                style={inputStyle({ width: '100%', marginBottom: 10 })} />
+              <div style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 14, border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+                {empresasFiltradas.map(e => editEmpresaId === e.id ? (
+                  <div key={e.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: '#FCFDFF', flexWrap: 'wrap' }}>
+                    <input value={editNome} onChange={ev => setEditNome(ev.target.value)} placeholder="Razão social / fantasia" style={inputStyle({ flex: 2, minWidth: 160 })} />
+                    <input value={editContratante} onChange={ev => setEditContratante(ev.target.value)} placeholder="Contratante" style={inputStyle({ flex: 1, minWidth: 110 })} />
+                    <input value={editEmail} onChange={ev => setEditEmail(ev.target.value)} placeholder="e-mail1@x.com;e-mail2@x.com" style={inputStyle({ flex: 2, minWidth: 160 })} />
+                    <button onClick={salvarEdicaoEmpresa} style={sm(btnAccent)}>✓ Salvar</button>
+                    <button onClick={cancelarEdicaoEmpresa} style={sm(btnGhost)}>Cancelar</button>
+                  </div>
+                ) : (
+                  <div key={e.id} className="gt3-table-row-hover" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '9px 10px', borderBottom: `1px solid ${BORDER}` }}>
+                    <div style={{ minWidth: 0 }}>
                       <b style={{ fontSize: 13.5 }}>{e.nome}</b>
-                      <div style={{ fontSize: 11.5, color: MUTED }}>{e.contratante || '—'}</div>
+                      <div style={{ fontSize: 11.5, color: MUTED, overflowWrap: 'break-word' }}>
+                        {e.contratante || '—'} {e.email ? <>· {e.email}</> : <span style={{ color: '#B45309' }}>· e-mail não cadastrado</span>}
+                      </div>
                     </div>
-                    <button onClick={() => removerEmpresa(e.id)} style={btnDangerIcon} title="Excluir">🗑</button>
+                    <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                      <button onClick={() => iniciarEdicaoEmpresa(e)} title="Editar" style={{ ...btnDangerIcon, color: PRIMARY }}>✏️</button>
+                      <button onClick={() => removerEmpresa(e.id)} style={btnDangerIcon} title="Excluir">🗑</button>
+                    </div>
                   </div>
                 ))}
-                {empresas.length === 0 && <div style={{ fontSize: 12.5, color: MUTED }}>Nenhuma empresa cadastrada.</div>}
+                {empresasFiltradas.length === 0 && <div style={{ fontSize: 12.5, color: MUTED, padding: '10px' }}>Nenhuma empresa encontrada.</div>}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input value={novaEmpresaNome} onChange={e => setNovaEmpresaNome(e.target.value)} placeholder="Razão social / fantasia" style={inputStyle({ flex: 2, minWidth: 180 })} />
                 <input value={novaEmpresaContratante} onChange={e => setNovaEmpresaContratante(e.target.value)} placeholder="Contratante" style={inputStyle({ flex: 1, minWidth: 130 })} />
+                <input value={novaEmpresaEmail} onChange={e => setNovaEmpresaEmail(e.target.value)} placeholder="e-mail1@x.com;e-mail2@x.com" style={inputStyle({ flex: 2, minWidth: 180 })} />
                 <button onClick={addEmpresa} style={sm(btnAccent)}>＋ Add</button>
               </div>
             </ConfigPanel>
 
+            {/* Painel 6: Estrutura do e-mail */}
+            <ConfigPanel title="Estrutura do e-mail" subtitle="Assunto, saudação e fechamento — editáveis a qualquer momento, valem para todo e-mail montado pelo módulo" wide>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>
+                    Assunto <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>— variável: <code>{'{{empresa}}'}</code></span>
+                  </div>
+                  <input value={cfgAssunto} onChange={e => setCfgAssunto(e.target.value)} style={inputStyle({ width: '100%' })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>
+                    Saudação (abertura) <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>— variável: <code>{'{{setores}}'}</code> (fica em negrito, se adapta a 1 ou mais)</span>
+                  </div>
+                  <textarea value={cfgSaudacao} onChange={e => setCfgSaudacao(e.target.value)} rows={2} style={inputStyle({ width: '100%', resize: 'vertical' })} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Fechamento</div>
+                  <textarea value={cfgFechamento} onChange={e => setCfgFechamento(e.target.value)} rows={2} style={inputStyle({ width: '100%', resize: 'vertical' })} />
+                </div>
+                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>
+                  O bloco de setor/documentos (título em negrito+sublinhado com os tópicos) é montado automaticamente a partir do que foi marcado e não é editável aqui.
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>
+                    Prazo do histórico (Minha Caixa / Visão geral)
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input type="number" min={1} value={cfgHistoricoDias}
+                      onChange={e => setCfgHistoricoDias(Math.max(1, Number(e.target.value) || 1))}
+                      style={inputStyle({ width: 90 })} />
+                    <span style={{ fontSize: 12.5, color: MUTED }}>
+                      dias contados a partir da verificação — só vale pra item já <b>resolvido</b>. Passado isso, sai da lista principal
+                      e vai pro Histórico (continua acionável lá). Enquanto não tiver ciência/resolução, o item fica ativo indefinidamente.
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <button onClick={salvarEmailConfig} disabled={savingConfig} style={{ ...btnAccent, opacity: savingConfig ? .6 : 1 }}>
+                    {savingConfig ? 'Salvando...' : '💾 Salvar estrutura'}
+                  </button>
+                </div>
+              </div>
+            </ConfigPanel>
+
           </div>
+            )}
+          </>
         )}
       </div>
 

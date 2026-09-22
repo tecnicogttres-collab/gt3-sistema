@@ -249,7 +249,7 @@ export const MODULES: Module[] = [
     label: 'Aniversários',
     color: '#4A90D9',
     path: '/aniversarios',
-    description: 'Calendário de aniversários dos colaboradores',
+    description: 'Relação de aniversários dos colaboradores por mês',
     allowedRoles: ['admin'],
   },
   {

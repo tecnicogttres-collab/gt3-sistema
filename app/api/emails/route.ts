@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await admin
     .from('email_templates')
     .insert({
+      id: crypto.randomUUID(),
       title: title.trim(),
       client: client.trim(),
       category: category ?? 'Orientação Inicial',

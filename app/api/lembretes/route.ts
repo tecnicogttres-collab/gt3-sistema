@@ -22,7 +22,7 @@ export async function GET() {
   const [{ data: all, error }, { data: confirmacoes }] = await Promise.all([
     admin
       .from('lembretes')
-      .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
+      .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, dia_semana, semana_ordinal, concluido, criado_por, created_at, visibilidade, destinatarios')
       .order('data_inicio', { ascending: true }),
     admin
       .from('lembretes_historico')
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const body = await req.json()
-  const { titulo, descricao, periodo, data_inicio, hora_inicio, visibilidade, destinatarios } = body
+  const { titulo, descricao, periodo, data_inicio, hora_inicio, dia_semana, semana_ordinal, visibilidade, destinatarios } = body
 
   if (!titulo?.trim()) return Response.json({ error: 'Título obrigatório' }, { status: 400 })
   if (!data_inicio) return Response.json({ error: 'Data obrigatória' }, { status: 400 })
@@ -70,12 +70,14 @@ export async function POST(req: NextRequest) {
       periodo: periodo ?? 'unico',
       data_inicio,
       hora_inicio: hora_inicio ?? null,
+      dia_semana: periodo === 'mensal_dia_semana' ? dia_semana ?? null : null,
+      semana_ordinal: periodo === 'mensal_dia_semana' ? semana_ordinal ?? null : null,
       concluido: false,
       criado_por: caller.user.id,
       visibilidade: vis,
       destinatarios: vis === 'selecionados' ? (destinatarios ?? []) : null,
     })
-    .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
+    .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, dia_semana, semana_ordinal, concluido, criado_por, created_at, visibilidade, destinatarios')
     .single()
 
   if (error || !data) return Response.json({ error: error?.message ?? 'Erro ao criar' }, { status: 500 })

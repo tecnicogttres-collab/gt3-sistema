@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '../lib/supabase'
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+const WEEKDAYS_FULL = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']
 
 type Pessoa = { key: string; nome: string; usuarioId: string | null; livreId: string | null }
+type Entry = Pessoa & { dia: number }
 type BdayData = Record<string, Pessoa[]>
 type UsuarioOpcao = { id: string; nome: string | null; usuario: string | null; vinculado: boolean }
 
@@ -14,91 +15,14 @@ function dateKey(month: number, day: number): string {
   return `${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-function DayCell({
-  day, people, isToday, isLastCol, onClick,
-}: {
-  day: number
-  people: Pessoa[]
-  isToday: boolean
-  isLastCol: boolean
-  onClick: () => void
-}) {
-  const [hovered, setHovered] = useState(false)
-
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        minHeight: 88,
-        borderRight: isLastCol ? 'none' : '1px solid #E2E8F0',
-        borderBottom: '1px solid #E2E8F0',
-        padding: '8px 8px 6px',
-        cursor: 'pointer',
-        position: 'relative',
-        overflow: 'hidden',
-        background: hovered ? '#EBF0FB' : '#fff',
-        transition: 'background 0.12s',
-      }}
-    >
-      {/* Day number */}
-      <div style={{ marginBottom: 5, lineHeight: 1 }}>
-        {isToday ? (
-          <div style={{
-            width: 22, height: 22, borderRadius: '50%',
-            background: '#2A4F96', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 600,
-          }}>{day}</div>
-        ) : (
-          <span style={{ fontSize: 13, fontWeight: 500, color: '#6B7A99' }}>{day}</span>
-        )}
-      </div>
-
-      {/* Birthday tags */}
-      {people.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {people.slice(0, 3).map((p) => (
-            <div key={p.key} style={{
-              background: '#EBF0FB', color: '#1E3A6E',
-              borderRadius: 4, padding: '2px 6px',
-              fontSize: 11, fontWeight: 500,
-              display: 'flex', alignItems: 'center', gap: 4,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2A4F96" strokeWidth="2" style={{ flexShrink: 0 }}>
-                <path d="M4 20h16a2 2 0 000-4H4a2 2 0 000 4zM8 16V10M12 16V10M16 16V10M4 10h16"/>
-                <circle cx="12" cy="4" r="1" fill="#2A4F96" stroke="none"/>
-                <circle cx="8" cy="7" r="1" fill="#2A4F96" stroke="none"/>
-                <circle cx="16" cy="7" r="1" fill="#2A4F96" stroke="none"/>
-              </svg>
-              {p.nome}
-            </div>
-          ))}
-          {people.length > 3 && (
-            <div style={{ fontSize: 11, color: '#6B7A99', padding: '2px 6px' }}>
-              +{people.length - 3} mais
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Plus hint on hover */}
-      {hovered && (
-        <span style={{ position: 'absolute', bottom: 6, right: 6, fontSize: 16, color: '#2A4F96', lineHeight: 1, fontWeight: 300 }}>+</span>
-      )}
-    </div>
-  )
-}
-
 export default function AniversariosClient() {
   const today = new Date()
-  const [cy, setCy] = useState(today.getFullYear())
-  const [cm, setCm] = useState(today.getMonth())
+  const [viewYear, setViewYear] = useState(today.getFullYear())
   const [data, setData] = useState<BdayData>({})
   const [usuarios, setUsuarios] = useState<UsuarioOpcao[]>([])
-  const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [formDay, setFormDay] = useState(today.getDate())
+  const [formMonth, setFormMonth] = useState(today.getMonth())
   const [modo, setModo] = useState<'login' | 'livre'>('login')
   const [selectedUserId, setSelectedUserId] = useState('')
   const [inputName, setInputName] = useState('')
@@ -125,26 +49,35 @@ export default function AniversariosClient() {
 
   useEffect(() => { void loadAll() }, [loadAll])
 
-  const prevMonth = () => {
-    if (cm === 0) { setCm(11); setCy(y => y - 1) }
-    else setCm(m => m - 1)
-  }
-
-  const nextMonth = () => {
-    if (cm === 11) { setCm(0); setCy(y => y + 1) }
-    else setCm(m => m + 1)
-  }
-
   const usuariosDisponiveis = useMemo(() => usuarios.filter(u => !u.vinculado), [usuarios])
 
+  // Lista de todo mundo, agrupada por mês (0-11) e ordenada por dia — a "relação" que
+  // substitui o calendário. Meses sem ninguém cadastrado somem da lista.
+  const porMes = useMemo(() => {
+    const buckets: Entry[][] = Array.from({ length: 12 }, () => [])
+    for (const [key, pessoas] of Object.entries(data)) {
+      const [mm, dd] = key.split('-').map(Number)
+      for (const p of pessoas) buckets[mm - 1].push({ ...p, dia: dd })
+    }
+    buckets.forEach(list => list.sort((a, b) => a.dia - b.dia))
+    return buckets
+  }, [data])
+  const totalCadastrados = porMes.reduce((n, l) => n + l.length, 0)
+
+  function openAddModal() {
+    setFormDay(today.getDate()); setFormMonth(today.getMonth())
+    setInputName(''); setSelectedUserId(''); setModo('login'); setMsg('')
+    setAddOpen(true)
+  }
+
   const vincularUsuario = async () => {
-    if (!selectedUserId || selectedDay === null) return
+    if (!selectedUserId) return
     setSaving(true)
     setMsg('')
     const res = await fetch('/api/aniversarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario_id: selectedUserId, dia: selectedDay, mes: cm + 1 }),
+      body: JSON.stringify({ usuario_id: selectedUserId, dia: formDay, mes: formMonth + 1 }),
     })
     setSaving(false)
     if (!res.ok) { setMsg((await res.json().catch(() => ({})))?.error ?? 'Erro ao vincular.'); return }
@@ -154,12 +87,12 @@ export default function AniversariosClient() {
 
   const addPersonLivre = async () => {
     const name = inputName.trim()
-    if (!name || selectedDay === null) return
+    if (!name) return
     setInputName('')
     const supabase = createClient()
     const { error } = await supabase
       .from('aniversarios')
-      .insert({ nome: name, dia: selectedDay, mes: cm + 1 })
+      .insert({ nome: name, dia: formDay, mes: formMonth + 1 })
     if (error) console.error('Erro ao adicionar aniversário:', error)
     await loadAll()
   }
@@ -174,10 +107,7 @@ export default function AniversariosClient() {
     await loadAll()
   }
 
-  const firstDay = new Date(cy, cm, 1).getDay()
-  const totalDays = new Date(cy, cm + 1, 0).getDate()
-
-  // Upcoming birthdays (next 30 days from today)
+  // Upcoming birthdays (next 30 days from today, independente do ano que está sendo visto)
   const upcoming: { name: string; label: string }[] = []
   const ref = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   for (let offset = 0; offset <= 30; offset++) {
@@ -192,8 +122,8 @@ export default function AniversariosClient() {
     }
   }
 
-  const modalKey = selectedDay !== null ? dateKey(cm, selectedDay) : null
-  const modalPeople = modalKey ? (data[modalKey] ?? []) : []
+  const modalKey = dateKey(formMonth, formDay)
+  const modalPeopleNesteDia = data[modalKey] ?? []
 
   const navBtn: React.CSSProperties = {
     width: 34, height: 34, borderRadius: 6, border: '1px solid #E2E8F0',
@@ -202,19 +132,25 @@ export default function AniversariosClient() {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 780, margin: '0 auto' }}>
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #E2E8F0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #E2E8F0', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, color: '#1E293B', letterSpacing: -0.3 }}>Aniversários</div>
-          <div style={{ fontSize: 12, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>GT3 Consultoria</div>
+          <div style={{ fontSize: 12, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>
+            GT3 Consultoria · {totalCadastrados} cadastrado{totalCadastrados !== 1 ? 's' : ''}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={prevMonth} style={navBtn} title="Mês anterior">←</button>
-          <span style={{ fontWeight: 600, fontSize: 15, color: '#1E293B', minWidth: 190, textAlign: 'center' }}>
-            {MONTHS[cm]} de {cy}
-          </span>
-          <button onClick={nextMonth} style={navBtn} title="Próximo mês">→</button>
+          <button onClick={() => setViewYear(y => y - 1)} style={navBtn} title="Ano anterior">←</button>
+          <span style={{ fontWeight: 600, fontSize: 15, color: '#1E293B', minWidth: 56, textAlign: 'center' }}>{viewYear}</span>
+          <button onClick={() => setViewYear(y => y + 1)} style={navBtn} title="Próximo ano">→</button>
+          <button
+            onClick={openAddModal}
+            style={{ marginLeft: 6, background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            + Adicionar aniversário
+          </button>
         </div>
       </div>
 
@@ -245,66 +181,72 @@ export default function AniversariosClient() {
         </div>
       </div>
 
-      {/* Calendar */}
+      {/* Relação — agrupada por mês, separação sutil */}
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden' }}>
-        {/* Weekday headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#F4F6FA', borderBottom: '1px solid #E2E8F0' }}>
-          {WEEKDAYS.map(d => (
-            <div key={d} style={{ padding: '10px 0', textAlign: 'center', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#6B7A99' }}>
-              {d}
+        {totalCadastrados === 0 ? (
+          <div style={{ padding: '48px 20px', textAlign: 'center', color: '#B0ADA5', fontSize: 13.5 }}>
+            Nenhum aniversário cadastrado ainda.
+          </div>
+        ) : porMes.map((lista, mes0) => {
+          if (lista.length === 0) return null
+          return (
+            <div key={mes0}>
+              <div style={{
+                padding: '9px 20px', background: '#FAFBFC',
+                borderTop: mes0 === 0 ? 'none' : '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9',
+                fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9AAABF',
+              }}>
+                {MONTHS[mes0]}
+              </div>
+              {lista.map((p, i) => {
+                const weekday = WEEKDAYS_FULL[new Date(viewYear, mes0, p.dia).getDay()]
+                return (
+                  <div key={p.key} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 20px', borderBottom: i < lista.length - 1 ? '1px solid #F4F6FA' : 'none',
+                    transition: 'background-color .12s',
+                  }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = '#FAFBFC' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent' }}
+                  >
+                    <span style={{ fontSize: 14, color: '#1E293B', lineHeight: 1.4 }}>
+                      <b style={{ fontWeight: 600 }}>{p.nome}</b>
+                      {', '}{String(p.dia).padStart(2, '0')}/{String(mes0 + 1).padStart(2, '0')}. {weekday}
+                      {p.usuarioId && <span style={{ marginLeft: 8, fontSize: 10, color: '#2A4F96', fontWeight: 600 }}>· login vinculado</span>}
+                    </span>
+                    <button
+                      onClick={() => void removePerson(p)}
+                      title={`Remover ${p.nome}`}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D8D4CC', fontSize: 16, lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#E74C3C' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#D8D4CC' }}
+                    >×</button>
+                  </div>
+                )
+              })}
             </div>
-          ))}
-        </div>
-
-        {/* Days grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-          {/* Empty leading cells */}
-          {Array.from({ length: firstDay }).map((_, i) => (
-            <div key={`e${i}`} style={{
-              minHeight: 88,
-              borderRight: (i + 1) % 7 === 0 ? 'none' : '1px solid #E2E8F0',
-              borderBottom: '1px solid #E2E8F0',
-              background: '#F9FAFB',
-            }} />
-          ))}
-
-          {/* Day cells */}
-          {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => {
-            const k = dateKey(cm, d)
-            const isToday = today.getDate() === d && today.getMonth() === cm && today.getFullYear() === cy
-            const colIndex = (firstDay + d - 1) % 7
-            return (
-              <DayCell
-                key={d}
-                day={d}
-                people={data[k] ?? []}
-                isToday={isToday}
-                isLastCol={colIndex === 6}
-                onClick={() => { setSelectedDay(d); setInputName(''); setSelectedUserId(''); setModo('login'); setMsg('') }}
-              />
-            )
-          })}
-        </div>
+          )
+        })}
       </div>
 
       <p style={{ textAlign: 'center', fontSize: 12, color: '#B0ADA5', marginTop: 12 }}>
         Os dados ficam salvos na nuvem e são compartilhados entre todos os usuários.
       </p>
 
-      {/* Modal */}
-      {selectedDay !== null && (
+      {/* Modal: novo aniversário */}
+      {addOpen && (
         <div
           className="gt3-overlay-fade"
           style={{ position: 'fixed', inset: 0, background: 'rgba(26,25,22,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) setSelectedDay(null) }}
+          onClick={e => { if (e.target === e.currentTarget) setAddOpen(false) }}
         >
           <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, width: 380, maxWidth: '94vw', boxShadow: '0 8px 40px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
             {/* Modal header */}
             <div style={{ background: '#2A4F96', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h2 style={{ fontWeight: 600, fontSize: 17, color: '#fff', letterSpacing: -0.2, margin: 0 }}>
-                {selectedDay} de {MONTHS[cm]}
+                Novo aniversário
               </h2>
-              <button onClick={() => setSelectedDay(null)} className="gt3-close-btn" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: '0 2px' }}>
+              <button onClick={() => setAddOpen(false)} className="gt3-close-btn" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 22, lineHeight: 1, padding: '0 2px' }}>
                 ×
               </button>
             </div>
@@ -312,28 +254,33 @@ export default function AniversariosClient() {
             {/* Modal body */}
             <div style={{ padding: 20 }}>
               <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#B0ADA5', marginBottom: 8 }}>
-                Aniversariantes
+                Data de nascimento (dia/mês)
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <input
+                  type="number" min={1} max={31} value={formDay}
+                  onChange={e => setFormDay(Math.min(31, Math.max(1, Number(e.target.value) || 1)))}
+                  style={{ width: 72, border: '1px solid #E2E8F0', borderRadius: 6, padding: '9px 10px', fontSize: 14, background: '#fff', color: '#1E293B', outline: 'none' }}
+                  onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#2A4F96' }}
+                  onBlur={e => { (e.target as HTMLInputElement).style.borderColor = '#E2E8F0' }}
+                />
+                <select
+                  value={formMonth}
+                  onChange={e => setFormMonth(Number(e.target.value))}
+                  style={{ flex: 1, border: '1px solid #E2E8F0', borderRadius: 6, padding: '9px 12px', fontSize: 14, background: '#fff', color: '#1E293B', outline: 'none' }}
+                >
+                  {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                </select>
               </div>
 
-              {modalPeople.length === 0 ? (
-                <p style={{ fontSize: 13, color: '#B0ADA5', fontStyle: 'italic', marginBottom: 16 }}>
-                  Nenhum aniversariante cadastrado.
-                </p>
-              ) : (
+              {modalPeopleNesteDia.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  {modalPeople.map((p) => (
-                    <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#F4F6FA', borderRadius: 6, marginBottom: 4, fontSize: 13, color: '#1E293B' }}>
-                      <span>
-                        {p.nome}
-                        {p.usuarioId && <span style={{ marginLeft: 6, fontSize: 10, color: '#2A4F96', fontWeight: 600 }}>· login vinculado</span>}
-                      </span>
-                      <button
-                        onClick={() => void removePerson(p)}
-                        title={`Remover ${p.nome}`}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B0ADA5', fontSize: 16, lineHeight: 1, padding: '0 2px' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#E74C3C' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#B0ADA5' }}
-                      >×</button>
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#B0ADA5', marginBottom: 8 }}>
+                    Já cadastrado{modalPeopleNesteDia.length !== 1 ? 's' : ''} neste dia
+                  </div>
+                  {modalPeopleNesteDia.map(p => (
+                    <div key={p.key} style={{ fontSize: 13, color: '#1E293B', padding: '4px 10px', background: '#F4F6FA', borderRadius: 6, marginBottom: 4 }}>
+                      {p.nome}
                     </div>
                   ))}
                 </div>
