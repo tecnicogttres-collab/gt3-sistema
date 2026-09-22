@@ -184,11 +184,15 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
             <div ref={menuRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => setMenuOpen(v => !v)}
-                title="Organizar módulos"
+                title="Filtrar e personalizar a ordem dos módulos"
                 style={{
-                  width: 30, height: 30, borderRadius: 7, border: `1px solid ${BORDER}`,
-                  background: menuOpen ? '#EBF0FA' : '#fff', color: menuOpen ? INK : MUTED,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '7px 14px 7px 11px', borderRadius: 8,
+                  border: `1.5px solid ${menuOpen ? INK : '#C7D2E8'}`,
+                  background: menuOpen ? INK : '#EBF0FA', color: menuOpen ? '#fff' : INK,
+                  fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                  boxShadow: menuOpen ? '0 4px 14px rgba(42,79,150,0.25)' : '0 1px 3px rgba(42,79,150,0.12)',
+                  transition: 'background 150ms var(--ease-gt3), border-color 150ms var(--ease-gt3), box-shadow 150ms var(--ease-gt3)',
                 }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -196,6 +200,7 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
                   <line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/>
                   <line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none"/>
                 </svg>
+                Organizar módulos
               </button>
 
               {menuOpen && (
