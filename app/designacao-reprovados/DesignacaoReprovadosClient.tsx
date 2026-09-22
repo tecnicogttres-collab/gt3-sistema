@@ -425,6 +425,8 @@ export default function DesignacaoReprovadosClient() {
   const [dragSobrePasta, setDragSobrePasta]   = useState<string | null>(null)
   const [novoDocPorPasta, setNovoDocPorPasta] = useState<Record<string, string>>({})
   const [novoDocInline, setNovoDocInline]     = useState<Record<string, string>>({})
+  const [novoDocInlinePasta, setNovoDocInlinePasta] = useState<Record<string, string>>({})
+  const [destaqueDocId, setDestaqueDocId]     = useState<string | null>(null)
   const [novaEmpresaNome, setNovaEmpresaNome] = useState('')
   const [novaEmpresaContratante, setNovaEmpresaContratante] = useState('')
   const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
@@ -849,12 +851,16 @@ export default function DesignacaoReprovadosClient() {
     else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao adicionar documento.') }
   }
   /** Cadastra um documento novo direto do formulário de Nova designação (sem passar por
-   *  Configurações) e já marca ele como flegado, pra seguir o preenchimento sem interrupção. */
+   *  Configurações) e já marca ele como flegado, pra seguir o preenchimento sem interrupção.
+   *  Se uma pasta foi indicada, o documento já nasce nela e o mapa de pastas abre com ele
+   *  destacado — senão, entra direto em "Sem pasta". */
   async function addDocumentoInlineForm(setorId: string) {
     const nome = (novoDocInline[setorId] || '').trim()
     if (!nome) { showToast('Informe o documento.'); return }
+    const pastaId = novoDocInlinePasta[setorId] || null
     const res = await fetch('/api/designacao-reprovados/documentos', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setor_id: setorId, nome }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setor_id: setorId, nome, pasta_id: pastaId }),
     })
     if (res.ok) {
       const created = await res.json()
@@ -862,6 +868,12 @@ export default function DesignacaoReprovadosClient() {
       setNovoDocInline(prev => ({ ...prev, [setorId]: '' }))
       setFDocumentos(prev => [...prev, created.id])
       showToast('Documento "' + nome + '" cadastrado e adicionado.')
+      if (pastaId) {
+        setTab('config')
+        setCfgSetorAtual(setorId)
+        setDestaqueDocId(created.id)
+        setModalPastasAberto(true)
+      }
     } else {
       const e = await res.json().catch(() => ({}))
       showToast((e as { error?: string }).error ?? 'Erro ao adicionar documento.')
@@ -1285,6 +1297,17 @@ export default function DesignacaoReprovadosClient() {
                             placeholder="Novo documento neste setor..."
                             style={inputStyle({ flex: 1, fontSize: 12.5, padding: '7px 10px' })}
                           />
+                          {pastasDoSetor.length > 0 && (
+                            <select
+                              value={novoDocInlinePasta[sId] || ''}
+                              onChange={e => setNovoDocInlinePasta(prev => ({ ...prev, [sId]: e.target.value }))}
+                              title="Pasta de destino"
+                              style={inputStyle({ fontSize: 12.5, padding: '7px 8px', flexShrink: 0, maxWidth: 140 })}
+                            >
+                              <option value="">Sem pasta</option>
+                              {pastasDoSetor.map(p => <option key={p.id} value={p.id}>🗂 {p.nome}</option>)}
+                            </select>
+                          )}
                           <button onClick={() => addDocumentoInlineForm(sId)} style={sm(btnAccent)}>＋ Add</button>
                         </div>
                       )
@@ -1719,6 +1742,7 @@ export default function DesignacaoReprovadosClient() {
               const isDuplicado = (d: Documento) => duplicatasNomesSetor.has(d.nome.trim().toLowerCase())
 
               function renderDocChip(d: Documento) {
+                const destacado = d.id === destaqueDocId
                 return (
                   <div
                     key={d.id}
@@ -1726,9 +1750,13 @@ export default function DesignacaoReprovadosClient() {
                     onDragStart={() => setDragDocId(d.id)}
                     onDragEnd={() => { setDragDocId(null); setDragSobrePasta(null) }}
                     style={{
-                      cursor: 'grab', display: 'flex', alignItems: 'center', gap: 6, background: '#fff',
-                      border: `1px solid ${isDuplicado(d) ? '#F0B429' : BORDER}`, borderRadius: 8,
-                      padding: '6px 9px', fontSize: 12, fontWeight: 600, opacity: d.ativo ? 1 : .5,
+                      cursor: 'grab', display: 'flex', alignItems: 'center', gap: 6,
+                      background: destacado ? PRIMARY_SOFT : '#fff',
+                      border: `${destacado ? 2 : 1}px solid ${destacado ? PRIMARY : isDuplicado(d) ? '#F0B429' : BORDER}`,
+                      borderRadius: 8, padding: destacado ? '5px 8px' : '6px 9px', fontSize: 12, fontWeight: 600,
+                      opacity: d.ativo ? 1 : .5,
+                      boxShadow: destacado ? `0 0 0 3px ${PRIMARY_SOFT}` : 'none',
+                      transition: 'background-color 200ms var(--ease-gt3), border-color 200ms var(--ease-gt3), box-shadow 200ms var(--ease-gt3)',
                     }}>
                     <span style={{ color: MUTED, fontSize: 11 }}>⠿</span>
                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nome}</span>
@@ -1790,7 +1818,7 @@ export default function DesignacaoReprovadosClient() {
               }
 
               return (
-                <div className="gt3-overlay-fade" onClick={e => { if (e.target === e.currentTarget) setModalPastasAberto(false) }}
+                <div className="gt3-overlay-fade" onClick={e => { if (e.target === e.currentTarget) { setModalPastasAberto(false); setDestaqueDocId(null) } }}
                   style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
                   <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 1040, boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
                     <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1798,7 +1826,7 @@ export default function DesignacaoReprovadosClient() {
                         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: PRIMARY }}>🗂 Pastas de {getSetorNome(cfgSetorEfetivo)}</h3>
                         <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>Arraste um documento de uma pasta pra outra, ou use o &quot;＋&quot; dentro de uma delas</div>
                       </div>
-                      <button onClick={() => setModalPastasAberto(false)} className="gt3-close-btn" style={{ border: 'none', background: BG, width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 15, color: MUTED, flexShrink: 0 }}>✕</button>
+                      <button onClick={() => { setModalPastasAberto(false); setDestaqueDocId(null) }} className="gt3-close-btn" style={{ border: 'none', background: BG, width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 15, color: MUTED, flexShrink: 0 }}>✕</button>
                     </div>
                     <div style={{ padding: '20px 24px', maxHeight: '72vh', overflowY: 'auto' }}>
                       {duplicatasNomesSetor.size > 0 && (
