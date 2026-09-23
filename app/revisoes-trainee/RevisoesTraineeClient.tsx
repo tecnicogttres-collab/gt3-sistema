@@ -104,6 +104,23 @@ function sumWeight(recs: Registro[]): number {
   return recs.reduce((s, r) => s + docWeight(r), 0)
 }
 
+type EmpresaGroup = { key: string; nome: string; records: Registro[] }
+
+// Agrupa registros consecutivos por empresa (case/trim-insensitive), escopado por
+// pessoa (trainee/currentUser ou trainee selecionado pelo revisor), preservando a
+// ordem de primeira aparição.
+function groupByEmpresa(recs: Registro[], scopeId: string): EmpresaGroup[] {
+  const map = new Map<string, EmpresaGroup>()
+  const order: string[] = []
+  for (const r of recs) {
+    const norm = (r.empresa || '').trim().toLowerCase()
+    const key = `${scopeId}::${norm}`
+    if (!map.has(key)) { map.set(key, { key, nome: r.empresa, records: [] }); order.push(key) }
+    map.get(key)!.records.push(r)
+  }
+  return order.map(k => map.get(k)!)
+}
+
 export default function RevisoesTraineeClient() {
   const { profile, loading: profileLoading } = useUser()
 
@@ -134,6 +151,13 @@ export default function RevisoesTraineeClient() {
   const [editCell, setEditCell] = useState<{ id: string; field: string } | null>(null)
   const [editVal, setEditVal] = useState('')
   const editRef = useRef<HTMLInputElement>(null)
+
+  // Gavetas por empresa (expandir/recolher quando há 2+ documentos)
+  const [expandedEmpresas, setExpandedEmpresas] = useState<Set<string>>(new Set())
+  function toggleEmpresaGroup(key: string) {
+    setExpandedEmpresas(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n })
+  }
+  const newDocumentoRef = useRef<HTMLInputElement>(null)
 
   // Flag modal (revisor)
   const [flagModal, setFlagModal] = useState<{ id: string; status: 'red' | 'yellow' } | null>(null)
@@ -342,6 +366,17 @@ export default function RevisoesTraineeClient() {
     return arr
   }, [activeRecords, sortKey, sortDir])
 
+  const viewedPersonId = isTrainee ? (data?.currentUserId ?? '') : activeTraineeId
+
+  const traineeGroups = useMemo(
+    () => groupByEmpresa(isTrainee ? activeRecords : [], viewedPersonId),
+    [isTrainee, activeRecords, viewedPersonId]
+  )
+  const revisorGroups = useMemo(
+    () => groupByEmpresa(!isTrainee ? sortedRecords : [], viewedPersonId),
+    [isTrainee, sortedRecords, viewedPersonId]
+  )
+
   const docSuggestions = newDocumento.trim()
     ? docBanco.filter(d => d.nome.toLowerCase().includes(newDocumento.toLowerCase()))
     : docBanco
@@ -400,7 +435,9 @@ export default function RevisoesTraineeClient() {
     })
 
     if (res.ok) {
-      setNewEmpresa(''); setNewColaborador(''); setNewDocumento('')
+      // Empresa é mantida propositalmente: permite adicionar vários documentos
+      // seguidos para a mesma empresa sem precisar redigitar o nome.
+      setNewColaborador(''); setNewDocumento('')
       setNewObservacoes(''); setNewAutoAval(null)
       await fetchData()
     } else {
@@ -776,8 +813,9 @@ export default function RevisoesTraineeClient() {
 
   // ── Cell renderer ──────────────────────────────────────────────
   function renderCell(rec: Registro, field: 'empresa' | 'colaborador' | 'documento') {
-    // documento nunca abre edição inline — é sempre copy-on-click
-    const canEdit = isTrainee && rec.criado_por === data!.currentUserId && !!activeDate && !isFinalized && field !== 'documento'
+    // documento e empresa nunca abrem edição inline — são sempre copy-on-click
+    // (empresa agora é definida uma vez e reaproveitada nas gavetas por empresa)
+    const canEdit = isTrainee && rec.criado_por === data!.currentUserId && !!activeDate && !isFinalized && field !== 'documento' && field !== 'empresa'
     const isEditing = editCell?.id === rec.id && editCell.field === field
     const isCopiedEmpresa = field === 'empresa' && !canEdit && copiedEmpresaId === rec.id
     const isCopiedDoc = field === 'documento' && copiedDocId === rec.id
@@ -835,6 +873,217 @@ export default function RevisoesTraineeClient() {
           </span>
         ) : (rawVal || <span style={{ color: '#CBD5E1' }}>—</span>)}
       </span>
+    )
+  }
+
+  // ── Linha de registro (usada solta ou dentro de uma gaveta expandida) ──
+  function renderRecordRow(rec: Registro, nested = false) {
+    return (
+      <tr key={rec.id} style={{ borderBottom: '1px solid var(--border-soft)', backgroundColor: nested ? '#FAFBFF' : rowBg(rec.status), borderLeft: nested ? '3px solid transparent' : rowBorderLeft(rec.status), transition: 'background-color 200ms var(--ease-gt3)' }}>
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#6B7A99', fontSize: 12 }}>{formatTime(rec.created_at)}</td>
+        <td style={{ padding: nested ? '10px 14px 10px 30px' : '10px 14px' }}>
+          {nested ? <span style={{ color: '#CBD5E1', fontSize: 12 }}>↳</span> : renderCell(rec, 'empresa')}
+        </td>
+        <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'colaborador')}</td>
+        <td style={{ padding: '10px 14px' }}>
+          {renderCell(rec, 'documento')}
+          {rec.observacoes && (
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 4, fontStyle: 'italic', borderLeft: '2px solid #CBD5E1', paddingLeft: 6 }}>
+              obs: "{rec.observacoes}"
+            </div>
+          )}
+          {rec.nota_revisor && (
+            <div style={{ fontSize: 11, color: rec.status === 'red' ? '#9B1C1C' : '#92400E', marginTop: 4, fontStyle: 'italic', borderLeft: `2px solid ${rec.status === 'red' ? '#FCA5A5' : '#FCD34D'}`, paddingLeft: 6 }}>
+              "{rec.nota_revisor}" — {rec.revisado_por_profile?.nome ?? '—'}
+            </div>
+          )}
+        </td>
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+          {isTrainee && rec.criado_por === data!.currentUserId && !isFinalized ? (
+            <button
+              onClick={() => cycleAutoAval(rec)}
+              style={{ padding: '3px 8px', borderRadius: 4, border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', backgroundColor: rec.auto_avaliacao ? AUTO_AVAL_META[rec.auto_avaliacao].bg : '#F1F5F9', color: rec.auto_avaliacao ? AUTO_AVAL_META[rec.auto_avaliacao].color : '#94A3B8' }}
+              title="Clique para alterar"
+            >
+              {rec.auto_avaliacao ? `${AUTO_AVAL_META[rec.auto_avaliacao].icon} ${AUTO_AVAL_META[rec.auto_avaliacao].label}` : '—'}
+            </button>
+          ) : rec.auto_avaliacao ? (
+            <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 500, backgroundColor: AUTO_AVAL_META[rec.auto_avaliacao].bg, color: AUTO_AVAL_META[rec.auto_avaliacao].color }}>
+              {AUTO_AVAL_META[rec.auto_avaliacao].icon} {AUTO_AVAL_META[rec.auto_avaliacao].label}
+            </span>
+          ) : (
+            <span style={{ color: '#CBD5E1', fontSize: 12 }}>—</span>
+          )}
+        </td>
+        {!isTrainee && (
+          <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 7px', borderRadius: 4, backgroundColor: rec.status === 'green' ? '#D1FAE5' : rec.status === 'red' ? '#FEE2E2' : rec.status === 'yellow' ? '#FEF3C7' : rec.status === 'erro_corrigido' ? '#FFF7ED' : '#F1F5F9', color: rec.status === 'green' ? '#065F46' : rec.status === 'red' ? '#991B1B' : rec.status === 'yellow' ? '#92400E' : rec.status === 'erro_corrigido' ? '#C2410C' : '#6B7A99' }}>
+              {rec.status === 'erro_corrigido' ? '⚠️ Erro corrigido' : STATUS_LABEL[rec.status]}
+            </span>
+          </td>
+        )}
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+          {isTrainee ? (
+            rec.criado_por === data!.currentUserId && !isFinalized && (
+              (rec.status === 'red' || rec.status === 'yellow') ? (
+                <button
+                  onClick={() => handleJaCorrigido(rec.id)}
+                  disabled={loadingIds.has(rec.id)}
+                  style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #C2410C', background: '#FFF7ED', color: '#C2410C', fontSize: 11, fontWeight: 600, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.6 : 1 }}
+                >
+                  {loadingIds.has(rec.id) ? '…' : '✅ Já corrigido'}
+                </button>
+              ) : (
+                <button onClick={() => handleDelete(rec.id)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: 12, padding: '3px 6px', borderRadius: 4 }} onMouseEnter={e => (e.currentTarget.style.color = '#DC2626')} onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}>
+                  excluir
+                </button>
+              )
+            )
+          ) : (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => handleApprove(rec.id)}
+                disabled={loadingIds.has(rec.id)}
+                style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#16A34A', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#F0FFF4'; e.currentTarget.style.borderColor = '#16A34A' } }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+              >
+                ✓ Aprovar
+              </button>
+              <button
+                onClick={() => openFlag(rec.id, 'yellow')}
+                disabled={loadingIds.has(rec.id)}
+                style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#D97706', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#FFFBEB'; e.currentTarget.style.borderColor = '#D97706' } }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+              >
+                ! Discutir
+              </button>
+              <button
+                onClick={() => openFlag(rec.id, 'red')}
+                disabled={loadingIds.has(rec.id)}
+                style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#DC2626', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = '#DC2626' } }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+              >
+                ✕ Erro
+              </button>
+              {rec.status !== 'pending' && (
+                <button
+                  onClick={() => handleClear(rec.id)}
+                  disabled={loadingIds.has(rec.id)}
+                  style={{ padding: '4px 8px', borderRadius: 5, border: 'none', background: 'transparent', color: '#94A3B8', fontSize: 11, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
+                  onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.color = '#374151'; e.currentTarget.style.background = '#F1F5F9' } }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'transparent' }}
+                >
+                  limpar
+                </button>
+              )}
+            </div>
+          )}
+        </td>
+      </tr>
+    )
+  }
+
+  // ── Cabeçalho de gaveta (empresa com 2+ documentos) ─────────────
+  function renderGroupHeaderRow(group: EmpresaGroup) {
+    const isExpanded = expandedEmpresas.has(group.key)
+    const totalDocs = group.records.length
+    const groupCopyId = `grp-${group.key}`
+    const avalCounts: Partial<Record<NonNullable<AutoAval>, number>> = {}
+    group.records.forEach(r => { if (r.auto_avaliacao) avalCounts[r.auto_avaliacao] = (avalCounts[r.auto_avaliacao] ?? 0) + 1 })
+    const statusCounts: Partial<Record<Status, number>> = {}
+    group.records.forEach(r => { statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1 })
+    const STATUS_DOT: Record<Status, string> = { green: '#16A34A', red: '#DC2626', yellow: '#D97706', pending: '#94A3B8', erro_corrigido: '#C2410C' }
+    const docNames = group.records.map(r => r.documento).filter(Boolean)
+
+    function copyEmpresa(e: React.MouseEvent) {
+      e.stopPropagation()
+      navigator.clipboard.writeText(group.nome).catch(() => {})
+      setCopiedEmpresaId(groupCopyId)
+      clearTimeout(copiedEmpresaTimer.current)
+      copiedEmpresaTimer.current = setTimeout(() => setCopiedEmpresaId(null), 1000)
+    }
+
+    return (
+      <tr
+        key={group.key}
+        onClick={() => toggleEmpresaGroup(group.key)}
+        title="Clique para expandir/recolher os documentos desta empresa"
+        style={{ cursor: 'pointer', borderBottom: '1px solid var(--border-soft)', backgroundColor: isExpanded ? '#EEF3FF' : '#FAFBFF', borderLeft: '3px solid #D1AE6E', transition: 'background-color 150ms var(--ease-gt3)' }}
+      >
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+          <span style={{ display: 'inline-block', fontSize: 10, color: '#94A3B8', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }}>▶</span>
+        </td>
+        <td style={{ padding: '10px 14px' }}>
+          <span
+            onClick={copyEmpresa}
+            title="Clique para copiar"
+            style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: copiedEmpresaId === groupCopyId ? '#16A34A' : '#1E293B' }}
+          >
+            {copiedEmpresaId === groupCopyId ? '✓ Copiado!' : group.nome}
+          </span>
+          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: '#92400E', background: '#FEF3C7', borderRadius: 10, padding: '2px 8px' }}>
+            ×{totalDocs} docs
+          </span>
+        </td>
+        <td style={{ padding: '10px 14px', fontSize: 12, color: '#CBD5E1' }}>—</td>
+        <td style={{ padding: '10px 14px', fontSize: 12, color: '#6B7A99' }}>
+          {isExpanded ? (
+            <span style={{ fontStyle: 'italic', color: '#94A3B8' }}>clique para recolher</span>
+          ) : (
+            <span style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{docNames.join(', ')}</span>
+          )}
+        </td>
+        <td style={{ padding: '10px 14px' }}>
+          {Object.keys(avalCounts).length === 0 ? <span style={{ color: '#CBD5E1', fontSize: 12 }}>—</span> : (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {(Object.keys(avalCounts) as NonNullable<AutoAval>[]).map(k => (
+                <span key={k} style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: AUTO_AVAL_META[k].bg, color: AUTO_AVAL_META[k].color }}>
+                  {AUTO_AVAL_META[k].icon} {avalCounts[k]}
+                </span>
+              ))}
+            </div>
+          )}
+        </td>
+        {!isTrainee && (
+          <td style={{ padding: '10px 14px' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(Object.keys(statusCounts) as Status[]).map(s => (
+                <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#475569' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: STATUS_DOT[s], display: 'inline-block' }} />
+                  {statusCounts[s]}
+                </span>
+              ))}
+            </div>
+          </td>
+        )}
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 11, color: '#5B8DEF', fontWeight: 600 }}>{isExpanded ? '▾ recolher' : '▸ expandir'}</span>
+        </td>
+      </tr>
+    )
+  }
+
+  // ── Botão "+ adicionar documento" dentro de uma gaveta expandida (trainee) ──
+  function renderAddMoreRow(group: EmpresaGroup) {
+    const colSpan = isTrainee ? 6 : 7
+    return (
+      <tr key={`add-${group.key}`} style={{ backgroundColor: '#FAFBFF', borderBottom: '1px solid var(--border-soft)' }}>
+        <td colSpan={colSpan} style={{ padding: '6px 14px 10px 30px' }}>
+          <button
+            onClick={() => {
+              setNewEmpresa(group.nome)
+              setTimeout(() => newDocumentoRef.current?.focus(), 0)
+              newDocumentoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }}
+            style={{ background: 'none', border: '1px dashed #C7D7F0', color: '#2A4F96', fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 6, cursor: 'pointer' }}
+          >
+            + Adicionar outro documento para {group.nome}
+          </button>
+        </td>
+      </tr>
     )
   }
 
@@ -1004,110 +1253,18 @@ export default function RevisoesTraineeClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(isTrainee ? activeRecords : sortedRecords).map(rec => (
-                    <tr key={rec.id} style={{ borderBottom: '1px solid var(--border-soft)', backgroundColor: rowBg(rec.status), borderLeft: rowBorderLeft(rec.status), transition: 'background-color 200ms var(--ease-gt3)' }}>
-                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#6B7A99', fontSize: 12 }}>{formatTime(rec.created_at)}</td>
-                      <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'empresa')}</td>
-                      <td style={{ padding: '10px 14px' }}>{renderCell(rec, 'colaborador')}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        {renderCell(rec, 'documento')}
-                        {rec.observacoes && (
-                          <div style={{ fontSize: 11, color: '#475569', marginTop: 4, fontStyle: 'italic', borderLeft: '2px solid #CBD5E1', paddingLeft: 6 }}>
-                            obs: "{rec.observacoes}"
-                          </div>
-                        )}
-                        {rec.nota_revisor && (
-                          <div style={{ fontSize: 11, color: rec.status === 'red' ? '#9B1C1C' : '#92400E', marginTop: 4, fontStyle: 'italic', borderLeft: `2px solid ${rec.status === 'red' ? '#FCA5A5' : '#FCD34D'}`, paddingLeft: 6 }}>
-                            "{rec.nota_revisor}" — {rec.revisado_por_profile?.nome ?? '—'}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                        {isTrainee && rec.criado_por === data.currentUserId && !isFinalized ? (
-                          <button
-                            onClick={() => cycleAutoAval(rec)}
-                            style={{ padding: '3px 8px', borderRadius: 4, border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', backgroundColor: rec.auto_avaliacao ? AUTO_AVAL_META[rec.auto_avaliacao].bg : '#F1F5F9', color: rec.auto_avaliacao ? AUTO_AVAL_META[rec.auto_avaliacao].color : '#94A3B8' }}
-                            title="Clique para alterar"
-                          >
-                            {rec.auto_avaliacao ? `${AUTO_AVAL_META[rec.auto_avaliacao].icon} ${AUTO_AVAL_META[rec.auto_avaliacao].label}` : '—'}
-                          </button>
-                        ) : rec.auto_avaliacao ? (
-                          <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 500, backgroundColor: AUTO_AVAL_META[rec.auto_avaliacao].bg, color: AUTO_AVAL_META[rec.auto_avaliacao].color }}>
-                            {AUTO_AVAL_META[rec.auto_avaliacao].icon} {AUTO_AVAL_META[rec.auto_avaliacao].label}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#CBD5E1', fontSize: 12 }}>—</span>
-                        )}
-                      </td>
-                      {!isTrainee && (
-                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 7px', borderRadius: 4, backgroundColor: rec.status === 'green' ? '#D1FAE5' : rec.status === 'red' ? '#FEE2E2' : rec.status === 'yellow' ? '#FEF3C7' : rec.status === 'erro_corrigido' ? '#FFF7ED' : '#F1F5F9', color: rec.status === 'green' ? '#065F46' : rec.status === 'red' ? '#991B1B' : rec.status === 'yellow' ? '#92400E' : rec.status === 'erro_corrigido' ? '#C2410C' : '#6B7A99' }}>
-                            {rec.status === 'erro_corrigido' ? '⚠️ Erro corrigido' : STATUS_LABEL[rec.status]}
-                          </span>
-                        </td>
-                      )}
-                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                        {isTrainee ? (
-                          rec.criado_por === data.currentUserId && !isFinalized && (
-                            (rec.status === 'red' || rec.status === 'yellow') ? (
-                              <button
-                                onClick={() => handleJaCorrigido(rec.id)}
-                                disabled={loadingIds.has(rec.id)}
-                                style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #C2410C', background: '#FFF7ED', color: '#C2410C', fontSize: 11, fontWeight: 600, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.6 : 1 }}
-                              >
-                                {loadingIds.has(rec.id) ? '…' : '✅ Já corrigido'}
-                              </button>
-                            ) : (
-                              <button onClick={() => handleDelete(rec.id)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: 12, padding: '3px 6px', borderRadius: 4 }} onMouseEnter={e => (e.currentTarget.style.color = '#DC2626')} onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}>
-                                excluir
-                              </button>
-                            )
-                          )
-                        ) : (
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <button
-                              onClick={() => handleApprove(rec.id)}
-                              disabled={loadingIds.has(rec.id)}
-                              style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#16A34A', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
-                              onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#F0FFF4'; e.currentTarget.style.borderColor = '#16A34A' } }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
-                            >
-                              ✓ Aprovar
-                            </button>
-                            <button
-                              onClick={() => openFlag(rec.id, 'yellow')}
-                              disabled={loadingIds.has(rec.id)}
-                              style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#D97706', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
-                              onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#FFFBEB'; e.currentTarget.style.borderColor = '#D97706' } }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
-                            >
-                              ! Discutir
-                            </button>
-                            <button
-                              onClick={() => openFlag(rec.id, 'red')}
-                              disabled={loadingIds.has(rec.id)}
-                              style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: '#DC2626', fontSize: 11, fontWeight: 500, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
-                              onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.borderColor = '#DC2626' } }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
-                            >
-                              ✕ Erro
-                            </button>
-                            {rec.status !== 'pending' && (
-                              <button
-                                onClick={() => handleClear(rec.id)}
-                                disabled={loadingIds.has(rec.id)}
-                                style={{ padding: '4px 8px', borderRadius: 5, border: 'none', background: 'transparent', color: '#94A3B8', fontSize: 11, cursor: loadingIds.has(rec.id) ? 'wait' : 'pointer', opacity: loadingIds.has(rec.id) ? 0.5 : 1 }}
-                                onMouseEnter={e => { if (!loadingIds.has(rec.id)) { e.currentTarget.style.color = '#374151'; e.currentTarget.style.background = '#F1F5F9' } }}
-                                onMouseLeave={e => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'transparent' }}
-                              >
-                                limpar
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {(isTrainee ? traineeGroups : revisorGroups).flatMap(group => {
+                    if (group.records.length < 2) {
+                      return [renderRecordRow(group.records[0])]
+                    }
+                    const isExpanded = expandedEmpresas.has(group.key)
+                    const rows = [renderGroupHeaderRow(group)]
+                    if (isExpanded) {
+                      group.records.forEach(rec => rows.push(renderRecordRow(rec, true)))
+                      if (isTrainee && !isFinalized) rows.push(renderAddMoreRow(group))
+                    }
+                    return rows
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1133,6 +1290,7 @@ export default function RevisoesTraineeClient() {
                     {/* Documento com autocomplete do banco */}
                     <div style={{ position: 'relative', flex: 2, minWidth: 110 }}>
                       <input
+                        ref={newDocumentoRef}
                         type="text"
                         placeholder="Documento *"
                         value={newDocumento}
