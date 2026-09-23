@@ -107,7 +107,7 @@ export default function Tabbar() {
                 }}
               />
             )}
-            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
               {label}
             </span>
             {tab.id !== 'home' && (
