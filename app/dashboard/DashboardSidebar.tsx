@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '../lib/supabase'
 import { nthWeekdayOfMonth } from '../lib/lembretes'
+import { useUser } from '../components/UserContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +36,7 @@ type LembreteItem = {
   id: string
   titulo: string
   daysLeft: number
+  dataOcorrencia: string
 }
 
 type TeamLembreteItem = {
@@ -123,6 +126,16 @@ function pad2(n: number) {
   return String(n).padStart(2, '0')
 }
 
+function dateToStr(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function addDaysStr(base: string, days: number): string {
+  const d = new Date(base + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return dateToStr(d)
+}
+
 function bdayKey(month0: number, day: number) {
   return `${pad2(month0 + 1)}-${pad2(day)}`
 }
@@ -149,6 +162,8 @@ function prioDateLabel(p: Prioridade): string {
 
 export default function DashboardSidebar({ role }: { role?: string }) {
   const isManager = role === 'gestor' || role === 'admin'
+  const { profile } = useUser()
+  const router = useRouter()
   const [priorities, setPriorities] = useState<Prioridade[]>([])
   const [hoNames, setHoNames] = useState<string[]>([])
   const [bsaPerson, setBsaPerson] = useState('')
@@ -156,6 +171,12 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const [lembreteItems, setLembreteItems] = useState<LembreteItem[]>([])
   const [teamLembretes, setTeamLembretes] = useState<TeamLembreteItem[]>([])
   const [abaLembretes, setAbaLembretes] = useState<'meus' | 'equipe'>('meus')
+  // Data (YYYY-MM-DD) a partir da qual cada lembrete volta a aparecer aqui —
+  // preenchido ao "Descartar" ou "Adiar" (não afeta a confirmação nem /lembretes).
+  const [adiamentos, setAdiamentos] = useState<Record<string, string>>({})
+  const [lembreteActingId, setLembreteActingId] = useState<string | null>(null)
+  const [adiarPopoverId, setAdiarPopoverId] = useState<string | null>(null)
+  const [adiarCustomDate, setAdiarCustomDate] = useState('')
   const [modalPrio, setModalPrio] = useState<Prioridade | null>(null)
   const [pdiAgenda, setPdiAgenda] = useState<PdiAgendaEntry[]>([])
   const [pdiConversaColaborador, setPdiConversaColaborador] = useState<PdiConversaColaborador | null>(null)
@@ -290,7 +311,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           const next = nextOccStr(r.periodo, r.data_inicio, r.dia_semana, r.semana_ordinal)
           const diff = Math.round((next.getTime() - todayBase.getTime()) / 86400000)
           if (diff >= 0 && diff <= 3) {
-            items.push({ id: r.id, titulo: r.titulo, daysLeft: diff })
+            items.push({ id: r.id, titulo: r.titulo, daysLeft: diff, dataOcorrencia: dateToStr(next) })
           }
         }
         items.sort((a, b) => a.daysLeft - b.daysLeft)
@@ -359,6 +380,85 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     loadData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
+
+  // Adiamentos/descartes do próprio usuário para o bloco de Lembretes do Dashboard
+  useEffect(() => {
+    if (!profile?.id) return
+    const supabase = createClient()
+    void (async () => {
+      const { data } = await supabase
+        .from('lembretes_adiamentos')
+        .select('lembrete_id, mostrar_a_partir_de')
+        .eq('usuario_id', profile.id)
+      if (!data) return
+      const map: Record<string, string> = {}
+      for (const row of data as { lembrete_id: string; mostrar_a_partir_de: string }[]) {
+        map[row.lembrete_id] = row.mostrar_a_partir_de
+      }
+      setAdiamentos(map)
+    })()
+  }, [profile?.id])
+
+  const todayStrLembretes = dateToStr(new Date())
+  const visibleLembreteItems = lembreteItems.filter(item => {
+    const hideUntil = adiamentos[item.id]
+    return !hideUntil || hideUntil <= todayStrLembretes
+  })
+
+  async function persistAdiamento(lembreteId: string, mostrarAPartirDe: string) {
+    if (!profile?.id) return
+    setAdiamentos(prev => ({ ...prev, [lembreteId]: mostrarAPartirDe }))
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('lembretes_adiamentos')
+      .upsert({ lembrete_id: lembreteId, usuario_id: profile.id, mostrar_a_partir_de: mostrarAPartirDe }, { onConflict: 'lembrete_id,usuario_id' })
+    if (error) console.error('Erro ao adiar/descartar lembrete:', error.message)
+  }
+
+  async function handleConfirmDashboard(item: LembreteItem) {
+    if (!profile || lembreteActingId) return
+    setLembreteActingId(item.id)
+    try {
+      const supabase = createClient()
+      const mesRef = `${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}-01`
+      await supabase.from('lembretes_historico').insert({
+        lembrete_id: item.id,
+        lembrete_titulo: item.titulo,
+        usuario_id: profile.id,
+        usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
+        usuario_login: profile.usuario ?? profile.email ?? profile.nome ?? 'Usuário',
+        mes_referencia: mesRef,
+      })
+      setLembreteItems(prev => prev.filter(i => i.id !== item.id))
+    } finally {
+      setLembreteActingId(null)
+    }
+  }
+
+  async function handleDescartar(item: LembreteItem) {
+    if (lembreteActingId) return
+    setLembreteActingId(item.id)
+    try {
+      await persistAdiamento(item.id, addDaysStr(item.dataOcorrencia, 1))
+    } finally {
+      setLembreteActingId(null)
+    }
+  }
+
+  async function handleAdiarPara(item: LembreteItem, dataAlvo: string) {
+    if (lembreteActingId) return
+    setLembreteActingId(item.id)
+    setAdiarPopoverId(null)
+    try {
+      await persistAdiamento(item.id, dataAlvo)
+    } finally {
+      setLembreteActingId(null)
+    }
+  }
+
+  function abrirLembreteNaPagina(item: LembreteItem) {
+    router.push(`/lembretes?highlight=${item.id}`)
+  }
 
   // Real-time: atualiza conversa PDI do colaborador imediatamente quando gestor agendar
   useEffect(() => {
@@ -694,7 +794,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         })()}
 
         {/* ── Block 4: Lembretes próximos (conditional) ────────────────── */}
-        {(lembreteItems.length > 0 || (isManager && teamLembretes.length > 0)) && (
+        {(visibleLembreteItems.length > 0 || (isManager && teamLembretes.length > 0)) && (
           <div style={{
             background: '#FFF8F0',
             borderRadius: 8,
@@ -736,28 +836,97 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             </div>
 
             {(!isManager || abaLembretes === 'meus') ? (
-              lembreteItems.length === 0 ? (
+              visibleLembreteItems.length === 0 ? (
                 <div style={{ fontSize: 12.5, color: '#9CA3AF', fontStyle: 'italic' }}>Nenhum lembrete seu para os próximos dias.</div>
-              ) : lembreteItems.map((item, i) => (
-                <Link
-                  key={item.id}
-                  href={`/lembretes?edit=${item.id}`}
-                  title="Abrir e editar este lembrete"
-                  style={{
-                    fontSize: 13, color: '#1E293B', textDecoration: 'none',
-                    padding: '5px 0', display: 'block',
-                    borderBottom: i < lembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <span style={{ fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.titulo}
-                  </span>
-                  <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
-                    {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
-                  </span>
-                </Link>
-              ))
+              ) : visibleLembreteItems.map((item, i) => {
+                const acting = lembreteActingId === item.id
+                const popoverOpen = adiarPopoverId === item.id
+                return (
+                  <div key={item.id} style={{ padding: '7px 0', borderBottom: i < visibleLembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none' }}>
+                    <button
+                      onClick={() => abrirLembreteNaPagina(item)}
+                      title="Ver este lembrete em Lembretes ativos"
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0,
+                        cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.5,
+                      }}
+                    >
+                      <span style={{ fontWeight: 500, fontSize: 13, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.titulo}
+                      </span>
+                      <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
+                        {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
+                      </span>
+                    </button>
+
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6, position: 'relative' }}>
+                      <button
+                        onClick={() => void handleConfirmDashboard(item)}
+                        disabled={acting}
+                        style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #16A34A', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 700, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
+                      >
+                        OK
+                      </button>
+                      <button
+                        onClick={() => void handleDescartar(item)}
+                        disabled={acting}
+                        style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 11, fontWeight: 600, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
+                      >
+                        Descartar
+                      </button>
+                      <button
+                        onClick={() => { setAdiarPopoverId(popoverOpen ? null : item.id); setAdiarCustomDate('') }}
+                        disabled={acting}
+                        style={{ padding: '3px 10px', borderRadius: 6, border: `1px solid ${popoverOpen ? '#B85C1A' : '#D1D5DB'}`, background: popoverOpen ? '#FFF3D9' : '#fff', color: '#7A3A0E', fontSize: 11, fontWeight: 600, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
+                      >
+                        Adiar
+                      </button>
+
+                      {popoverOpen && (
+                        <div style={{
+                          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+                          background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8,
+                          boxShadow: '0 6px 20px rgba(0,0,0,0.12)', padding: 10, width: 200,
+                        }}>
+                          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                            {[{ lbl: '+1 dia', d: 1 }, { lbl: '+3 dias', d: 3 }, { lbl: '+7 dias', d: 7 }].map(opt => (
+                              <button
+                                key={opt.d}
+                                onClick={() => void handleAdiarPara(item, addDaysStr(todayStrLembretes, opt.d))}
+                                style={{ flex: 1, padding: '4px 0', borderRadius: 5, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#374151', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                              >
+                                {opt.lbl}
+                              </button>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <input
+                              type="date"
+                              value={adiarCustomDate}
+                              onChange={e => setAdiarCustomDate(e.target.value)}
+                              min={todayStrLembretes}
+                              style={{ flex: 1, padding: '3px 6px', border: '1px solid #E2E8F0', borderRadius: 5, fontSize: 11, fontFamily: 'inherit', color: '#1E293B' }}
+                            />
+                            <button
+                              onClick={() => { if (adiarCustomDate) void handleAdiarPara(item, adiarCustomDate) }}
+                              disabled={!adiarCustomDate}
+                              style={{ padding: '3px 10px', borderRadius: 5, border: 'none', background: '#B85C1A', color: '#fff', fontSize: 11, fontWeight: 600, cursor: adiarCustomDate ? 'pointer' : 'default', opacity: adiarCustomDate ? 1 : 0.5, fontFamily: 'inherit' }}
+                            >
+                              OK
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => setAdiarPopoverId(null)}
+                            style={{ marginTop: 6, width: '100%', padding: '3px 0', borderRadius: 5, border: 'none', background: 'none', color: '#9CA3AF', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
             ) : (
               teamLembretes.length === 0 ? (
                 <div style={{ fontSize: 12.5, color: '#9CA3AF', fontStyle: 'italic' }}>Nenhum lembrete de outros colaboradores hoje.</div>

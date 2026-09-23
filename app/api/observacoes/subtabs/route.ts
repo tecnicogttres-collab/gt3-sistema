@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
-import { getCaller as _getCaller } from '../../../lib/api-helpers'
+import { getCaller as _getCaller, getAuthUser } from '../../../lib/api-helpers'
 
 async function getCaller() {
   const caller = await _getCaller()
@@ -9,7 +9,9 @@ async function getCaller() {
 }
 
 export async function GET(req: NextRequest) {
-  const { user } = await getCaller()
+  // Leitura não depende de papel — evita o round-trip extra em profiles que
+  // deixava a guia dinâmica visivelmente atrasada em relação às fixas.
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)

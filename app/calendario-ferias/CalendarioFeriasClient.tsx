@@ -2,17 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '../lib/supabase'
+import { pickNextFeriasColor } from '../lib/feriasColors'
 
-const PEOPLE = ['Alexandra', 'Camila', 'Daiana', 'Emiliane', 'Giancarlo', 'Jose', 'Luciane', 'Marcio Bastos', 'Marcio Z.', 'Mariane', 'Marina', 'Rodrigo', 'Valmir']
-const COLORS = ['#2A4F96', '#D1AE6E', '#3B6D11', '#7B1FA2', '#0288D1', '#F06292', '#993556', '#00796B', '#185FA5', '#993C1D', '#0F6E56', '#533AB7', '#E65100']
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-const EXTRA_COLOR_POOL = ['#B71C1C','#880E4F','#4A148C','#006064','#33691E','#827717','#BF360C','#4E342E','#37474F','#0D47A1']
 const FOLGA_COLOR = '#FFE600'
 
 type FeriasRecord = { id: string; pessoa: string; inicio: string; fim: string; observacao: string; tipo: 'ferias' | 'folga' }
 type TooltipState = { visible: boolean; x: number; y: number; record: FeriasRecord | null }
 type ExtraPessoa = { id: string; nome: string; cor: string }
+type ActiveUser = { id: string; nome: string; cor: string }
 
 function parseD(s: string): Date {
   return new Date(s + 'T00:00:00')
@@ -35,10 +34,29 @@ function dayStr(year: number, month: number, day: number): string {
   return `${year}-${pad(month + 1)}-${pad(day)}`
 }
 
+function normalizeName(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+// Registros antigos foram salvos com nome curto/abreviado (ex.: "Marcio Z.",
+// "Jose", "Rodrigo") — pode não bater mais 100% com o nome completo do login
+// (ex.: "Marcio Zim", "José Knapp"). Casa por prefixo, token a token, pra achar
+// o colaborador certo sem precisar migrar os dados antigos.
+function nameMatchesPessoa(pessoa: string, nomeCompleto: string): boolean {
+  const pessoaTokens = normalizeName(pessoa).split(/\s+/).filter(Boolean)
+  const nomeTokens = normalizeName(nomeCompleto).split(/\s+/).filter(Boolean)
+  if (pessoaTokens.length === 0) return false
+  return pessoaTokens.every((tok, i) => {
+    const alvo = nomeTokens[i]
+    return !!alvo && alvo.startsWith(tok.replace(/\.$/, ''))
+  })
+}
+
 export default function CalendarioFeriasClient() {
   const today = new Date()
   const [month, setMonth] = useState(today.getMonth())
   const [year, setYear] = useState(today.getFullYear())
+  const [view, setView] = useState<'calendario' | 'lista'>('lista')
   const [records, setRecords] = useState<FeriasRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -46,7 +64,8 @@ export default function CalendarioFeriasClient() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [mPessoa, setMPessoa] = useState(PEOPLE[0])
+  const [mPessoa, setMPessoa] = useState('')
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([])
   const [mInicio, setMInicio] = useState('')
   const [mFim, setMFim] = useState('')
   const [mObs, setMObs] = useState('')
@@ -83,6 +102,15 @@ export default function CalendarioFeriasClient() {
   }, [])
 
   useEffect(() => { void loadExtraPeople() }, [loadExtraPeople])
+
+  // Só colaboradores com login ativo entram nas opções — quem perde o acesso
+  // some da lista (histórico continua no calendário, só não é mais selecionável).
+  const loadActiveUsers = useCallback(async () => {
+    const res = await fetch('/api/ferias/usuarios')
+    if (res.ok) setActiveUsers(await res.json())
+  }, [])
+
+  useEffect(() => { void loadActiveUsers() }, [loadActiveUsers])
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -123,9 +151,22 @@ export default function CalendarioFeriasClient() {
     return acc + Math.round((parseD(e).getTime() - parseD(s).getTime()) / 86400000) + 1
   }, 0)
 
-  const allPeople = [...PEOPLE, ...extraPeople.map(p => p.nome)]
-  const allColors = [...COLORS, ...extraPeople.map(p => p.cor)]
-  const getColor = (nome: string) => { const i = allPeople.indexOf(nome); return i >= 0 ? allColors[i] : '#888' }
+  const allPeople = [...activeUsers.map(u => u.nome), ...extraPeople.map(p => p.nome)]
+  const allColors = [...activeUsers.map(u => u.cor), ...extraPeople.map(p => p.cor)]
+  const getColor = (nome: string) => {
+    const exact = allPeople.indexOf(nome)
+    if (exact >= 0) return allColors[exact]
+    // Fallback pra registros antigos com nome curto: só entre logins ativos,
+    // e só se casar com exatamente um colaborador (evita atribuir errado
+    // quando há homônimos, ex.: mais de um "Rodrigo").
+    const candidatos = activeUsers.filter(u => nameMatchesPessoa(nome, u.nome))
+    return candidatos.length === 1 ? candidatos[0].cor : '#888'
+  }
+
+  // Lista: só o que ainda não chegou no último dia (exclui o que termina hoje ou já passou)
+  const upcomingRecords = [...records]
+    .filter(v => v.fim > todayStr)
+    .sort((a, b) => a.inicio.localeCompare(b.inicio))
 
   const openModal = (id: string | null, initialDay?: string, tipo?: 'ferias' | 'folga') => {
     setEditingId(id)
@@ -133,7 +174,7 @@ export default function CalendarioFeriasClient() {
       const v = records.find(x => x.id === id)
       if (v) { setMPessoa(v.pessoa); setMInicio(v.inicio); setMFim(v.fim); setMObs(v.observacao || ''); setMTipo(v.tipo ?? 'ferias') }
     } else {
-      setMPessoa(allPeople[0])
+      setMPessoa(allPeople[0] ?? '')
       setMInicio(initialDay ?? '')
       setMFim(initialDay ?? '')
       setMObs('')
@@ -145,6 +186,7 @@ export default function CalendarioFeriasClient() {
   const closeModal = () => { setModalOpen(false); setEditingId(null) }
 
   const doSave = async (): Promise<boolean> => {
+    if (!mPessoa) { alert('Selecione um colaborador.'); return false }
     if (!mInicio || !mFim) { alert('Preencha início e fim.'); return false }
     if (mFim < mInicio) { alert('A data de fim deve ser igual ou posterior ao início.'); return false }
     setSaving(true)
@@ -166,7 +208,7 @@ export default function CalendarioFeriasClient() {
   const handleSaveAndNext = async () => {
     if (await doSave()) {
       setEditingId(null)
-      setMPessoa(allPeople[0])
+      setMPessoa(allPeople[0] ?? '')
       setMInicio('')
       setMFim('')
       setMObs('')
@@ -188,7 +230,8 @@ export default function CalendarioFeriasClient() {
       alert('Colaborador já existe na lista.'); return
     }
     setAddingSaving(true)
-    const cor = EXTRA_COLOR_POOL[extraPeople.length % EXTRA_COLOR_POOL.length]
+    const usedColors = new Set(allColors)
+    const cor = pickNextFeriasColor(usedColors, activeUsers.length + extraPeople.length)
     const supabase = createClient()
     const { data, error } = await supabase.from('ferias_pessoas').insert({ nome, cor }).select('id, nome, cor').single()
     if (error) { console.error(error); setAddingSaving(false); return }
@@ -246,27 +289,53 @@ export default function CalendarioFeriasClient() {
         </div>
       </div>
 
-      {/* Month nav + summary */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={prevMonth} style={navBtn}>←</button>
-          <span style={{ fontWeight: 700, fontSize: 16, color: '#1E293B', minWidth: 200 }}>
-            {MONTHS[month]} {year}
-          </span>
-          <button onClick={nextMonth} style={navBtn}>→</button>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[
-            { val: monthRecords.length, lbl: `registro${monthRecords.length !== 1 ? 's' : ''}` },
-            { val: uniquePeople, lbl: `colaborador${uniquePeople !== 1 ? 'es' : ''}` },
-            { val: totalMonthDays, lbl: 'dias no mês' },
-          ].map(item => (
-            <div key={item.lbl} style={{ background: '#fff', border: '1px solid rgba(42,79,150,0.12)', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#6b7a9e', boxShadow: '0 2px 8px rgba(42,79,150,0.06)' }}>
-              <strong style={{ color: '#2A4F96' }}>{item.val}</strong> {item.lbl}
-            </div>
-          ))}
-        </div>
+      {/* Toggle de visão */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {([
+          { key: 'calendario' as const, lbl: '📅 Calendário' },
+          { key: 'lista' as const, lbl: `📋 Lista (${upcomingRecords.length})` },
+        ]).map(opt => {
+          const on = view === opt.key
+          return (
+            <button
+              key={opt.key}
+              onClick={() => setView(opt.key)}
+              style={{
+                padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${on ? '#2A4F96' : '#E2E8F0'}`,
+                background: on ? '#2A4F96' : '#fff',
+                color: on ? '#fff' : '#6B7A99',
+              }}
+            >
+              {opt.lbl}
+            </button>
+          )
+        })}
       </div>
+
+      {view === 'calendario' && (
+        <>
+          {/* Month nav + summary */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={prevMonth} style={navBtn}>←</button>
+              <span style={{ fontWeight: 700, fontSize: 16, color: '#1E293B', minWidth: 200 }}>
+                {MONTHS[month]} {year}
+              </span>
+              <button onClick={nextMonth} style={navBtn}>→</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[
+                { val: monthRecords.length, lbl: `registro${monthRecords.length !== 1 ? 's' : ''}` },
+                { val: uniquePeople, lbl: `colaborador${uniquePeople !== 1 ? 'es' : ''}` },
+                { val: totalMonthDays, lbl: 'dias no mês' },
+              ].map(item => (
+                <div key={item.lbl} style={{ background: '#fff', border: '1px solid rgba(42,79,150,0.12)', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#6b7a9e', boxShadow: '0 2px 8px rgba(42,79,150,0.06)' }}>
+                  <strong style={{ color: '#2A4F96' }}>{item.val}</strong> {item.lbl}
+                </div>
+              ))}
+            </div>
+          </div>
 
       {/* Calendar */}
       <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden' }}>
@@ -378,6 +447,79 @@ export default function CalendarioFeriasClient() {
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {view === 'lista' && (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden', marginBottom: 4 }}>
+          {loading ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: '#6B7A99', fontSize: 14 }}>Carregando...</div>
+          ) : loadError ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: '#b03030', fontSize: 14 }}>
+              Erro ao carregar dados: <strong>{loadError}</strong>
+            </div>
+          ) : upcomingRecords.length === 0 ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8', fontSize: 14 }}>
+              Nenhuma férias ou folga em andamento ou por vir.
+            </div>
+          ) : (
+            <div>
+              {upcomingRecords.map((v, i) => {
+                const isFolga = v.tipo === 'folga'
+                const emAndamento = v.inicio <= todayStr && todayStr <= v.fim
+                const diasParaComecar = Math.round((parseD(v.inicio).getTime() - parseD(todayStr).getTime()) / 86400000)
+                const monthKey = v.inicio.slice(0, 7)
+                const isNewMonth = i === 0 || upcomingRecords[i - 1].inicio.slice(0, 7) !== monthKey
+                const [my, mm] = monthKey.split('-')
+                return (
+                  <div key={v.id}>
+                    {isNewMonth && (
+                      <div style={{
+                        padding: '10px 16px 6px', fontSize: 10.5, fontWeight: 700, color: '#94A3B8',
+                        textTransform: 'uppercase', letterSpacing: '0.08em',
+                        background: '#FAFBFC', borderTop: i > 0 ? '1px solid #F1F5F9' : 'none',
+                      }}>
+                        {MONTHS[parseInt(mm, 10) - 1]} {my}
+                      </div>
+                    )}
+                    <div
+                      onClick={() => openModal(v.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                        borderBottom: i < upcomingRecords.length - 1 ? '1px solid #F1F5F9' : 'none',
+                        cursor: 'pointer', transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F9FAFB' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                    >
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFolga ? FOLGA_COLOR : getColor(v.pessoa), flexShrink: 0, border: isFolga ? '1px solid rgba(0,0,0,0.15)' : 'none' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: '#1E293B' }}>{v.pessoa}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', padding: '2px 7px', borderRadius: 4, background: isFolga ? '#FFF7D6' : '#EBF0FB', color: isFolga ? '#8a6d00' : '#2A4F96' }}>
+                            {isFolga ? 'Folga' : 'Férias'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>
+                          {fmt(v.inicio)} → {fmt(v.fim)} · {totalDays(v)} dia{totalDays(v) !== 1 ? 's' : ''}
+                          {v.observacao && <span style={{ fontStyle: 'italic' }}> · {v.observacao}</span>}
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0,
+                        background: emAndamento ? '#DCFCE7' : '#F1F5F9',
+                        color: emAndamento ? '#166534' : '#6B7A99',
+                      }}>
+                        {emAndamento ? 'Em andamento' : diasParaComecar === 0 ? 'Começa hoje' : diasParaComecar === 1 ? 'Começa amanhã' : `Em ${diasParaComecar} dias`}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Legend */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>

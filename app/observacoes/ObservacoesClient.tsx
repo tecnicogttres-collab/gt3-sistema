@@ -86,8 +86,6 @@ function escreverClipboard(texto: string) {
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
-const ACCENT = '#D1AE6E'
-const ACCENT_DARK = '#B8922A'
 const BORDER = '#E2E8F0'
 const MUTED = '#6B7A99'
 const INK = '#1E253D'
@@ -291,7 +289,9 @@ export default function ObservacoesClient() {
   const spacerRef = useRef<HTMLDivElement>(null)
 
   const [dbObs, setDbObs] = useState<DbObservacao[]>([])
-  const [dbSubtabs, setDbSubtabs] = useState<DbSubtab[]>([])
+  // Cacheado por categoria — trocar de aba não deve zerar o que já foi
+  // carregado antes (senão a guia dinâmica "pisca" de novo a cada troca).
+  const [dbSubtabsByCategoria, setDbSubtabsByCategoria] = useState<Record<string, DbSubtab[]>>({})
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false })
   const [subtabModal, setSubtabModal] = useState<SubtabModal>({ open: false, name: '', saving: false, error: '' })
@@ -384,7 +384,7 @@ export default function ObservacoesClient() {
         toDelete.forEach(ds => {
           fetch(`/api/observacoes/subtabs?categoria=${encodeURIComponent(ds.categoria)}&subtab=${encodeURIComponent(ds.subtab)}`, { method: 'DELETE' }).catch(() => {})
         })
-        setDbSubtabs(data.filter(ds => !isImageOnlyColuna(ds.subtab)))
+        setDbSubtabsByCategoria(prev => ({ ...prev, [activeCatKey]: data.filter(ds => !isImageOnlyColuna(ds.subtab)) }))
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -504,6 +504,8 @@ export default function ObservacoesClient() {
     () => CATEGORIES.find(c => c.key === activeCatKey),
     [activeCatKey]
   )
+
+  const dbSubtabs = useMemo(() => dbSubtabsByCategoria[activeCatKey] ?? [], [dbSubtabsByCategoria, activeCatKey])
 
   const allSubtabs = useMemo(() => {
     const staticSubs = activeCategory?.subtabs ?? []
@@ -642,7 +644,6 @@ export default function ObservacoesClient() {
     const cat = CATEGORIES.find(c => c.key === key)
     setActiveCatKey(key)
     setActiveSubtabKey(cat?.subtabs[0]?.key ?? '')
-    setDbSubtabs([])
     setSearch('')
     setLayoutMode(false)
     setDragColIdx(null)
@@ -723,7 +724,7 @@ export default function ObservacoesClient() {
     const res = await fetch('/api/observacoes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoria: catKey, subtab: subtabKey, coluna, motivo, parecer, status_edicao: 'pendente_validacao' }),
+      body: JSON.stringify({ categoria: catKey, subtab: subtabKey, coluna, motivo, parecer }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
@@ -898,7 +899,7 @@ export default function ObservacoesClient() {
     })
     if (res.ok) {
       const created: DbSubtab = await res.json()
-      setDbSubtabs(prev => [...prev, created])
+      setDbSubtabsByCategoria(prev => ({ ...prev, [activeCatKey]: [...(prev[activeCatKey] ?? []), created] }))
       setActiveSubtabKey(created.subtab)
       setSubtabModal({ open: false, name: '', saving: false, error: '' })
     } else {
@@ -1628,7 +1629,6 @@ export default function ObservacoesClient() {
                 !isImageOnlyColuna(st.key) || !!activeCategory?.subtabs.find(s => s.key === st.key)
               ).map((st, idx) => {
                 const isActive = st.key === (activeSubtab?.key ?? '')
-                const isDynamic = !activeCategory?.subtabs.find(s => s.key === st.key)
                 const isTabDragging = layoutMode && dragTabIdx === idx
                 const isTabDropTarget = layoutMode && hoverTabIdx === idx && dragTabIdx !== null && dragTabIdx !== idx
                 return (
@@ -1642,9 +1642,9 @@ export default function ObservacoesClient() {
                     onDragEnd={layoutMode ? () => { setDragTabIdx(null); setHoverTabIdx(null) } : undefined}
                     style={{
                       padding: '6px 14px', borderRadius: 20,
-                      border: `1.5px solid ${isTabDropTarget ? PRIMARY : isActive ? PRIMARY : isDynamic ? ACCENT : BORDER}`,
+                      border: `1.5px solid ${isTabDropTarget ? PRIMARY : isActive ? PRIMARY : BORDER}`,
                       background: isActive ? PRIMARY : isTabDropTarget ? PRIMARY_LIGHT : '#fff',
-                      color: isActive ? '#fff' : isDynamic ? ACCENT_DARK : MUTED, fontSize: 12,
+                      color: isActive ? '#fff' : MUTED, fontSize: 12,
                       fontWeight: isActive ? 700 : 500,
                       cursor: layoutMode ? (isTabDragging ? 'grabbing' : 'grab') : 'pointer',
                       transition: 'all 0.15s', whiteSpace: 'nowrap',

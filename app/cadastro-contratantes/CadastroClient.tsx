@@ -462,15 +462,9 @@ export default function CadastroClient() {
 
         {/* Add company */}
         <div style={{ padding: '10px 14px', borderTop: '1px solid #E2E8F0' }}>
-          <button
-            onClick={openNewModal}
-            style={{
-              width: '100%', padding: '8px', borderRadius: 8, border: '1px dashed #CBD5E0',
-              background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#2A4F96', fontWeight: 500,
-            }}
-          >
-            + Nova contratante
-          </button>
+          <LabelBtn onClick={openNewModal} icon={<IconPlus size={13} />} dashed fullWidth>
+            Nova contratante
+          </LabelBtn>
         </div>
       </div>
 
@@ -543,7 +537,12 @@ export default function CadastroClient() {
             }}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-            <button onClick={() => setEditTextModal({ open: false })} style={btnSecondary}>Cancelar</button>
+            <button
+              onClick={() => setEditTextModal({ open: false })}
+              style={btnSecondary}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#F4F6FA' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
+            >Cancelar</button>
             <button
               onClick={() => {
                 if (!editTextModal.open || !currentId) return
@@ -552,6 +551,8 @@ export default function CadastroClient() {
                 setEditTextModal({ open: false })
               }}
               style={btnPrimary}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#3D6ABF' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2A4F96' }}
             >
               Salvar
             </button>
@@ -596,8 +597,18 @@ export default function CadastroClient() {
             </select>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button onClick={() => setNewCompanyModal({ open: false })} style={btnSecondary}>Cancelar</button>
-            <button onClick={() => void confirmModal()} style={btnPrimary}>
+            <button
+              onClick={() => setNewCompanyModal({ open: false })}
+              style={btnSecondary}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#F4F6FA' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
+            >Cancelar</button>
+            <button
+              onClick={() => void confirmModal()}
+              style={btnPrimary}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#3D6ABF' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2A4F96' }}
+            >
               {newCompanyModal.mode === 'create' ? 'Criar' : 'Mover'}
             </button>
           </div>
@@ -622,16 +633,21 @@ function CompanyCard({
   const em = getEmailFirst(c)
   const auth = getAuthTag(c)
   const dot = SEGMENT_COLORS[c.segment] ?? '#8C6EDC'
+  const [hov, setHov] = useState(false)
 
   return (
     <div
       onClick={onSelect}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       style={{
-        padding: '8px 8px 8px 10px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
-        background: isActive ? '#EEF2FF' : '#F7F9FC',
+        padding: '8px 8px 8px 9px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
+        background: isActive ? '#EEF2FF' : hov ? '#F0F3F8' : '#F7F9FC',
         border: isActive ? '1px solid #BFD0FF' : '1px solid transparent',
+        borderLeft: `3px solid ${isActive ? dot : 'transparent'}`,
+        boxShadow: isActive ? '0 1px 4px rgba(42,79,150,0.1)' : 'none',
         display: 'flex', alignItems: 'flex-start', gap: 6,
-        transition: 'background 0.15s',
+        transition: 'background-color 0.15s, border-color 0.15s, box-shadow 0.15s',
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -699,6 +715,103 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
   )
 }
 
+// ── Icons ──────────────────────────────────────────────────────────────────
+
+function IconPencil() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  )
+}
+
+function IconTrash() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+      <path d="M10 11v6M14 11v6M9 6V4h6v2" />
+    </svg>
+  )
+}
+
+function IconChevronUp() {
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 15l-6-6-6 6" /></svg>
+}
+
+function IconChevronDown() {
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+}
+
+function IconPlus({ size = 14 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
+}
+
+function IconSwap() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M7 16V4M7 4L3 8M17 8v12M17 20l4-4M17 20l-4-4" />
+    </svg>
+  )
+}
+
+// ── Botões reutilizáveis (ícone / ícone+texto), com realce de cor no hover ──
+
+function IconBtn({
+  onClick, title, danger, disabled, children,
+}: { onClick: () => void; title: string; danger?: boolean; disabled?: boolean; children: React.ReactNode }) {
+  const [hov, setHov] = useState(false)
+  const active = hov && !disabled
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      disabled={disabled}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: `1px solid ${active ? (danger ? '#FEB2B2' : '#BFD0FF') : '#E2E8F0'}`,
+        background: active ? (danger ? '#FFF5F5' : '#EEF2FF') : '#fff',
+        color: disabled ? '#CBD5E0' : active ? (danger ? '#E53E3E' : '#2A4F96') : '#718096',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontSize: 11, fontWeight: 700,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function LabelBtn({
+  onClick, icon, children, danger, dashed, fullWidth,
+}: { onClick: () => void; icon?: React.ReactNode; children: React.ReactNode; danger?: boolean; dashed?: boolean; fullWidth?: boolean }) {
+  const [hov, setHov] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        width: fullWidth ? '100%' : undefined,
+        padding: '7px 12px', borderRadius: 8,
+        border: dashed
+          ? `1px dashed ${hov ? '#2A4F96' : '#CBD5E0'}`
+          : `1px solid ${danger ? '#FEB2B2' : hov ? '#BFD0FF' : '#E2E8F0'}`,
+        background: dashed ? 'transparent' : hov ? (danger ? '#FFF5F5' : '#EEF2FF') : '#fff',
+        color: danger ? '#E53E3E' : hov ? '#2A4F96' : dashed ? '#2A4F96' : '#4A5568',
+        fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+      }}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
 // ── Detail panel ───────────────────────────────────────────────────────────
 
 type DetailPanelProps = {
@@ -731,6 +844,42 @@ function DetailPanel({
   const tblCount = c.fields.filter(f => f.type === 'table').length
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const hoverIdxRef = useRef<number | null>(null)
+
+  // Reordenar segurando e arrastando (pointer events) — mais fluido e confiável
+  // do que o drag-and-drop nativo do HTML5, que conflitava com o texto editável
+  // e exigia soltar exatamente em cima do alvo.
+  useEffect(() => {
+    if (dragIdx === null) return
+
+    function onPointerMove(e: PointerEvent) {
+      const el = document.elementFromPoint(e.clientX, e.clientY)
+      const cardEl = el?.closest('[data-field-idx]') as HTMLElement | null
+      const idx = cardEl ? Number(cardEl.dataset.fieldIdx) : null
+      if (idx !== hoverIdxRef.current) {
+        hoverIdxRef.current = idx
+        setHoverIdx(idx)
+      }
+    }
+    function onPointerUp() {
+      const from = dragIdx
+      const to = hoverIdxRef.current
+      if (from !== null && to !== null && to !== from) onReorderField(from, to)
+      hoverIdxRef.current = null
+      setDragIdx(null)
+      setHoverIdx(null)
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+    return () => {
+      document.body.style.userSelect = ''
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+    }
+  }, [dragIdx, onReorderField])
 
   return (
     <>
@@ -751,9 +900,9 @@ function DetailPanel({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={onRename} style={btnSmall}>✎ Renomear</button>
-          <button onClick={onChangeSegment} style={btnSmall}>⇄ Segmento</button>
-          <button onClick={onDelete} style={{ ...btnSmall, color: '#E53E3E', borderColor: '#FEB2B2' }}>✕ Excluir</button>
+          <LabelBtn onClick={onRename} icon={<IconPencil />}>Renomear</LabelBtn>
+          <LabelBtn onClick={onChangeSegment} icon={<IconSwap />}>Segmento</LabelBtn>
+          <LabelBtn onClick={onDelete} icon={<IconTrash />} danger>Excluir</LabelBtn>
         </div>
       </div>
 
@@ -784,10 +933,7 @@ function DetailPanel({
             onRemoveRow={ri => onRemoveTableRow(idx, ri)}
             isDragging={dragIdx === idx}
             isDropTarget={hoverIdx === idx && dragIdx !== null && dragIdx !== idx}
-            onDragStart={() => setDragIdx(idx)}
-            onDragOver={() => setHoverIdx(idx)}
-            onDrop={() => { if (dragIdx !== null && dragIdx !== idx) onReorderField(dragIdx, idx) }}
-            onDragEnd={() => { setDragIdx(null); setHoverIdx(null) }}
+            onHandlePointerDown={e => { e.preventDefault(); setDragIdx(idx) }}
           />
         ))}
       </div>
@@ -796,8 +942,8 @@ function DetailPanel({
         padding: '10px 20px', borderTop: '1px solid #E2E8F0', background: '#fff',
         display: 'flex', gap: 8,
       }}>
-        <button onClick={() => onAddField('text')} style={{ ...btnSmall, fontSize: 12 }}>+ Campo texto</button>
-        <button onClick={() => onAddField('table')} style={{ ...btnSmall, fontSize: 12 }}>+ Tabela</button>
+        <LabelBtn onClick={() => onAddField('text')} icon={<IconPlus size={13} />}>Campo texto</LabelBtn>
+        <LabelBtn onClick={() => onAddField('table')} icon={<IconPlus size={13} />}>Tabela</LabelBtn>
       </div>
     </>
   )
@@ -821,33 +967,27 @@ type FieldCardProps = {
   onRemoveRow: (ri: number) => void
   isDragging: boolean
   isDropTarget: boolean
-  onDragStart: () => void
-  onDragOver: () => void
-  onDrop: () => void
-  onDragEnd: () => void
+  onHandlePointerDown: (e: React.PointerEvent) => void
 }
 
 function FieldCard({
   field: f, idx, total, onCopy, onEditText,
   onUpdateLabel, onUpdateCell, onUpdateHeader,
   onMove, onRemove, onAddRow, onAddCol, onRemoveRow,
-  isDragging, isDropTarget, onDragStart, onDragOver, onDrop, onDragEnd,
+  isDragging, isDropTarget, onHandlePointerDown,
 }: FieldCardProps) {
   const labelRef = useRef<HTMLDivElement>(null)
 
   return (
     <div
-      draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
-      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onDragOver() }}
-      onDrop={e => { e.preventDefault(); onDrop() }}
-      onDragEnd={onDragEnd}
+      data-field-idx={idx}
       style={{
         background: '#fff',
         border: isDropTarget ? '2px solid #2A4F96' : '1px solid #E2E8F0',
         borderRadius: 10, marginBottom: 10, overflow: 'hidden',
-        opacity: isDragging ? 0.4 : 1,
-        transition: 'opacity 0.15s, border-color 0.1s',
+        opacity: isDragging ? 0.5 : 1,
+        transform: isDropTarget ? 'scale(1.01)' : 'scale(1)',
+        transition: 'opacity 0.15s, border-color 0.1s, transform 0.1s',
       }}
     >
       <div style={{
@@ -856,10 +996,14 @@ function FieldCard({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
           <div
-            title="Arrastar para reordenar"
+            title="Segure e arraste para reordenar"
+            onPointerDown={onHandlePointerDown}
             style={{
-              cursor: 'grab', color: '#C4CEDD', fontSize: 18, marginRight: 8,
-              userSelect: 'none', flexShrink: 0, lineHeight: 1,
+              cursor: isDragging ? 'grabbing' : 'grab', color: isDragging ? '#2A4F96' : '#C4CEDD',
+              fontSize: 18, marginRight: 8, width: 22, height: 22, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              userSelect: 'none', flexShrink: 0, lineHeight: 1, touchAction: 'none',
+              transition: 'color 0.15s',
             }}
           >⠿</div>
           <div
@@ -867,7 +1011,6 @@ function FieldCard({
             contentEditable
             suppressContentEditableWarning
             spellCheck={false}
-            onDragStart={e => e.stopPropagation()}
             onBlur={() => onUpdateLabel(labelRef.current?.textContent?.trim() || 'CAMPO')}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); labelRef.current?.blur() } }}
             style={{
@@ -879,16 +1022,16 @@ function FieldCard({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-          {f.type === 'text' && <button onClick={onEditText} style={iconBtn} title="Editar valor">✎</button>}
+          {f.type === 'text' && <IconBtn onClick={onEditText} title="Editar valor"><IconPencil /></IconBtn>}
           {f.type === 'table' && (
             <>
-              <button onClick={onAddRow} style={iconBtn} title="Nova linha">+L</button>
-              <button onClick={onAddCol} style={iconBtn} title="Nova coluna">+C</button>
+              <IconBtn onClick={onAddRow} title="Nova linha">+L</IconBtn>
+              <IconBtn onClick={onAddCol} title="Nova coluna">+C</IconBtn>
             </>
           )}
-          <button onClick={() => onMove(-1)} disabled={idx === 0} style={iconBtn} title="Subir">▲</button>
-          <button onClick={() => onMove(1)} disabled={idx === total - 1} style={iconBtn} title="Descer">▼</button>
-          <button onClick={onRemove} style={{ ...iconBtn, color: '#E53E3E' }} title="Excluir">✕</button>
+          <IconBtn onClick={() => onMove(-1)} disabled={idx === 0} title="Subir"><IconChevronUp /></IconBtn>
+          <IconBtn onClick={() => onMove(1)} disabled={idx === total - 1} title="Descer"><IconChevronDown /></IconBtn>
+          <IconBtn onClick={onRemove} title="Excluir" danger><IconTrash /></IconBtn>
         </div>
       </div>
 
@@ -1093,16 +1236,6 @@ function EditableCell({ value, onCopy: _onCopy, onSave }: { value: string; onCop
 }
 
 // ── Shared button styles ───────────────────────────────────────────────────
-
-const iconBtn: React.CSSProperties = {
-  background: 'transparent', border: '1px solid #E2E8F0',
-  borderRadius: 5, cursor: 'pointer', fontSize: 12, padding: '2px 6px', color: '#718096',
-}
-
-const btnSmall: React.CSSProperties = {
-  padding: '5px 10px', borderRadius: 7, border: '1px solid #E2E8F0',
-  background: '#fff', cursor: 'pointer', fontSize: 12, color: '#4A5568', fontWeight: 500,
-}
 
 const btnPrimary: React.CSSProperties = {
   padding: '8px 18px', borderRadius: 8, border: 'none',

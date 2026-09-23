@@ -105,6 +105,7 @@ export default function LembretesClient() {
   const [loading, setLoading] = useState(true)
   const [ativosExpanded, setAtivosExpanded] = useState(false)
   const [finalizadosExpanded, setFinalizadosExpanded] = useState(false)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -187,6 +188,27 @@ export default function LembretesClient() {
     router.replace('/lembretes')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, lembretes, searchParams])
+
+  // Vem do widget "Lembretes" do Dashboard (?highlight=<id>) — não abre popup,
+  // só expande "Lembretes ativos", rola até o card e destaca ele por um instante.
+  function highlightLembrete(id: string) {
+    setAtivosExpanded(true)
+    setHighlightId(id)
+  }
+  useEffect(() => {
+    if (loading) return
+    const id = searchParams.get('highlight')
+    if (!id) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    highlightLembrete(id)
+    router.replace('/lembretes')
+    const timer = setTimeout(() => {
+      document.getElementById(`lembrete-card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 150)
+    const clearTimer = setTimeout(() => setHighlightId(null), 2600)
+    return () => { clearTimeout(timer); clearTimeout(clearTimer) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams])
 
   // Abre direto no modal "outros" para um colaborador quando vem do widget de
   // equipe no dashboard (?outros=<userId>).
@@ -478,16 +500,18 @@ export default function LembretesClient() {
 
     // Quem confirmou (o primeiro registro do histórico para este lembrete)
     const cnf = historico.find(h => h.lembrete_id === r.id)
+    const highlighted = highlightId === r.id
 
     return (
-      <div key={r.id} style={{
-        background: done ? '#F0FDF4' : '#fff',
-        border: `1px solid ${done ? '#86EFAC' : BORDER}`,
+      <div key={r.id} id={`lembrete-card-${r.id}`} style={{
+        background: highlighted ? '#FFF3D9' : done ? '#F0FDF4' : '#fff',
+        border: `1px solid ${highlighted ? GOLD : done ? '#86EFAC' : BORDER}`,
         borderLeft: `3px solid ${cardBorderColor(r)}`,
         borderRadius: 10,
         padding: '14px 16px',
         display: 'flex', alignItems: 'flex-start', gap: 14,
-        transition: 'background 0.2s, border-color 0.2s',
+        boxShadow: highlighted ? '0 0 0 3px rgba(209,174,110,0.45)' : 'none',
+        transition: 'background 0.6s, border-color 0.6s, box-shadow 0.6s',
       }}>
         {/* Body */}
         <div style={{ flex: 1, minWidth: 0 }}>

@@ -75,6 +75,7 @@ export default function Tabbar() {
           <Link
             key={tab.id}
             href={tab.path}
+            title={label}
             className={`gt3-tab${isActive ? ' gt3-tab-active' : ''}`}
             style={{
               display: 'flex',
@@ -82,7 +83,10 @@ export default function Tabbar() {
               gap: 6,
               padding: '8px 14px',
               fontSize: 13,
-              whiteSpace: 'nowrap',
+              width: 168,
+              minWidth: 168,
+              maxWidth: 168,
+              flexShrink: 0,
               borderBottom: '2px solid transparent', // reserva o mesmo espaço de antes — a barra ativa agora é o ::after
               color: isActive ? '#1E253D' : '#6B7A99',
               fontWeight: isActive ? 500 : 400,
@@ -103,7 +107,9 @@ export default function Tabbar() {
                 }}
               />
             )}
-            {label}
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {label}
+            </span>
             {tab.id !== 'home' && (
               <button
                 onClick={(e) => closeTab(tab.id, tab.path, e)}

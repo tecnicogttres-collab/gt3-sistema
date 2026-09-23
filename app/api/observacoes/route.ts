@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
-import { getCaller as _getCaller } from '../../lib/api-helpers'
+import { getCaller as _getCaller, getAuthUser } from '../../lib/api-helpers'
 
 async function getCaller() {
   const caller = await _getCaller()
@@ -9,7 +9,8 @@ async function getCaller() {
 }
 
 export async function GET(req: NextRequest) {
-  const { user } = await getCaller()
+  // Leitura não depende de papel — evita o round-trip extra em profiles.
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -60,13 +61,16 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { categoria, subtab, coluna, motivo, parecer, group_name, imagem_url, status_edicao } = body
+  const { categoria, subtab, coluna, motivo, parecer, group_name, imagem_url } = body
   if (!categoria || !subtab || !coluna || !motivo?.trim()) {
     return Response.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
   }
   if (!imagem_url && !parecer?.trim()) {
     return Response.json({ error: 'Observação ou imagem obrigatórios' }, { status: 400 })
   }
+
+  // Criação por gestor/admin já entra validada — só colaborador gera pendência.
+  const isPrivileged = ['gestor', 'admin'].includes(papel)
 
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -80,8 +84,9 @@ export async function POST(req: NextRequest) {
       group_name: group_name ?? null,
       imagem_url: imagem_url ?? null,
       criado_por: user.id,
-      ...(status_edicao ? { status_edicao } : {}),
-      ...(status_edicao === 'pendente_validacao' ? { atualizado_por: user.id, atualizado_em: new Date().toISOString() } : {}),
+      ...(isPrivileged
+        ? { status_edicao: 'original' }
+        : { status_edicao: 'pendente_validacao', atualizado_por: user.id, atualizado_em: new Date().toISOString() }),
     })
     .select()
     .single()

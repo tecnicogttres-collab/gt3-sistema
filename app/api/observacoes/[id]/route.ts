@@ -41,6 +41,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       parecer: parecer.trim(),
       editado_por: user.id,
       imagem_url: imagem_url !== undefined ? imagem_url : undefined,
+      // Edição completa só é feita por gestor/admin (checado acima) — não
+      // precisa de validação própria, então resolve qualquer pendência.
+      status_edicao: 'original',
+      parecer_anterior: null,
+      atualizado_por: null,
+      atualizado_em: null,
     })
     .eq('id', id)
     .select()
@@ -94,13 +100,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .eq('id', id)
     .single()
 
-  const updatePayload: Record<string, unknown> = {
-    parecer: parecer.trim(),
-    parecer_anterior: current?.parecer ?? null,
-    atualizado_por: user.id,
-    atualizado_em: new Date().toISOString(),
-    status_edicao: 'pendente_validacao',
-  }
+  // Edição de gestor/admin já é autoridade final — não gera pendência de
+  // validação pro próprio perfil (nem deixa uma pendência antiga pra trás).
+  const isPrivileged = ['gestor', 'admin'].includes(papel ?? '')
+
+  const updatePayload: Record<string, unknown> = isPrivileged
+    ? {
+        parecer: parecer.trim(),
+        parecer_anterior: null,
+        atualizado_por: null,
+        atualizado_em: null,
+        status_edicao: 'original',
+      }
+    : {
+        parecer: parecer.trim(),
+        parecer_anterior: current?.parecer ?? null,
+        atualizado_por: user.id,
+        atualizado_em: new Date().toISOString(),
+        status_edicao: 'pendente_validacao',
+      }
   if (motivo?.trim()) updatePayload.motivo = motivo.trim()
 
   const { data, error } = await admin
