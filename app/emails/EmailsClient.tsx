@@ -111,9 +111,14 @@ export default function EmailsClient() {
   const [expandedCorpo, setExpandedCorpo] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [uploadingFileId, setUploadingFileId] = useState<string | null>(null)
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copiedRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Input escondido único p/ trocar o arquivo direto pelo card, sem abrir o modal
+  // de edição inteiro — o id-alvo fica na ref pra não precisar de um input por card.
+  const swapFileInputRef = useRef<HTMLInputElement>(null)
+  const swapFileTargetId = useRef<string | null>(null)
 
   // Carrega apenas metadados — sem a coluna file (base64 pesado)
   useEffect(() => {
@@ -227,6 +232,42 @@ export default function EmailsClient() {
     const reader = new FileReader()
     reader.onload = ev => {
       setModal(m => ({ ...m, file: { name: file.name, size: file.size, data: ev.target?.result as string }, dragOver: false }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Troca rápida do arquivo direto pelo card — sem abrir o modal de edição inteiro.
+  function requestSwapFile(id: string) {
+    swapFileTargetId.current = id
+    swapFileInputRef.current?.click()
+  }
+
+  function handleSwapFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const id = swapFileTargetId.current
+    e.target.value = ''
+    if (!file || !id) return
+    const reader = new FileReader()
+    reader.onload = async ev => {
+      const data = ev.target?.result as string
+      setUploadingFileId(id)
+      const res = await fetch(`/api/emails/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file: { name: file.name, size: file.size, data },
+          file_name: file.name,
+          file_size: file.size,
+        }),
+      })
+      setUploadingFileId(null)
+      if (res.ok) {
+        setTemplates(prev => prev.map(x => x.id === id ? { ...x, fileName: file.name, fileSize: file.size, updatedAt: Date.now() } : x))
+        showToast('Arquivo atualizado')
+      } else {
+        console.error('Erro ao trocar arquivo do template')
+        showToast('Erro ao trocar arquivo')
+      }
     }
     reader.readAsDataURL(file)
   }
@@ -551,6 +592,9 @@ export default function EmailsClient() {
         </div>
       )}
 
+      {/* Input escondido — troca rápida de arquivo direto pelo card */}
+      <input ref={swapFileInputRef} type="file" accept=".msg,.eml,.oft" style={{ display: 'none' }} onChange={handleSwapFileChange} />
+
       {/* Toast */}
       <div style={{
         position: 'fixed', bottom: 24, right: 24,
@@ -701,19 +745,30 @@ export default function EmailsClient() {
 
                 <div style={{ padding: '12px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 8 }}>
                   {t.fileName ? (
-                    <button
-                      onClick={() => void downloadTemplate(t.id)}
-                      disabled={downloading === t.id}
-                      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: 'none', background: downloading === t.id ? '#B0BEC5' : ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: downloading === t.id ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit', transition: 'background .15s' }}
-                    >
-                      {downloading === t.id ? '⏳ Carregando…' : '📨 Abrir no Outlook'}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => void downloadTemplate(t.id)}
+                        disabled={downloading === t.id}
+                        style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: 'none', background: downloading === t.id ? '#B0BEC5' : ACCENT, color: '#fff', fontSize: 12, fontWeight: 600, cursor: downloading === t.id ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit', transition: 'background .15s' }}
+                      >
+                        {downloading === t.id ? '⏳ Carregando…' : '📨 Abrir no Outlook'}
+                      </button>
+                      <button
+                        onClick={() => requestSwapFile(t.id)}
+                        disabled={uploadingFileId === t.id}
+                        title="Enviar um novo arquivo e substituir o atual"
+                        style={{ padding: '7px 12px', borderRadius: 6, border: `1.5px solid ${BORDER}`, background: '#fff', color: MUTED, fontSize: 12, fontWeight: 600, cursor: uploadingFileId === t.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                      >
+                        {uploadingFileId === t.id ? '⏳' : '🔄 Trocar'}
+                      </button>
+                    </>
                   ) : (
                     <button
-                      onClick={() => openModal(t.id)}
-                      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: `1.5px dashed ${BORDER}`, background: '#FAFBFD', color: MUTED, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onClick={() => requestSwapFile(t.id)}
+                      disabled={uploadingFileId === t.id}
+                      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: `1.5px dashed ${BORDER}`, background: '#FAFBFD', color: MUTED, fontSize: 12, fontWeight: 600, cursor: uploadingFileId === t.id ? 'wait' : 'pointer', fontFamily: 'inherit' }}
                     >
-                      + Adicionar arquivo .msg
+                      {uploadingFileId === t.id ? '⏳ Enviando…' : '+ Adicionar arquivo .msg'}
                     </button>
                   )}
                 </div>
