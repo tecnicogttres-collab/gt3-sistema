@@ -197,13 +197,21 @@ export default function CalendarioFeriasClient() {
 
   const closeModal = () => { setModalOpen(false); setEditingId(null); setSavedMsg(null) }
 
+  // Nada antes de hoje — exceto, na edição, as datas que o registro já tinha
+  // (férias em andamento começaram no passado e continuam editáveis).
+  const editingRecord = editingId ? records.find(x => x.id === editingId) : undefined
+  const minInicio = editingRecord && editingRecord.inicio < todayStr ? editingRecord.inicio : todayStr
+  const minFim = editingRecord && editingRecord.fim < todayStr ? editingRecord.fim : todayStr
+
   const doSave = async (): Promise<boolean> => {
     if (!mPessoa) { alert('Selecione um colaborador.'); return false }
     if (!mInicio || !mFim) { alert('Preencha início e fim.'); return false }
     if (mFim < mInicio) { alert('A data de fim deve ser igual ou posterior ao início.'); return false }
-    // Período já encerrado não aparece na Lista (que só mostra o que está por
-    // vir) — quase sempre é ano digitado errado, então confirma antes de gravar.
-    if (mFim <= todayStr && !confirm(`O período ${fmt(mInicio)} → ${fmt(mFim)} já terminou e não vai aparecer na Lista (só no Calendário, no mês correspondente).\n\nConfira o ano. Salvar mesmo assim?`)) return false
+    // Data retroativa bloqueada (quase sempre é ano digitado errado)
+    if (mInicio < minInicio || mFim < minFim) {
+      alert(`Não é possível registrar data retroativa (anterior a ${fmt(todayStr)}).\n\nConfira o ano digitado.`)
+      return false
+    }
     setSaving(true)
     const supabase = createClient()
     if (editingId) {
@@ -639,14 +647,14 @@ export default function CalendarioFeriasClient() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
               <div>
                 <label style={fieldLabel}>Início</label>
-                <input type="date" value={mInicio} onChange={e => {
+                <input type="date" value={mInicio} min={minInicio} onChange={e => {
                   setMInicio(e.target.value)
                   if (!mFim || mFim < e.target.value) setMFim(e.target.value)
                 }} style={fieldInput} />
               </div>
               <div>
                 <label style={fieldLabel}>Fim</label>
-                <input type="date" value={mFim} onChange={e => setMFim(e.target.value)} style={fieldInput} />
+                <input type="date" value={mFim} min={mInicio && mInicio > minFim ? mInicio : minFim} onChange={e => setMFim(e.target.value)} style={fieldInput} />
               </div>
             </div>
 
