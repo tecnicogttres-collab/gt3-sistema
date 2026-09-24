@@ -71,6 +71,7 @@ export default function CalendarioFeriasClient() {
   const [mObs, setMObs] = useState('')
   const [mTipo, setMTipo] = useState<'ferias' | 'folga'>('ferias')
   const [saving, setSaving] = useState(false)
+  const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [extraPeople, setExtraPeople] = useState<ExtraPessoa[]>([])
   const [addPersonOpen, setAddPersonOpen] = useState(false)
   const [newPersonName, setNewPersonName] = useState('')
@@ -172,7 +173,7 @@ export default function CalendarioFeriasClient() {
     setEditingId(id)
     if (id) {
       const v = records.find(x => x.id === id)
-      if (v) { setMPessoa(v.pessoa); setMInicio(v.inicio); setMFim(v.fim); setMObs(v.observacao || ''); setMTipo(v.tipo ?? 'ferias') }
+      if (v) { setMPessoa(resolvePessoa(v.pessoa)); setMInicio(v.inicio); setMFim(v.fim); setMObs(v.observacao || ''); setMTipo(v.tipo ?? 'ferias') }
     } else {
       setMPessoa(allPeople[0] ?? '')
       setMInicio(initialDay ?? '')
@@ -180,23 +181,37 @@ export default function CalendarioFeriasClient() {
       setMObs('')
       setMTipo(tipo ?? 'ferias')
     }
+    setSavedMsg(null)
     setModalOpen(true)
   }
 
-  const closeModal = () => { setModalOpen(false); setEditingId(null) }
+  // Registro antigo com nome curto (ex.: "Marcio Z.") não bate com as opções
+  // do select (nome completo do login) — sem isso o select mostrava o primeiro
+  // da lista em ordem alfabética. Se casar com exatamente um colaborador, usa
+  // o nome completo; senão mantém o nome gravado (vira opção extra no select).
+  const resolvePessoa = (pessoa: string): string => {
+    if (allPeople.includes(pessoa)) return pessoa
+    const candidatos = activeUsers.filter(u => nameMatchesPessoa(pessoa, u.nome))
+    return candidatos.length === 1 ? candidatos[0].nome : pessoa
+  }
+
+  const closeModal = () => { setModalOpen(false); setEditingId(null); setSavedMsg(null) }
 
   const doSave = async (): Promise<boolean> => {
     if (!mPessoa) { alert('Selecione um colaborador.'); return false }
     if (!mInicio || !mFim) { alert('Preencha início e fim.'); return false }
     if (mFim < mInicio) { alert('A data de fim deve ser igual ou posterior ao início.'); return false }
+    // Período já encerrado não aparece na Lista (que só mostra o que está por
+    // vir) — quase sempre é ano digitado errado, então confirma antes de gravar.
+    if (mFim <= todayStr && !confirm(`O período ${fmt(mInicio)} → ${fmt(mFim)} já terminou e não vai aparecer na Lista (só no Calendário, no mês correspondente).\n\nConfira o ano. Salvar mesmo assim?`)) return false
     setSaving(true)
     const supabase = createClient()
     if (editingId) {
       const { error } = await supabase.from('ferias').update({ pessoa: mPessoa, inicio: mInicio, fim: mFim, observacao: mObs, tipo: mTipo }).eq('id', editingId)
-      if (error) { console.error(error); setSaving(false); return false }
+      if (error) { console.error(error); alert(`Erro ao salvar: ${error.message}`); setSaving(false); return false }
     } else {
       const { error } = await supabase.from('ferias').insert({ pessoa: mPessoa, inicio: mInicio, fim: mFim, observacao: mObs, tipo: mTipo })
-      if (error) { console.error(error); setSaving(false); return false }
+      if (error) { console.error(error); alert(`Erro ao salvar: ${error.message}`); setSaving(false); return false }
     }
     setSaving(false)
     void loadAll()
@@ -207,6 +222,7 @@ export default function CalendarioFeriasClient() {
 
   const handleSaveAndNext = async () => {
     if (await doSave()) {
+      setSavedMsg(`${mTipo === 'folga' ? 'Folga' : 'Férias'} de ${mPessoa} (${fmt(mInicio)} → ${fmt(mFim)}) salva${mTipo === 'folga' ? '' : 's'}. Pode incluir o próximo.`)
       setEditingId(null)
       setMPessoa(allPeople[0] ?? '')
       setMInicio('')
@@ -606,9 +622,16 @@ export default function CalendarioFeriasClient() {
               <button onClick={closeModal} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0aac4', fontSize: 22, lineHeight: 1 }}>×</button>
             </div>
 
+            {savedMsg && (
+              <div style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', borderRadius: 8, padding: '8px 12px', fontSize: 12.5, fontWeight: 500, marginBottom: '1rem' }}>
+                ✓ {savedMsg}
+              </div>
+            )}
+
             <div style={{ marginBottom: '1rem' }}>
               <label style={fieldLabel}>Colaborador</label>
-              <select value={mPessoa} onChange={e => setMPessoa(e.target.value)} style={fieldInput}>
+              <select value={mPessoa} onChange={e => { setMPessoa(e.target.value); setSavedMsg(null) }} style={fieldInput}>
+                {mPessoa && !allPeople.includes(mPessoa) && <option value={mPessoa}>{mPessoa}</option>}
                 {allPeople.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
