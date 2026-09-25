@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '../lib/supabase'
 import { pickNextFeriasColor } from '../lib/feriasColors'
+import { criarCalendarioFeriados, feriadosDoAno, nameMatchesPessoa, type DiaSemExpediente } from '../lib/feriados'
+import { useUser } from '../components/UserContext'
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
@@ -36,25 +38,11 @@ function dayStr(year: number, month: number, day: number): string {
   return `${year}-${pad(month + 1)}-${pad(day)}`
 }
 
-function normalizeName(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-}
-
-// Registros antigos foram salvos com nome curto/abreviado (ex.: "Marcio Z.",
-// "Jose", "Rodrigo") — pode não bater mais 100% com o nome completo do login
-// (ex.: "Marcio Zim", "José Knapp"). Casa por prefixo, token a token, pra achar
-// o colaborador certo sem precisar migrar os dados antigos.
-function nameMatchesPessoa(pessoa: string, nomeCompleto: string): boolean {
-  const pessoaTokens = normalizeName(pessoa).split(/\s+/).filter(Boolean)
-  const nomeTokens = normalizeName(nomeCompleto).split(/\s+/).filter(Boolean)
-  if (pessoaTokens.length === 0) return false
-  return pessoaTokens.every((tok, i) => {
-    const alvo = nomeTokens[i]
-    return !!alvo && alvo.startsWith(tok.replace(/\.$/, ''))
-  })
-}
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
 export default function CalendarioFeriasClient() {
+  const { profile } = useUser()
+  const canManage = profile?.papel === 'gestor' || profile?.papel === 'admin'
   const today = new Date()
   const [month, setMonth] = useState(today.getMonth())
   const [year, setYear] = useState(today.getFullYear())
@@ -65,6 +53,17 @@ export default function CalendarioFeriasClient() {
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, record: null })
   // Nome em foco na lista abaixo de cada mês — destaca os dias dele no calendário
   const [hoverRecId, setHoverRecId] = useState<string | null>(null)
+
+  // Dias sem expediente configurados (além dos feriados nacionais, que são calculados)
+  const [diasSemExp, setDiasSemExp] = useState<DiaSemExpediente[]>([])
+  const [feriadosOpen, setFeriadosOpen] = useState(false)
+  const [fAno, setFAno] = useState(today.getFullYear())
+  const [fData, setFData] = useState('')
+  const [fDesc, setFDesc] = useState('')
+  const [fAnual, setFAnual] = useState(false)
+  const [fSaving, setFSaving] = useState(false)
+  const [fErr, setFErr] = useState('')
+  const cal = useMemo(() => criarCalendarioFeriados(diasSemExp), [diasSemExp])
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -99,6 +98,38 @@ export default function CalendarioFeriasClient() {
   }, [])
 
   useEffect(() => { void loadAll() }, [loadAll])
+
+  const loadDiasSemExp = useCallback(async () => {
+    const supabase = createClient()
+    const { data } = await supabase.from('ferias_feriados').select('id, data, descricao, anual').order('data')
+    if (data) setDiasSemExp(data as DiaSemExpediente[])
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    createClient().from('ferias_feriados').select('id, data, descricao, anual').order('data')
+      .then(({ data }) => { if (!cancelled && data) setDiasSemExp(data as DiaSemExpediente[]) })
+    return () => { cancelled = true }
+  }, [])
+
+  const addDiaSemExp = async () => {
+    if (!fData) { setFErr('Escolha a data.'); return }
+    setFSaving(true); setFErr('')
+    const supabase = createClient()
+    const { error } = await supabase.from('ferias_feriados').insert({ data: fData, descricao: fDesc.trim(), anual: fAnual })
+    setFSaving(false)
+    if (error) { setFErr(error.message); return }
+    setFData(''); setFDesc(''); setFAnual(false)
+    void loadDiasSemExp()
+  }
+
+  const removeDiaSemExp = async (d: DiaSemExpediente) => {
+    if (!confirm(`Voltar a considerar ${fmt(d.data)}${d.anual ? ' (todo ano)' : ''} como dia normal?`)) return
+    const supabase = createClient()
+    const { error } = await supabase.from('ferias_feriados').delete().eq('id', d.id)
+    if (error) { alert(`Erro ao remover: ${error.message}`); return }
+    void loadDiasSemExp()
+  }
 
   const loadExtraPeople = useCallback(async () => {
     const supabase = createClient()
@@ -300,6 +331,15 @@ export default function CalendarioFeriasClient() {
           <div style={{ fontSize: 26, fontWeight: 700, color: '#1E293B', letterSpacing: -0.5, lineHeight: 1, marginTop: 4 }}>Calendário de Férias</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {canManage && (
+            <button
+              onClick={() => { setFErr(''); setFAno(today.getFullYear()); setFeriadosOpen(true) }}
+              title="Feriados e dias sem expediente — usados no cálculo de dia útil"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', color: '#6B7A99', border: '1px solid #E2E8F0', borderRadius: 6, padding: '10px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            >
+              ⚙ Feriados
+            </button>
+          )}
           <button
             onClick={() => openModal(null, undefined, 'folga')}
             style={{ display: 'flex', alignItems: 'center', gap: 8, background: FOLGA_COLOR, color: '#2A2000', border: 'none', borderRadius: 6, padding: '10px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
@@ -425,6 +465,7 @@ export default function CalendarioFeriasClient() {
             const isToday = ds === todayStr
             const dow = (firstDow + d - 1) % 7
             const isWeekend = dow === 0 || dow === 6
+            const feriado = cal.feriado(ds)
             const vacHere = doMes.filter(v => v.inicio <= ds && ds <= v.fim)
             const hl = vacHere.find(v => v.id === hoverRecId)
             const hlColor = hl ? (hl.tipo === 'folga' ? FOLGA_COLOR : getColor(hl.pessoa)) : null
@@ -432,7 +473,7 @@ export default function CalendarioFeriasClient() {
               <div
                 key={d}
                 onClick={() => openModal(null, ds)}
-                title={vacHere.length ? vacHere.map(v => `${v.tipo === 'folga' ? 'Folga — ' : ''}${v.pessoa}`).join('\n') : 'Clique para adicionar'}
+                title={[feriado ? `🎌 ${feriado.nome}` : '', ...vacHere.map(v => `${v.tipo === 'folga' ? 'Folga — ' : ''}${v.pessoa}`)].filter(Boolean).join('\n') || 'Clique para adicionar'}
                 style={{
                   height: 42, borderRadius: 8, cursor: 'pointer',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 3,
@@ -448,7 +489,9 @@ export default function CalendarioFeriasClient() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 11.5, fontWeight: isToday || hl ? 700 : 500,
                   background: isToday ? '#2A4F96' : 'transparent',
-                  color: isToday ? '#fff' : hl ? '#1E293B' : isWeekend ? '#A0AEC0' : '#475569',
+                  color: isToday ? '#fff' : hl ? '#1E293B' : feriado ? '#C53030' : isWeekend ? '#A0AEC0' : '#475569',
+                  textDecoration: feriado && !isToday ? 'underline dotted' : 'none',
+                  textUnderlineOffset: 3,
                 }}>
                   {d}
                 </span>
@@ -647,10 +690,96 @@ export default function CalendarioFeriasClient() {
         }}>
           <strong>{tooltip.record.pessoa}</strong><br />
           {fmt(tooltip.record.inicio)} → {fmt(tooltip.record.fim)}<br />
-          {totalDays(tooltip.record)} dias
+          {totalDays(tooltip.record)} dias corridos · {cal.diasUteis(tooltip.record.inicio, tooltip.record.fim)} úteis
+          {tooltip.record.tipo !== 'folga' && (() => {
+            const ret = cal.proximoDiaUtil(tooltip.record.fim)
+            return <><br />Retorno: {fmt(ret)} ({DIAS_SEMANA[new Date(ret + 'T00:00:00').getDay()]})</>
+          })()}
           {tooltip.record.observacao && <><br /><em style={{ opacity: 0.8 }}>{tooltip.record.observacao}</em></>}
         </div>
       )}
+
+      {/* Modal Feriados / dias sem expediente (gestor/admin) */}
+      {feriadosOpen && (() => {
+        const lista = [...feriadosDoAno(fAno, diasSemExp).values()].sort((a, b) => a.data.localeCompare(b.data))
+        const configDoAno = (data: string) => diasSemExp.find(d => (d.anual ? `${fAno}${d.data.slice(4)}` : d.data) === data)
+        return (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setFeriadosOpen(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+        >
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 16px 60px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 14px', borderBottom: '1px solid #E2E8F0' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 17, color: '#1E293B' }}>Feriados e dias sem expediente</div>
+                <div style={{ fontSize: 12, color: '#6B7A99', marginTop: 2 }}>Sábado, domingo e estes dias não contam como dia útil.</div>
+              </div>
+              <button onClick={() => setFeriadosOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#a0aac4', fontSize: 22, lineHeight: 1 }}>×</button>
+            </div>
+
+            <div style={{ padding: '16px 22px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Adicionar */}
+              <div style={{ background: '#F4F6FA', border: '1px solid #E2E8F0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#1E293B' }}>Marcar dia sem expediente</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 8 }}>
+                  <input type="date" value={fData} onChange={e => setFData(e.target.value)} style={{ ...fieldInput, background: '#fff' }} />
+                  <input type="text" value={fDesc} onChange={e => setFDesc(e.target.value)} placeholder="Descrição (ex.: Carnaval)" style={{ ...fieldInput, background: '#fff' }}
+                    onKeyDown={e => { if (e.key === 'Enter') void addDiaSemExp() }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#475569', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={fAnual} onChange={e => setFAnual(e.target.checked)} style={{ accentColor: '#2A4F96' }} />
+                    Repetir todo ano (ex.: 31/12)
+                  </label>
+                  <button onClick={() => void addDiaSemExp()} disabled={fSaving}
+                    style={{ background: '#2A4F96', color: '#fff', border: 'none', borderRadius: 7, padding: '8px 16px', fontSize: 12.5, fontWeight: 600, cursor: fSaving ? 'default' : 'pointer', opacity: fSaving ? 0.6 : 1 }}>
+                    {fSaving ? 'Salvando…' : '+ Adicionar'}
+                  </button>
+                </div>
+                {fErr && <div style={{ fontSize: 12, color: '#C53030' }}>{fErr}</div>}
+              </div>
+
+              {/* Lista do ano */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1E293B' }}>Dias sem expediente em {fAno}</div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => setFAno(a => a - 1)} style={{ ...navBtn, width: 26, height: 26, fontSize: 13 }}>←</button>
+                    <button onClick={() => setFAno(a => a + 1)} style={{ ...navBtn, width: 26, height: 26, fontSize: 13 }}>→</button>
+                  </div>
+                </div>
+                <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+                  {lista.map((f, i) => {
+                    const cfg = f.origem === 'config' ? configDoAno(f.data) : undefined
+                    const dow = new Date(f.data + 'T00:00:00').getDay()
+                    return (
+                      <div key={f.data} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: i ? '1px solid #EEF2F7' : 'none', fontSize: 12.5 }}>
+                        <span style={{ width: 86, fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: '#1E293B' }}>{fmt(f.data).slice(0, 5)} <span style={{ fontWeight: 400, color: '#A0AEC0' }}>{DIAS_SEMANA[dow].slice(0, 3)}</span></span>
+                        <span style={{ flex: 1, minWidth: 0, color: '#475569' }}>
+                          {f.nome}
+                          {cfg?.anual && <span style={{ marginLeft: 6, fontSize: 10, color: '#6B7A99' }}>· todo ano</span>}
+                        </span>
+                        {f.origem === 'nacional' ? (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#6B7A99', background: '#F1F5F9', borderRadius: 4, padding: '2px 6px' }}>NACIONAL</span>
+                        ) : cfg && (
+                          <button onClick={() => void removeDiaSemExp(cfg)} title="Voltar a ser dia normal"
+                            style={{ fontSize: 11, color: '#C53030', background: 'none', border: '1px solid #FCA5A5', borderRadius: 5, padding: '2px 7px', cursor: 'pointer' }}>
+                            Remover
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: 11, color: '#A0AEC0', marginTop: 8, lineHeight: 1.5 }}>
+                  Feriados nacionais são automáticos. Pontos facultativos (Carnaval, Corpus Christi) e feriados estaduais/municipais entram aqui se não houver expediente.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        )
+      })()}
 
       {/* Modal */}
       {modalOpen && (
