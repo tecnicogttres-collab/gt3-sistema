@@ -43,6 +43,7 @@ const DynAtasContratantes   = dynamic(() => import('../atas-contratantes/AtasCon
 const DynRepositorioModelos = dynamic(() => import('../repositorio-modelos/RepositorioClient'),    { ssr: false })
 const DynRevisaoNR          = dynamic(() => import('../revisao-nr/RevisaoNRClient'),                { ssr: false })
 const DynRetornoNR          = dynamic(() => import('../retorno-de-nr/RetornoNRClient'),             { ssr: false })
+const DynQuestionarios      = dynamic(() => import('../questionarios/QuestionariosClient'),         { ssr: false })
 const DynComparativoGuia    = dynamic(() => import('../comparativo-guia-fgts/ComparativoGuiaClient'), { ssr: false })
 const DynDesignacaoReprovados = dynamic(() => import('../designacao-reprovados/DesignacaoReprovadosClient'), { ssr: false })
 const DynComparadorComprovantes = dynamic(() => import('../comparador-comprovantes/ComparadorComprovantesClient'), { ssr: false })
@@ -83,4 +84,5 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/comparativo-guia-fgts': DynComparativoGuia,
   '/designacao-reprovados': DynDesignacaoReprovados,
   '/comparador-comprovantes': DynComparadorComprovantes,
+  '/questionarios':         DynQuestionarios,
 }

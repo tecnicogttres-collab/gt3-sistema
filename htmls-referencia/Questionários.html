@@ -1,0 +1,1360 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Painel de Respostas GT3</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+:root{
+  --bg:#F4F6FA;
+  --surface:#FFFFFF;
+  --surface-2:#EBF0F9;
+  --chart-surface:#fcfcfb;
+  --primary:#2A4F96;
+  --primary-dark:#1B3A73;
+  --primary-soft:#E2E9F6;
+  --gold:#B8934E;
+  --text:#1C2530;
+  --text-secondary:#52514e;
+  --text-muted:#6F7A8C;
+  --border:#DCE3EE;
+  --gridline:#e1e0d9;
+  --danger:#C53030;
+  --shadow: 0 1px 2px rgba(27,58,115,0.06), 0 8px 24px -12px rgba(27,58,115,0.18);
+
+  --cat-1:#2a78d6; --cat-2:#eb6834; --cat-3:#1baf7a; --cat-4:#eda100;
+  --cat-5:#e87ba4; --cat-6:#008300; --cat-7:#4a3aa7; --cat-8:#e34948;
+  --ord-1:#86b6ef; --ord-2:#5598e7; --ord-3:#2a78d6; --ord-4:#1c5cab; --ord-5:#104281;
+  --st-good:#0ca30c; --st-warning:#fab219; --st-pending:#898781;
+  --st-good-text:#0b7a0b; --st-warning-text:#8a5d0a;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151F; --surface:#182131; --surface-2:#1D2A40; --chart-surface:#1a1a19;
+    --primary:#6E93DD; --primary-dark:#9DB7EA; --primary-soft:#22335A; --gold:#E0BE83;
+    --text:#E7ECF5; --text-secondary:#c3c2b7; --text-muted:#93A2BB;
+    --border:#2B384E; --gridline:#2c2c2a; --danger:#F07878;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500;
+    --cat-5:#d55181; --cat-6:#008300; --cat-7:#9085e9; --cat-8:#e66767;
+    --ord-1:#184f95; --ord-2:#1c5cab; --ord-3:#256abf; --ord-4:#3987e5; --ord-5:#5598e7;
+    --st-good:#0ca30c; --st-warning:#fab219; --st-pending:#93A2BB;
+    --st-good-text:#4fd14f; --st-warning-text:#fab219;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151F; --surface:#182131; --surface-2:#1D2A40; --chart-surface:#1a1a19;
+  --primary:#6E93DD; --primary-dark:#9DB7EA; --primary-soft:#22335A; --gold:#E0BE83;
+  --text:#E7ECF5; --text-secondary:#c3c2b7; --text-muted:#93A2BB;
+  --border:#2B384E; --gridline:#2c2c2a; --danger:#F07878;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500;
+  --cat-5:#d55181; --cat-6:#008300; --cat-7:#9085e9; --cat-8:#e66767;
+  --ord-1:#184f95; --ord-2:#1c5cab; --ord-3:#256abf; --ord-4:#3987e5; --ord-5:#5598e7;
+  --st-good:#0ca30c; --st-warning:#fab219; --st-pending:#93A2BB;
+  --st-good-text:#4fd14f; --st-warning-text:#fab219;
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Source Sans 3', system-ui, sans-serif;padding-inline:16px;padding-block:26px;}
+.wrap{max-width:1180px;margin-inline:auto;display:flex;flex-direction:column;gap:18px;}
+button{font-family:inherit;}
+
+.eyebrow{font-family:'IBM Plex Mono', monospace;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--primary);}
+h1{font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(22px,3.6vw,29px);margin:5px 0 4px;text-wrap:balance;}
+.sub{color:var(--text-secondary);font-size:14px;max-width:70ch;margin:0;line-height:1.5;}
+
+.tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:12px;max-width:fit-content;flex-wrap:wrap;}
+.tab{font-weight:600;font-size:13px;padding:9px 15px;border-radius:9px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--primary);box-shadow:var(--shadow);}
+.tab:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+.view{display:none;flex-direction:column;gap:18px;}
+.view.active{display:flex;}
+
+/* generic */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);}
+.card h2{font-family:'Manrope',sans-serif;font-size:15px;font-weight:700;margin:0 0 2px;}
+.card .cap{font-size:12.5px;color:var(--text-muted);margin:0 0 14px;line-height:1.45;}
+.btn{font-weight:700;font-size:13px;padding:9px 16px;border-radius:9px;border:1px solid var(--primary);cursor:pointer;background:var(--primary);color:#fff;}
+.btn:hover{background:var(--primary-dark);border-color:var(--primary-dark);}
+.btn.ghost{background:transparent;color:var(--primary);border-color:var(--border);}
+.btn.ghost:hover{background:var(--surface-2);border-color:var(--primary);}
+.btn.small{font-size:12px;padding:6px 11px;}
+.btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+.link-btn{background:none;border:none;color:var(--primary);font-weight:700;font-size:13px;cursor:pointer;padding:4px 0;}
+.link-btn:hover{text-decoration:underline;}
+.field-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
+input[type=text], textarea, select{font-family:inherit;font-size:13.5px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);}
+select{font-weight:600;background:var(--surface-2);}
+input[type=text]:focus-visible, textarea:focus-visible, select:focus-visible{outline:2px solid var(--primary);outline-offset:1px;}
+textarea{resize:vertical;width:100%;min-height:58px;line-height:1.4;}
+
+.pill-tag{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px;background:var(--surface-2);color:var(--text-secondary);white-space:nowrap;}
+.status-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px;white-space:nowrap;}
+.status-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}
+.status-tag.ativo{background:color-mix(in srgb, var(--st-good) 15%, transparent);color:var(--st-good-text);}
+.status-tag.rascunho{background:var(--surface-2);color:var(--text-muted);}
+.status-tag.encerrado{background:color-mix(in srgb, var(--st-warning) 20%, transparent);color:var(--st-warning-text);}
+
+/* ===== HUB ===== */
+.hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
+.qn-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px;}
+.qn-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.qn-card h3{font-family:'Manrope',sans-serif;font-size:16px;font-weight:800;margin:0;line-height:1.25;text-wrap:balance;}
+.qn-meta{display:flex;gap:6px;flex-wrap:wrap;}
+.qn-numbers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--border);padding-top:12px;}
+.qn-numbers div{display:flex;flex-direction:column;}
+.qn-numbers b{font-family:'Manrope',sans-serif;font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;}
+.qn-numbers span{font-size:11px;color:var(--text-muted);}
+.qn-progress{height:6px;border-radius:100px;background:var(--surface-2);overflow:hidden;}
+.qn-progress i{display:block;height:100%;background:var(--st-good);border-radius:100px;}
+.qn-actions{display:flex;gap:8px;margin-top:auto;}
+.qn-actions .btn{flex:1;}
+.qn-new{border:1.5px dashed var(--border);background:transparent;box-shadow:none;align-items:stretch;justify-content:center;min-height:200px;}
+.qn-new-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:none;border:none;cursor:pointer;color:var(--primary);font-weight:700;font-size:14px;height:100%;min-height:160px;border-radius:10px;}
+.qn-new-btn:hover{background:var(--surface-2);}
+.plus-circle{width:42px;height:42px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:400;line-height:1;}
+.qn-new-form{display:flex;flex-direction:column;gap:10px;}
+.qn-new-form .row{display:flex;flex-direction:column;gap:5px;}
+
+/* ===== EDITOR ===== */
+.editor-head{display:flex;flex-direction:column;gap:12px;}
+.editor-head .title-input{font-family:'Manrope',sans-serif;font-size:20px;font-weight:800;width:100%;padding:8px 10px;}
+.editor-head .meta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;}
+.editor-head .meta-row .row{display:flex;flex-direction:column;gap:5px;}
+.saved-note{font-size:12px;color:var(--text-muted);}
+.editor-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px;align-items:start;}
+@media (max-width:860px){.editor-grid{grid-template-columns:1fr;}}
+
+.qlist{display:flex;flex-direction:column;gap:10px;}
+.qitem{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden;}
+.qitem-head{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.qnum{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--primary);}
+.qtype{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--text-secondary);}
+.qtype svg{width:14px;height:14px;}
+.qitem-tools{margin-left:auto;display:flex;gap:4px;align-items:center;}
+.icon-btn{height:28px;min-width:28px;padding:0 8px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;font-size:12px;font-weight:600;}
+.icon-btn:hover{border-color:var(--primary);color:var(--primary);}
+.icon-btn:disabled{opacity:.35;cursor:not-allowed;}
+.icon-btn.danger:hover{border-color:var(--danger);color:var(--danger);}
+.icon-btn.confirm{background:var(--danger);border-color:var(--danger);color:#fff;}
+.qitem-body{display:grid;grid-template-columns:120px 1fr;gap:8px 12px;padding:12px 14px;}
+@media (max-width:520px){.qitem-body{grid-template-columns:1fr;gap:3px 0;}}
+.qitem-body .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding-top:3px;}
+.qitem-body .v{font-size:14px;font-weight:600;line-height:1.4;}
+.answers-inline{display:flex;flex-wrap:wrap;gap:5px;}
+.answers-inline span{font-size:12px;font-weight:600;padding:3px 9px;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-secondary);}
+.answers-inline .scale-desc{background:none;border:none;padding:3px 0;color:var(--text-muted);font-weight:500;}
+
+.add-q{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border:1.5px dashed var(--border);border-radius:12px;background:transparent;cursor:pointer;color:var(--primary);font-weight:700;font-size:14px;}
+.add-q:hover{background:var(--surface-2);border-color:var(--primary);}
+.add-q .plus-circle{width:32px;height:32px;font-size:20px;}
+.empty-qs{font-size:13px;color:var(--text-muted);padding:10px 2px;}
+
+/* composer */
+.composer{border:1.5px solid var(--primary);border-radius:14px;background:var(--surface);overflow:hidden;box-shadow:var(--shadow);}
+.composer-head{padding:12px 16px;background:var(--primary);color:#fff;font-family:'Manrope',sans-serif;font-weight:700;font-size:14px;}
+.composer-sec{padding:16px;display:flex;flex-direction:column;gap:10px;}
+.composer-sec + .composer-sec{border-top:1px solid var(--border);}
+.sec-title{display:flex;align-items:baseline;gap:8px;}
+.sec-title .n{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#fff;background:var(--primary);border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;flex:none;}
+.sec-title h4{margin:0;font-family:'Manrope',sans-serif;font-size:14px;font-weight:800;}
+.sec-title small{font-size:12px;color:var(--text-muted);}
+.type-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+@media (max-width:520px){.type-cards{grid-template-columns:1fr;}}
+.type-card{display:flex;flex-direction:column;gap:6px;align-items:flex-start;text-align:left;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;color:var(--text);}
+.type-card:hover{border-color:var(--primary);}
+.type-card.on{border-color:var(--primary);background:var(--primary-soft);}
+.type-card svg{width:22px;height:22px;color:var(--primary);}
+.type-card b{font-size:13px;}
+.type-card span{font-size:11.5px;color:var(--text-muted);line-height:1.35;}
+.type-card:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+
+.scale-row{display:flex;gap:6px;}
+.scale-row span{flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:13px;padding:8px 0;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-secondary);}
+.scale-labels{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.scale-labels .row{display:flex;flex-direction:column;gap:5px;}
+.scale-labels input{width:100%;}
+.opt-list{display:flex;flex-direction:column;gap:7px;}
+.opt-row{display:flex;align-items:center;gap:8px;}
+.opt-row .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);flex:none;}
+.opt-row input{flex:1;min-width:0;}
+.opt-add{align-self:flex-start;}
+.text-answer-demo{border:1px dashed var(--border);border-radius:8px;padding:12px;font-size:12.5px;color:var(--text-muted);background:var(--surface-2);}
+.composer-foot{display:flex;align-items:center;gap:10px;justify-content:flex-end;padding:12px 16px;background:var(--surface-2);border-top:1px solid var(--border);flex-wrap:wrap;}
+.composer-error{margin-right:auto;font-size:12.5px;font-weight:600;color:var(--danger);}
+
+/* preview */
+.preview-shell{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface);}
+.preview-top{background:var(--primary);color:#fff;padding:14px 16px;}
+.preview-top small{display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.8;margin-bottom:3px;}
+.preview-top b{font-family:'Manrope',sans-serif;font-size:14.5px;}
+.preview-body{padding:16px;display:flex;flex-direction:column;gap:16px;}
+.pv-q{display:flex;flex-direction:column;gap:7px;}
+.pv-q.draft{border:1.5px dashed var(--primary);border-radius:10px;padding:10px;}
+.pv-q .pv-label{font-size:13px;font-weight:600;}
+.pv-q .pv-label i{font-style:normal;color:var(--text-muted);font-weight:500;}
+.pv-scale{display:flex;gap:5px;}
+.pv-scale span{flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:7px 0;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-muted);}
+.pv-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);}
+.pv-choice{display:flex;flex-direction:column;gap:6px;}
+.pv-choice span{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12.5px;background:var(--surface-2);color:var(--text-secondary);}
+.pv-choice span::before{content:"";width:11px;height:11px;border-radius:50%;border:1.5px solid var(--text-muted);flex:none;}
+.pv-text{border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:12px;color:var(--text-muted);background:var(--surface-2);min-height:44px;}
+
+/* ===== PAINEL ===== */
+.qn-select-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.qn-select-bar select{font-size:15px;font-family:'Manrope',sans-serif;font-weight:800;padding:9px 12px;min-width:min(100%,320px);}
+.filterbar{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end;}
+.f-group{display:flex;flex-direction:column;gap:6px;}
+.chipset{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:100px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-secondary);cursor:pointer;white-space:nowrap;}
+.chip:hover{border-color:var(--primary);}
+.chip.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+.chip:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+.f-search{flex:1 1 200px;min-width:160px;}
+.f-search input{width:100%;background:var(--surface-2);}
+.f-hint{font-size:11.5px;color:var(--text-muted);margin:0;}
+
+.active-strip{display:none;flex-wrap:wrap;gap:7px;align-items:center;font-size:12px;color:var(--text-muted);}
+.active-strip.show{display:flex;}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 6px 4px 10px;border-radius:100px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);}
+.pill button{border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:14px;line-height:1;padding:2px;}
+.pill button:hover{color:var(--text);}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);}
+.stat .n{font-family:'Manrope',sans-serif;font-weight:800;font-size:26px;line-height:1.1;}
+.stat .l{font-size:12px;color:var(--text-muted);margin-top:3px;}
+.stat .n.good{color:var(--st-good-text);}
+.stat .n.warning{color:var(--st-warning-text);}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media (max-width:760px){.grid2{grid-template-columns:1fr;}}
+.chart-surface{background:var(--chart-surface);border-radius:10px;padding:12px 10px 6px;}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-secondary);}
+.legend-item{display:flex;align-items:center;gap:6px;}
+.legend-swatch{width:10px;height:10px;border-radius:2px;flex:none;}
+.barchart{display:flex;align-items:flex-end;gap:10px;height:160px;padding:0 4px;}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;min-width:0;}
+.bar-rect-wrap{width:100%;display:flex;justify-content:center;height:100%;align-items:flex-end;}
+.bar-rect{width:60%;min-width:18px;border-radius:4px 4px 0 0;cursor:pointer;transition:opacity .12s ease, outline-color .12s ease;outline:2px solid transparent;outline-offset:2px;}
+.bar-rect:hover{opacity:.85;}
+.bar-rect.dim{opacity:.35;}
+.bar-rect.sel{outline-color:var(--primary);}
+.bar-rect:focus-visible{outline-color:var(--primary);}
+.bar-val{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;color:var(--text-secondary);}
+.bar-label{font-size:11px;color:var(--text);font-weight:700;text-align:center;line-height:1.25;max-width:90px;overflow-wrap:break-word;min-height:28px;}
+.empty-note{font-size:12.5px;color:var(--text-muted);padding:20px 4px;text-align:center;width:100%;align-self:center;}
+
+.stacklist{display:flex;flex-direction:column;gap:12px;}
+.stackrow{display:flex;flex-direction:column;gap:5px;}
+.stackrow-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.stackrow-head button{font-size:13px;font-weight:700;color:var(--text);background:none;border:none;cursor:pointer;padding:1px 4px;border-radius:5px;text-align:left;}
+.stackrow-head button:hover{color:var(--primary);}
+.stackrow-head button.on{color:var(--primary);text-decoration:underline;}
+.stackrow-head .tot{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-muted);}
+.stackbar{display:flex;height:16px;border-radius:4px;overflow:hidden;gap:2px;background:var(--gridline);}
+.stackseg{height:100%;cursor:pointer;transition:opacity .12s ease;min-width:2px;}
+.stackseg:hover{opacity:.8;}
+.stackseg.dim{opacity:.3;}
+
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-top:4px;}
+table{width:100%;border-collapse:collapse;font-size:12.8px;}
+th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;padding:9px 11px;background:var(--surface-2);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;}
+td{padding:9px 11px;border-top:1px solid var(--border);vertical-align:top;}
+.name-cell{font-weight:600;white-space:nowrap;}
+.comment-cell{min-width:220px;max-width:300px;color:var(--text-secondary);}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:100px;white-space:nowrap;}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}
+.badge.respondido{background:color-mix(in srgb, var(--st-good) 15%, transparent);color:var(--st-good-text);}
+.badge.enviado{background:color-mix(in srgb, var(--st-warning) 20%, transparent);color:var(--st-warning-text);}
+.badge.pendente{background:var(--surface-2);color:var(--text-muted);}
+.dash{color:var(--text-muted);}
+.empty-row td{text-align:center;color:var(--text-muted);padding:26px 10px;font-size:13px;}
+.tbl-foot{font-size:12px;color:var(--text-muted);margin-top:8px;}
+
+/* ===== CONFIG ===== */
+.settings-block{display:flex;flex-direction:column;}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px;border-top:1px solid var(--border);}
+.toggle-row:first-child{border-top:none;}
+.toggle-row .lbl{font-size:13.5px;font-weight:600;}
+.toggle-row .lbl small{display:block;font-weight:400;color:var(--text-muted);font-size:11.5px;margin-top:1px;}
+.toggle-row-actions{display:flex;align-items:center;gap:10px;}
+.order-btns{display:flex;gap:3px;}
+.switch{position:relative;width:38px;height:22px;flex:none;display:inline-block;}
+.switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1;}
+.switch .track{position:absolute;inset:0;background:var(--border);border-radius:100px;transition:background .15s ease;}
+.switch .thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s ease;}
+.switch input:checked + .track{background:var(--primary);}
+.switch input:checked + .track .thumb{transform:translateX(16px);}
+.switch input:focus-visible + .track{outline:2px solid var(--primary);outline-offset:2px;}
+
+/* ===== CONVITES ===== */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+@media (max-width:700px){.steps{grid-template-columns:1fr;}}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;display:flex;gap:11px;align-items:flex-start;}
+.step-num{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--primary);color:#fff;flex:none;}
+.step-num.later{background:var(--surface-2);color:var(--text-muted);border:1px dashed var(--border);}
+.step h3{font-size:13.5px;margin:0 0 2px;font-weight:700;}
+.step p{font-size:12px;color:var(--text-muted);margin:0;line-height:1.4;}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+.card-head .actions{display:flex;gap:8px;flex-wrap:wrap;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.email-sub{display:block;font-size:11.5px;color:var(--text-muted);font-weight:400;}
+.token-btn{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--primary);background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:5px 9px;cursor:pointer;white-space:nowrap;}
+.token-btn:hover{border-color:var(--primary);}
+.add-row-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:12px;}
+.add-row-form .row{display:flex;flex-direction:column;gap:5px;}
+.add-row-form input, .add-row-form select{width:100%;background:var(--surface);}
+.add-row-form .form-actions{display:flex;gap:8px;grid-column:1/-1;justify-content:flex-end;align-items:center;}
+.info-note{font-size:12.5px;color:var(--text-muted);background:var(--surface-2);border:1px dashed var(--border);border-radius:10px;padding:11px 13px;line-height:1.5;}
+.info-note b{color:var(--text);}
+
+/* ===== RESPONDENT MODAL ===== */
+.modal{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:calc(24px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px));}
+.modal-back{position:fixed;inset:0;background:rgba(10,18,32,.55);}
+.modal-inner{position:relative;width:100%;max-width:480px;display:flex;flex-direction:column;gap:10px;}
+.urlbar{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 8px 8px 12px;}
+.urlbar code{flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.urlbar code b{color:var(--primary);font-weight:600;}
+.phone{background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:0 20px 50px -20px rgba(0,0,0,.5);}
+.phone-top{background:var(--primary);color:#fff;padding:16px 20px;}
+.phone-top small{display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.85;margin-bottom:3px;}
+.phone-top h3{font-family:'Manrope',sans-serif;font-size:16px;margin:0;font-weight:800;}
+.phone-top p{margin:4px 0 0;font-size:12.5px;opacity:.9;}
+.phone-body{padding:20px;display:flex;flex-direction:column;gap:20px;}
+.rq{display:flex;flex-direction:column;gap:9px;}
+.rq .rq-label{font-size:13.5px;font-weight:700;line-height:1.35;}
+.rq-scale{display:flex;gap:6px;}
+.rq-scale button{flex:1;padding:10px 0;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:13px;color:var(--text-secondary);cursor:pointer;}
+.rq-scale button.sel{background:var(--primary);border-color:var(--primary);color:#fff;}
+.rq-scale button:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+.rq-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:-3px;}
+.rq-choice{display:flex;flex-direction:column;gap:7px;}
+.rq-choice label{display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:9px;padding:10px 12px;cursor:pointer;font-size:13.5px;}
+.rq-choice label.sel{border-color:var(--primary);background:var(--primary-soft);}
+.rq-choice input{accent-color:var(--primary);margin:0;}
+.phone-foot{padding:0 20px 20px;display:flex;flex-direction:column;gap:8px;}
+.phone-foot .btn{width:100%;padding:12px;}
+.form-error{font-size:12.5px;font-weight:600;color:var(--danger);min-height:1em;}
+.phone-state{text-align:center;padding:34px 22px 38px;display:flex;flex-direction:column;align-items:center;gap:10px;}
+.phone-state .ico{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.phone-state .ico.ok{background:color-mix(in srgb, var(--st-good) 16%, transparent);color:var(--st-good-text);}
+.phone-state .ico.warn{background:color-mix(in srgb, var(--st-warning) 20%, transparent);color:var(--st-warning-text);}
+.phone-state h4{font-family:'Manrope',sans-serif;margin:0;font-size:16px;}
+.phone-state p{margin:0;font-size:13px;color:var(--text-muted);max-width:34ch;line-height:1.45;}
+
+[hidden]{display:none!important;}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important;} }
+</style>
+
+<div class="wrap">
+  <div>
+    <div class="eyebrow">GT3 Sistema · Módulo Enquetes</div>
+    <h1>Questionários e respostas</h1>
+    <p class="sub">Monte os questionários de contratantes e prestadores, envie um link único para cada responsável e acompanhe as respostas, já vinculadas ao cadastro, no painel.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-view="hub">Questionários</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="convites">Convites</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="painel">Painel de respostas</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="config">Personalizar painel</button>
+  </div>
+
+  <!-- ===================== HUB ===================== -->
+  <section class="view active" id="view-hub">
+    <div id="hub-list"></div>
+    <div id="hub-editor" hidden></div>
+  </section>
+
+  <!-- ===================== CONVITES ===================== -->
+  <section class="view" id="view-convites">
+    <div class="qn-select-bar">
+      <span class="field-label">Questionário</span>
+      <select id="v-qn"></select>
+      <span id="v-qn-status"></span>
+    </div>
+
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div><h3>Destinatários</h3><p>Responsáveis de cada contratante ou prestador. Por enquanto, adicionados manualmente.</p></div></div>
+      <div class="step"><div class="step-num">2</div><div><h3>Gerar links</h3><p>Cada destinatário recebe um link único. É ele que vincula a resposta ao cadastro.</p></div></div>
+      <div class="step"><div class="step-num">3</div><div><h3>Acompanhar</h3><p>O status muda para Respondido assim que o formulário é enviado.</p></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>Destinatários do questionário</h2>
+          <p class="cap" style="margin:0;" id="v-counts"></p>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="v-add-toggle">+ Adicionar destinatário</button>
+          <button class="btn" id="v-gen">Gerar links</button>
+        </div>
+      </div>
+      <div id="v-add-form" hidden></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Responsável</th><th>Empresa</th><th>Contratante</th><th>Status</th><th>Link do convite</th><th></th></tr></thead>
+          <tbody id="v-body"></tbody>
+        </table>
+      </div>
+      <p class="f-hint" id="v-hint" style="margin-top:10px;"></p>
+    </div>
+
+    <div class="info-note"><b>Importação da planilha do Portal GT3</b> fica para a etapa final. Quando entrar, ela substitui o cadastro manual acima: cada linha do Excel (nome, e-mail, empresa, CNPJ) vira um destinatário deste questionário.</div>
+  </section>
+
+  <!-- ===================== PAINEL ===================== -->
+  <section class="view" id="view-painel">
+    <div class="qn-select-bar">
+      <span class="field-label">Questionário</span>
+      <select id="p-qn"></select>
+      <span id="p-qn-status"></span>
+    </div>
+
+    <div class="filterbar">
+      <div class="f-group">
+        <span class="field-label">Contratante vinculado</span>
+        <select id="f-contratante"><option value="all">Todos os contratantes</option></select>
+      </div>
+      <div class="f-group">
+        <span class="field-label">Status do convite</span>
+        <div class="chipset" id="f-status">
+          <button class="chip" data-v="respondido">Respondido</button>
+          <button class="chip" data-v="enviado">Enviado</button>
+          <button class="chip" data-v="pendente">Pendente</button>
+        </div>
+      </div>
+      <div class="f-group">
+        <span class="field-label">Empresa</span>
+        <div class="chipset" id="f-empresa"></div>
+      </div>
+      <div class="f-group f-search">
+        <span class="field-label">Buscar respondente</span>
+        <input type="text" id="f-search" placeholder="Nome ou empresa...">
+      </div>
+      <button class="btn ghost small" id="f-clear">Limpar filtros</button>
+    </div>
+    <p class="f-hint">Filtrar por contratante também traz os prestadores vinculados a ele. Clique numa barra dos gráficos para isolar uma resposta específica.</p>
+
+    <div class="active-strip" id="active-strip"></div>
+    <div id="widgets-root" style="display:flex;flex-direction:column;gap:14px;"></div>
+  </section>
+
+  <!-- ===================== CONFIG ===================== -->
+  <section class="view" id="view-config">
+    <div class="qn-select-bar">
+      <span class="field-label">Personalizando o painel de</span>
+      <select id="c-qn"></select>
+    </div>
+    <div class="card">
+      <h2>Cartões de resumo</h2>
+      <p class="cap">Escolha quais números aparecem no topo do painel.</p>
+      <div class="settings-block" id="cfg-stats"></div>
+    </div>
+    <div class="card">
+      <h2>Gráficos e listas</h2>
+      <p class="cap">Ative, desative e reordene os blocos. A ordem aqui é a ordem exibida no painel. Cada pergunta de nota ou múltipla escolha vira um gráfico.</p>
+      <div class="settings-block" id="cfg-widgets"></div>
+      <button class="btn ghost small" id="cfg-restore" style="margin-top:14px;">Restaurar padrão</button>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="resp-modal" hidden role="dialog" aria-modal="true" aria-label="Tela do respondente">
+  <div class="modal-back" id="resp-back"></div>
+  <div class="modal-inner">
+    <div class="urlbar"><code id="resp-url"></code><button class="btn ghost small" id="resp-close">Fechar</button></div>
+    <div class="phone" id="resp-phone"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  /* ---------------- icons ---------------- */
+  var ICON = {
+    escala:'<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="14" width="3" height="6" rx="1" fill="currentColor"/><rect x="8" y="11" width="3" height="9" rx="1" fill="currentColor"/><rect x="13" y="8" width="3" height="12" rx="1" fill="currentColor"/><rect x="18" y="4" width="3" height="16" rx="1" fill="currentColor"/></svg>',
+    multipla:'<svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="12" r="2.5" fill="currentColor"/><circle cx="6" cy="18" r="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M11 6h10M11 12h10M11 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    texto:'<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 11h16M4 16h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+  };
+  var TYPE_NAME = {escala:'Nota de satisfação', multipla:'Múltipla escolha', texto:'Resposta escrita'};
+  var TYPE_DESC = {escala:'Respondente dá uma nota de 1 a 5.', multipla:'Respondente escolhe uma das opções que você definir.', texto:'Respondente escreve livremente.'};
+
+  var ORD_COLOR = ['var(--ord-1)','var(--ord-2)','var(--ord-3)','var(--ord-4)','var(--ord-5)'];
+  var CAT_COLOR = ['var(--cat-1)','var(--cat-2)','var(--cat-3)','var(--cat-4)','var(--cat-5)','var(--cat-6)','var(--cat-7)','var(--cat-8)'];
+
+  /* ---------------- storage ---------------- */
+  var KEY = 'gt3-enquetes-v4';
+  function load(){
+    try{
+      var v = localStorage.getItem(KEY);
+      if(v) return JSON.parse(v);
+      var old = localStorage.getItem('gt3-enquetes-v3'); // keep questionnaires built in the earlier version
+      if(old){ var o = JSON.parse(old); var s = defaultStore(); s.questionnaires = o.questionnaires || s.questionnaires; s.config = o.config || {}; s.seq = Math.max(o.seq||0, s.seq); return s; }
+    }catch(e){}
+    return null;
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} }
+
+  function defaultStore(){
+    return {
+      seq: 100,
+      questionnaires: [
+        {id:'qn2', titulo:'Questionário Contratantes 2026', publico:'Contratante', status:'ativo', questions:[
+          {id:'k1', type:'escala', label:'Qual seu nível de satisfação geral com a GT3?', min:'Muito insatisfeito', max:'Muito satisfeito'},
+          {id:'k2', type:'multipla', label:'Qual serviço da GT3 é mais importante para sua empresa?', options:['Gestão de PGR/PCMSO','Controle de terceiros','Conformidade eSocial']},
+          {id:'k3', type:'texto', label:'Comentários ou sugestões'}
+        ]},
+        {id:'qn1', titulo:'Questionário Prestadores 2026', publico:'Prestador', status:'ativo', questions:[
+          {id:'p1', type:'escala', label:'Como você avalia o suporte da GT3 no envio de documentação?', min:'Precisa melhorar', max:'Excelente'},
+          {id:'p2', type:'multipla', label:'Qual canal você prefere para contato com a GT3?', options:['E-mail','WhatsApp','Telefone']},
+          {id:'p3', type:'texto', label:'Algo que a GT3 poderia melhorar no processo?'}
+        ]},
+        {id:'qn3', titulo:'Pesquisa de Onboarding · Prestadores', publico:'Prestador', status:'rascunho', questions:[
+          {id:'o1', type:'escala', label:'O processo de cadastro na GT3 foi claro?', min:'Nada claro', max:'Muito claro'},
+          {id:'o2', type:'multipla', label:'Como ficou sabendo da GT3?', options:['Indicação da contratante','E-mail da GT3','Outro']}
+        ]}
+      ],
+      config: {},
+      rows: seedRows()
+    };
+  }
+
+  function slug(s){ return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,''); }
+  function genToken(){ var s=''; for(var i=0;i<8;i++) s += '0123456789abcdef'[Math.floor(Math.random()*16)]; return s; }
+  function seedRows(){
+    return SEED.map(function(d, i){
+      var r = Object.assign({}, d);
+      r.id = 'r'+(i+1);
+      r.email = slug(d.nome.split(' ')[0]+' '+d.nome.split(' ').slice(-1)[0]) + '@' + slug(d.empresa.split(' ')[0]) + '.com.br';
+      r.token = d.status==='pendente' ? null : genToken();
+      return r;
+    });
+  }
+
+  /* ---------------- sample recipients & responses (would come from Supabase) ---------------- */
+  var BASE_CONTRATANTES = ['Marcopolo S.A.','Volare Veículos','RS Compliance'];
+  var SEED = [
+    {qn:'qn2', nome:'Carla Menezes', empresa:'Marcopolo S.A.', tipo:'Contratante', status:'respondido', r:{k1:5, k2:'Gestão de PGR/PCMSO', k3:'Atendimento rápido no último protocolo de PGR.'}},
+    {qn:'qn2', nome:'Roberto Vieira', empresa:'Volare Veículos', tipo:'Contratante', status:'respondido', r:{k1:4, k2:'Controle de terceiros', k3:'Poderia avisar com mais antecedência sobre vencimentos.'}},
+    {qn:'qn2', nome:'Fernanda Lopes', empresa:'Marcopolo S.A.', tipo:'Contratante', status:'enviado', r:{}},
+    {qn:'qn2', nome:'Diego Amaral', empresa:'Volare Veículos', tipo:'Contratante', status:'pendente', r:{}},
+    {qn:'qn2', nome:'Patrícia Nunes', empresa:'RS Compliance', tipo:'Contratante', status:'respondido', r:{k1:3, k2:'Conformidade eSocial', k3:'Documentação às vezes chega picada, em vários e-mails.'}},
+    {qn:'qn2', nome:'Henrique Bastos', empresa:'RS Compliance', tipo:'Contratante', status:'respondido', r:{k1:5, k2:'Gestão de PGR/PCMSO', k3:'Sem reclamações, equipe muito atenciosa.'}},
+    {qn:'qn2', nome:'Juliana Costa', empresa:'Marcopolo S.A.', tipo:'Contratante', status:'respondido', r:{k1:4, k2:'Controle de terceiros', k3:'Gostaria de um relatório mensal consolidado.'}},
+    {qn:'qn2', nome:'André Ferraz', empresa:'Volare Veículos', tipo:'Contratante', status:'respondido', r:{k1:2, k2:'Controle de terceiros', k3:'Já tive retorno de NR duplicado duas vezes este mês.'}},
+
+    {qn:'qn1', nome:'Elisângela Prado', empresa:'Segflex Terceirizada', tipo:'Prestador', vinculo:'Marcopolo S.A.', status:'respondido', r:{p1:4, p2:'WhatsApp', p3:'Só senti falta de um canal direto para dúvidas urgentes.'}},
+    {qn:'qn1', nome:'João Pedro Silva', empresa:'Ativa Manutenção', tipo:'Prestador', vinculo:'Volare Veículos', status:'respondido', r:{p1:5, p2:'WhatsApp', p3:'Processo de cadastro foi bem tranquilo.'}},
+    {qn:'qn1', nome:'Marcos Tadeu', empresa:'Prestreino Segurança', tipo:'Prestador', vinculo:'Volare Veículos', status:'respondido', r:{p1:3, p2:'Telefone', p3:'O prazo de resposta do e-mail padrão poderia ser menor.'}},
+    {qn:'qn1', nome:'Camila Duarte', empresa:'Segflex Terceirizada', tipo:'Prestador', vinculo:'Marcopolo S.A.', status:'enviado', r:{}},
+    {qn:'qn1', nome:'Vinícius Rocha', empresa:'Prestreino Segurança', tipo:'Prestador', vinculo:'RS Compliance', status:'respondido', r:{p1:5, p2:'E-mail', p3:'Muito claro o passo a passo enviado.'}},
+    {qn:'qn1', nome:'Simone Ávila', empresa:'Ativa Manutenção', tipo:'Prestador', vinculo:'Marcopolo S.A.', status:'pendente', r:{}},
+    {qn:'qn1', nome:'Rafael Guedes', empresa:'Prestreino Segurança', tipo:'Prestador', vinculo:'Volare Veículos', status:'respondido', r:{p1:2, p2:'E-mail', p3:'Tive retorno de documento reprovado sem explicação clara do motivo.'}},
+    {qn:'qn1', nome:'Bianca Ferreira', empresa:'Segflex Terceirizada', tipo:'Prestador', vinculo:'RS Compliance', status:'pendente', r:{}},
+    {qn:'qn1', nome:'Otávio Lima', empresa:'Ativa Manutenção', tipo:'Prestador', vinculo:'Marcopolo S.A.', status:'respondido', r:{p1:4, p2:'WhatsApp', p3:'Boa comunicação, só o portal trava às vezes.'}},
+    {qn:'qn1', nome:'Letícia Moraes', empresa:'Ativa Manutenção', tipo:'Prestador', vinculo:'Volare Veículos', status:'enviado', r:{}},
+    {qn:'qn1', nome:'Gustavo Pires', empresa:'Prestreino Segurança', tipo:'Prestador', vinculo:'RS Compliance', status:'respondido', r:{p1:5, p2:'Telefone', p3:'Excelente suporte na renovação do PCMSO.'}},
+    {qn:'qn1', nome:'Aline Souza', empresa:'Segflex Terceirizada', tipo:'Prestador', vinculo:'Volare Veículos', status:'respondido', r:{p1:4, p2:'E-mail', p3:'Tudo certo, só sugiro lembrete automático de vencimento.'}},
+    {qn:'qn1', nome:'Fábio Nogueira', empresa:'Segflex Terceirizada', tipo:'Prestador', vinculo:'Marcopolo S.A.', status:'pendente', r:{}},
+    {qn:'qn1', nome:'Renata Cunha', empresa:'Prestreino Segurança', tipo:'Prestador', vinculo:'RS Compliance', status:'respondido', r:{p1:3, p2:'WhatsApp', p3:'Ok no geral, mas o link demorou pra abrir no celular.'}},
+    {qn:'qn1', nome:'Thiago Martins', empresa:'Ativa Manutenção', tipo:'Prestador', vinculo:'Marcopolo S.A.', status:'respondido', r:{p1:1, p2:'Telefone', p3:'Tive documento recusado três vezes pelo mesmo motivo já corrigido.'}}
+  ];
+  var store = load() || defaultStore();
+  if(!store.rows) store.rows = seedRows();
+  function contratantesList(){
+    var set = new Set(BASE_CONTRATANTES);
+    store.rows.forEach(function(d){ if(d.tipo==='Contratante') set.add(d.empresa); if(d.vinculo) set.add(d.vinculo); });
+    return Array.from(set).sort();
+  }
+
+  /* ---------------- helpers ---------------- */
+  function esc(s){ var d=document.createElement('div'); d.textContent = s==null ? '' : String(s); return d.innerHTML; }
+  function toggleSetVal(set, v){ if(set.has(v)) set.delete(v); else set.add(v); }
+  function getQn(id){ return store.questionnaires.filter(function(q){return q.id===id;})[0]; }
+  function rowsOf(qnId){ return store.rows.filter(function(d){return d.qn===qnId;}); }
+  function newId(prefix){ store.seq++; return prefix+store.seq; }
+
+  function cfgFor(qn){
+    if(!store.config[qn.id]) store.config[qn.id] = {statTiles:{total:true,taxa:true,respondido:true,pendente:true}, order:[], visible:{}};
+    var c = store.config[qn.id];
+    var ids = qn.questions.filter(function(q){return q.type!=='texto';}).map(function(q){return q.id;}).concat(['empresaStack','table']);
+    ids.forEach(function(id){ if(c.order.indexOf(id)===-1) c.order.push(id); if(!(id in c.visible)) c.visible[id]=true; });
+    c.order = c.order.filter(function(id){return ids.indexOf(id)!==-1;});
+    // keep table last unless the user moved it
+    return c;
+  }
+
+  /* ---------------- tabs ---------------- */
+  var tabs = document.querySelectorAll('.tab');
+  var views = {hub:'view-hub', convites:'view-convites', painel:'view-painel', config:'view-config'};
+  function openTab(name){
+    tabs.forEach(function(t){ t.setAttribute('aria-selected', t.dataset.view===name ? 'true':'false'); });
+    Object.keys(views).forEach(function(k){ document.getElementById(views[k]).classList.toggle('active', k===name); });
+    if(name==='convites'){ syncQnSelects(); renderConvites(); }
+    if(name==='painel'){ syncQnSelects(); renderPainel(); }
+    if(name==='config'){ syncQnSelects(); renderConfig(); }
+    if(name==='hub'){ renderHub(); }
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ openTab(t.dataset.view); }); });
+
+  /* =========================================================
+     HUB
+     ========================================================= */
+  var ui = {editingQn:null, draft:null, confirmDel:null, newQnOpen:false};
+
+  function renderHub(){
+    var list = document.getElementById('hub-list');
+    var editor = document.getElementById('hub-editor');
+    if(ui.editingQn){ list.hidden = true; editor.hidden = false; renderEditor(); return; }
+    list.hidden = false; editor.hidden = true;
+
+    var html = '<div class="hub-grid">';
+    store.questionnaires.forEach(function(qn){
+      var rows = rowsOf(qn.id);
+      var resp = rows.filter(function(d){return d.status==='respondido';}).length;
+      var pct = rows.length ? Math.round(resp/rows.length*100) : 0;
+      html += '<div class="qn-card">'+
+        '<div class="qn-card-top"><h3>'+esc(qn.titulo)+'</h3><span class="status-tag '+qn.status+'">'+statusName(qn.status)+'</span></div>'+
+        '<div class="qn-meta"><span class="pill-tag">Público: '+esc(qn.publico)+'</span></div>'+
+        '<div class="qn-numbers">'+
+          '<div><b>'+qn.questions.length+'</b><span>pergunta'+(qn.questions.length===1?'':'s')+'</span></div>'+
+          '<div><b>'+rows.length+'</b><span>convites</span></div>'+
+          '<div><b>'+resp+'</b><span>respostas</span></div>'+
+        '</div>'+
+        '<div class="qn-progress" title="'+pct+'% de resposta"><i style="width:'+pct+'%"></i></div>'+
+        '<div class="qn-actions">'+
+          '<button class="btn" data-open="'+qn.id+'">Abrir</button>'+
+          '<button class="btn ghost" data-inv="'+qn.id+'">Convites</button>'+
+          '<button class="btn ghost" data-panel="'+qn.id+'">Respostas</button>'+
+        '</div>'+
+      '</div>';
+    });
+    html += '<div class="qn-card qn-new">';
+    if(!ui.newQnOpen){
+      html += '<button class="qn-new-btn" id="new-qn-btn"><span class="plus-circle">+</span>Novo questionário</button>';
+    } else {
+      html += '<div class="qn-new-form">'+
+        '<h3 style="font-family:Manrope,sans-serif;font-size:15px;margin:0;">Novo questionário</h3>'+
+        '<div class="row"><span class="field-label">Nome</span><input type="text" id="new-qn-title" placeholder="Ex: Questionário Contratantes 2027"></div>'+
+        '<div class="row"><span class="field-label">Público</span><select id="new-qn-pub"><option>Contratante</option><option>Prestador</option></select></div>'+
+        '<div class="qn-actions"><button class="btn ghost" id="new-qn-cancel">Cancelar</button><button class="btn" id="new-qn-create">Criar e abrir</button></div>'+
+      '</div>';
+    }
+    html += '</div></div>';
+    list.innerHTML = html;
+
+    list.querySelectorAll('[data-open]').forEach(function(b){ b.addEventListener('click', function(){ ui.editingQn = b.dataset.open; ui.draft = null; ui.confirmDel=null; renderHub(); }); });
+    list.querySelectorAll('[data-panel]').forEach(function(b){ b.addEventListener('click', function(){ selectPanelQn(b.dataset.panel); openTab('painel'); }); });
+    list.querySelectorAll('[data-inv]').forEach(function(b){ b.addEventListener('click', function(){ selectPanelQn(b.dataset.inv); openTab('convites'); }); });
+    var nb = document.getElementById('new-qn-btn');
+    if(nb) nb.addEventListener('click', function(){ ui.newQnOpen = true; renderHub(); var t=document.getElementById('new-qn-title'); if(t) t.focus(); });
+    var nc = document.getElementById('new-qn-cancel');
+    if(nc) nc.addEventListener('click', function(){ ui.newQnOpen=false; renderHub(); });
+    var ncr = document.getElementById('new-qn-create');
+    if(ncr) ncr.addEventListener('click', function(){
+      var t = document.getElementById('new-qn-title').value.trim();
+      if(!t){ document.getElementById('new-qn-title').focus(); return; }
+      var qn = {id:newId('qn'), titulo:t, publico:document.getElementById('new-qn-pub').value, status:'rascunho', questions:[]};
+      store.questionnaires.push(qn); save();
+      ui.newQnOpen=false; ui.editingQn=qn.id; ui.draft = blankDraft();
+      renderHub();
+    });
+  }
+  function statusName(s){ return s==='ativo'?'Ativo':s==='encerrado'?'Encerrado':'Rascunho'; }
+
+  /* ---------------- EDITOR ---------------- */
+  function blankDraft(){ return {id:null, type:'escala', label:'', min:'Muito insatisfeito', max:'Muito satisfeito', options:['','']}; }
+
+  function answersSummary(q){
+    if(q.type==='escala'){
+      return '<div class="answers-inline"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>'+
+        '<span class="scale-desc">1 = '+esc(q.min||'—')+' · 5 = '+esc(q.max||'—')+'</span></div>';
+    }
+    if(q.type==='multipla'){
+      return '<div class="answers-inline">'+(q.options||[]).map(function(o){return '<span>'+esc(o)+'</span>';}).join('')+'</div>';
+    }
+    return '<div class="answers-inline"><span class="scale-desc">Texto livre, escrito pelo respondente</span></div>';
+  }
+
+  function renderEditor(){
+    var qn = getQn(ui.editingQn);
+    var el = document.getElementById('hub-editor');
+    if(!qn){ ui.editingQn=null; renderHub(); return; }
+
+    var html = '<div style="display:flex;flex-direction:column;gap:14px;">'+
+      '<div><button class="link-btn" id="ed-back">← Todos os questionários</button></div>'+
+      '<div class="card editor-head">'+
+        '<div style="display:flex;flex-direction:column;gap:5px;"><span class="field-label">Nome do questionário</span>'+
+        '<input type="text" class="title-input" id="ed-title" value="'+esc(qn.titulo)+'"></div>'+
+        '<div class="meta-row">'+
+          '<div class="row"><span class="field-label">Público</span><select id="ed-pub"><option'+(qn.publico==='Contratante'?' selected':'')+'>Contratante</option><option'+(qn.publico==='Prestador'?' selected':'')+'>Prestador</option></select></div>'+
+          '<div class="row"><span class="field-label">Situação</span><select id="ed-status">'+
+            ['rascunho','ativo','encerrado'].map(function(s){return '<option value="'+s+'"'+(qn.status===s?' selected':'')+'>'+statusName(s)+'</option>';}).join('')+
+          '</select></div>'+
+          '<div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">'+
+            '<button class="btn ghost small" id="ed-inv">Convites</button>'+
+            '<button class="btn ghost small" id="ed-panel">Ver respostas</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="editor-grid">'+
+        '<div class="card">'+
+          '<h2>Perguntas</h2>'+
+          '<p class="cap">Cada pergunta tem duas partes: o texto da <b>pergunta</b> e as <b>respostas possíveis</b>. Use o <b>+</b> para criar uma nova.</p>'+
+          '<div class="qlist" id="ed-qlist"></div>'+
+        '</div>'+
+        '<div class="card" style="position:sticky;top:16px;">'+
+          '<h2>Como o respondente verá</h2>'+
+          '<p class="cap">Pré-visualização atualizada enquanto você edita.</p>'+
+          '<div class="preview-shell"><div class="preview-top"><small>GT3 Consultoria</small><b id="pv-title"></b></div><div class="preview-body" id="pv-body"></div></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+    el.innerHTML = html;
+
+    document.getElementById('ed-back').addEventListener('click', function(){ ui.editingQn=null; ui.draft=null; renderHub(); });
+    document.getElementById('ed-title').addEventListener('input', function(e){ qn.titulo = e.target.value; save(); renderPreview(); });
+    document.getElementById('ed-pub').addEventListener('change', function(e){ qn.publico = e.target.value; save(); });
+    document.getElementById('ed-status').addEventListener('change', function(e){ qn.status = e.target.value; save(); });
+    document.getElementById('ed-panel').addEventListener('click', function(){ selectPanelQn(qn.id); openTab('painel'); });
+    document.getElementById('ed-inv').addEventListener('click', function(){ selectPanelQn(qn.id); openTab('convites'); });
+
+    renderQList();
+    renderPreview();
+  }
+
+  function renderQList(){
+    var qn = getQn(ui.editingQn);
+    var list = document.getElementById('ed-qlist');
+    list.innerHTML = '';
+
+    if(!qn.questions.length && !ui.draft){
+      var em = document.createElement('p'); em.className='empty-qs'; em.textContent='Este questionário ainda não tem perguntas.'; list.appendChild(em);
+    }
+
+    qn.questions.forEach(function(q, i){
+      if(ui.draft && ui.draft.id===q.id){ list.appendChild(buildComposer(i)); return; }
+      var item = document.createElement('div'); item.className='qitem';
+      var confirming = ui.confirmDel===q.id;
+      item.innerHTML =
+        '<div class="qitem-head">'+
+          '<span class="qnum">#'+(i+1)+'</span>'+
+          '<span class="qtype">'+ICON[q.type]+TYPE_NAME[q.type]+'</span>'+
+          '<div class="qitem-tools">'+
+            '<button class="icon-btn" data-a="up" aria-label="Mover para cima" '+(i===0?'disabled':'')+'>▲</button>'+
+            '<button class="icon-btn" data-a="down" aria-label="Mover para baixo" '+(i===qn.questions.length-1?'disabled':'')+'>▼</button>'+
+            '<button class="icon-btn" data-a="edit">Editar</button>'+
+            '<button class="icon-btn danger'+(confirming?' confirm':'')+'" data-a="del">'+(confirming?'Confirmar remoção':'Remover')+'</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="qitem-body">'+
+          '<div class="k">Pergunta</div><div class="v">'+esc(q.label)+'</div>'+
+          '<div class="k">Respostas possíveis</div><div>'+answersSummary(q)+'</div>'+
+        '</div>';
+      item.querySelectorAll('[data-a]').forEach(function(b){
+        b.addEventListener('click', function(){
+          var a = b.dataset.a;
+          if(a==='up' || a==='down'){
+            var j = a==='up' ? i-1 : i+1;
+            var t = qn.questions[i]; qn.questions[i]=qn.questions[j]; qn.questions[j]=t;
+            save(); renderQList(); renderPreview();
+          } else if(a==='edit'){
+            ui.draft = JSON.parse(JSON.stringify(q));
+            if(ui.draft.type==='multipla' && (!ui.draft.options || ui.draft.options.length<2)) ui.draft.options = (ui.draft.options||[]).concat(['','']).slice(0,Math.max(2,(ui.draft.options||[]).length));
+            if(!ui.draft.options) ui.draft.options=['',''];
+            if(ui.draft.min==null) ui.draft.min='Muito insatisfeito';
+            if(ui.draft.max==null) ui.draft.max='Muito satisfeito';
+            ui.confirmDel=null; renderQList(); renderPreview();
+          } else if(a==='del'){
+            if(ui.confirmDel===q.id){
+              qn.questions.splice(i,1);
+              if(store.config[qn.id]){ delete store.config[qn.id].visible[q.id]; store.config[qn.id].order = store.config[qn.id].order.filter(function(x){return x!==q.id;}); }
+              ui.confirmDel=null; save(); renderQList(); renderPreview();
+            } else { ui.confirmDel=q.id; renderQList(); }
+          }
+        });
+      });
+      list.appendChild(item);
+    });
+
+    if(ui.draft && !ui.draft.id){
+      list.appendChild(buildComposer(qn.questions.length));
+    } else if(!ui.draft){
+      var add = document.createElement('button'); add.className='add-q';
+      add.innerHTML = '<span class="plus-circle">+</span>Nova pergunta';
+      add.addEventListener('click', function(){ ui.draft = blankDraft(); ui.confirmDel=null; renderQList(); renderPreview(); var f=document.getElementById('cp-label'); if(f) f.focus(); });
+      list.appendChild(add);
+    }
+  }
+
+  function buildComposer(index){
+    var d = ui.draft;
+    var box = document.createElement('div'); box.className='composer';
+    var html =
+      '<div class="composer-head">'+(d.id ? 'Editando pergunta #'+(index+1) : 'Nova pergunta #'+(index+1))+'</div>'+
+      '<div class="composer-sec">'+
+        '<div class="sec-title"><span class="n">1</span><h4>Tipo de pergunta</h4></div>'+
+        '<div class="type-cards">'+
+          ['escala','multipla','texto'].map(function(t){
+            return '<button class="type-card'+(d.type===t?' on':'')+'" data-type="'+t+'" aria-pressed="'+(d.type===t)+'">'+ICON[t]+'<b>'+TYPE_NAME[t]+'</b><span>'+TYPE_DESC[t]+'</span></button>';
+          }).join('')+
+        '</div>'+
+      '</div>'+
+      '<div class="composer-sec">'+
+        '<div class="sec-title"><span class="n">2</span><h4>Pergunta</h4><small>o que o respondente vai ler</small></div>'+
+        '<textarea id="cp-label" rows="2" placeholder="Ex: Como você avalia o atendimento da GT3?">'+esc(d.label)+'</textarea>'+
+      '</div>'+
+      '<div class="composer-sec">'+
+        '<div class="sec-title"><span class="n">3</span><h4>Respostas possíveis</h4><small>'+(d.type==='escala'?'escala fixa de 1 a 5':d.type==='multipla'?'as opções que o respondente pode escolher':'')+'</small></div>'+
+        answersEditorHtml(d)+
+      '</div>'+
+      '<div class="composer-foot">'+
+        '<span class="composer-error" id="cp-error"></span>'+
+        '<button class="btn ghost" id="cp-cancel">Cancelar</button>'+
+        '<button class="btn" id="cp-save">Salvar pergunta</button>'+
+      '</div>';
+    box.innerHTML = html;
+
+    box.querySelectorAll('.type-card').forEach(function(b){
+      b.addEventListener('click', function(){
+        d.label = box.querySelector('#cp-label').value;
+        d.type = b.dataset.type;
+        if(d.type==='multipla' && (!d.options || d.options.length<2)) d.options = ['',''];
+        renderQList(); renderPreview();
+      });
+    });
+    box.querySelector('#cp-label').addEventListener('input', function(e){ d.label = e.target.value; renderPreview(); });
+
+    if(d.type==='escala'){
+      box.querySelector('#cp-min').addEventListener('input', function(e){ d.min = e.target.value; renderPreview(); });
+      box.querySelector('#cp-max').addEventListener('input', function(e){ d.max = e.target.value; renderPreview(); });
+    }
+    if(d.type==='multipla'){
+      box.querySelectorAll('[data-opt]').forEach(function(inp){
+        inp.addEventListener('input', function(e){ d.options[+inp.dataset.opt] = e.target.value; renderPreview(); });
+      });
+      box.querySelectorAll('[data-rm]').forEach(function(b){
+        b.addEventListener('click', function(){ d.label = box.querySelector('#cp-label').value; d.options.splice(+b.dataset.rm,1); renderQList(); renderPreview(); });
+      });
+      box.querySelector('#cp-addopt').addEventListener('click', function(){
+        d.label = box.querySelector('#cp-label').value; d.options.push(''); renderQList(); renderPreview();
+        var inputs = document.querySelectorAll('[data-opt]'); if(inputs.length) inputs[inputs.length-1].focus();
+      });
+    }
+
+    box.querySelector('#cp-cancel').addEventListener('click', function(){ ui.draft=null; renderQList(); renderPreview(); });
+    box.querySelector('#cp-save').addEventListener('click', function(){
+      var err = box.querySelector('#cp-error');
+      var label = (d.label||'').trim();
+      if(!label){ err.textContent='Escreva o texto da pergunta.'; box.querySelector('#cp-label').focus(); return; }
+      var q = {id: d.id || newId('x'), type:d.type, label:label};
+      if(d.type==='escala'){ q.min = (d.min||'').trim(); q.max = (d.max||'').trim(); }
+      if(d.type==='multipla'){
+        var opts = d.options.map(function(o){return (o||'').trim();}).filter(Boolean);
+        if(opts.length<2){ err.textContent='Defina pelo menos duas respostas possíveis.'; return; }
+        q.options = opts;
+      }
+      var qn = getQn(ui.editingQn);
+      if(d.id){
+        var idx = qn.questions.map(function(x){return x.id;}).indexOf(d.id);
+        qn.questions[idx] = q;
+      } else {
+        qn.questions.push(q);
+      }
+      if(q.type==='texto' && store.config[qn.id]){ delete store.config[qn.id].visible[q.id]; }
+      ui.draft = null; save(); renderQList(); renderPreview();
+    });
+    return box;
+  }
+
+  function answersEditorHtml(d){
+    if(d.type==='escala'){
+      return '<div class="scale-row"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>'+
+        '<div class="scale-labels">'+
+          '<div class="row"><span class="field-label">O que significa 1</span><input type="text" id="cp-min" value="'+esc(d.min)+'"></div>'+
+          '<div class="row"><span class="field-label">O que significa 5</span><input type="text" id="cp-max" value="'+esc(d.max)+'"></div>'+
+        '</div>';
+    }
+    if(d.type==='multipla'){
+      var h = '<div class="opt-list">';
+      d.options.forEach(function(o, i){
+        h += '<div class="opt-row"><span class="dot"></span><input type="text" data-opt="'+i+'" value="'+esc(o)+'" placeholder="Resposta '+(i+1)+'">'+
+             '<button class="icon-btn danger" data-rm="'+i+'" aria-label="Remover resposta" '+(d.options.length<=2?'disabled':'')+'>✕</button></div>';
+      });
+      h += '</div><button class="btn ghost small opt-add" id="cp-addopt">+ Adicionar resposta</button>';
+      return h;
+    }
+    return '<div class="text-answer-demo">O respondente terá um campo livre para escrever. Não há respostas pré-definidas.</div>';
+  }
+
+  function renderPreview(){
+    var qn = getQn(ui.editingQn); if(!qn) return;
+    var t = document.getElementById('pv-title'); if(t) t.textContent = qn.titulo || 'Sem nome';
+    var body = document.getElementById('pv-body'); if(!body) return;
+    var items = qn.questions.slice();
+    if(ui.draft){
+      if(ui.draft.id){ items = items.map(function(q){ return q.id===ui.draft.id ? Object.assign({_draft:true}, ui.draft) : q; }); }
+      else items.push(Object.assign({_draft:true}, ui.draft));
+    }
+    if(!items.length){ body.innerHTML = '<p style="font-size:12.5px;color:var(--text-muted);margin:0;">Adicione a primeira pergunta para ver a prévia.</p>'; return; }
+    body.innerHTML = items.map(function(q, i){
+      var h = '<div class="pv-q'+(q._draft?' draft':'')+'"><div class="pv-label">'+(i+1)+'. '+(q.label ? esc(q.label) : '<i>Texto da pergunta…</i>')+'</div>';
+      if(q.type==='escala'){
+        h += '<div class="pv-scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>'+
+             '<div class="pv-ends"><span>'+esc(q.min||'')+'</span><span>'+esc(q.max||'')+'</span></div>';
+      } else if(q.type==='multipla'){
+        var opts = (q.options||[]).filter(function(o){return o && o.trim();});
+        h += '<div class="pv-choice">'+(opts.length ? opts.map(function(o){return '<span>'+esc(o)+'</span>';}).join('') : '<span>Resposta 1</span><span>Resposta 2</span>')+'</div>';
+      } else {
+        h += '<div class="pv-text">Escreva sua resposta…</div>';
+      }
+      return h+'</div>';
+    }).join('');
+  }
+
+  /* =========================================================
+     PAINEL
+     ========================================================= */
+  var state = {qn:'qn2', contratante:'all', status:new Set(), empresa:new Set(), search:'', q:{}};
+  function qSet(id){ if(!state.q[id]) state.q[id]=new Set(); return state.q[id]; }
+
+  function syncQnSelects(){
+    ['p-qn','c-qn','v-qn'].forEach(function(id){
+      var s = document.getElementById(id);
+      s.innerHTML = store.questionnaires.map(function(qn){ return '<option value="'+qn.id+'"'+(qn.id===state.qn?' selected':'')+'>'+esc(qn.titulo)+'</option>'; }).join('');
+    });
+  }
+  function selectPanelQn(id){
+    state.qn = id; state.contratante='all'; state.status=new Set(); state.empresa=new Set(); state.search=''; state.q={};
+    document.getElementById('f-contratante').value='all';
+    document.getElementById('f-search').value='';
+  }
+  document.getElementById('p-qn').addEventListener('change', function(e){ selectPanelQn(e.target.value); renderPainel(); });
+  document.getElementById('c-qn').addEventListener('change', function(e){ state.qn = e.target.value; renderConfig(); });
+
+  document.getElementById('v-qn').addEventListener('change', function(e){ selectPanelQn(e.target.value); ui.addOpen=false; renderConvites(); });
+  var contratanteSel = document.getElementById('f-contratante');
+  function syncContratanteSelect(){
+    contratanteSel.innerHTML = '<option value="all">Todos os contratantes</option>' + contratantesList().map(function(c){ return '<option value="'+esc(c)+'"'+(state.contratante===c?' selected':'')+'>'+esc(c)+'</option>'; }).join('');
+  }
+  contratanteSel.addEventListener('change', function(e){ state.contratante = e.target.value; renderPainel(); });
+  document.querySelectorAll('#f-status .chip').forEach(function(b){ b.addEventListener('click', function(){ toggleSetVal(state.status, b.dataset.v); renderPainel(); }); });
+  document.getElementById('f-search').addEventListener('input', function(e){ state.search = e.target.value.trim().toLowerCase(); renderPainel(); });
+  document.getElementById('f-clear').addEventListener('click', function(){ selectPanelQn(state.qn); renderPainel(); });
+
+  function broadFiltered(){
+    return rowsOf(state.qn).filter(function(d){
+      if(state.contratante!=='all'){
+        var m = (d.tipo==='Contratante' && d.empresa===state.contratante) || (d.tipo==='Prestador' && d.vinculo===state.contratante);
+        if(!m) return false;
+      }
+      if(state.empresa.size && !state.empresa.has(d.empresa)) return false;
+      if(state.status.size && !state.status.has(d.status)) return false;
+      if(state.search && (d.nome+' '+d.empresa).toLowerCase().indexOf(state.search)===-1) return false;
+      return true;
+    });
+  }
+  function withQuestions(list, excludeId){
+    return list.filter(function(d){
+      for(var qid in state.q){
+        if(qid===excludeId) continue;
+        var s = state.q[qid];
+        if(s.size && !s.has(d.r[qid])) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderFilterChrome(){
+    var qn = getQn(state.qn);
+    syncContratanteSelect();
+    document.getElementById('p-qn-status').innerHTML = qn ? '<span class="status-tag '+qn.status+'">'+statusName(qn.status)+'</span> <span class="pill-tag">Público: '+esc(qn.publico)+'</span>' : '';
+    var emps = Array.from(new Set(rowsOf(state.qn).map(function(d){return d.empresa;}))).sort();
+    var wrap = document.getElementById('f-empresa');
+    wrap.innerHTML = '';
+    if(!emps.length){ wrap.innerHTML = '<span class="f-hint">Sem empresas ainda</span>'; }
+    emps.forEach(function(emp){
+      var b = document.createElement('button'); b.className='chip'+(state.empresa.has(emp)?' on':''); b.textContent=emp;
+      b.addEventListener('click', function(){ toggleSetVal(state.empresa, emp); renderPainel(); });
+      wrap.appendChild(b);
+    });
+    document.querySelectorAll('#f-status .chip').forEach(function(b){ b.classList.toggle('on', state.status.has(b.dataset.v)); });
+  }
+
+  function renderActiveStrip(){
+    var qn = getQn(state.qn);
+    var strip = document.getElementById('active-strip');
+    var pills=[], rm=[];
+    if(state.contratante!=='all'){ pills.push('Contratante: '+state.contratante); rm.push(function(){ state.contratante='all'; contratanteSel.value='all'; }); }
+    state.empresa.forEach(function(v){ pills.push('Empresa: '+v); rm.push(function(){ state.empresa.delete(v); }); });
+    state.status.forEach(function(v){ pills.push('Status: '+v); rm.push(function(){ state.status.delete(v); }); });
+    Object.keys(state.q).forEach(function(qid){
+      var q = qn && qn.questions.filter(function(x){return x.id===qid;})[0];
+      state.q[qid].forEach(function(v){ pills.push((q?q.label:qid)+' → '+v); rm.push(function(){ state.q[qid].delete(v); }); });
+    });
+    if(!pills.length){ strip.classList.remove('show'); strip.innerHTML=''; return; }
+    strip.classList.add('show');
+    strip.innerHTML = '<span>Filtros ativos:</span>'+pills.map(function(p,i){ return '<span class="pill">'+esc(p)+'<button data-i="'+i+'" aria-label="Remover filtro">×</button></span>'; }).join('');
+    strip.querySelectorAll('button').forEach(function(b,i){ b.addEventListener('click', function(){ rm[i](); renderPainel(); }); });
+  }
+
+  function renderStats(list, cfg, root){
+    var total = list.length;
+    var resp = list.filter(function(d){return d.status==='respondido';}).length;
+    var items = [];
+    if(cfg.statTiles.total) items.push({n:total, l:'Convites no recorte', c:''});
+    if(cfg.statTiles.taxa) items.push({n:(total?Math.round(resp/total*100):0)+'%', l:'Taxa de resposta', c:'good'});
+    if(cfg.statTiles.respondido) items.push({n:resp, l:'Respondido', c:'good'});
+    if(cfg.statTiles.pendente) items.push({n:total-resp, l:'Enviado + pendente', c:'warning'});
+    if(!items.length) return;
+    var w = document.createElement('div'); w.className='stats';
+    w.innerHTML = items.map(function(it){ return '<div class="stat"><div class="n '+it.c+'">'+it.n+'</div><div class="l">'+it.l+'</div></div>'; }).join('');
+    root.appendChild(w);
+  }
+
+  function renderQuestionChart(q, container){
+    var card = document.createElement('div'); card.className='card';
+    var domain = q.type==='escala' ? [1,2,3,4,5] : (q.options||[]);
+    var colors = q.type==='escala' ? ORD_COLOR : CAT_COLOR;
+    var base = withQuestions(broadFiltered(), q.id).filter(function(d){ return d.status==='respondido' && d.r[q.id]!=null; });
+    var counts = domain.map(function(v){ return base.filter(function(d){return d.r[q.id]===v;}).length; });
+    var max = Math.max.apply(null, counts.concat([1]));
+    var cap = q.type==='escala' ? ('1 = '+esc(q.min||'')+' · 5 = '+esc(q.max||'')+'. ') : '';
+    card.innerHTML = '<h2>'+esc(q.label)+'</h2><p class="cap">'+cap+'Clique numa barra para isolar essa resposta.</p>';
+    var surf = document.createElement('div'); surf.className='chart-surface';
+    var bc = document.createElement('div'); bc.className='barchart';
+    var totalAns = counts.reduce(function(a,b){return a+b;},0);
+    if(!totalAns && !qSet(q.id).size){
+      bc.innerHTML = '<div class="empty-note">Ainda sem respostas para esta pergunta no recorte atual.</div>';
+    } else {
+      domain.forEach(function(v, i){
+        var sel = qSet(q.id).has(v), dim = qSet(q.id).size>0 && !sel;
+        var h = Math.max(4, Math.round(counts[i]/max*112));
+        var col = document.createElement('div'); col.className='bar-col';
+        col.innerHTML = '<span class="bar-val">'+counts[i]+'</span>'+
+          '<div class="bar-rect-wrap"><div class="bar-rect'+(sel?' sel':'')+(dim?' dim':'')+'" tabindex="0" role="button" aria-pressed="'+sel+'" aria-label="'+esc(v)+': '+counts[i]+' respostas" title="'+esc(v)+': '+counts[i]+' resposta'+(counts[i]===1?'':'s')+'" style="height:'+h+'px;background:'+colors[i%colors.length]+'"></div></div>'+
+          '<span class="bar-label">'+esc(v)+'</span>';
+        var rect = col.querySelector('.bar-rect');
+        function act(){ toggleSetVal(qSet(q.id), v); renderPainel(); }
+        rect.addEventListener('click', act);
+        rect.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); act(); } });
+        bc.appendChild(col);
+      });
+    }
+    surf.appendChild(bc); card.appendChild(surf);
+    container.appendChild(card);
+  }
+
+  function renderEmpresaStack(root){
+    var card = document.createElement('div'); card.className='card';
+    card.innerHTML = '<h2>Status por empresa</h2><p class="cap">Clique no nome da empresa para filtrar por ela, ou num segmento para filtrar por status.</p>';
+    var list = document.createElement('div'); list.className='stacklist';
+    var base = withQuestions(broadFiltered(), null);
+    var emps = Array.from(new Set(base.map(function(d){return d.empresa;}))).sort();
+    emps.forEach(function(emp){
+      var rows = base.filter(function(d){return d.empresa===emp;});
+      var c = {respondido:0, enviado:0, pendente:0};
+      rows.forEach(function(d){ c[d.status]++; });
+      var row = document.createElement('div'); row.className='stackrow';
+      row.innerHTML = '<div class="stackrow-head"><button class="'+(state.empresa.has(emp)?'on':'')+'">'+esc(emp)+'</button><span class="tot">'+c.respondido+'/'+rows.length+' responderam</span></div>';
+      row.querySelector('button').addEventListener('click', function(){ toggleSetVal(state.empresa, emp); renderPainel(); });
+      var bar = document.createElement('div'); bar.className='stackbar';
+      [['respondido','var(--st-good)'],['enviado','var(--st-warning)'],['pendente','var(--st-pending)']].forEach(function(p){
+        if(!c[p[0]]) return;
+        var seg = document.createElement('div'); seg.className='stackseg'+(state.status.size && !state.status.has(p[0])?' dim':'');
+        seg.style.width = (c[p[0]]/rows.length*100)+'%'; seg.style.background = p[1];
+        seg.title = p[0]+': '+c[p[0]]; seg.tabIndex=0; seg.setAttribute('role','button'); seg.setAttribute('aria-label', emp+', '+p[0]+': '+c[p[0]]);
+        function act(){ toggleSetVal(state.status, p[0]); renderPainel(); }
+        seg.addEventListener('click', act);
+        seg.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); act(); } });
+        bar.appendChild(seg);
+      });
+      row.appendChild(bar); list.appendChild(row);
+    });
+    if(!emps.length) list.innerHTML = '<p class="empty-note" style="text-align:left;padding:4px 0;">Nenhuma empresa no recorte atual.</p>';
+    card.appendChild(list);
+    var leg = document.createElement('div'); leg.className='legend';
+    leg.innerHTML = '<div class="legend-item"><span class="legend-swatch" style="background:var(--st-good)"></span>Respondido</div><div class="legend-item"><span class="legend-swatch" style="background:var(--st-warning)"></span>Enviado</div><div class="legend-item"><span class="legend-swatch" style="background:var(--st-pending)"></span>Pendente</div>';
+    card.appendChild(leg);
+    root.appendChild(card);
+  }
+
+  function renderTable(list, qn, root){
+    var card = document.createElement('div'); card.className='card';
+    card.innerHTML = '<h2>Respondentes no recorte atual</h2><p class="cap">Sincronizada com todos os filtros acima, com cada resposta por pergunta.</p>';
+    var closed = qn.questions.filter(function(q){return q.type!=='texto';});
+    var open = qn.questions.filter(function(q){return q.type==='texto';});
+    var heads = ['Nome','Empresa','Contratante','Status'].concat(closed.map(function(q){return q.label;})).concat(open.map(function(q){return q.label;}));
+    var html = '<div class="tbl-wrap"><table><thead><tr>'+heads.map(function(h){return '<th title="'+esc(h)+'">'+esc(h)+'</th>';}).join('')+'</tr></thead><tbody>';
+    if(!list.length){
+      html += '<tr class="empty-row"><td colspan="'+heads.length+'">Nenhum respondente corresponde aos filtros atuais.</td></tr>';
+    } else {
+      list.forEach(function(d){
+        var vinc = d.tipo==='Contratante' ? d.empresa : (d.vinculo||'—');
+        html += '<tr><td class="name-cell">'+esc(d.nome)+'</td><td>'+esc(d.empresa)+'</td><td>'+esc(vinc)+'</td>'+
+          '<td><span class="badge '+d.status+'">'+d.status.charAt(0).toUpperCase()+d.status.slice(1)+'</span></td>';
+        closed.forEach(function(q){ var v=d.r[q.id]; html += '<td>'+(v!=null?esc(v):'<span class="dash">—</span>')+'</td>'; });
+        open.forEach(function(q){ var v=d.r[q.id]; html += '<td class="comment-cell">'+(v?esc(v):'<span class="dash">—</span>')+'</td>'; });
+        html += '</tr>';
+      });
+    }
+    html += '</tbody></table></div><p class="tbl-foot">'+list.length+' de '+rowsOf(qn.id).length+' convites exibidos.</p>';
+    card.innerHTML += html;
+    root.appendChild(card);
+  }
+
+  function renderPainel(){
+    var qn = getQn(state.qn);
+    if(!qn){ state.qn = store.questionnaires[0] && store.questionnaires[0].id; qn = getQn(state.qn); }
+    syncQnSelects();
+    renderFilterChrome();
+    renderActiveStrip();
+    var root = document.getElementById('widgets-root'); root.innerHTML='';
+    if(!qn) return;
+    var cfg = cfgFor(qn);
+    var full = withQuestions(broadFiltered(), null);
+    renderStats(full, cfg, root);
+
+    var pending = [];
+    function flush(){ if(!pending.length) return; var g=document.createElement('div'); g.className='grid2'; pending.forEach(function(fn){fn(g);}); root.appendChild(g); pending=[]; }
+    cfg.order.forEach(function(id){
+      if(cfg.visible[id]===false) return;
+      var q = qn.questions.filter(function(x){return x.id===id && x.type!=='texto';})[0];
+      if(q){ pending.push(function(g){ renderQuestionChart(q, g); }); return; }
+      flush();
+      if(id==='empresaStack') renderEmpresaStack(root);
+      if(id==='table') renderTable(full, qn, root);
+    });
+    flush();
+    if(!rowsOf(qn.id).length){
+      var note = document.createElement('div'); note.className='card';
+      note.innerHTML = '<h2>Nenhum convite enviado ainda</h2><p class="cap" style="margin:0;">Este questionário ainda não tem destinatários. Quando os contatos forem importados e os convites enviados, as respostas aparecem aqui.</p>';
+      root.insertBefore(note, root.firstChild);
+    }
+  }
+
+  /* =========================================================
+     CONVITES
+     ========================================================= */
+  var LINK_BASE = 'gt3-sistema-gt3.vercel.app/questionario/';
+  var STATUS_LABEL = {pendente:'Sem link', enviado:'Enviado', respondido:'Respondido'};
+
+  function renderConvites(){
+    var qn = getQn(state.qn);
+    if(!qn){ return; }
+    var rows = rowsOf(qn.id);
+    document.getElementById('v-qn-status').innerHTML = '<span class="status-tag '+qn.status+'">'+statusName(qn.status)+'</span> <span class="pill-tag">Público: '+esc(qn.publico)+'</span>';
+
+    var c = {pendente:0, enviado:0, respondido:0};
+    rows.forEach(function(d){ c[d.status]++; });
+    document.getElementById('v-counts').textContent = rows.length+' destinatário'+(rows.length===1?'':'s')+' · '+c.respondido+' respondido'+(c.respondido===1?'':'s')+' · '+c.enviado+' aguardando resposta · '+c.pendente+' sem link';
+
+    var gen = document.getElementById('v-gen');
+    var hint = document.getElementById('v-hint');
+    gen.textContent = c.pendente ? 'Gerar links ('+c.pendente+')' : 'Gerar links';
+    if(qn.status!=='ativo'){
+      gen.disabled = true;
+      hint.textContent = qn.status==='rascunho' ? 'Este questionário está em rascunho. Mude a situação para Ativo (no editor) para gerar os links.' : 'Este questionário está encerrado e não aceita novas respostas.';
+    } else {
+      gen.disabled = !c.pendente;
+      hint.textContent = 'Use "Abrir link" para ver exatamente o que o destinatário recebe e testar uma resposta. O resultado aparece no Painel de respostas.';
+    }
+
+    renderAddForm(qn);
+
+    var body = document.getElementById('v-body');
+    if(!rows.length){
+      body.innerHTML = '<tr class="empty-row"><td colspan="6">Nenhum destinatário ainda. Use "+ Adicionar destinatário".</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(function(d){
+      var vinc = d.tipo==='Contratante' ? d.empresa : (d.vinculo||'—');
+      var link = d.token ? '<button class="token-btn" data-copy="'+d.id+'" title="Copiar link">/'+d.token+'</button>' : '<span class="dash">—</span>';
+      var action = d.token ? '<button class="btn ghost small" data-openlink="'+d.id+'">Abrir link</button>' : '';
+      return '<tr><td class="name-cell">'+esc(d.nome)+'<span class="email-sub">'+esc(d.email||'')+'</span></td>'+
+        '<td>'+esc(d.empresa)+'</td><td>'+esc(vinc)+'</td>'+
+        '<td><span class="badge '+d.status+'">'+STATUS_LABEL[d.status]+'</span></td>'+
+        '<td>'+link+'</td><td style="text-align:right;">'+action+'</td></tr>';
+    }).join('');
+
+    body.querySelectorAll('[data-copy]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var row = store.rows.filter(function(r){return r.id===b.dataset.copy;})[0];
+        var url = 'https://'+LINK_BASE+row.token;
+        var label = b.textContent;
+        function done(ok){ b.textContent = ok ? 'Copiado' : url; setTimeout(function(){ b.textContent = label; }, ok?1300:4000); }
+        try{ navigator.clipboard.writeText(url).then(function(){done(true);}, function(){done(false);}); }catch(e){ done(false); }
+      });
+    });
+    body.querySelectorAll('[data-openlink]').forEach(function(b){
+      b.addEventListener('click', function(){ openResponder(b.dataset.openlink); });
+    });
+  }
+
+  document.getElementById('v-gen').addEventListener('click', function(){
+    rowsOf(state.qn).forEach(function(d){ if(d.status==='pendente'){ d.token = genToken(); d.status='enviado'; } });
+    save(); renderConvites();
+  });
+  document.getElementById('v-add-toggle').addEventListener('click', function(){ ui.addOpen = !ui.addOpen; renderConvites(); if(ui.addOpen){ var n=document.getElementById('na-nome'); if(n) n.focus(); } });
+
+  function renderAddForm(qn){
+    var box = document.getElementById('v-add-form');
+    box.hidden = !ui.addOpen;
+    if(!ui.addOpen){ box.innerHTML=''; return; }
+    var isPrest = qn.publico==='Prestador';
+    box.innerHTML = '<div class="add-row-form">'+
+      '<div class="row"><span class="field-label">Nome do responsável</span><input type="text" id="na-nome" placeholder="Ex: Mariana Alves"></div>'+
+      '<div class="row"><span class="field-label">E-mail</span><input type="text" id="na-email" placeholder="nome@empresa.com.br"></div>'+
+      '<div class="row"><span class="field-label">Empresa</span><input type="text" id="na-emp" placeholder="'+(isPrest?'Ex: Segflex Terceirizada':'Ex: Marcopolo S.A.')+'"></div>'+
+      '<div class="row"><span class="field-label">Tipo</span><select id="na-tipo"><option'+(!isPrest?' selected':'')+'>Contratante</option><option'+(isPrest?' selected':'')+'>Prestador</option></select></div>'+
+      '<div class="row" id="na-vinc-row"'+(isPrest?'':' hidden')+'><span class="field-label">Contratante vinculado</span><select id="na-vinc">'+contratantesList().map(function(c){return '<option>'+esc(c)+'</option>';}).join('')+'</select></div>'+
+      '<div class="form-actions"><span class="form-error" id="na-err"></span><button class="btn ghost" id="na-cancel">Cancelar</button><button class="btn" id="na-save">Adicionar</button></div>'+
+    '</div>';
+    document.getElementById('na-tipo').addEventListener('change', function(e){ document.getElementById('na-vinc-row').hidden = e.target.value!=='Prestador'; });
+    document.getElementById('na-cancel').addEventListener('click', function(){ ui.addOpen=false; renderConvites(); });
+    document.getElementById('na-save').addEventListener('click', function(){
+      var nome = document.getElementById('na-nome').value.trim();
+      var email = document.getElementById('na-email').value.trim();
+      var emp = document.getElementById('na-emp').value.trim();
+      var tipo = document.getElementById('na-tipo').value;
+      var err = document.getElementById('na-err');
+      if(!nome || !emp){ err.textContent = 'Preencha nome e empresa.'; return; }
+      if(email && email.indexOf('@')===-1){ err.textContent = 'O e-mail parece incompleto.'; return; }
+      var row = {id:newId('r'), qn:state.qn, nome:nome, email:email, empresa:emp, tipo:tipo, status:'pendente', token:null, r:{}};
+      if(tipo==='Prestador') row.vinculo = document.getElementById('na-vinc').value;
+      store.rows.push(row); save();
+      ui.addOpen = false; renderConvites();
+    });
+  }
+
+  /* ---------------- respondent screen ---------------- */
+  var modal = document.getElementById('resp-modal');
+  var resp = {row:null, answers:{}};
+  function closeResponder(){ modal.hidden = true; document.body.style.overflow=''; renderConvites(); }
+  document.getElementById('resp-close').addEventListener('click', closeResponder);
+  document.getElementById('resp-back').addEventListener('click', closeResponder);
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape' && !modal.hidden) closeResponder(); });
+
+  function openResponder(rowId){
+    var row = store.rows.filter(function(r){return r.id===rowId;})[0];
+    if(!row) return;
+    resp.row = row; resp.answers = {};
+    document.getElementById('resp-url').innerHTML = LINK_BASE+'<b>'+esc(row.token)+'</b>';
+    modal.hidden = false; document.body.style.overflow='hidden';
+    renderResponder();
+  }
+
+  var ICO_OK = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 12.5L9.5 18L20 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var ICO_WARN = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 7v6M12 17h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+
+  function renderResponder(){
+    var row = resp.row, qn = getQn(row.qn);
+    var phone = document.getElementById('resp-phone');
+    var top = '<div class="phone-top"><small>GT3 Consultoria</small><h3>'+esc(qn.titulo)+'</h3><p>'+esc(row.empresa)+' · '+qn.questions.length+' pergunta'+(qn.questions.length===1?'':'s')+'</p></div>';
+
+    if(row.status==='respondido'){
+      phone.innerHTML = top+'<div class="phone-state"><div class="ico warn">'+ICO_WARN+'</div><h4>Este link já foi utilizado</h4><p>A resposta de '+esc(row.nome)+' já foi registrada. Cada link aceita uma única resposta.</p></div>';
+      return;
+    }
+    if(qn.status!=='ativo'){
+      phone.innerHTML = top+'<div class="phone-state"><div class="ico warn">'+ICO_WARN+'</div><h4>Questionário indisponível</h4><p>Este questionário não está recebendo respostas no momento.</p></div>';
+      return;
+    }
+
+    var html = top+'<div class="phone-body">';
+    qn.questions.forEach(function(q, i){
+      html += '<div class="rq" data-q="'+q.id+'"><div class="rq-label">'+(i+1)+'. '+esc(q.label)+'</div>';
+      if(q.type==='escala'){
+        html += '<div class="rq-scale">'+[1,2,3,4,5].map(function(n){ return '<button type="button" data-v="'+n+'" aria-pressed="false">'+n+'</button>'; }).join('')+'</div>'+
+                '<div class="rq-ends"><span>'+esc(q.min||'')+'</span><span>'+esc(q.max||'')+'</span></div>';
+      } else if(q.type==='multipla'){
+        html += '<div class="rq-choice">'+(q.options||[]).map(function(o, j){ return '<label><input type="radio" name="rq-'+q.id+'" value="'+j+'">'+esc(o)+'</label>'; }).join('')+'</div>';
+      } else {
+        html += '<textarea id="rq-t-'+q.id+'" rows="3" placeholder="Escreva sua resposta..."></textarea>';
+      }
+      html += '</div>';
+    });
+    html += '</div><div class="phone-foot"><span class="form-error" id="rq-err"></span><button class="btn" id="rq-send">Enviar respostas</button></div>';
+    phone.innerHTML = html;
+
+    phone.querySelectorAll('.rq').forEach(function(block){
+      var qid = block.dataset.q;
+      var q = qn.questions.filter(function(x){return x.id===qid;})[0];
+      block.querySelectorAll('.rq-scale button').forEach(function(b){
+        b.addEventListener('click', function(){
+          block.querySelectorAll('.rq-scale button').forEach(function(o){ o.classList.remove('sel'); o.setAttribute('aria-pressed','false'); });
+          b.classList.add('sel'); b.setAttribute('aria-pressed','true');
+          resp.answers[qid] = +b.dataset.v;
+        });
+      });
+      block.querySelectorAll('.rq-choice input').forEach(function(inp){
+        inp.addEventListener('change', function(){
+          block.querySelectorAll('.rq-choice label').forEach(function(l){ l.classList.remove('sel'); });
+          inp.parentNode.classList.add('sel');
+          resp.answers[qid] = q.options[+inp.value];
+        });
+      });
+      var ta = block.querySelector('textarea');
+      if(ta) ta.addEventListener('input', function(){ resp.answers[qid] = ta.value.trim(); });
+    });
+
+    document.getElementById('rq-send').addEventListener('click', function(){
+      var missing = qn.questions.filter(function(q){ return q.type!=='texto' && resp.answers[q.id]==null; });
+      if(missing.length){ document.getElementById('rq-err').textContent = 'Responda todas as perguntas de nota e de múltipla escolha.'; return; }
+      var answers = {};
+      Object.keys(resp.answers).forEach(function(k){ if(resp.answers[k]!=='' && resp.answers[k]!=null) answers[k] = resp.answers[k]; });
+      row.r = answers; row.status = 'respondido'; save();
+      phone.innerHTML = top+'<div class="phone-state"><div class="ico ok">'+ICO_OK+'</div><h4>Resposta registrada</h4><p>Obrigado. A resposta foi vinculada a '+esc(row.empresa)+(row.vinculo?' (contratante: '+esc(row.vinculo)+')':'')+' no GT3 Sistema e já aparece no painel.</p>'+
+        '<button class="btn ghost small" id="rq-see">Ver no painel</button></div>';
+      document.getElementById('rq-see').addEventListener('click', function(){ modal.hidden=true; document.body.style.overflow=''; openTab('painel'); });
+    });
+  }
+
+  /* =========================================================
+     CONFIG
+     ========================================================= */
+  function sw(checked){ return '<label class="switch"><input type="checkbox"'+(checked?' checked':'')+'><span class="track"><span class="thumb"></span></span></label>'; }
+  function renderConfig(){
+    var qn = getQn(state.qn); if(!qn) return;
+    var cfg = cfgFor(qn);
+    var sEl = document.getElementById('cfg-stats'); sEl.innerHTML='';
+    [['total','Convites no recorte'],['taxa','Taxa de resposta'],['respondido','Respondido'],['pendente','Enviado + pendente']].forEach(function(p){
+      var r = document.createElement('div'); r.className='toggle-row';
+      r.innerHTML = '<span class="lbl">'+p[1]+'</span><div class="toggle-row-actions">'+sw(cfg.statTiles[p[0]])+'</div>';
+      r.querySelector('input').addEventListener('change', function(e){ cfg.statTiles[p[0]] = e.target.checked; save(); });
+      sEl.appendChild(r);
+    });
+    var wEl = document.getElementById('cfg-widgets'); wEl.innerHTML='';
+    cfg.order.forEach(function(id, i){
+      var q = qn.questions.filter(function(x){return x.id===id;})[0];
+      var name = q ? q.label : id==='empresaStack' ? 'Status por empresa' : 'Tabela de respondentes';
+      var sub = q ? 'Gráfico · '+TYPE_NAME[q.type] : 'Bloco fixo';
+      var r = document.createElement('div'); r.className='toggle-row';
+      r.innerHTML = '<span class="lbl">'+esc(name)+'<small>'+sub+'</small></span>'+
+        '<div class="toggle-row-actions"><div class="order-btns">'+
+          '<button class="icon-btn" data-d="-1" aria-label="Mover para cima" '+(i===0?'disabled':'')+'>▲</button>'+
+          '<button class="icon-btn" data-d="1" aria-label="Mover para baixo" '+(i===cfg.order.length-1?'disabled':'')+'>▼</button>'+
+        '</div>'+sw(cfg.visible[id]!==false)+'</div>';
+      r.querySelectorAll('[data-d]').forEach(function(b){
+        b.addEventListener('click', function(){
+          var j = i + (+b.dataset.d); var t = cfg.order[i]; cfg.order[i]=cfg.order[j]; cfg.order[j]=t; save(); renderConfig();
+        });
+      });
+      r.querySelector('input').addEventListener('change', function(e){ cfg.visible[id] = e.target.checked; save(); });
+      wEl.appendChild(r);
+    });
+  }
+  document.getElementById('cfg-restore').addEventListener('click', function(){
+    delete store.config[state.qn]; save(); renderConfig();
+  });
+
+  renderHub();
+})();
+</script>
+
+</body></html>

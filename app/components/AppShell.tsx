@@ -626,7 +626,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     loadLegislacoesPendentes(profile.created_at)
   }, [pathname, profile, loadLegislacoesPendentes])
 
-  if (pathname === '/login') return <>{children}</>
+  // Login e link público do questionário (respondente externo) aparecem sem o shell do sistema
+  if (pathname === '/login' || pathname.startsWith('/questionario/')) return <>{children}</>
 
   const fullName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
 

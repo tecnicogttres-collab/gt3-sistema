@@ -285,6 +285,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'questionarios',
+    label: 'Questionários',
+    color: '#4A90D9',
+    path: '/questionarios',
+    description: 'Questionários para contratantes e prestadores, com link único por destinatário e painel de respostas',
+    allowedRoles: ['gestor', 'admin'],
+  },
+  {
     id: 'coisas-a-fazer',
     label: 'Melhorias',
     color: '#4A90D9',

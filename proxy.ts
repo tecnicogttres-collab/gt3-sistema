@@ -9,6 +9,8 @@ export async function proxy(request: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/') ||
+    // Link público do questionário (respondente externo, sem login)
+    pathname.startsWith('/questionario/') ||
     /\.(ico|png|jpg|jpeg|svg|gif|webp|woff|woff2|ttf|otf|eot|mp4|pdf)$/i.test(pathname)
   ) {
     return NextResponse.next()
