@@ -11,6 +11,7 @@ const TRAT_LABEL: Record<string, string> = {
   ciente: 'Ciente',
   andamento: 'Em andamento',
   resolvido: 'Resolvido',
+  excluido: 'Doc(s) excluído',
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
@@ -51,15 +52,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     acaoHistorico = 'Ciência registrada'
   } else if (action === 'tratativa') {
     const novo = body?.tratativa as string
-    if (!['andamento', 'resolvido'].includes(novo)) {
+    if (!['andamento', 'resolvido', 'excluido'].includes(novo)) {
       return Response.json({ error: 'Tratativa inválida' }, { status: 400 })
     }
     const cienciaPor: string[] = atual.ciencia_por ?? []
     if (!cienciaPor.includes(caller.user.id)) {
       return Response.json({ error: 'É preciso dar ciência antes de avançar a tratativa' }, { status: 403 })
     }
-    if (atual.tratativa === 'resolvido') {
-      return Response.json({ error: 'Designação já resolvida' }, { status: 400 })
+    if (['resolvido', 'excluido'].includes(atual.tratativa)) {
+      return Response.json({ error: 'Designação já finalizada' }, { status: 400 })
     }
     update = { tratativa: novo }
     acaoHistorico = `Tratativa → ${TRAT_LABEL[novo] ?? novo}`

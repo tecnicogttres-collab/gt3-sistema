@@ -18,7 +18,11 @@ type EmailConfig = {
   historico_dias: number
 }
 
-type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido'
+type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido' | 'excluido'
+
+/** Itens finalizados (resolvido ou doc(s) excluído) saem de Ativas e vão pro Histórico */
+const FINALIZADAS: Tratativa[] = ['resolvido', 'excluido']
+const finalizada = (t: Tratativa) => FINALIZADAS.includes(t)
 
 type Designacao = {
   id: string
@@ -57,18 +61,21 @@ const TRAT_COLORS: Record<Tratativa, string> = {
   ciente:     '#2D8FD5',
   andamento:  '#B45309',
   resolvido:  '#16A34A',
+  excluido:   '#DC2626',
 }
 const TRAT_LABEL: Record<Tratativa, string> = {
   aguardando: 'Aguardando ciência',
   ciente:     'Ciente',
   andamento:  'Em andamento',
   resolvido:  'Resolvido',
+  excluido:   'Doc(s) excluído',
 }
 const TRAT_OPTIONS: { id: Tratativa; label: string }[] = [
   { id: 'aguardando', label: 'Aguardando ciência' },
   { id: 'ciente',     label: 'Ciente' },
   { id: 'andamento',  label: 'Em andamento' },
   { id: 'resolvido',  label: 'Resolvido' },
+  { id: 'excluido',   label: 'Doc(s) excluído' },
 ]
 
 const CORES_SITUACAO = ['#DC2626', '#D97706', '#0284C7', '#059669', '#6B21A8', '#64748B']
@@ -141,14 +148,6 @@ const CONFIG_PADRAO: EmailConfig = {
   historico_dias: 2,
 }
 
-/** Dias corridos entre a data de verificação (YYYY-MM-DD) e hoje. */
-function diasDesde(dataIso: string): number {
-  const [y, m, d] = dataIso.split('-').map(Number)
-  const dia = new Date(y, (m || 1) - 1, d || 1)
-  const hj = new Date(); hj.setHours(0, 0, 0, 0)
-  return Math.round((hj.getTime() - dia.getTime()) / 86400000)
-}
-
 type GrupoDiaEmpresa = { key: string; data: string; empresa: string; itens: Designacao[] }
 
 /** Agrupa uma lista de designações por dia + empresa, mais recente primeiro — dá o
@@ -214,6 +213,7 @@ const btnGhost: React.CSSProperties = {
 }
 const btnPrimary: React.CSSProperties = { ...btnGhost, background: PRIMARY, color: '#fff', border: 'none' }
 const btnAccent: React.CSSProperties = { ...btnGhost, background: ACCENT, color: '#3D2F14', border: 'none' }
+const btnDanger: React.CSSProperties = { ...btnGhost, background: '#DC2626', color: '#fff', border: 'none', fontWeight: 700 }
 const btnDangerIcon: React.CSSProperties = {
   background: 'transparent', border: 'none', color: '#C53030', cursor: 'pointer', fontSize: 14, padding: '4px 6px',
 }
@@ -329,7 +329,7 @@ function TratativaBadge({ t }: { t: Tratativa }) {
 }
 
 const KPI_ICON: Record<string, string> = {
-  aguardando: '⏳', ciente: '👁', andamento: '▶', resolvido: '✔', total: '📊',
+  aguardando: '⏳', ciente: '👁', andamento: '▶', resolvido: '✔', excluido: '🗑', total: '📊',
 }
 
 function Kpi({ label, value, color, icon }: { label: string; value: number; color: string; icon?: string }) {
@@ -553,18 +553,16 @@ export default function DesignacaoReprovadosClient() {
   const minhaCaixa = useMemo(() => designacoes.filter(d => d.responsaveis.includes(userId)), [designacoes, userId])
   const minhaCaixaPendentes = minhaCaixa.filter(d => d.tratativa === 'aguardando').length
 
-  // Recorte por prazo ANTES de agrupar — reaproveitado também nas estatísticas por
-  // colaborador da Visão geral. Só quem já foi RESOLVIDO entra nessa conta: enquanto não
-  // tiver ciência/resolução, o item fica ativo pra sempre, não importa a idade. Resolvido,
-  // continua ativo por N dias (padrão 2, configurável) a partir da data de verificação —
-  // passado isso, some da lista principal e vai pro Histórico.
+  // Recorte Ativas/Histórico ANTES de agrupar — reaproveitado também nas estatísticas por
+  // colaborador da Visão geral. Ativas = só o que ainda não foi finalizado; assim que vira
+  // Resolvido ou Doc(s) excluído, sai na hora e vai pro Histórico.
   const designacoesAtivas = useMemo(
-    () => designacoes.filter(d => d.tratativa !== 'resolvido' || diasDesde(d.data_verificacao) <= emailConfig.historico_dias),
-    [designacoes, emailConfig.historico_dias],
+    () => designacoes.filter(d => !finalizada(d.tratativa)),
+    [designacoes],
   )
   const designacoesHistorico = useMemo(
-    () => designacoes.filter(d => d.tratativa === 'resolvido' && diasDesde(d.data_verificacao) > emailConfig.historico_dias),
-    [designacoes, emailConfig.historico_dias],
+    () => designacoes.filter(d => finalizada(d.tratativa)),
+    [designacoes],
   )
 
   const minhaAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas.filter(d => d.responsaveis.includes(userId))), [designacoesAtivas, userId])
@@ -596,6 +594,7 @@ export default function DesignacaoReprovadosClient() {
     ciente:     itensGeralAtual.filter(d => d.tratativa === 'ciente').length,
     andamento:  itensGeralAtual.filter(d => d.tratativa === 'andamento').length,
     resolvido:  itensGeralAtual.filter(d => d.tratativa === 'resolvido').length,
+    excluido:   itensGeralAtual.filter(d => d.tratativa === 'excluido').length,
     total: itensGeralAtual.length,
   }), [itensGeralAtual])
 
@@ -612,17 +611,18 @@ export default function DesignacaoReprovadosClient() {
       aguardando: itens.filter(d => d.tratativa === 'aguardando').length,
       andamento: itens.filter(d => d.tratativa === 'andamento').length,
       resolvido: itens.filter(d => d.tratativa === 'resolvido').length,
+      excluido: itens.filter(d => d.tratativa === 'excluido').length,
       retornou: itens.filter(d => d.retorno_recebido).length,
     }
   }
 
   // ── Visão geral: BI por colaborador (grade de cards; clicar no nome abre o detalhe) ──
   const statsColaboradores = useMemo(() => {
-    const map = new Map<string, { userId: string; total: number; aguardando: number; ciente: number; andamento: number; resolvido: number; retornou: number }>()
+    const map = new Map<string, { userId: string; total: number; aguardando: number; ciente: number; andamento: number; resolvido: number; excluido: number; retornou: number }>()
     for (const d of itensGeralAtual) {
       for (const uid of d.responsaveis) {
         let s = map.get(uid)
-        if (!s) { s = { userId: uid, total: 0, aguardando: 0, ciente: 0, andamento: 0, resolvido: 0, retornou: 0 }; map.set(uid, s) }
+        if (!s) { s = { userId: uid, total: 0, aguardando: 0, ciente: 0, andamento: 0, resolvido: 0, excluido: 0, retornou: 0 }; map.set(uid, s) }
         s.total++
         s[d.tratativa]++
         if (d.retorno_recebido) s.retornou++
@@ -762,7 +762,7 @@ export default function DesignacaoReprovadosClient() {
       showToast((e as { error?: string }).error ?? 'Erro ao registrar ciência.')
     }
   }
-  async function mudarTratativa(id: string, novo: 'andamento' | 'resolvido') {
+  async function mudarTratativa(id: string, novo: 'andamento' | 'resolvido' | 'excluido') {
     const res = await fetch(`/api/designacao-reprovados/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'tratativa', tratativa: novo }),
     })
@@ -1041,7 +1041,7 @@ export default function DesignacaoReprovadosClient() {
       <div key={d.id} style={{
         background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
         borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
-        opacity: d.tratativa === 'resolvido' ? .78 : 1,
+        opacity: finalizada(d.tratativa) ? .78 : 1,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 12, color: MUTED, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1112,10 +1112,17 @@ export default function DesignacaoReprovadosClient() {
             ) : (
               <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
             )}
-            {jaCiente && d.tratativa !== 'resolvido' && (
+            {jaCiente && !finalizada(d.tratativa) && (
               <>
                 <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
                 <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
+                <button
+                  onClick={() => { if (confirm('Marcar como "Doc(s) excluído"? Isso finaliza o item.')) void mudarTratativa(d.id, 'excluido') }}
+                  title="O(s) documento(s) foram excluídos — finaliza o item"
+                  style={sm(btnDanger)}
+                >
+                  🗑 Doc(s) excluído
+                </button>
               </>
             )}
             <button onClick={() => marcarRetorno(d.id, !d.retorno_recebido)} style={sm(btnGhost)}>
@@ -1150,6 +1157,7 @@ export default function DesignacaoReprovadosClient() {
             {r.andamento > 0 && <span style={{ color: TRAT_COLORS.andamento }}>▶ {r.andamento} em andamento</span>}
             {r.retornou > 0 && <span style={{ color: '#0A7A5E' }}>🔁 {r.retornou} retornou</span>}
             {r.resolvido > 0 && <span style={{ color: TRAT_COLORS.resolvido }}>✔ {r.resolvido} resolvido</span>}
+            {r.excluido > 0 && <span style={{ color: TRAT_COLORS.excluido }}>🗑 {r.excluido} doc(s) excluído</span>}
           </div>
         </div>
         {isOpen && (
@@ -1441,7 +1449,7 @@ export default function DesignacaoReprovadosClient() {
               <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                 <p style={{ fontWeight: 600, margin: 0 }}>
-                  {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : `Nada no histórico (resolvido há mais de ${emailConfig.historico_dias} dia(s)).`}
+                  {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : 'Nada no histórico (itens resolvidos ou com doc(s) excluído).'}
                 </p>
               </div>
             ) : minhaAtual.map((grupo, i) => (
@@ -1544,6 +1552,7 @@ export default function DesignacaoReprovadosClient() {
               <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} icon={KPI_ICON.ciente} />
               <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} icon={KPI_ICON.andamento} />
               <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} icon={KPI_ICON.resolvido} />
+              <Kpi label="Doc(s) excluído" value={kpis.excluido} color={TRAT_COLORS.excluido} icon={KPI_ICON.excluido} />
               <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} icon={KPI_ICON.total} />
             </div>
 
@@ -1552,7 +1561,7 @@ export default function DesignacaoReprovadosClient() {
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                   <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                   <p style={{ fontWeight: 600, margin: 0 }}>
-                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : `Nada no histórico (resolvido há mais de ${emailConfig.historico_dias} dia(s)).`}
+                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : 'Nada no histórico (itens resolvidos ou com doc(s) excluído).'}
                   </p>
                 </div>
               ) : (
@@ -1949,20 +1958,6 @@ export default function DesignacaoReprovadosClient() {
                 </div>
                 <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5 }}>
                   O bloco de setor/documentos (título em negrito+sublinhado com os tópicos) é montado automaticamente a partir do que foi marcado e não é editável aqui.
-                </div>
-                <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>
-                    Prazo do histórico (Minha Caixa / Visão geral)
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="number" min={1} value={cfgHistoricoDias}
-                      onChange={e => setCfgHistoricoDias(Math.max(1, Number(e.target.value) || 1))}
-                      style={inputStyle({ width: 90 })} />
-                    <span style={{ fontSize: 12.5, color: MUTED }}>
-                      dias contados a partir da verificação — só vale pra item já <b>resolvido</b>. Passado isso, sai da lista principal
-                      e vai pro Histórico (continua acionável lá). Enquanto não tiver ciência/resolução, o item fica ativo indefinidamente.
-                    </span>
-                  </div>
                 </div>
                 <div>
                   <button onClick={salvarEmailConfig} disabled={savingConfig} style={{ ...btnAccent, opacity: savingConfig ? .6 : 1 }}>
