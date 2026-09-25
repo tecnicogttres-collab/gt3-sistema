@@ -7,7 +7,7 @@ import { pickNextFeriasColor } from '../lib/feriasColors'
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 const MESES_VISIVEIS = 3
-const MAX_CHIPS = 3
+const MAX_DOTS = 4
 const FOLGA_COLOR = '#FFE600'
 
 type FeriasRecord = { id: string; pessoa: string; inicio: string; fim: string; observacao: string; tipo: 'ferias' | 'folga' }
@@ -63,6 +63,8 @@ export default function CalendarioFeriasClient() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, record: null })
+  // Nome em foco na lista abaixo de cada mês — destaca os dias dele no calendário
+  const [hoverRecId, setHoverRecId] = useState<string | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -375,7 +377,8 @@ export default function CalendarioFeriasClient() {
             </div>
           </div>
 
-      {/* Calendar — 3 meses lado a lado (quebra em coluna em tela estreita) */}
+      {/* Calendar — 3 meses lado a lado: dias só com bolinhas de cor, e a lista de quem
+          está fora no mês logo abaixo (os nomes saíram de dentro das células) */}
       {loading ? (
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '3rem', textAlign: 'center', color: '#6B7A99', fontSize: 14 }}>Carregando...</div>
       ) : loadError ? (
@@ -387,115 +390,119 @@ export default function CalendarioFeriasClient() {
           </span>
         </div>
       ) : (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'start' }}>
         {visibleMonths.map(({ year: y, month: m }) => {
           const totalDays = new Date(y, m + 1, 0).getDate()
           const firstDow = new Date(y, m, 1).getDay()
           const isCurrent = y === today.getFullYear() && m === today.getMonth()
+          const mStart = dayStr(y, m, 1)
+          const mEnd = dayStr(y, m, totalDays)
+          const doMes = records
+            .filter(v => v.inicio <= mEnd && v.fim >= mStart)
+            .sort((a, b) => a.inicio.localeCompare(b.inicio) || a.pessoa.localeCompare(b.pessoa))
           return (
-      <div key={`${y}-${m}`} style={{ background: '#fff', border: `1px solid ${isCurrent ? '#2A4F96' : '#E2E8F0'}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div key={`${y}-${m}`} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '14px 14px 12px', boxShadow: '0 1px 4px rgba(42,79,150,0.05)' }}>
         {/* Month title */}
-        <div style={{ padding: '8px 12px', fontSize: 13, fontWeight: 700, color: isCurrent ? '#fff' : '#1E293B', background: isCurrent ? '#2A4F96' : '#fff', borderBottom: '1px solid #E2E8F0' }}>
-          {MONTHS[m]} {y}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, padding: '0 4px' }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#1E293B' }}>{MONTHS[m]} <span style={{ fontWeight: 500, color: '#94A3B8' }}>{y}</span></span>
+          {isCurrent && <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2A4F96', background: '#EBF0FB', borderRadius: 20, padding: '2px 8px' }}>Mês atual</span>}
         </div>
+
         {/* Weekday headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#F4F6FA', borderBottom: '1px solid #E2E8F0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 2 }}>
           {WEEKDAYS.map(d => (
-            <div key={d} style={{ padding: '5px 0', textAlign: 'center', fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6B7A99' }}>
-              {d}
+            <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 600, color: '#A0AEC0', padding: '2px 0' }}>
+              {d.charAt(0)}
             </div>
           ))}
         </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-            {/* Empty leading cells */}
-            {Array.from({ length: firstDow }).map((_, i) => {
-              const isLast = (i + 1) % 7 === 0
-              return (
-                <div key={`e${i}`} style={{ minHeight: 58, borderRight: isLast ? 'none' : '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', background: '#F9FAFB' }} />
-              )
-            })}
-
-            {/* Day cells */}
-            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => {
-              const ds = dayStr(y, m, d)
-              const isToday = ds === todayStr
-              const colIndex = (firstDow + d - 1) % 7
-              const isLastCol = colIndex === 6
-              const vacHere = monthRecords.filter(v => v.inicio <= ds && ds <= v.fim)
-
-              return (
-                <div
-                  key={d}
-                  onClick={() => openModal(null, ds)}
-                  style={{
-                    minHeight: 58,
-                    minWidth: 0,
-                    borderRight: isLastCol ? 'none' : '1px solid #E2E8F0',
-                    borderBottom: '1px solid #E2E8F0',
-                    padding: '3px 3px 3px',
-                    cursor: 'pointer',
-                    background: '#fff',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#EBF0FB' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = '#fff' }}
-                >
-                  {/* Day number */}
-                  <div style={{ marginBottom: 2 }}>
-                    {isToday ? (
-                      <div style={{ width: 17, height: 17, borderRadius: '50%', background: '#2A4F96', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600 }}>
-                        {d}
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: 10.5, fontWeight: 500, color: '#6B7A99' }}>{d}</span>
-                    )}
+        {/* Days */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', rowGap: 2 }}>
+          {Array.from({ length: firstDow }).map((_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => {
+            const ds = dayStr(y, m, d)
+            const isToday = ds === todayStr
+            const dow = (firstDow + d - 1) % 7
+            const isWeekend = dow === 0 || dow === 6
+            const vacHere = doMes.filter(v => v.inicio <= ds && ds <= v.fim)
+            const hl = vacHere.find(v => v.id === hoverRecId)
+            const hlColor = hl ? (hl.tipo === 'folga' ? FOLGA_COLOR : getColor(hl.pessoa)) : null
+            return (
+              <div
+                key={d}
+                onClick={() => openModal(null, ds)}
+                title={vacHere.length ? vacHere.map(v => `${v.tipo === 'folga' ? 'Folga — ' : ''}${v.pessoa}`).join('\n') : 'Clique para adicionar'}
+                style={{
+                  height: 42, borderRadius: 8, cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 3,
+                  paddingTop: 4,
+                  background: hlColor ? `color-mix(in srgb, ${hlColor} ${hl?.tipo === 'folga' ? 45 : 26}%, transparent)` : 'transparent',
+                  transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'inset 0 0 0 1.5px #C9D6EF' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
+              >
+                <span style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11.5, fontWeight: isToday || hl ? 700 : 500,
+                  background: isToday ? '#2A4F96' : 'transparent',
+                  color: isToday ? '#fff' : hl ? '#1E293B' : isWeekend ? '#A0AEC0' : '#475569',
+                }}>
+                  {d}
+                </span>
+                {vacHere.length > 0 && (
+                  <div style={{ display: 'flex', gap: 2, alignItems: 'center', height: 7 }}>
+                    {vacHere.slice(0, MAX_DOTS).map(v => (
+                      <span key={v.id} style={{
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                        background: v.tipo === 'folga' ? FOLGA_COLOR : getColor(v.pessoa),
+                        boxShadow: v.tipo === 'folga' ? 'inset 0 0 0 1px rgba(0,0,0,0.2)' : 'none',
+                      }} />
+                    ))}
+                    {vacHere.length > MAX_DOTS && <span style={{ fontSize: 8, fontWeight: 700, color: '#6B7A99', lineHeight: 1 }}>+{vacHere.length - MAX_DOTS}</span>}
                   </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
 
-                  {/* Chips */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {vacHere.slice(0, MAX_CHIPS).map(v => {
-                      const isFolga = v.tipo === 'folga'
-                      return (
-                      <div
-                        key={v.id}
-                        title={`${isFolga ? 'Folga — ' : ''}${v.pessoa}: ${fmt(v.inicio)} → ${fmt(v.fim)}`}
-                        style={{
-                          background: isFolga ? FOLGA_COLOR : getColor(v.pessoa),
-                          color: isFolga ? '#2A2000' : '#fff',
-                          borderRadius: 3,
-                          padding: '1px 3px',
-                          fontSize: 9,
-                          fontWeight: 600,
-                          lineHeight: 1.3,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        onMouseEnter={e => {
-                          e.stopPropagation()
-                          setTooltip({ visible: true, x: e.clientX + 14, y: e.clientY - 10, record: v })
-                        }}
-                        onMouseLeave={() => setTooltip(t => ({ ...t, visible: false }))}
-                        onClick={e => { e.stopPropagation(); openModal(v.id) }}
-                      >
-                        {isFolga ? `Folga · ${v.pessoa.split(' ')[0]}` : v.pessoa.split(' ')[0]}
-                      </div>
-                      )
-                    })}
-                    {vacHere.length > MAX_CHIPS && (
-                      <div
-                        title={vacHere.slice(MAX_CHIPS).map(v => `${v.tipo === 'folga' ? 'Folga — ' : ''}${v.pessoa}`).join('\n')}
-                        style={{ fontSize: 9, fontWeight: 600, color: '#6B7A99', padding: '0 3px' }}
-                      >
-                        +{vacHere.length - MAX_CHIPS}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+        {/* Quem está fora no mês */}
+        <div style={{ borderTop: '1px solid #EEF2F7', marginTop: 10, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {doMes.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: '#A0AEC0', padding: '4px 4px' }}>Ninguém de férias ou folga neste mês.</div>
+          ) : doMes.map(v => {
+            const isFolga = v.tipo === 'folga'
+            return (
+              <div
+                key={v.id}
+                onClick={() => openModal(v.id)}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = '#F4F7FC'
+                  setHoverRecId(v.id)
+                  setTooltip({ visible: true, x: e.clientX + 14, y: e.clientY - 10, record: v })
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = 'transparent'
+                  setHoverRecId(null)
+                  setTooltip(t => ({ ...t, visible: false }))
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}
+              >
+                <span style={{ width: 4, height: 16, borderRadius: 2, flexShrink: 0, background: isFolga ? FOLGA_COLOR : getColor(v.pessoa), boxShadow: isFolga ? 'inset 0 0 0 1px rgba(0,0,0,0.2)' : 'none' }} />
+                <span style={{ flex: 1, minWidth: 0, fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {v.pessoa}
+                  {isFolga && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: '#6B5A00', background: '#FFF6A8', borderRadius: 4, padding: '1px 5px' }}>FOLGA</span>}
+                </span>
+                <span style={{ color: '#6B7A99', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: 11.5 }}>
+                  {v.inicio === v.fim ? fmt(v.inicio).slice(0, 5) : `${fmt(v.inicio).slice(0, 5)} – ${fmt(v.fim).slice(0, 5)}`}
+                </span>
+              </div>
+            )
+          })}
+        </div>
       </div>
           )
         })}
