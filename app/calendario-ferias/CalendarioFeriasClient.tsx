@@ -6,6 +6,8 @@ import { pickNextFeriasColor } from '../lib/feriasColors'
 
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const WEEKDAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+const MESES_VISIVEIS = 3
+const MAX_CHIPS = 3
 const FOLGA_COLOR = '#FFE600'
 
 type FeriasRecord = { id: string; pessoa: string; inicio: string; fim: string; observacao: string; tipo: 'ferias' | 'folga' }
@@ -127,23 +129,27 @@ export default function CalendarioFeriasClient() {
     return () => window.removeEventListener('keydown', fn)
   }, [])
 
-  const prevMonth = () => {
-    if (month === 0) { setMonth(11); setYear(y => y - 1) }
-    else setMonth(m => m - 1)
+  // Calendário mostra MESES_VISIVEIS meses lado a lado e navega de bloco em bloco
+  const shiftMonths = (delta: number) => {
+    const d = new Date(year, month + delta, 1)
+    setMonth(d.getMonth()); setYear(d.getFullYear())
   }
+  const prevMonth = () => shiftMonths(-MESES_VISIVEIS)
+  const nextMonth = () => shiftMonths(MESES_VISIVEIS)
 
-  const nextMonth = () => {
-    if (month === 11) { setMonth(0); setYear(y => y + 1) }
-    else setMonth(m => m + 1)
-  }
-
-  const totalDaysInMonth = new Date(year, month + 1, 0).getDate()
-  const firstDayOfWeek = new Date(year, month, 1).getDay()
+  const visibleMonths = Array.from({ length: MESES_VISIVEIS }, (_, i) => {
+    const d = new Date(year, month + i, 1)
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
+  const lastVisible = visibleMonths[visibleMonths.length - 1]
   const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
 
   const monthStart = dayStr(year, month, 1)
-  const monthEnd = dayStr(year, month, totalDaysInMonth)
+  const monthEnd = dayStr(lastVisible.year, lastVisible.month, new Date(lastVisible.year, lastVisible.month + 1, 0).getDate())
   const monthRecords = records.filter(v => v.inicio <= monthEnd && v.fim >= monthStart)
+  const periodoLabel = lastVisible.year === year
+    ? `${MONTHS[month]} – ${MONTHS[lastVisible.month]} ${year}`
+    : `${MONTHS[month]} ${year} – ${MONTHS[lastVisible.month]} ${lastVisible.year}`
 
   const uniquePeople = new Set(monthRecords.map(v => v.pessoa)).size
   const totalMonthDays = monthRecords.reduce((acc, v) => {
@@ -283,7 +289,7 @@ export default function CalendarioFeriasClient() {
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto' }}>
+    <div style={{ maxWidth: view === 'calendario' ? 1400 : 960, margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', paddingBottom: 20, borderBottom: '1.5px solid #E2E8F0', marginBottom: 24 }}>
@@ -342,17 +348,25 @@ export default function CalendarioFeriasClient() {
           {/* Month nav + summary */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button onClick={prevMonth} style={navBtn}>←</button>
-              <span style={{ fontWeight: 700, fontSize: 16, color: '#1E293B', minWidth: 200 }}>
-                {MONTHS[month]} {year}
+              <button onClick={prevMonth} style={navBtn} title="3 meses anteriores">←</button>
+              <span style={{ fontWeight: 700, fontSize: 16, color: '#1E293B', minWidth: 260, textAlign: 'center' }}>
+                {periodoLabel}
               </span>
-              <button onClick={nextMonth} style={navBtn}>→</button>
+              <button onClick={nextMonth} style={navBtn} title="Próximos 3 meses">→</button>
+              {(month !== today.getMonth() || year !== today.getFullYear()) && (
+                <button
+                  onClick={() => { setMonth(today.getMonth()); setYear(today.getFullYear()) }}
+                  style={{ ...navBtn, width: 'auto', padding: '0 10px', fontSize: 12, fontWeight: 600 }}
+                >
+                  Hoje
+                </button>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[
                 { val: monthRecords.length, lbl: `registro${monthRecords.length !== 1 ? 's' : ''}` },
                 { val: uniquePeople, lbl: `colaborador${uniquePeople !== 1 ? 'es' : ''}` },
-                { val: totalMonthDays, lbl: 'dias no mês' },
+                { val: totalMonthDays, lbl: 'dias no período' },
               ].map(item => (
                 <div key={item.lbl} style={{ background: '#fff', border: '1px solid rgba(42,79,150,0.12)', borderRadius: 20, padding: '5px 14px', fontSize: 12, color: '#6b7a9e', boxShadow: '0 2px 8px rgba(42,79,150,0.06)' }}>
                   <strong style={{ color: '#2A4F96' }}>{item.val}</strong> {item.lbl}
@@ -361,42 +375,52 @@ export default function CalendarioFeriasClient() {
             </div>
           </div>
 
-      {/* Calendar */}
-      <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden' }}>
+      {/* Calendar — 3 meses lado a lado (quebra em coluna em tela estreita) */}
+      {loading ? (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '3rem', textAlign: 'center', color: '#6B7A99', fontSize: 14 }}>Carregando...</div>
+      ) : loadError ? (
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '3rem', textAlign: 'center', color: '#b03030', fontSize: 14 }}>
+          Erro ao carregar dados: <strong>{loadError}</strong>
+          <br />
+          <span style={{ fontSize: 12, color: '#6b7a9e', marginTop: 8, display: 'block' }}>
+            Verifique se a tabela <code>ferias</code> foi criada no Supabase (execute <code>supabase-ferias.sql</code>).
+          </span>
+        </div>
+      ) : (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>
+        {visibleMonths.map(({ year: y, month: m }) => {
+          const totalDays = new Date(y, m + 1, 0).getDate()
+          const firstDow = new Date(y, m, 1).getDay()
+          const isCurrent = y === today.getFullYear() && m === today.getMonth()
+          return (
+      <div key={`${y}-${m}`} style={{ background: '#fff', border: `1px solid ${isCurrent ? '#2A4F96' : '#E2E8F0'}`, borderRadius: 12, overflow: 'hidden' }}>
+        {/* Month title */}
+        <div style={{ padding: '8px 12px', fontSize: 13, fontWeight: 700, color: isCurrent ? '#fff' : '#1E293B', background: isCurrent ? '#2A4F96' : '#fff', borderBottom: '1px solid #E2E8F0' }}>
+          {MONTHS[m]} {y}
+        </div>
         {/* Weekday headers */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#F4F6FA', borderBottom: '1px solid #E2E8F0' }}>
           {WEEKDAYS.map(d => (
-            <div key={d} style={{ padding: '10px 0', textAlign: 'center', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#6B7A99' }}>
+            <div key={d} style={{ padding: '5px 0', textAlign: 'center', fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6B7A99' }}>
               {d}
             </div>
           ))}
         </div>
 
-        {loading ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#6B7A99', fontSize: 14 }}>Carregando...</div>
-        ) : loadError ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#b03030', fontSize: 14 }}>
-            Erro ao carregar dados: <strong>{loadError}</strong>
-            <br />
-            <span style={{ fontSize: 12, color: '#6b7a9e', marginTop: 8, display: 'block' }}>
-              Verifique se a tabela <code>ferias</code> foi criada no Supabase (execute <code>supabase-ferias.sql</code>).
-            </span>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
             {/* Empty leading cells */}
-            {Array.from({ length: firstDayOfWeek }).map((_, i) => {
+            {Array.from({ length: firstDow }).map((_, i) => {
               const isLast = (i + 1) % 7 === 0
               return (
-                <div key={`e${i}`} style={{ minHeight: 90, borderRight: isLast ? 'none' : '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', background: '#F9FAFB' }} />
+                <div key={`e${i}`} style={{ minHeight: 58, borderRight: isLast ? 'none' : '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', background: '#F9FAFB' }} />
               )
             })}
 
             {/* Day cells */}
-            {Array.from({ length: totalDaysInMonth }, (_, i) => i + 1).map(d => {
-              const ds = dayStr(year, month, d)
+            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => {
+              const ds = dayStr(y, m, d)
               const isToday = ds === todayStr
-              const colIndex = (firstDayOfWeek + d - 1) % 7
+              const colIndex = (firstDow + d - 1) % 7
               const isLastCol = colIndex === 6
               const vacHere = monthRecords.filter(v => v.inicio <= ds && ds <= v.fim)
 
@@ -405,10 +429,11 @@ export default function CalendarioFeriasClient() {
                   key={d}
                   onClick={() => openModal(null, ds)}
                   style={{
-                    minHeight: 90,
+                    minHeight: 58,
+                    minWidth: 0,
                     borderRight: isLastCol ? 'none' : '1px solid #E2E8F0',
                     borderBottom: '1px solid #E2E8F0',
-                    padding: '8px 6px 6px',
+                    padding: '3px 3px 3px',
                     cursor: 'pointer',
                     background: '#fff',
                     transition: 'background 0.1s',
@@ -417,22 +442,20 @@ export default function CalendarioFeriasClient() {
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = '#fff' }}
                 >
                   {/* Day number */}
-                  <div style={{ marginBottom: 5 }}>
+                  <div style={{ marginBottom: 2 }}>
                     {isToday ? (
-                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#2A4F96', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
+                      <div style={{ width: 17, height: 17, borderRadius: '50%', background: '#2A4F96', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600 }}>
                         {d}
                       </div>
                     ) : (
-                      <span style={{ fontSize: 13, fontWeight: 500, color: '#6B7A99' }}>{d}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 500, color: '#6B7A99' }}>{d}</span>
                     )}
                   </div>
 
                   {/* Chips */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {vacHere.slice(0, 5).map(v => {
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {vacHere.slice(0, MAX_CHIPS).map(v => {
                       const isFolga = v.tipo === 'folga'
-                      const chipFs = vacHere.length <= 3 ? 10 : 9
-                      const chipPad = vacHere.length <= 3 ? '2px 5px' : '1px 4px'
                       return (
                       <div
                         key={v.id}
@@ -440,10 +463,11 @@ export default function CalendarioFeriasClient() {
                         style={{
                           background: isFolga ? FOLGA_COLOR : getColor(v.pessoa),
                           color: isFolga ? '#2A2000' : '#fff',
-                          borderRadius: 4,
-                          padding: chipPad,
-                          fontSize: chipFs,
+                          borderRadius: 3,
+                          padding: '1px 3px',
+                          fontSize: 9,
                           fontWeight: 600,
+                          lineHeight: 1.3,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -459,9 +483,12 @@ export default function CalendarioFeriasClient() {
                       </div>
                       )
                     })}
-                    {vacHere.length > 5 && (
-                      <div style={{ fontSize: 10, color: '#6B7A99', padding: '1px 4px' }}>
-                        +{vacHere.length - 5}
+                    {vacHere.length > MAX_CHIPS && (
+                      <div
+                        title={vacHere.slice(MAX_CHIPS).map(v => `${v.tipo === 'folga' ? 'Folga — ' : ''}${v.pessoa}`).join('\n')}
+                        style={{ fontSize: 9, fontWeight: 600, color: '#6B7A99', padding: '0 3px' }}
+                      >
+                        +{vacHere.length - MAX_CHIPS}
                       </div>
                     )}
                   </div>
@@ -469,8 +496,11 @@ export default function CalendarioFeriasClient() {
               )
             })}
           </div>
-        )}
       </div>
+          )
+        })}
+      </div>
+      )}
         </>
       )}
 
