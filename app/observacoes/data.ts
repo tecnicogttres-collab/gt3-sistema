@@ -22,6 +22,15 @@ const ICONS: Record<string, string> = {
   'Contratantes': '🤝',
 }
 
+/** Categorias que têm uma guia só (valor = nome da guia). Subcategorias criadas
+ *  pelo gestor nessas categorias entram como coluna nova dessa guia, não como guia. */
+export const GUIA_UNICA: Record<string, string> = {
+  'BSA': 'BSA',
+  'PGR & PCMSO & LTCAT': 'PGR & PCMSO & LTCAT',
+  'GPF - Alimentar': 'GPF - Alimentar',
+  'Orientações Gerais': 'Orientações Gerais',
+}
+
 function countItems(node: unknown): number {
   if (Array.isArray(node)) return node.length
   if (node && typeof node === 'object') {
@@ -115,11 +124,17 @@ function normalizeCategory(key: string, rawCat: unknown): Category | null {
 
   if (subtabs.length === 0) return null
 
+  // Categorias de guia única: as guias viram colunas de uma guia só (igual Empresas/Funcionários)
+  const guiaUnica = GUIA_UNICA[key]
+  const finalSubtabs: Subtab[] = guiaUnica
+    ? [{ key: guiaUnica, columns: subtabs.flatMap(s => s.columns).filter((c, i, arr) => arr.findIndex(x => x.title === c.title) === i) }]
+    : subtabs
+
   return {
     key,
     label: key,
     icon: ICONS[key] || '📌',
-    subtabs,
+    subtabs: finalSubtabs,
     totalCards: countItems(rawCat),
   }
 }

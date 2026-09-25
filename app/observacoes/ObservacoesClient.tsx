@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { CATEGORIES, type Category, type Card } from './data'
+import { CATEGORIES, GUIA_UNICA, type Category, type Card } from './data'
 import { useUser, displayName } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
@@ -275,9 +275,12 @@ export default function ObservacoesClient() {
   const searchParams = useSearchParams()
   const initialCat = (() => {
     const c = searchParams.get('cat')
-    return c && CATEGORIES.some(x => x.key === c) ? c : (CATEGORIES[0]?.key ?? '')
+    // Sem ?cat= o módulo abre neutro (nenhuma categoria) — a pessoa escolhe na coluna da esquerda
+    return c && CATEGORIES.some(x => x.key === c) ? c : ''
   })()
   const [activeCatKey, setActiveCatKey] = useState<string>(initialCat)
+  // Coluna de categorias recolhe ao escolher uma categoria (seta → reabre)
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(!!initialCat)
   const [activeSubtabKey, setActiveSubtabKey] = useState<string>(
     CATEGORIES.find(c => c.key === initialCat)?.subtabs[0]?.key ?? ''
   )
@@ -358,6 +361,8 @@ export default function ObservacoesClient() {
   function copiarAvulsa() {
     if (!avulsaTexto.trim()) return
     escreverClipboard(avulsaFormatada)
+    // Já copiou — limpa o campo pra próxima observação avulsa
+    setAvulsaTexto('')
     setAvulsaCopiado(true)
     if (avulsaCopiadoTimeoutRef.current) clearTimeout(avulsaCopiadoTimeoutRef.current)
     avulsaCopiadoTimeoutRef.current = setTimeout(() => setAvulsaCopiado(false), 1600)
@@ -523,8 +528,13 @@ export default function ObservacoesClient() {
         const imageOnly = isImageOnlyColuna(ds.subtab)
         return { key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly }] }
       })
+    // Categoria de guia única (ex: BSA): subcategorias criadas viram colunas da guia
+    if (GUIA_UNICA[activeCatKey] && staticSubs.length === 1) {
+      const [unica] = staticSubs
+      return [{ ...unica, columns: [...unica.columns, ...dynSubs.flatMap(s => s.columns)] }]
+    }
     return [...staticSubs, ...dynSubs]
-  }, [activeCategory, dbSubtabs])
+  }, [activeCategory, dbSubtabs, activeCatKey])
 
   const allSubtabsOrdered = useMemo(() => {
     const order = guiaOrderMap[activeCatKey]
@@ -553,9 +563,13 @@ export default function ObservacoesClient() {
     : ['Ficha Registro + ASO', 'EPI + Treinamentos'].includes(activeSubtab?.key ?? '') ? 580
     : 320
 
+  // Na guia única, observações gravadas quando cada coluna ainda era uma guia própria
+  // (subtab = nome da antiga guia) continuam aparecendo — o casamento é só pela coluna.
   const dbObsForSubtab = useMemo(
-    () => dbObs.filter(o => o.subtab === (activeSubtab?.key ?? '')),
-    [dbObs, activeSubtab]
+    () => GUIA_UNICA[activeCatKey]
+      ? dbObs
+      : dbObs.filter(o => o.subtab === (activeSubtab?.key ?? '')),
+    [dbObs, activeSubtab, activeCatKey]
   )
 
   const mergedMainCols = useMemo(
@@ -644,6 +658,7 @@ export default function ObservacoesClient() {
     const cat = CATEGORIES.find(c => c.key === key)
     setActiveCatKey(key)
     setActiveSubtabKey(cat?.subtabs[0]?.key ?? '')
+    setNavCollapsed(true)
     setSearch('')
     setLayoutMode(false)
     setDragColIdx(null)
@@ -900,7 +915,7 @@ export default function ObservacoesClient() {
     if (res.ok) {
       const created: DbSubtab = await res.json()
       setDbSubtabsByCategoria(prev => ({ ...prev, [activeCatKey]: [...(prev[activeCatKey] ?? []), created] }))
-      setActiveSubtabKey(created.subtab)
+      if (!GUIA_UNICA[activeCatKey]) setActiveSubtabKey(created.subtab)
       setSubtabModal({ open: false, name: '', saving: false, error: '' })
     } else {
       const body = await res.json().catch(() => ({}))
@@ -1316,7 +1331,7 @@ export default function ObservacoesClient() {
               padding: '16px 20px',
             }}>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
-                ＋ Nova Subcategoria
+                {GUIA_UNICA[activeCatKey] ? '＋ Nova Coluna' : '＋ Nova Subcategoria'}
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
                 {activeCatKey}
@@ -1325,7 +1340,7 @@ export default function ObservacoesClient() {
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  Nome da subcategoria
+                  {GUIA_UNICA[activeCatKey] ? 'Nome da coluna' : 'Nome da subcategoria'}
                 </label>
                 <input
                   type="text"
@@ -1537,9 +1552,9 @@ export default function ObservacoesClient() {
                   disabled={!avulsaTexto.trim()}
                   style={{
                     padding: '8px 20px', borderRadius: 8, border: 'none',
-                    background: !avulsaTexto.trim() ? MUTED : (avulsaCopiado ? '#16A34A' : PRIMARY), color: '#fff',
+                    background: avulsaCopiado ? '#16A34A' : (!avulsaTexto.trim() ? MUTED : PRIMARY), color: '#fff',
                     fontSize: 13, cursor: !avulsaTexto.trim() ? 'not-allowed' : 'pointer', fontWeight: 700,
-                    opacity: !avulsaTexto.trim() ? 0.5 : 1,
+                    opacity: !avulsaTexto.trim() && !avulsaCopiado ? 0.5 : 1,
                   }}
                 >
                   {avulsaCopiado ? '✓ Copiado!' : 'Copiar'}
@@ -1551,10 +1566,50 @@ export default function ObservacoesClient() {
       )}
 
       <div style={{
-        display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0,
+        display: 'grid', gridTemplateColumns: navCollapsed ? '52px 1fr' : '220px 1fr', gap: 0,
         height: 'calc(100vh - 140px)', borderRadius: 10, overflow: 'clip',
         border: `1px solid ${BORDER}`, boxShadow: '0 1px 6px rgba(30,37,61,0.06)',
+        transition: 'grid-template-columns 0.2s ease',
       }}>
+        {navCollapsed ? (
+          <nav style={{
+            background: '#fff', borderRight: `1px solid ${BORDER}`,
+            padding: '10px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+            overflowY: 'auto',
+          }}>
+            <button
+              onClick={() => setNavCollapsed(false)}
+              title="Mostrar categorias"
+              style={{
+                width: 36, height: 32, borderRadius: 8, border: `1.5px solid ${PRIMARY}`,
+                background: PRIMARY_LIGHT, color: PRIMARY, fontSize: 16, fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 8, flexShrink: 0,
+              }}
+            >
+              →
+            </button>
+            {CATEGORIES.map(cat => {
+              const isActive = cat.key === activeCatKey
+              return (
+                <button
+                  key={cat.key}
+                  onClick={() => handleCatChange(cat.key)}
+                  title={cat.label}
+                  style={{
+                    width: 36, height: 34, borderRadius: 8, border: 'none', flexShrink: 0,
+                    background: isActive ? PRIMARY_LIGHT : 'transparent',
+                    boxShadow: isActive ? `inset 3px 0 0 ${PRIMARY}` : 'none',
+                    cursor: 'pointer', fontSize: 16, lineHeight: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  {cat.icon}
+                </button>
+              )
+            })}
+          </nav>
+        ) : (
         <nav style={{
           background: '#fff', borderRight: `1px solid ${BORDER}`,
           padding: '14px 8px', display: 'flex', flexDirection: 'column', gap: 2,
@@ -1563,8 +1618,22 @@ export default function ObservacoesClient() {
           <div style={{
             fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase',
             letterSpacing: '0.12em', padding: '0 10px 10px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             Categorias
+            {activeCatKey && (
+              <button
+                onClick={() => setNavCollapsed(true)}
+                title="Recolher categorias"
+                style={{
+                  width: 26, height: 22, borderRadius: 6, border: `1px solid ${BORDER}`,
+                  background: '#fff', color: MUTED, fontSize: 13, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                ←
+              </button>
+            )}
           </div>
 
           {CATEGORIES.map(cat => {
@@ -1575,7 +1644,7 @@ export default function ObservacoesClient() {
                 onClick={() => handleCatChange(cat.key)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px',
-                  borderRadius: 8, border: 'none',
+                  borderRadius: 8, borderTop: 'none', borderRight: 'none', borderBottom: 'none',
                   background: isActive ? PRIMARY_LIGHT : 'transparent',
                   color: isActive ? PRIMARY : INK, fontSize: 13,
                   fontWeight: isActive ? 700 : 400, cursor: 'pointer',
@@ -1600,7 +1669,20 @@ export default function ObservacoesClient() {
             )
           })}
         </nav>
+        )}
 
+        {!activeCatKey ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            background: BG_PAGE, minWidth: 0, color: MUTED, textAlign: 'center', padding: 32, gap: 10,
+          }}>
+            <div style={{ fontSize: 40, lineHeight: 1 }}>📝</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Observações</div>
+            <div style={{ fontSize: 13, maxWidth: 360, lineHeight: 1.5 }}>
+              ← Escolha uma categoria na coluna da esquerda para ver as observações.
+            </div>
+          </div>
+        ) : (
         <div style={{ display: 'flex', flexDirection: 'column', background: BG_PAGE, minWidth: 0, overflow: 'hidden' }}>
 
           {layoutMode && (
@@ -1670,7 +1752,7 @@ export default function ObservacoesClient() {
                     transition: 'all 0.15s',
                   }}
                 >
-                  ＋ Nova subcategoria
+                  {GUIA_UNICA[activeCatKey] ? '＋ Nova coluna' : '＋ Nova subcategoria'}
                 </button>
               )}
             </div>
@@ -1962,6 +2044,7 @@ export default function ObservacoesClient() {
             </div>
           )}
         </div>
+        )}
       </div>
     </>
   )
