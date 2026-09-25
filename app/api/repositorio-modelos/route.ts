@@ -9,13 +9,12 @@ export async function GET(req: NextRequest) {
   const caller = await getCaller()
   if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const tipo = req.nextUrl.searchParams.get('tipo') ?? 'empresas'
+  // Sem ?tipo= devolve todas as abas (a tela usa isso p/ mostrar a contagem por aba)
+  const tipo = req.nextUrl.searchParams.get('tipo')
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('repositorio_modelos')
-    .select(SELECT)
-    .eq('tipo', tipo)
-    .order('nome', { ascending: true })
+  let query = admin.from('repositorio_modelos').select(SELECT)
+  if (tipo) query = query.eq('tipo', tipo)
+  const { data, error } = await query.order('nome', { ascending: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json(data ?? [])
