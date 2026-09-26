@@ -40,13 +40,28 @@ function dayStr(year: number, month: number, day: number): string {
 
 const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
+// Mês (ano*12 + mês) do próximo mês com alguém de férias — o atual, se já houver alguém
+function proximasMonthKey(records: FeriasRecord[]): number {
+  const now = new Date()
+  const curKey = now.getFullYear() * 12 + now.getMonth()
+  const hoje = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  const prox = records
+    .filter(v => v.tipo !== 'folga' && v.fim >= hoje)
+    .sort((a, b) => a.inicio.localeCompare(b.inicio))[0]
+  if (!prox) return curKey
+  const d = parseD(prox.inicio)
+  return Math.max(curKey, d.getFullYear() * 12 + d.getMonth())
+}
+
 export default function CalendarioFeriasClient() {
   const { profile } = useUser()
   const canManage = profile?.papel === 'gestor' || profile?.papel === 'admin'
   const today = new Date()
-  const [month, setMonth] = useState(today.getMonth())
-  const [year, setYear] = useState(today.getFullYear())
-  const [view, setView] = useState<'calendario' | 'lista'>('lista')
+  // null = abre no próximo mês com alguém de férias; vira ano*12+mês quando o usuário navega
+  const [navKey, setNavKey] = useState<number | null>(null)
+  const [view, setView] = useState<'calendario' | 'lista'>('calendario')
+  // Dia em foco no calendário — destaca na lista do mês quem está fora nesse dia
+  const [hoverDay, setHoverDay] = useState<string | null>(null)
   const [records, setRecords] = useState<FeriasRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -163,10 +178,11 @@ export default function CalendarioFeriasClient() {
   }, [])
 
   // Calendário mostra MESES_VISIVEIS meses lado a lado e navega de bloco em bloco
-  const shiftMonths = (delta: number) => {
-    const d = new Date(year, month + delta, 1)
-    setMonth(d.getMonth()); setYear(d.getFullYear())
-  }
+  // A janela começa em qualquer mês (não é trimestre fixo)
+  const startKey = navKey ?? proximasMonthKey(records)
+  const year = Math.floor(startKey / 12)
+  const month = startKey % 12
+  const shiftMonths = (delta: number) => setNavKey(startKey + delta)
   const prevMonth = () => shiftMonths(-MESES_VISIVEIS)
   const nextMonth = () => shiftMonths(MESES_VISIVEIS)
 
@@ -397,10 +413,19 @@ export default function CalendarioFeriasClient() {
               <button onClick={nextMonth} style={navBtn} title="Próximos 3 meses">→</button>
               {(month !== today.getMonth() || year !== today.getFullYear()) && (
                 <button
-                  onClick={() => { setMonth(today.getMonth()); setYear(today.getFullYear()) }}
+                  onClick={() => setNavKey(today.getFullYear() * 12 + today.getMonth())}
                   style={{ ...navBtn, width: 'auto', padding: '0 10px', fontSize: 12, fontWeight: 600 }}
                 >
                   Hoje
+                </button>
+              )}
+              {navKey !== null && (
+                <button
+                  onClick={() => setNavKey(null)}
+                  title="Voltar para o próximo mês com alguém de férias"
+                  style={{ ...navBtn, width: 'auto', padding: '0 10px', fontSize: 12, fontWeight: 600 }}
+                >
+                  Próximas férias
                 </button>
               )}
             </div>
@@ -416,6 +441,12 @@ export default function CalendarioFeriasClient() {
               ))}
             </div>
           </div>
+
+      {/* Aviso da interação de hover */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 12px', background: '#FFF4E8', border: '1px solid rgba(194,65,12,0.18)', borderRadius: 8, fontSize: 12, color: '#C2410C' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span>Passe o mouse sobre um <strong>dia</strong> para destacar quem está de férias, ou sobre um <strong>nome</strong> para destacar os dias dele no calendário.</span>
+      </div>
 
       {/* Calendar — 3 meses lado a lado: dias só com bolinhas de cor, e a lista de quem
           está fora no mês logo abaixo (os nomes saíram de dentro das células) */}
@@ -481,8 +512,8 @@ export default function CalendarioFeriasClient() {
                   background: hlColor ? `color-mix(in srgb, ${hlColor} ${hl?.tipo === 'folga' ? 45 : 26}%, transparent)` : 'transparent',
                   transition: 'background 0.12s',
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'inset 0 0 0 1.5px #C9D6EF' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'inset 0 0 0 1.5px #C9D6EF'; setHoverDay(ds) }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; setHoverDay(h => (h === ds ? null : h)) }}
               >
                 <span style={{
                   width: 22, height: 22, borderRadius: '50%',
@@ -518,6 +549,10 @@ export default function CalendarioFeriasClient() {
             <div style={{ fontSize: 11.5, color: '#A0AEC0', padding: '4px 4px' }}>Ninguém de férias ou folga neste mês.</div>
           ) : doMes.map(v => {
             const isFolga = v.tipo === 'folga'
+            // Dia em foco dentro deste mês: destaca quem está fora nele e apaga os demais
+            const dayInMonth = !!hoverDay && hoverDay >= mStart && hoverDay <= mEnd
+            const onDay = dayInMonth && v.inicio <= hoverDay! && hoverDay! <= v.fim
+            const cor = isFolga ? FOLGA_COLOR : getColor(v.pessoa)
             return (
               <div
                 key={v.id}
@@ -532,7 +567,12 @@ export default function CalendarioFeriasClient() {
                   setHoverRecId(null)
                   setTooltip(t => ({ ...t, visible: false }))
                 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                  background: onDay ? `color-mix(in srgb, ${cor} ${isFolga ? 40 : 18}%, transparent)` : undefined,
+                  opacity: dayInMonth && !onDay ? 0.35 : 1,
+                  transition: 'opacity 0.12s, background 0.12s',
+                }}
               >
                 <span style={{ width: 4, height: 16, borderRadius: 2, flexShrink: 0, background: isFolga ? FOLGA_COLOR : getColor(v.pessoa), boxShadow: isFolga ? 'inset 0 0 0 1px rgba(0,0,0,0.2)' : 'none' }} />
                 <span style={{ flex: 1, minWidth: 0, fontWeight: 600, color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { CATEGORIES, GUIA_UNICA, type Category, type Card } from './data'
+import { CATEGORIES, GUIA_UNICA, subtabCanonico, type Category, type Card } from './data'
 import { useUser, displayName } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
@@ -218,6 +218,21 @@ function buildColumnUI(col: { title: string; isFixed?: boolean; imageOnly?: bool
   return { ...col, cards }
 }
 
+type CardOrdemItem = { motivo: string; group_name: string | null }
+
+// Aplica a ordem/seção salva (observacoes_card_ordem) aos cards da coluna.
+// Cards sem registro salvo (ex.: criados depois) vão para o fim, na ordem natural.
+function applyCardOrder(col: ColumnUI, saved?: CardOrdemItem[]): ColumnUI {
+  if (!saved || saved.length === 0) return col
+  const pos = new Map(saved.map((s, i) => [s.motivo, i]))
+  const grp = new Map(saved.map(s => [s.motivo, s.group_name]))
+  const cards = col.cards
+    .map((card, i) => ({ card, key: pos.get(card.motivo) ?? 1e6 + i }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ card }) => (grp.has(card.motivo) ? { ...card, group: grp.get(card.motivo) ?? undefined } : card))
+  return { ...col, cards }
+}
+
 type ModalState = {
   open: boolean
   mode: 'create' | 'edit'
@@ -304,6 +319,8 @@ export default function ObservacoesClient() {
   const [layoutSaving, setLayoutSaving] = useState(false)
   const [colColors, setColColors] = useState<Record<string, string>>({})
   const [colOrderMap, setColOrderMap] = useState<Record<string, string[]>>({})
+  // Ordem dos cards por coluna da categoria ativa — chave `${subtab}||${coluna}`
+  const [cardOrderMap, setCardOrderMap] = useState<Record<string, CardOrdemItem[]>>({})
   const [guiaOrderMap, setGuiaOrderMap] = useState<Record<string, string[]>>({})
   const [dragColIdx, setDragColIdx] = useState<number | null>(null)
   const [hoverColIdx, setHoverColIdx] = useState<number | null>(null)
@@ -434,11 +451,13 @@ export default function ObservacoesClient() {
         const newColors: Record<string, string> = {}
         const newWidths: Record<string, number> = {}
         for (const r of columns) {
-          if (r.cor) newColors[`${cat}||${r.subtab}||${r.chave}`] = r.cor
-          if (r.largura) newWidths[`${cat}||${r.subtab}||${r.chave}`] = r.largura
+          if (r.cor) newColors[`${cat}||${subtabCanonico(r.subtab)}||${r.chave}`] = r.cor
+          if (r.largura) newWidths[`${cat}||${subtabCanonico(r.subtab)}||${r.chave}`] = r.largura
         }
         const orderGroups: Record<string, Array<{ chave: string; ordem: number }>> = {}
         for (const r of columns) {
+          // Ordem salva numa guia incorporada não vale na guia de destino (os índices colidiriam)
+          if (subtabCanonico(r.subtab) !== r.subtab) continue
           const key = `${cat}||${r.subtab}`
           if (!orderGroups[key]) orderGroups[key] = []
           orderGroups[key].push({ chave: r.chave, ordem: r.ordem })
@@ -472,6 +491,40 @@ export default function ObservacoesClient() {
     if (!activeCatKey) return
     loadLayoutForCategory(activeCatKey)
   }, [activeCatKey, loadLayoutForCategory])
+
+  useEffect(() => {
+    if (!activeCatKey) return
+    let cancelled = false
+    fetch(`/api/observacoes/card-ordem?categoria=${encodeURIComponent(activeCatKey)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: Array<CardOrdemItem & { subtab: string; coluna: string }>) => {
+        if (cancelled) return
+        const map: Record<string, CardOrdemItem[]> = {}
+        for (const r of rows) {
+          const k = `${r.subtab}||${r.coluna}`
+          ;(map[k] ??= []).push({ motivo: r.motivo, group_name: r.group_name })
+        }
+        setCardOrderMap(map)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [activeCatKey])
+
+  const saveCardOrder = useCallback(async (subtab: string, coluna: string, items: CardOrdemItem[]) => {
+    const k = `${subtab}||${coluna}`
+    let previous: CardOrdemItem[] | undefined
+    setCardOrderMap(prev => { previous = prev[k]; return { ...prev, [k]: items } })
+    const res = await fetch('/api/observacoes/card-ordem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoria: activeCatKey, subtab, coluna, items }),
+    })
+    if (!res.ok) {
+      setCardOrderMap(prev => ({ ...prev, [k]: previous ?? [] }))
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error ?? 'Erro ao salvar a ordem')
+    }
+  }, [activeCatKey])
 
   useEffect(() => {
     if (activeCatKey === 'Funcionários') return
@@ -568,17 +621,17 @@ export default function ObservacoesClient() {
   const dbObsForSubtab = useMemo(
     () => GUIA_UNICA[activeCatKey]
       ? dbObs
-      : dbObs.filter(o => o.subtab === (activeSubtab?.key ?? '')),
+      : dbObs.filter(o => subtabCanonico(o.subtab) === (activeSubtab?.key ?? '')),
     [dbObs, activeSubtab, activeCatKey]
   )
 
   const mergedMainCols = useMemo(
-    () => mainCols.map(col => buildColumnUI(col, dbObsForSubtab)),
-    [mainCols, dbObsForSubtab]
+    () => mainCols.map(col => applyCardOrder(buildColumnUI(col, dbObsForSubtab), cardOrderMap[`${activeSubtab?.key ?? ''}||${col.title}`])),
+    [mainCols, dbObsForSubtab, cardOrderMap, activeSubtab]
   )
   const mergedFixedCols = useMemo(
-    () => fixedCols.map(col => buildColumnUI(col, dbObsForSubtab)),
-    [fixedCols, dbObsForSubtab]
+    () => fixedCols.map(col => applyCardOrder(buildColumnUI(col, dbObsForSubtab), cardOrderMap[`${activeSubtab?.key ?? ''}||${col.title}`])),
+    [fixedCols, dbObsForSubtab, cardOrderMap, activeSubtab]
   )
 
   // Colunas em ordem customizada para o layout Funcionários (apenas main)
@@ -1913,6 +1966,7 @@ export default function ObservacoesClient() {
                           onToggleMultiCard={(id, texto) => toggleMultiCard(mColKey, id, texto)}
                           onCancelarMulti={() => cancelarMulti(mColKey)}
                           onFinalizarMulti={() => finalizarMulti(mColKey)}
+                          onSaveOrder={items => saveCardOrder(activeSubtab.key, col.title, items)}
                         />
                       </div>
                     )
@@ -1940,6 +1994,7 @@ export default function ObservacoesClient() {
                       onToggleMultiCard={(id, texto) => toggleMultiCard(fColKey, id, texto)}
                       onCancelarMulti={() => cancelarMulti(fColKey)}
                       onFinalizarMulti={() => finalizarMulti(fColKey)}
+                      onSaveOrder={mergedFixedCols.length === 1 ? items => saveCardOrder(activeSubtab.key, funcFixedMergedCol.title, items) : undefined}
                     />
                   </div>
                   )
@@ -1999,6 +2054,7 @@ export default function ObservacoesClient() {
                             onToggleMultiCard={(id, texto) => toggleMultiCard(mColKey, id, texto)}
                             onCancelarMulti={() => cancelarMulti(mColKey)}
                             onFinalizarMulti={() => finalizarMulti(mColKey)}
+                            onSaveOrder={items => saveCardOrder(activeSubtab.key, col.title, items)}
                           />
                           {layoutMode && (
                             <div

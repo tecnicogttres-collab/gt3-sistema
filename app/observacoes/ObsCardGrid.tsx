@@ -165,6 +165,9 @@ function ObsCard({
   }
 
   const isPendente = card._status_edicao === 'pendente_validacao'
+  // Fora da pendência o card fica "normal" (só ✏️ Editar); "Editar completo" e
+  // "Excluir" ficam no modo ⇅ Organizar da coluna.
+  const showDbActions = card._source === 'db' && isPendente
   const accentColor = isFixed ? ACCENT : PRIMARY
   const tagBg = isFixed ? 'rgba(209,174,110,0.15)' : 'rgba(42,79,150,0.08)'
   const isMultiSelected = !!multiOrder
@@ -433,7 +436,7 @@ function ObsCard({
             >
               ✏️ Editar
             </button>
-            {card._source === 'db' && onEdit && (
+            {showDbActions && canManage && onEdit && (
               <button
                 onClick={onEdit}
                 style={{
@@ -444,7 +447,7 @@ function ObsCard({
                 ✎ Editar completo
               </button>
             )}
-            {canManage && card._source === 'db' && (
+            {canManage && showDbActions && (
               <button
                 onClick={onDelete}
                 style={{
@@ -469,6 +472,7 @@ export function ObsColumn({
   papel, onAdd, onEdit, onDelete, onInlineSave, onValidate, onInlineCreate,
   layoutMode, columnColor, onColorChangeRequest, isColumnCopied,
   multiMode, multiSelecionados, onToggleMultiMode, onToggleMultiCard, onCancelarMulti, onFinalizarMulti,
+  onSaveOrder,
 }: {
   col: ColumnUI
   catKey: string
@@ -495,7 +499,10 @@ export function ObsColumn({
   onToggleMultiCard?: (id: string, texto: string) => void
   onCancelarMulti?: () => void
   onFinalizarMulti?: () => void
+  /** Salva a ordem/seção dos cards da coluna (modo ⇅ Organizar, gestor/admin) */
+  onSaveOrder?: (items: { motivo: string; group_name: string | null }[]) => Promise<void>
 }) {
+  const [organizing, setOrganizing] = useState(false)
   const multiOrderMap = useMemo(() => {
     const m = new Map<string, number>()
     ;(multiSelecionados ?? []).forEach((s, i) => m.set(s.id, i + 1))
@@ -640,7 +647,23 @@ export function ObsColumn({
               ＋
             </button>
           )}
-          {!layoutMode && !col.imageOnly && onToggleMultiMode && (
+          {canManage && onSaveOrder && !layoutMode && !multiMode && !col.imageOnly && (
+            <button
+              onClick={e => { e.stopPropagation(); setOrganizing(o => !o) }}
+              title={organizing ? 'Sair do modo organizar' : 'Organizar: reordenar observações, mudar de seção, editar e excluir'}
+              style={{
+                fontSize: 13, fontWeight: 700, lineHeight: 1,
+                color: organizing ? PRIMARY : 'rgba(255,255,255,0.9)',
+                background: organizing ? '#fff' : 'rgba(255,255,255,0.18)',
+                border: '1px solid rgba(255,255,255,0.35)', borderRadius: 6,
+                width: 24, height: 24, cursor: 'pointer', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              ⇅
+            </button>
+          )}
+          {!layoutMode && !organizing && !col.imageOnly && onToggleMultiMode && (
             <button
               onClick={e => { e.stopPropagation(); onToggleMultiMode() }}
               title={multiMode ? 'Sair do modo de dupla reprovação' : 'Combinar 2 ou mais observações num único "Favor rever:" numerado'}
@@ -691,6 +714,16 @@ export function ObsColumn({
         </div>
       )}
 
+      {organizing && onSaveOrder ? (
+        <ObsOrganizeList
+          key={col.cards.map(c => c._id ?? c.motivo).join("|")}
+          cards={col.cards}
+          onSave={onSaveOrder}
+          onClose={() => setOrganizing(false)}
+          onEdit={card => card._id && onEdit(card._id, card.motivo, card.parecer, col.title, subtabKey, card._imagem_url ?? '')}
+          onDelete={card => card._id && onDelete(card._id)}
+        />
+      ) : (
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto' }}>
         {ungrouped.map(({ card, idx }) => {
           const id = cardId(catKey, subtabKey, col.title, idx)
@@ -755,7 +788,210 @@ export function ObsColumn({
           </div>
         ))}
       </div>
+      )}
     </div>
+    </>
+  )
+}
+
+// ─── ObsOrganizeList ───────────────────────────────────────────────────────────
+// Modo "⇅ Organizar" da coluna: arrastar para reordenar; soltar sobre um card de
+// outra seção (ou no título da seção) move o card para ela. A seção também pode
+// ser trocada pelo seletor, inclusive criando uma nova.
+
+type DraftItem = { card: CardUI; group: string | null }
+
+// Mesma ordem visual da coluna: sem seção primeiro, depois as seções na ordem
+// em que aparecem — mantendo a ordem relativa dos cards dentro de cada uma.
+function normalizeDraft(items: DraftItem[]): DraftItem[] {
+  const order: (string | null)[] = [null]
+  for (const it of items) if (!order.includes(it.group)) order.push(it.group)
+  return order.flatMap(g => items.filter(it => it.group === g))
+}
+
+function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
+  cards: CardUI[]
+  onSave: (items: { motivo: string; group_name: string | null }[]) => Promise<void>
+  onClose: () => void
+  onEdit: (card: CardUI) => void
+  onDelete: (card: CardUI) => void
+}) {
+  const initial = useMemo(
+    () => normalizeDraft(cards.map(card => ({ card, group: card.group ?? null }))),
+    [cards]
+  )
+  const [draft, setDraft] = useState<DraftItem[]>(initial)
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [overKey, setOverKey] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const dirty = draft.some((it, i) => it.card !== initial[i]?.card || it.group !== initial[i]?.group)
+  const sections = Array.from(new Set(draft.map(it => it.group).filter((g): g is string => !!g)))
+
+  // Move o item arrastado para antes de `targetIdx` (ou para o início da seção) e adota a seção
+  function moveTo(from: number, targetIdx: number | null, group: string | null) {
+    setDraft(prev => {
+      const item = { ...prev[from], group }
+      const rest = prev.filter((_, i) => i !== from)
+      let at: number
+      if (targetIdx !== null) {
+        const target = prev[targetIdx]
+        at = rest.indexOf(target)
+      } else {
+        at = rest.findIndex(it => it.group === group)
+        if (at < 0) at = group === null ? 0 : rest.length
+      }
+      rest.splice(at < 0 ? rest.length : at, 0, item)
+      return normalizeDraft(rest)
+    })
+  }
+
+  function setGroup(idx: number, value: string) {
+    let group: string | null = value || null
+    if (value === '__nova__') {
+      const nome = window.prompt('Nome da nova seção (ex.: NR 33):')?.trim()
+      if (!nome) return
+      group = nome
+    }
+    setDraft(prev => normalizeDraft(prev.map((it, i) => (i === idx ? { ...it, group } : it))))
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(draft.map(it => ({ motivo: it.card.motivo, group_name: it.group })))
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const endDrag = () => { setDragIdx(null); setOverKey(null) }
+
+  const sectionHeader = (group: string | null) => {
+    const key = `h:${group ?? ''}`
+    return (
+      <div
+        key={key}
+        onDragOver={e => { if (dragIdx !== null) { e.preventDefault(); setOverKey(key) } }}
+        onDrop={() => { if (dragIdx !== null) moveTo(dragIdx, null, group); endDrag() }}
+        style={{
+          fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+          color: overKey === key ? PRIMARY : MUTED,
+          padding: '6px 4px 4px', marginTop: 4,
+          borderBottom: `${overKey === key ? 2 : 1}px solid ${overKey === key ? PRIMARY : BORDER}`,
+        }}
+      >
+        {group ?? 'Sem seção'}
+      </div>
+    )
+  }
+
+  const rows: React.ReactNode[] = []
+  let lastGroup: string | null | undefined
+  // Cabeçalho "Sem seção" sempre visível, para dar pra soltar cards nele
+  if (draft.length === 0 || draft[0].group !== null) rows.push(sectionHeader(null))
+  draft.forEach((it, idx) => {
+    if (it.group !== lastGroup) {
+      rows.push(sectionHeader(it.group))
+      lastGroup = it.group
+    }
+    const key = `c:${idx}`
+    const isOver = overKey === key && dragIdx !== null && dragIdx !== idx
+    rows.push(
+      <div
+        key={it.card._id ?? `${it.card.motivo}|${idx}`}
+        draggable
+        onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragIdx(idx) }}
+        onDragOver={e => { if (dragIdx !== null) { e.preventDefault(); setOverKey(key) } }}
+        onDrop={() => { if (dragIdx !== null && dragIdx !== idx) moveTo(dragIdx, idx, it.group); endDrag() }}
+        onDragEnd={endDrag}
+        style={{
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+          padding: '7px 8px', borderRadius: 7, background: '#fff',
+          border: `1px solid ${BORDER}`,
+          borderTop: isOver ? `3px solid ${PRIMARY}` : `1px solid ${BORDER}`,
+          opacity: dragIdx === idx ? 0.4 : 1,
+          cursor: 'grab',
+        }}
+      >
+        <span style={{ color: MUTED, fontSize: 13, lineHeight: '18px', userSelect: 'none', letterSpacing: -1 }}>⠿</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: PRIMARY, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {it.card.motivo}
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
+            {it.card.parecer}
+          </div>
+          <div style={{ display: 'flex', gap: 5, marginTop: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select
+              value={it.group ?? ''}
+              onChange={e => setGroup(idx, e.target.value)}
+              title="Seção"
+              style={{ fontSize: 11, padding: '2px 4px', borderRadius: 5, border: `1px solid ${BORDER}`, color: INK, background: '#F8FAFC', maxWidth: 150 }}
+            >
+              <option value="">Sem seção</option>
+              {sections.map(s => <option key={s} value={s}>{s}</option>)}
+              <option value="__nova__">＋ Nova seção…</option>
+            </select>
+            {it.card._source === 'db' && it.card._id && (
+              <>
+                <button
+                  onClick={() => onEdit(it.card)}
+                  style={{ fontSize: 11, padding: '2px 7px', borderRadius: 5, border: `1px solid ${BORDER}`, background: '#F0F4FA', color: PRIMARY, cursor: 'pointer', fontWeight: 600 }}
+                >
+                  ✎ Editar completo
+                </button>
+                <button
+                  onClick={() => onDelete(it.card)}
+                  style={{ fontSize: 11, padding: '2px 7px', borderRadius: 5, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  🗑
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  })
+
+  return (
+    <>
+      <div style={{
+        padding: '8px 12px', background: '#EFF6FF', borderBottom: '1px solid #BFDBFE',
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: PRIMARY, flex: 1, minWidth: 140 }}>
+          Arraste para reordenar. Soltar em outra seção muda a seção.
+        </span>
+        <button
+          onClick={onClose}
+          disabled={saving}
+          style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, border: '1px solid #BFDBFE', background: '#fff', color: MUTED, cursor: 'pointer', fontWeight: 600 }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving || !dirty}
+          style={{
+            fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none',
+            background: PRIMARY, color: '#fff', fontWeight: 700,
+            cursor: saving || !dirty ? 'default' : 'pointer', opacity: saving || !dirty ? 0.55 : 1,
+          }}
+        >
+          {saving ? 'Salvando…' : 'Salvar ordem'}
+        </button>
+        {error && <span style={{ fontSize: 11, color: '#DC2626', width: '100%' }}>{error}</span>}
+      </div>
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflowY: 'auto' }}>
+        {rows}
+      </div>
     </>
   )
 }

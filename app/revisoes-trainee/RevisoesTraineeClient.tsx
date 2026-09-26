@@ -160,7 +160,7 @@ export default function RevisoesTraineeClient() {
   const newDocumentoRef = useRef<HTMLInputElement>(null)
 
   // Flag modal (revisor)
-  const [flagModal, setFlagModal] = useState<{ id: string; status: 'red' | 'yellow' } | null>(null)
+  const [flagModal, setFlagModal] = useState<{ ids: string[]; status: 'red' | 'yellow'; empresa?: string } | null>(null)
   const [flagNote, setFlagNote] = useState('')
   const [flagLoading, setFlagLoading] = useState(false)
 
@@ -527,21 +527,25 @@ export default function RevisoesTraineeClient() {
   // ── Flag modal ─────────────────────────────────────────────────
   function openFlag(id: string, status: 'red' | 'yellow') {
     const rec = records.find(r => r.id === id)
-    setFlagModal({ id, status })
+    setFlagModal({ ids: [id], status })
     setFlagNote(rec?.nota_revisor ?? '')
   }
 
-  async function submitFlag() {
-    if (!flagModal) return
-    if (!flagNote.trim()) { alert('Descreva o motivo da sinalização.'); return }
-    const { id, status } = flagModal
-    const nota = flagNote
+  // Gaveta recolhida: aplica a mesma sinalização a todos os documentos da empresa
+  function openFlagGroup(group: EmpresaGroup, status: 'red' | 'yellow') {
+    setFlagModal({ ids: group.records.map(r => r.id), status, empresa: group.nome })
+    setFlagNote('')
+  }
+
+  function handleApproveGroup(group: EmpresaGroup) {
+    group.records.forEach(r => { void handleApprove(r.id) })
+  }
+
+  async function flagOne(id: string, status: 'red' | 'yellow', nota: string) {
     if (processingIds.current.has(id)) return
     const prev = data!.records.find(r => r.id === id)
     startProcessing(id)
-    // Optimistic — fecha modal imediatamente
     applyOptimisticStatus(id, { status: status as Status, nota_revisor: nota })
-    setFlagModal(null); setFlagNote('')
     const res = await fetch(`/api/revisoes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -554,6 +558,16 @@ export default function RevisoesTraineeClient() {
       else endProcessing(id)
       showToast('Erro ao sinalizar. Tente novamente.')
     }
+  }
+
+  async function submitFlag() {
+    if (!flagModal) return
+    if (!flagNote.trim()) { alert('Descreva o motivo da sinalização.'); return }
+    const { ids, status } = flagModal
+    const nota = flagNote
+    // Optimistic — fecha modal imediatamente
+    setFlagModal(null); setFlagNote('')
+    await Promise.all(ids.map(id => flagOne(id, status, nota)))
   }
 
   // ── Já corrigido (trainee) ─────────────────────────────────────
@@ -1060,7 +1074,34 @@ export default function RevisoesTraineeClient() {
           </td>
         )}
         <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-          <span style={{ fontSize: 11, color: '#5B8DEF', fontWeight: 600 }}>{isExpanded ? '▾ recolher' : '▸ expandir'}</span>
+          {!isTrainee && !isExpanded ? (
+            // Revisor com a gaveta recolhida: define todos os documentos de uma vez.
+            // Expandida, volta a ser item a item.
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+              {([
+                { lbl: '✓ Aprovar tudo', color: '#16A34A', hover: '#F0FFF4', onClick: () => handleApproveGroup(group) },
+                { lbl: '! Discutir tudo', color: '#D97706', hover: '#FFFBEB', onClick: () => openFlagGroup(group, 'yellow') },
+                { lbl: '✕ Erro em tudo', color: '#DC2626', hover: '#FEF2F2', onClick: () => openFlagGroup(group, 'red') },
+              ]).map(b => {
+                const busy = group.records.some(r => loadingIds.has(r.id))
+                return (
+                  <button
+                    key={b.lbl}
+                    onClick={b.onClick}
+                    disabled={busy}
+                    style={{ padding: '4px 8px', borderRadius: 5, border: `1px solid ${b.color}33`, background: '#fff', color: b.color, fontSize: 11, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.5 : 1 }}
+                    onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = b.hover; e.currentTarget.style.borderColor = b.color } }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = `${b.color}33` }}
+                  >
+                    {b.lbl}
+                  </button>
+                )
+              })}
+              <span onClick={() => toggleEmpresaGroup(group.key)} style={{ fontSize: 11, color: '#5B8DEF', fontWeight: 600, cursor: 'pointer', marginLeft: 4 }}>▸ expandir</span>
+            </div>
+          ) : (
+            <span style={{ fontSize: 11, color: '#5B8DEF', fontWeight: 600 }}>{isExpanded ? '▾ recolher' : '▸ expandir'}</span>
+          )}
         </td>
       </tr>
     )
@@ -1189,7 +1230,8 @@ export default function RevisoesTraineeClient() {
                 {t.nome.split(' ')[0]}
                 {tFlagged > 0 && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#DC2626', display: 'inline-block' }} />}
                 <span style={{ backgroundColor: isActive ? '#1E3A6E' : '#E2E8F0', color: isActive ? '#D1AE6E' : '#6B7A99', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 10 }}>
-                  {sumWeight(tRecs.filter(r => r.status !== 'green'))}
+                  {/* Pendentes (não avaliados) + com erro (falta o trainee corrigir) + a discutir */}
+                  {sumWeight(tRecs.filter(r => r.status === 'pending' || r.status === 'red' || r.status === 'yellow'))}
                 </span>
               </button>
             )
@@ -1375,11 +1417,13 @@ export default function RevisoesTraineeClient() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1E293B' }}>
                 {flagModal.status === 'red' ? 'Marcar como erro' : 'Sinalizar para discussão'}
+                {flagModal.ids.length > 1 && ` — ${flagModal.ids.length} documentos`}
               </h2>
               <button onClick={() => setFlagModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
             </div>
             <p style={{ margin: '0 0 14px', fontSize: 13, color: '#6B7A99' }}>
               {flagModal.status === 'red' ? 'Descreva o que está errado.' : 'Descreva o que precisa ser conversado.'}
+              {flagModal.ids.length > 1 && <> A mesma observação será aplicada a todos os documentos de <strong>{flagModal.empresa}</strong>.</>}
             </p>
             <textarea autoFocus value={flagNote} onChange={e => setFlagNote(e.target.value)} placeholder="Digite sua observação..." rows={3} style={{ width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 13, color: '#1E293B', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} onFocus={e => { e.target.style.borderColor = '#2A4F96' }} onBlur={e => { e.target.style.borderColor = '#D1D5DB' }} />
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>

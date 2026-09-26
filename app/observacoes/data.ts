@@ -31,6 +31,17 @@ export const GUIA_UNICA: Record<string, string> = {
   'Orientações Gerais': 'Orientações Gerais',
 }
 
+// Guias que foram incorporadas em outra: as colunas da guia antiga passam a
+// aparecer na guia de destino. Registros do banco ainda gravados com o nome
+// antigo são tratados como da guia de destino (ver subtabCanonico).
+export const SUBTAB_ALIAS: Record<string, string> = {
+  'EPI + Treinamentos': 'Ficha Registro + ASO',
+}
+
+export function subtabCanonico(subtab: string): string {
+  return SUBTAB_ALIAS[subtab] ?? subtab
+}
+
 function countItems(node: unknown): number {
   if (Array.isArray(node)) return node.length
   if (node && typeof node === 'object') {
@@ -61,7 +72,14 @@ function normalizeCategory(key: string, rawCat: unknown): Category | null {
   }
 
   if (!rawCat || typeof rawCat !== 'object') return null
-  const data = rawCat as Record<string, unknown>
+  const data = { ...(rawCat as Record<string, unknown>) }
+  for (const [antiga, destino] of Object.entries(SUBTAB_ALIAS)) {
+    const a = data[antiga], d = data[destino]
+    if (a && d && typeof a === 'object' && typeof d === 'object' && !Array.isArray(a) && !Array.isArray(d)) {
+      data[destino] = { ...(d as Record<string, unknown>), ...(a as Record<string, unknown>) }
+      delete data[antiga]
+    }
+  }
 
   // Fixed right columns at category level (Funcionários pattern)
   const catFixed = data['__fixed_right__'] as Record<string, Card[]> | undefined
