@@ -580,13 +580,13 @@ export function ObsColumn({
               ? `linear-gradient(135deg, ${columnColor} 0%, ${darkenHex(columnColor)} 100%)`
               : 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)')
           : effectiveHeaderBg,
-        padding: '10px 14px',
+        padding: '10px 10px 10px 12px',
         borderRadius: '8px 8px 0 0',
         flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
         transition: 'background 0.4s ease',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
           {layoutMode && (
             <span style={{
               fontSize: 14, opacity: 0.75, cursor: 'grab', userSelect: 'none',
@@ -596,7 +596,7 @@ export function ObsColumn({
             </span>
           )}
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.7)', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: 0.2 }}>
+          <span title={col.title} style={{ fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: 0.2, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {col.title}
           </span>
           {isColumnCopied && (
@@ -609,7 +609,7 @@ export function ObsColumn({
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <span style={{
             fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)',
             background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.3)',
@@ -672,7 +672,7 @@ export function ObsColumn({
                 color: multiMode ? '#B45309' : 'rgba(255,255,255,0.9)',
                 background: multiMode ? '#fff' : 'rgba(255,255,255,0.18)',
                 border: '1px solid rgba(255,255,255,0.35)', borderRadius: 6,
-                padding: '5px 8px', cursor: 'pointer', display: 'flex',
+                height: 24, padding: '0 7px', cursor: 'pointer', display: 'flex',
                 alignItems: 'center', gap: 4, justifyContent: 'center', flexShrink: 0,
               }}
             >

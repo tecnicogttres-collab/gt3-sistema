@@ -286,6 +286,8 @@ function Backdrop({ children }: { children: React.ReactNode }) {
 export default function ObservacoesClient() {
   const { profile } = useUser()
   const papel = profile?.papel ?? 'colaborador'
+  // Organizar (ordem/seção dos cards) é só para gestor/admin
+  const podeOrganizar = papel === 'gestor' || papel === 'admin'
 
   const searchParams = useSearchParams()
   const initialCat = (() => {
@@ -1966,7 +1968,7 @@ export default function ObservacoesClient() {
                           onToggleMultiCard={(id, texto) => toggleMultiCard(mColKey, id, texto)}
                           onCancelarMulti={() => cancelarMulti(mColKey)}
                           onFinalizarMulti={() => finalizarMulti(mColKey)}
-                          onSaveOrder={items => saveCardOrder(activeSubtab.key, col.title, items)}
+                          onSaveOrder={podeOrganizar ? items => saveCardOrder(activeSubtab.key, col.title, items) : undefined}
                         />
                       </div>
                     )
@@ -1994,7 +1996,7 @@ export default function ObservacoesClient() {
                       onToggleMultiCard={(id, texto) => toggleMultiCard(fColKey, id, texto)}
                       onCancelarMulti={() => cancelarMulti(fColKey)}
                       onFinalizarMulti={() => finalizarMulti(fColKey)}
-                      onSaveOrder={mergedFixedCols.length === 1 ? items => saveCardOrder(activeSubtab.key, funcFixedMergedCol.title, items) : undefined}
+                      onSaveOrder={podeOrganizar && mergedFixedCols.length === 1 ? items => saveCardOrder(activeSubtab.key, funcFixedMergedCol.title, items) : undefined}
                     />
                   </div>
                   )
@@ -2054,7 +2056,7 @@ export default function ObservacoesClient() {
                             onToggleMultiCard={(id, texto) => toggleMultiCard(mColKey, id, texto)}
                             onCancelarMulti={() => cancelarMulti(mColKey)}
                             onFinalizarMulti={() => finalizarMulti(mColKey)}
-                            onSaveOrder={items => saveCardOrder(activeSubtab.key, col.title, items)}
+                            onSaveOrder={podeOrganizar ? items => saveCardOrder(activeSubtab.key, col.title, items) : undefined}
                           />
                           {layoutMode && (
                             <div
