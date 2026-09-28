@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { PERIODS, type Period, findMonthOccurrence, currentMonthOccurrence, isLembreteOverdue } from '../lib/lembretes'
@@ -140,6 +140,13 @@ export default function LembretesClient() {
 
   function isDone(r: Lembrete) { return confirmedIds.has(r.id) }
 
+  // Confirmações do mês que o calendário está mostrando (não do mês atual): um lembrete recorrente
+  // finalizado neste mês volta a aparecer pendente nos meses seguintes.
+  const calConfirmedIds = useMemo(
+    () => calHistoricoLoading ? new Set<string>() : new Set(calHistorico.map(h => h.lembrete_id)),
+    [calHistorico, calHistoricoLoading],
+  )
+
   function isOverdue(r: Lembrete) {
     return isLembreteOverdue(r, isDone(r))
   }
@@ -176,7 +183,26 @@ export default function LembretesClient() {
     }
   }, [isGestorOrAdmin, profile?.id])
 
-  useEffect(() => { void load() }, [load])
+  // O módulo fica montado (escondido) quando se troca de aba — sem recarregar ao voltar, um OK dado
+  // no dashboard não aparecia aqui. Por isso recarrega também quando a rota muda (ao voltar para
+  // /lembretes) e, no efeito seguinte, quando alguém confirma/edita/exclui.
+  const pathname = usePathname()
+  useEffect(() => { void load() }, [load, pathname])
+
+  useEffect(() => {
+    const supabase = createClient()
+    const ch = supabase
+      .channel(`lembretes-rt-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes_historico' }, () => { void load() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes' }, () => { void load() })
+      .subscribe()
+    const onFocus = () => { if (document.visibilityState === 'visible') void load() }
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', onFocus)
+      void supabase.removeChannel(ch)
+    }
+  }, [load])
 
   // Abre direto para edição quando vem de um link do dashboard (?edit=<id>).
   useEffect(() => {
@@ -354,7 +380,15 @@ export default function LembretesClient() {
           mes_referencia: mesRef,
         })
 
-      if (error) return
+      if (error) {
+        // Já confirmado (ex.: pelo dashboard) mas a tela estava desatualizada: só sincroniza.
+        if (error.code === '23505') {
+          await load()
+          setFinalizadosExpanded(true)
+          setHistExpanded(true)
+        }
+        return
+      }
 
       const novaEntrada: HistoricoRow = {
         id: crypto.randomUUID(),
@@ -621,7 +655,8 @@ export default function LembretesClient() {
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto' }}>
+    <div style={{ height: '100%', overflowY: 'auto' }}>
+    <div style={{ maxWidth: 960, margin: '0 auto', paddingBottom: 48 }}>
 
       {/* ── Header ── */}
       <div style={{
@@ -726,7 +761,7 @@ export default function LembretesClient() {
           style={{
             display: 'flex', alignItems: 'center', gap: 10,
             background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            marginBottom: ativosExpanded ? 12 : 0, width: '100%',
+            marginBottom: ativosExpanded ? 12 : 0, width: '100%', transform: 'none', boxShadow: 'none',
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2">
@@ -776,7 +811,7 @@ export default function LembretesClient() {
           style={{
             display: 'flex', alignItems: 'center', gap: 10,
             background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            marginBottom: finalizadosExpanded ? 12 : 0, width: '100%',
+            marginBottom: finalizadosExpanded ? 12 : 0, width: '100%', transform: 'none', boxShadow: 'none',
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={OK_TEXT} strokeWidth="2">
@@ -817,7 +852,7 @@ export default function LembretesClient() {
           style={{
             display: 'flex', alignItems: 'center', gap: 10,
             background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            marginBottom: histExpanded ? 16 : 0, width: '100%',
+            marginBottom: histExpanded ? 16 : 0, width: '100%', transform: 'none', boxShadow: 'none',
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2">
@@ -934,7 +969,7 @@ export default function LembretesClient() {
                   {d}
                 </div>
                 {hits.slice(0, 5).map((r, idx) => {
-                  const confirmed = confirmedIds.has(r.id)
+                  const confirmed = calConfirmedIds.has(r.id)
                   const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
                     <div key={idx} title="Clique para editar" onClick={e => { e.stopPropagation(); openEdit(r) }} style={{
@@ -1363,6 +1398,7 @@ export default function LembretesClient() {
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }
