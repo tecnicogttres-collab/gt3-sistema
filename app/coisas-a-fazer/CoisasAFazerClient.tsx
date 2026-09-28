@@ -173,6 +173,8 @@ export default function CoisasAFazerClient() {
   const [ordemModulo, setOrdemModulo] = useState<'recente' | 'asc' | 'desc'>('recente')
   // Padrão: esconde módulos sem nenhum item ativo — reduz a lista ao que ainda precisa de atenção.
   const [apenasAtivos, setApenasAtivos] = useState(true)
+  // Itens marcados nos checkboxes para copiar de uma vez (vale entre módulos)
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
 
   // Modals
   const [modalModulo, setModalModulo]     = useState(false)
@@ -428,6 +430,29 @@ export default function CoisasAFazerClient() {
       return ordemModulo === 'asc' ? a.nome.localeCompare(b.nome, 'pt-BR') : b.nome.localeCompare(a.nome, 'pt-BR')
     })
 
+  // Marcados que ainda estão visíveis (respeita busca/filtros), na ordem em que aparecem na tela
+  const itensSelecionados = modulosFiltrados
+    .flatMap(m => [...itensDo(m.id, 'ativos'), ...itensDo(m.id, 'historico')])
+    .filter(i => selecionados.has(i.id))
+
+  function alternarSelecao(ids: string[]) {
+    setSelecionados(prev => {
+      const next = new Set(prev)
+      const todos = ids.length > 0 && ids.every(id => next.has(id))
+      ids.forEach(id => { if (todos) next.delete(id); else next.add(id) })
+      return next
+    })
+  }
+
+  async function copiarSelecionados() {
+    if (itensSelecionados.length === 0) return
+    try {
+      // Um item por parágrafo (linha em branco entre eles)
+      await navigator.clipboard.writeText(itensSelecionados.map(i => i.texto.trim()).join('\n\n'))
+      showToast(itensSelecionados.length === 1 ? '1 item copiado' : `${itensSelecionados.length} itens copiados`)
+    } catch { showToast('Erro ao copiar') }
+  }
+
   // ── Styles ─────────────────────────────────────────────────────────────────
 
   const inpStyle: React.CSSProperties = {
@@ -542,8 +567,34 @@ export default function CoisasAFazerClient() {
         </div>
       )}
 
+      {/* Barra de seleção: aparece quando há itens marcados */}
+      {itensSelecionados.length > 0 && (
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 20, marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '10px 14px', borderRadius: 10, background: '#2A4F96', color: '#fff',
+          boxShadow: '0 4px 14px rgba(42,79,150,0.28)',
+        }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700, flex: 1, minWidth: 140 }}>
+            ☑ {itensSelecionados.length} {itensSelecionados.length === 1 ? 'item selecionado' : 'itens selecionados'}
+          </span>
+          <button
+            onClick={() => void copiarSelecionados()}
+            style={{ border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', background: '#D1AE6E', color: '#4A3A1A' }}
+          >
+            📋 Copiar selecionados
+          </button>
+          <button
+            onClick={() => setSelecionados(new Set())}
+            style={{ border: '1px solid rgba(255,255,255,0.4)', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', background: 'transparent', color: '#fff' }}
+          >
+            Limpar seleção
+          </button>
+        </div>
+      )}
+
       {/* Module list */}
-      {loading && <p style={{ color: '#9CA3AF', fontSize: 14 }}>Carregando…</p>}
+      {loading &&<p style={{ color: '#9CA3AF', fontSize: 14 }}>Carregando…</p>}
 
       {!loading && modulos.length === 0 && (
         <div style={{ background: '#fff', border: '1px solid #E5E9F0', borderRadius: 14, padding: '28px 20px', textAlign: 'center', color: '#9CA3AF', fontSize: 13.5 }}>
@@ -642,6 +693,20 @@ export default function CoisasAFazerClient() {
                       </button>
                     ))}
                   </div>
+                  {items.length > 0 && (() => {
+                    const ids = items.map(i => i.id)
+                    const todos = ids.every(id => selecionados.has(id))
+                    return (
+                      <button
+                        onClick={e => { e.stopPropagation(); alternarSelecao(ids) }}
+                        title="Marcar ou desmarcar todos os itens desta lista para copiar de uma vez"
+                        style={{ display: 'flex', alignItems: 'center', gap: 7, border: 'none', background: 'transparent', color: '#2A4F96', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: '4px 2px' }}
+                      >
+                        <input type="checkbox" readOnly checked={todos} style={{ width: 15, height: 15, accentColor: '#2A4F96', pointerEvents: 'none' }} />
+                        {todos ? 'Desmarcar todos' : `Selecionar todos (${ids.length})`}
+                      </button>
+                    )
+                  })()}
                   {canManage && (
                     <Btn size="sm" variant="ghost" onClick={() => { setPendingModuloId(mod.id); setFormTextoItem(`No módulo de ${mod.nome}, preciso que `); setFormVisibItem('todos'); setModalItem(true) }}>
                       + Adicionar item
@@ -664,9 +729,17 @@ export default function CoisasAFazerClient() {
                     return (
                       <div
                         key={item.id}
-                        style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '12px 4px', borderBottom: '1px solid rgba(42,79,150,0.06)' }}
+                        style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '12px 4px', borderBottom: '1px solid rgba(42,79,150,0.06)', background: selecionados.has(item.id) ? '#F5F8FF' : 'transparent' }}
                       >
                         <div style={{ display: 'flex', gap: 10, minWidth: 0, flex: 1 }}>
+                          <input
+                            type="checkbox"
+                            checked={selecionados.has(item.id)}
+                            onChange={() => alternarSelecao([item.id])}
+                            aria-label="Selecionar item para copiar"
+                            title="Selecionar para copiar junto com outros"
+                            style={{ width: 16, height: 16, marginTop: 4, flexShrink: 0, accentColor: '#2A4F96', cursor: 'pointer' }}
+                          />
                           <div style={{
                             width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 7,
                             background: isDone ? '#10B981' : isSuggestion ? '#D1AE6E' : '#2A4F96',
