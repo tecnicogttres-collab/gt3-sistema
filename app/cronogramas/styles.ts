@@ -212,7 +212,6 @@ export const CSS = `
 .crm .fitem .d p{margin:3px 0 0;font-size:12px;color:var(--ink-2)}
 .crm .fitem .r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:11.5px;color:var(--ink-2)}
 .crm .focus-f{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 16px;border-top:1px solid var(--line);font-size:10.5px;color:var(--ink-3);background:#FBFCFE}
-.crm .snaphost{position:fixed;left:-10000px;top:0;width:1600px}
 /* destaque do período (durante o arraste) */
 .crm .ov .hl{position:absolute;top:0;bottom:0;background:rgba(209,174,110,.13);border-left:1.5px dashed #B8924F;border-right:1.5px dashed #B8924F;z-index:2}
 .crm .hd .hmk{position:absolute;bottom:3px;background:#8A6A2E;color:#fff;font:600 10.5px var(--mono);padding:2px 6px;border-radius:4px;z-index:4;white-space:nowrap}
@@ -220,7 +219,7 @@ export const CSS = `
 .crm .hd .hmk.b{transform:translateX(3px)}
 .crm .hd .hmk small{font-weight:400;opacity:.75;margin-left:4px}
 /* relatório (print do cronograma) */
-.crm .rep{width:1600px;background:#fff;color:#1A2233;font:12px/17px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.crm .rep{width:1600px;background:#fff;color:#1A2233;--mono:Consolas,"Courier New",monospace;font:12px/17px "Segoe UI",Arial,Helvetica,sans-serif}
 .crm .rep-h{background:#132649;color:#fff;padding:18px 24px;display:flex;align-items:center;gap:24px;border-bottom:4px solid #D1AE6E}
 .crm .rep-h .t{flex:1}
 .crm .rep-h h1{margin:0;font-size:20px;font-weight:600;color:#fff}
@@ -255,7 +254,7 @@ export const CSS = `
 .crm .rep .gc .br{position:absolute;top:3px;height:12px;border-radius:3px}
 .crm .rep .gc .br.gp{top:6px;height:6px;background:#D6DDEA}
 .crm .rep .gc .br.gp i{position:absolute;left:0;top:0;bottom:0;background:#1B3468;border-radius:3px}
-.crm .rep .gc .br.lt{box-shadow:0 0 0 1.5px #C0392B}
+.crm .rep .gc .br.lt{border:1.5px solid #C0392B}
 .crm .rep .gh{position:relative;height:14px}
 .crm .rep .gh span{position:absolute;bottom:0;padding-left:4px;border-left:1px solid rgba(255,255,255,.35)}
 .crm .rep .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;vertical-align:middle}

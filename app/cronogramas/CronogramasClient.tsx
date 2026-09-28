@@ -201,7 +201,6 @@ export default function CronogramasClient() {
   const backId = useRef<string | null>(null)
 
   const tlRef = useRef<HTMLDivElement>(null)
-  const hostRef = useRef<HTMLDivElement>(null)
   const needScroll = useRef(true)
   const clickT = useRef<ReturnType<typeof setTimeout> | null>(null)
   const toastT = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -511,11 +510,11 @@ export default function CronogramasClient() {
   }
 
   async function doSnap() {
-    if (!cur || !hostRef.current) return
+    if (!cur) return
     const html = reportHtml(m, cur, user, today)
     if (!html) { showToast('Não há itens com data para gerar o print'); return }
     try {
-      const r = await snapshot(hostRef.current, html, cur)
+      const r = await snapshot(html, cur)
       showToast(r === 'copiado' ? 'Print do cronograma baixado e copiado — cole direto no e-mail ou WhatsApp' : 'Print do cronograma baixado')
     } catch { showToast('Não foi possível gerar o print (a biblioteca de captura precisa de internet)') }
   }
@@ -1044,7 +1043,6 @@ export default function CronogramasClient() {
     <div className="crm" style={{ '--lw': `${G.lw}px` } as React.CSSProperties}>
       <style>{STYLES}</style>
       {content}
-      <div className="snaphost" ref={hostRef} aria-hidden="true" />
 
       {layer?.k === 'status' && cur && renderStatusPanel()}
       {layer?.k === 'drawer' && cur && renderDrawer(layer.id)}

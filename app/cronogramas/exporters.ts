@@ -4,6 +4,7 @@
 
 import type { Borders, Fill } from 'exceljs'
 import { type Cronograma, type Model, type Vis, D, DAY, days, fmt, fmtDT } from './model'
+import { CSS as STYLES } from './styles'
 
 const CDN = {
   html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
@@ -49,7 +50,7 @@ const SCOL: Record<Vis, [string, string, string]> = {
   andamento: ['#E4ECFA', '#2A4F96', '#2A4F96'],
   aguardando: ['#FBF0D9', '#A87617', '#D1AE6E'],
   pendente: ['#EEF1F5', '#6B778C', '#B4BDCC'],
-  bloqueado: ['#F4F5F8', '#8C98AD', 'repeating-linear-gradient(135deg,#CDD3DE 0 5px,#E0E4EB 5px 10px)'],
+  bloqueado: ['#F4F5F8', '#8C98AD', '#CDD3DE'],
 }
 
 const inMonth = (m: Model, it: Parameters<Model['span']>[0], mo: { a: Date; b: Date }) => {
@@ -104,21 +105,42 @@ export function reportHtml(m: Model, c: Cronograma, user: string, today: Date): 
         <th><div class="gh">${months.map(mo => `<span style="left:${pos(mo.a)}%">${mo.lab}</span>`).join('')}</div></th>
         <th>Status</th><th>Observação</th></tr></thead>
       <tbody>${rows}</tbody></table>
-    <div class="rep-f"><div class="lg"><span><i style="background:#2E8B57"></i>Concluído</span><span><i style="background:#2A4F96"></i>Em andamento</span><span><i style="background:#D1AE6E"></i>Aguardando cliente</span><span><i style="background:#B4BDCC"></i>Pendente</span><span><i style="background:repeating-linear-gradient(135deg,#CDD3DE 0 4px,#E0E4EB 4px 8px)"></i>Bloqueado</span><span><i style="background:#fff;box-shadow:0 0 0 1.5px #C0392B"></i>Atrasado</span><span><i style="background:#D1AE6E;width:2px"></i>Hoje</span></div>
+    <div class="rep-f"><div class="lg"><span><i style="background:#2E8B57"></i>Concluído</span><span><i style="background:#2A4F96"></i>Em andamento</span><span><i style="background:#D1AE6E"></i>Aguardando cliente</span><span><i style="background:#B4BDCC"></i>Pendente</span><span><i style="background:#CDD3DE"></i>Bloqueado</span><span><i style="background:#fff;border:1.5px solid #C0392B"></i>Atrasado</span><span><i style="background:#D1AE6E;width:2px"></i>Hoje</span></div>
       <span>Emitido em ${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} por ${esc(user)}</span></div>
   </div>`
 }
 
 type Html2Canvas = (el: HTMLElement, o: Record<string, unknown>) => Promise<HTMLCanvasElement>
 
-/** Gera o PNG do cronograma completo, baixa e tenta copiar para a área de transferência. */
-export async function snapshot(host: HTMLElement, html: string, c: Cronograma): Promise<'copiado' | 'baixado'> {
+/**
+ * Gera o PNG do cronograma completo, baixa e tenta copiar para a área de transferência.
+ * O relatório é desenhado num iframe com documento próprio, longe do CSS global do sistema.
+ * Além disso, o html2canvas mede a linha de base do texto com uma <img> inline na página principal;
+ * o reset do Tailwind (img { display:block }) estraga essa medida e todo texto sai deslocado para
+ * baixo, fora das caixas e "pílulas". Por isso a regra é neutralizada só durante a captura.
+ */
+export async function snapshot(html: string, c: Cronograma): Promise<'copiado' | 'baixado'> {
   await loadScript(CDN.html2canvas)
   const h2c = (window as unknown as { html2canvas?: Html2Canvas }).html2canvas
   if (!h2c) throw new Error('html2canvas indisponível')
-  host.innerHTML = html
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:1600px;height:900px;border:0'
+  document.body.appendChild(iframe)
+  const fix = document.createElement('style')
+  fix.textContent = 'img{display:inline !important;vertical-align:baseline !important}'
+  document.head.appendChild(fix)
   try {
-    const canvas = await h2c(host.firstElementChild as HTMLElement, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+    const doc = iframe.contentDocument
+    if (!doc) throw new Error('Não foi possível preparar o print')
+    doc.open()
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><style>${STYLES}</style></head><body style="margin:0;background:#fff"><div class="crm" style="display:block;height:auto;min-height:0">${html}</div></body></html>`)
+    doc.close()
+    await new Promise(r => setTimeout(r, 60))
+    iframe.style.height = doc.documentElement.scrollHeight + 'px'
+    const el = doc.querySelector('.rep') as HTMLElement | null
+    if (!el) throw new Error('Relatório vazio')
+    const canvas = await h2c(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, width: 1600, windowWidth: 1600 })
     const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'))
     if (!blob) throw new Error('Falha ao gerar a imagem')
     download(blob, `Cronograma_${slug(c.cliente)}_${stamp()}.png`)
@@ -127,7 +149,8 @@ export async function snapshot(host: HTMLElement, html: string, c: Cronograma): 
       return 'copiado'
     } catch { return 'baixado' }
   } finally {
-    host.innerHTML = ''
+    fix.remove()
+    iframe.remove()
   }
 }
 
