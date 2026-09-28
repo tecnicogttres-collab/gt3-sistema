@@ -168,7 +168,6 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const { profile } = useUser()
   const router = useRouter()
   const [priorities, setPriorities] = useState<Prioridade[]>([])
-  const [hoNames, setHoNames] = useState<string[]>([])
   const [bsaPerson, setBsaPerson] = useState('')
   const [bdayItems, setBdayItems] = useState<BdayItem[]>([])
   const [lembreteItems, setLembreteItems] = useState<LembreteItem[]>([])
@@ -214,28 +213,6 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     const todayDay = today.getDate()
     const todayMonth = today.getMonth()
     const todayYear = today.getFullYear()
-
-    // Home Office — entries for today: read from Supabase (async, fire-and-forget)
-    ;(async () => {
-      try {
-        const supabase = createClient()
-        const { data } = await supabase
-          .from('home_office_sheets')
-          .select('year, month_idx, rows')
-          .eq('is_current', true)
-          .maybeSingle()
-        if (data && data.year === todayYear && data.month_idx === todayMonth) {
-          const row = (data.rows as { day: number; type: string; entries?: string[] }[])?.find(
-            r => r.day === todayDay && r.type === 'normal'
-          )
-          setHoNames(row?.entries?.filter((e: string) => Boolean(e)) ?? [])
-        } else {
-          setHoNames([])
-        }
-      } catch {
-        setHoNames([])
-      }
-    })()
 
     // BSA (Controle Revisão) — person assigned for today
     ;(async () => {
@@ -364,12 +341,11 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Realtime: atualiza dashboard imediatamente quando home-office ou revisão mudar
+  // Realtime: atualiza dashboard imediatamente quando a revisão mudar
   useEffect(() => {
     const supabase = createClient()
     const ch = supabase
       .channel(`dashboard-sheets-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'home_office_sheets' }, () => loadData())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'controle_revisao_sheets' }, () => loadData())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lembretes_historico' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes' }, () => loadData())
@@ -709,7 +685,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           </div>
         )}
 
-        {/* ── Block 2: Home Office + BSA ────────────────────────────────── */}
+        {/* ── Block 2: Revisão BSA ────────────────────────────────── */}
         <div style={{
           background: '#fff',
           borderRadius: 8,
@@ -719,33 +695,27 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: '#2A4F96', marginBottom: 10 }}>
             Hoje
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div>
-              <div style={{
-                fontSize: 11, color: '#64748B', textTransform: 'uppercase',
-                letterSpacing: '0.05em', fontWeight: 600, marginBottom: 6,
-              }}>
-                🏠 Home Office
-              </div>
-              {hoNames.length === 0 ? (
-                <div style={{ fontSize: 13, color: '#9CA3AF' }}>—</div>
-              ) : hoNames.map((name, i) => (
-                <div key={i} style={{ fontSize: 13, color: '#1E293B', marginBottom: 2 }}>{name}</div>
-              ))}
+          <div>
+            <div style={{
+              fontSize: 11, color: '#64748B', textTransform: 'uppercase',
+              letterSpacing: '0.05em', fontWeight: 600, marginBottom: 6,
+            }}>
+              📋 Revisão BSA
             </div>
-            <div>
-              <div style={{
-                fontSize: 11, color: '#64748B', textTransform: 'uppercase',
-                letterSpacing: '0.05em', fontWeight: 600, marginBottom: 6,
-              }}>
-                📋 Revisão BSA
-              </div>
-              {bsaPerson ? (
-                <div style={{ fontSize: 13, color: '#1E293B' }}>{bsaPerson}</div>
+            {bsaPerson ? (
+              isManager ? (
+                <Link
+                  href="/controle-revisao"
+                  style={{ fontSize: 13, color: '#2A4F96', fontWeight: 500, textDecoration: 'none' }}
+                >
+                  {bsaPerson}
+                </Link>
               ) : (
-                <div style={{ fontSize: 13, color: '#9CA3AF' }}>—</div>
-              )}
-            </div>
+                <div style={{ fontSize: 13, color: '#1E293B' }}>{bsaPerson}</div>
+              )
+            ) : (
+              <div style={{ fontSize: 13, color: '#9CA3AF' }}>—</div>
+            )}
           </div>
         </div>
 
