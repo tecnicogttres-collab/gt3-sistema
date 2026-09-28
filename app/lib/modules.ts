@@ -293,6 +293,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['gestor', 'admin'],
   },
   {
+    id: 'cronogramas',
+    label: 'Cronogramas',
+    color: '#4A90D9',
+    path: '/cronogramas',
+    description: 'Cronogramas de implantação por contratante: etapas, prazos, responsáveis e status em linha do tempo',
+    allowedRoles: ['gestor', 'admin'],
+  },
+  {
     id: 'coisas-a-fazer',
     label: 'Melhorias',
     color: '#4A90D9',

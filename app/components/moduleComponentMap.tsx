@@ -44,7 +44,8 @@ const DynRepositorioModelos = dynamic(() => import('../repositorio-modelos/Repos
 const DynRevisaoNR          = dynamic(() => import('../revisao-nr/RevisaoNRClient'),                { ssr: false })
 const DynRetornoNR          = dynamic(() => import('../retorno-de-nr/RetornoNRClient'),             { ssr: false })
 const DynQuestionarios      = dynamic(() => import('../questionarios/QuestionariosClient'),         { ssr: false })
-const DynComparativoGuia    = dynamic(() => import('../comparativo-guia-fgts/ComparativoGuiaClient'), { ssr: false })
+const DynCronogramas        = dynamic(() => import('../cronogramas/CronogramasClient'),             { ssr: false })
+const DynComparativoGuia   = dynamic(() => import('../comparativo-guia-fgts/ComparativoGuiaClient'), { ssr: false })
 const DynDesignacaoReprovados = dynamic(() => import('../designacao-reprovados/DesignacaoReprovadosClient'), { ssr: false })
 const DynComparadorComprovantes = dynamic(() => import('../comparador-comprovantes/ComparadorComprovantesClient'), { ssr: false })
 function AtasContratantesWithSuspense() {
@@ -85,4 +86,5 @@ export const MODULE_COMPONENT_MAP: Record<string, React.ComponentType> = {
   '/designacao-reprovados': DynDesignacaoReprovados,
   '/comparador-comprovantes': DynComparadorComprovantes,
   '/questionarios':         DynQuestionarios,
+  '/cronogramas':           DynCronogramas,
 }

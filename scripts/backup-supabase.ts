@@ -58,6 +58,7 @@ const TABLES = [
   'contratantes',
   'contratantes_favs',
   'controle_revisao_sheets',
+  'cronogramas',
   'dashboard_prefs',
   'email_templates',
   'enquete_opcoes',
