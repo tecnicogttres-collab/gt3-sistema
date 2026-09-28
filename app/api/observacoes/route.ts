@@ -61,12 +61,18 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { categoria, subtab, coluna, motivo, parecer, group_name, imagem_url } = body
+  const { categoria, subtab, coluna, motivo, parecer, group_name, imagem_url, exigir_secao } = body
   if (!categoria || !subtab || !coluna || !motivo?.trim()) {
     return Response.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
   }
   if (!imagem_url && !parecer?.trim()) {
     return Response.json({ error: 'Observação ou imagem obrigatórios' }, { status: 400 })
+  }
+
+  // O modal de nova observação exige a seção; o servidor confere para não depender só da tela.
+  const secao = typeof group_name === 'string' ? group_name.trim() : ''
+  if (exigir_secao && !secao) {
+    return Response.json({ error: 'Informe a seção da observação' }, { status: 400 })
   }
 
   // Criação por gestor/admin já entra validada — só colaborador gera pendência.
@@ -81,7 +87,7 @@ export async function POST(req: NextRequest) {
       coluna,
       motivo: motivo.trim(),
       parecer: parecer.trim(),
-      group_name: group_name ?? null,
+      group_name: secao || null,
       imagem_url: imagem_url ?? null,
       criado_por: user.id,
       ...(isPrivileged

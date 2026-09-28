@@ -247,6 +247,11 @@ type ModalState = {
   imageOnly: boolean
   uploadError: string
   saving: boolean
+  /** Seções já existentes na coluna (na ordem em que aparecem) — opções do campo obrigatório "Seção". */
+  secoes: string[]
+  /** Seção escolhida, '' (nada escolhido) ou NOVA_SECAO (digitar uma nova). */
+  secao: string
+  secaoNova: string
 }
 
 type ConfirmState =
@@ -269,7 +274,14 @@ const MODAL_INIT: ModalState = {
   editingId: null, motivo: '', parecerBody: '',
   imagemUrl: '', imagemFile: null, imagemPreview: '',
   imageOnly: false, uploadError: '', saving: false,
+  secoes: [], secao: '', secaoNova: '',
 }
+
+const NOVA_SECAO = '__nova__'
+
+/** Começo já escrito no campo de nova observação (o colaborador só continua a frase). */
+const FAVOR_REVER = 'Favor rever: '
+const semFavorRever = (t: string) => t.replace(/^\s*favor rever\b:?\s*/i, '')
 
 function Backdrop({ children }: { children: React.ReactNode }) {
   return (
@@ -324,6 +336,8 @@ export default function ObservacoesClient() {
   // Ordem dos cards por coluna da categoria ativa — chave `${subtab}||${coluna}`
   const [cardOrderMap, setCardOrderMap] = useState<Record<string, CardOrdemItem[]>>({})
   const [guiaOrderMap, setGuiaOrderMap] = useState<Record<string, string[]>>({})
+  const [aviso, setAviso] = useState('')
+  const avisoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dragColIdx, setDragColIdx] = useState<number | null>(null)
   const [hoverColIdx, setHoverColIdx] = useState<number | null>(null)
   const [dragTabIdx, setDragTabIdx] = useState<number | null>(null)
@@ -774,16 +788,17 @@ export default function ObservacoesClient() {
     return () => { if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current) }
   }, [])
 
-  const handleAdd = useCallback((coluna: string, subtabKey: string) => {
+  const handleAdd = useCallback((coluna: string, subtabKey: string, secoes: string[]) => {
     const sub = allSubtabs.find(s => s.key === subtabKey)
     const col = sub?.columns.find(c => c.title === coluna)
     const imageOnly = col?.imageOnly === true || isImageOnlyColuna(coluna)
-    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly })
+    // Coluna sem nenhuma seção: já abre no modo "nova seção" (a escolha da seção é obrigatória).
+    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly, secoes, secao: secoes.length === 0 ? NOVA_SECAO : '', parecerBody: imageOnly ? '' : FAVOR_REVER })
   }, [allSubtabs])
 
   const handleEditOpen = useCallback((id: string, motivo: string, parecer: string, coluna: string, subtabKey: string, imagemUrl: string) => {
     if (modal.imagemPreview.startsWith('blob:')) URL.revokeObjectURL(modal.imagemPreview)
-    setModal({ open: true, mode: 'edit', coluna, subtabKey, editingId: id, motivo, parecerBody: parecer, imagemUrl, imagemFile: null, imagemPreview: imagemUrl, imageOnly: false, uploadError: '', saving: false })
+    setModal({ open: true, mode: 'edit', coluna, subtabKey, editingId: id, motivo, parecerBody: parecer, imagemUrl, imagemFile: null, imagemPreview: imagemUrl, imageOnly: false, uploadError: '', saving: false, secoes: [], secao: '', secaoNova: '' })
   }, [modal.imagemPreview])
 
   const handleDeleteRequest = useCallback((id: string) => {
@@ -835,9 +850,11 @@ export default function ObservacoesClient() {
 
   function buildParecer(): string {
     if (isImageOnlyColuna(modal.coluna)) return modal.parecerBody || ''
-    return !['gestor', 'admin'].includes(papel)
-      ? 'Favor rever: ' + modal.parecerBody
-      : modal.parecerBody
+    const texto = modal.parecerBody.trim()
+    // Gestor/admin: exatamente o que digitou. Colaborador: sempre começa com "Favor rever:" —
+    // mesmo que apague o começo pré-escrito, ele volta na hora de salvar.
+    if (['gestor', 'admin'].includes(papel)) return texto
+    return /^\s*favor rever\b/i.test(texto) ? texto : FAVOR_REVER + texto
   }
 
   function closeModal() {
@@ -872,12 +889,28 @@ export default function ObservacoesClient() {
     return url as string
   }
 
+  const secaoFinal = (modal.secao === NOVA_SECAO ? modal.secaoNova : modal.secao).trim()
+  // O campo já começa com "Favor rever:", então "tem texto" = sobrou algo além dele
+  const corpoObs = semFavorRever(modal.parecerBody).trim()
+  const precisaSecao = modal.mode === 'create' && !isImageOnlyColuna(modal.coluna)
+
+  function mostrarAviso(msg: string) {
+    if (avisoTimeoutRef.current) clearTimeout(avisoTimeoutRef.current)
+    setAviso(msg)
+    avisoTimeoutRef.current = setTimeout(() => setAviso(''), 5000)
+  }
+  useEffect(() => () => { if (avisoTimeoutRef.current) clearTimeout(avisoTimeoutRef.current) }, [])
+
   async function handleSave() {
     const imageOnly = isImageOnlyColuna(modal.coluna)
     if (imageOnly) {
       if (!modal.imagemFile && !modal.imagemUrl) return
     } else {
-      if (!modal.motivo.trim() || !modal.parecerBody.trim()) return
+      if (!modal.motivo.trim() || !corpoObs) return
+    }
+    if (precisaSecao && !secaoFinal) {
+      setModal(m => ({ ...m, uploadError: 'Indique a seção da observação.' }))
+      return
     }
     const motivo = imageOnly
       ? (modal.imagemFile?.name.replace(/\.[^.]+$/, '') ?? `imagem-${Date.now()}`)
@@ -915,14 +948,19 @@ export default function ObservacoesClient() {
         motivo,
         parecer: buildParecer(),
         imagem_url: imagemUrl,
+        ...(precisaSecao ? { group_name: secaoFinal, exigir_secao: true } : {}),
       }),
     })
     if (res.ok) {
       const created: DbObservacao = await res.json()
       setDbObs(prev => [...prev, created])
       closeModal()
+      mostrarAviso(['gestor', 'admin'].includes(papel)
+        ? 'Observação criada.'
+        : 'Observação enviada — o gestor/admin recebe um aviso no dashboard para validar.')
     } else {
-      setModal(m => ({ ...m, saving: false }))
+      const body = await res.json().catch(() => ({}))
+      setModal(m => ({ ...m, saving: false, uploadError: body.error ?? 'Não foi possível salvar a observação.' }))
     }
   }
 
@@ -1221,6 +1259,48 @@ export default function ObservacoesClient() {
               </div>
             ) : (
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {precisaSecao && (
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                      Seção <span style={{ color: '#DC2626' }}>*</span>
+                      <span style={{ fontWeight: 500, color: MUTED }}> — obrigatório</span>
+                    </label>
+                    <select
+                      value={modal.secao}
+                      onChange={e => setModal(m => ({ ...m, secao: e.target.value, uploadError: '' }))}
+                      autoFocus
+                      style={{
+                        width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                        border: `1.5px solid ${modal.secao ? BORDER : '#FCA5A5'}`, outline: 'none', boxSizing: 'border-box',
+                        fontFamily: 'inherit', color: modal.secao ? INK : MUTED, background: '#fff',
+                      }}
+                    >
+                      <option value="">Selecione a seção…</option>
+                      {modal.secoes.map(sc => <option key={sc} value={sc}>{sc}</option>)}
+                      <option value={NOVA_SECAO}>＋ Nova seção…</option>
+                    </select>
+                    {modal.secao === NOVA_SECAO && (
+                      <input
+                        type="text"
+                        value={modal.secaoNova}
+                        onChange={e => setModal(m => ({ ...m, secaoNova: e.target.value, uploadError: '' }))}
+                        placeholder="Nome da nova seção"
+                        autoFocus
+                        style={{
+                          width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13, marginTop: 8,
+                          border: `1.5px solid ${modal.secaoNova.trim() ? BORDER : '#FCA5A5'}`, outline: 'none', boxSizing: 'border-box',
+                          fontFamily: 'inherit', color: INK,
+                        }}
+                      />
+                    )}
+                    <p style={{ margin: '6px 0 0', fontSize: 11.5, color: MUTED, lineHeight: 1.4 }}>
+                      {modal.secoes.length === 0
+                        ? 'Esta coluna ainda não tem seções — informe o nome da primeira.'
+                        : 'Indique em qual seção da coluna esta observação deve aparecer.'}
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
                     Imagem (opcional)
@@ -1241,7 +1321,7 @@ export default function ObservacoesClient() {
                     value={modal.motivo}
                     onChange={e => setModal(m => ({ ...m, motivo: e.target.value }))}
                     placeholder="Ex: Outro coordenador"
-                    autoFocus
+                    autoFocus={!precisaSecao}
                     style={{
                       width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
                       border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
@@ -1254,42 +1334,36 @@ export default function ObservacoesClient() {
                   <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
                     Observação
                   </label>
-                  {!['gestor', 'admin'].includes(papel) ? (
+                  {modal.mode === 'create' && !isImageOnlyColuna(modal.coluna) && (
                     <div style={{
-                      border: `1.5px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden',
-                      background: '#fff',
+                      display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8,
+                      padding: '8px 10px', borderRadius: 8, background: '#EFF6FF', border: '1px solid #BFDBFE',
+                      fontSize: 12, color: '#1E3A6E', lineHeight: 1.45,
                     }}>
-                      <div style={{
-                        padding: '8px 12px 4px', fontSize: 12, fontWeight: 700,
-                        color: PRIMARY, background: PRIMARY_LIGHT, borderBottom: `1px solid ${BORDER}`,
-                      }}>
-                        Favor rever:
-                      </div>
-                      <textarea
-                        value={modal.parecerBody}
-                        onChange={e => setModal(m => ({ ...m, parecerBody: e.target.value }))}
-                        placeholder="Continue aqui…"
-                        rows={4}
-                        style={{
-                          width: '100%', padding: '8px 12px', border: 'none', outline: 'none',
-                          fontSize: 13, resize: 'vertical', fontFamily: 'inherit', color: INK,
-                          boxSizing: 'border-box',
-                        }}
-                      />
+                      <span style={{ fontSize: 14, lineHeight: 1.2 }}>ℹ️</span>
+                      <span>
+                        O <b>“Favor rever:”</b> já vem escrito no campo — é só continuar a frase.
+                        {['gestor', 'admin'].includes(papel)
+                          ? ' Se não for uma reprovação, você pode apagá-lo.'
+                          : ' A observação segue para validação do gestor/admin.'}
+                      </span>
                     </div>
-                  ) : (
-                    <textarea
-                      value={modal.parecerBody}
-                      onChange={e => setModal(m => ({ ...m, parecerBody: e.target.value }))}
-                      placeholder="Texto da observação…"
-                      rows={4}
-                      style={{
-                        width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
-                        border: `1.5px solid ${BORDER}`, outline: 'none', resize: 'vertical',
-                        fontFamily: 'inherit', color: INK, boxSizing: 'border-box',
-                      }}
-                    />
                   )}
+                  <textarea
+                    value={modal.parecerBody}
+                    onChange={e => setModal(m => ({ ...m, parecerBody: e.target.value }))}
+                    onFocus={e => {
+                      // Campo ainda intocado: cursor logo depois do "Favor rever: ", pronto para continuar
+                      if (e.target.value === FAVOR_REVER) e.target.setSelectionRange(FAVOR_REVER.length, FAVOR_REVER.length)
+                    }}
+                    placeholder="Texto da observação…"
+                    rows={4}
+                    style={{
+                      width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                      border: `1.5px solid ${BORDER}`, outline: 'none', resize: 'vertical',
+                      fontFamily: 'inherit', color: INK, boxSizing: 'border-box',
+                    }}
+                  />
                 </div>
               </div>
             )}
@@ -1314,7 +1388,7 @@ export default function ObservacoesClient() {
                 onClick={handleSave}
                 disabled={modal.saving || (isImageOnlyColuna(modal.coluna)
                   ? (!modal.imagemFile && !modal.imagemUrl)
-                  : (!modal.motivo.trim() || !modal.parecerBody.trim())
+                  : (!modal.motivo.trim() || !corpoObs || (precisaSecao && !secaoFinal))
                 )}
                 style={{
                   padding: '8px 20px', borderRadius: 8, border: 'none',
@@ -1322,7 +1396,7 @@ export default function ObservacoesClient() {
                   fontSize: 13, cursor: modal.saving ? 'not-allowed' : 'pointer', fontWeight: 700,
                   opacity: (isImageOnlyColuna(modal.coluna)
                     ? (!modal.imagemFile && !modal.imagemUrl)
-                    : (!modal.motivo.trim() || !modal.parecerBody.trim())
+                    : (!modal.motivo.trim() || !corpoObs || (precisaSecao && !secaoFinal))
                   ) ? 0.5 : 1,
                 }}
               >
@@ -2104,6 +2178,19 @@ export default function ObservacoesClient() {
         </div>
         )}
       </div>
+
+      {aviso && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 1100,
+            background: '#1A2340', color: '#fff', padding: '10px 18px', borderRadius: 8, fontSize: 13,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)', maxWidth: 'min(520px, calc(100vw - 32px))', textAlign: 'center',
+          }}
+        >
+          {aviso}
+        </div>
+      )}
     </>
   )
 }

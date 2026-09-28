@@ -481,7 +481,8 @@ export function ObsColumn({
   copiedId: string | null
   onCopy: (id: string, text: string) => void
   papel: string
-  onAdd: (coluna: string, subtabKey: string) => void
+  /** `secoes` = seções da coluna, na ordem em que aparecem — alimenta o campo obrigatório "Seção" do modal. */
+  onAdd: (coluna: string, subtabKey: string, secoes: string[]) => void
   onEdit: (id: string, motivo: string, parecer: string, coluna: string, subtabKey: string, imagemUrl: string) => void
   onDelete: (id: string) => void
   onInlineSave: (id: string, parecer: string) => Promise<void>
@@ -525,6 +526,13 @@ export function ObsColumn({
     })
     return { ungrouped, groups }
   }, [col.cards, search])
+
+  // Todas as seções da coluna (ignora a busca) na ordem em que aparecem
+  const secoesDaColuna = useMemo(() => {
+    const nomes: string[] = []
+    col.cards.forEach(c => { if (c.group && !nomes.includes(c.group)) nomes.push(c.group) })
+    return nomes
+  }, [col.cards])
 
   const totalVisible = ungrouped.length + Array.from(groups.values()).reduce((s, g) => s + g.length, 0)
   const canManage = ['gestor', 'admin'].includes(papel)
@@ -634,7 +642,7 @@ export function ObsColumn({
           )}
           {canAdd && !layoutMode && (
             <button
-              onClick={() => onAdd(col.title, subtabKey)}
+              onClick={() => onAdd(col.title, subtabKey, secoesDaColuna)}
               title="Nova observação"
               style={{
                 fontSize: 15, lineHeight: 1, fontWeight: 700,
@@ -847,6 +855,21 @@ function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
     })
   }
 
+  // Sobe/desce a seção inteira (todos os cards dela) — a ordem das seções na coluna é a ordem
+  // em que aparecem, então basta reordenar os blocos; "Sem seção" fica sempre no topo.
+  function moveSection(group: string, dir: -1 | 1) {
+    setDraft(prev => {
+      const order = Array.from(new Set(prev.map(it => it.group).filter((g): g is string => !!g)))
+      const i = order.indexOf(group), j = i + dir
+      if (i < 0 || j < 0 || j >= order.length) return prev
+      ;[order[i], order[j]] = [order[j], order[i]]
+      return [
+        ...prev.filter(it => it.group === null),
+        ...order.flatMap(g => prev.filter(it => it.group === g)),
+      ]
+    })
+  }
+
   function setGroup(idx: number, value: string) {
     let group: string | null = value || null
     if (value === '__nova__') {
@@ -884,9 +907,31 @@ function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
           color: overKey === key ? PRIMARY : MUTED,
           padding: '6px 4px 4px', marginTop: 4,
           borderBottom: `${overKey === key ? 2 : 1}px solid ${overKey === key ? PRIMARY : BORDER}`,
+          display: 'flex', alignItems: 'center', gap: 6,
         }}
       >
-        {group ?? 'Sem seção'}
+        <span style={{ flex: 1, minWidth: 0 }}>{group ?? 'Sem seção'}</span>
+        {group !== null && sections.length > 1 && (
+          <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
+            {([[-1, '▲', 'Subir seção'], [1, '▼', 'Descer seção']] as const).map(([dir, label, title]) => {
+              const pos = sections.indexOf(group)
+              const disabled = dir === -1 ? pos === 0 : pos === sections.length - 1
+              return (
+                <button
+                  key={label}
+                  onClick={() => moveSection(group, dir)}
+                  disabled={disabled}
+                  title={title}
+                  style={{
+                    width: 22, height: 20, padding: 0, borderRadius: 5, fontSize: 10, lineHeight: 1, fontWeight: 700,
+                    border: `1px solid ${BORDER}`, background: '#fff', color: PRIMARY,
+                    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.35 : 1,
+                  }}
+                >{label}</button>
+              )
+            })}
+          </span>
+        )}
       </div>
     )
   }
@@ -967,7 +1012,7 @@ function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0,
       }}>
         <span style={{ fontSize: 11.5, fontWeight: 600, color: PRIMARY, flex: 1, minWidth: 140 }}>
-          Arraste para reordenar. Soltar em outra seção muda a seção.
+          Arraste para reordenar. Soltar em outra seção muda a seção; use ▲ ▼ no título para ordenar as seções.
         </span>
         <button
           onClick={onClose}

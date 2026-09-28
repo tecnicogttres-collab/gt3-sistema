@@ -65,6 +65,9 @@ type ObsPendente = {
   categoria: string
   coluna: string
   motivo: string
+  secao?: string | null
+  /** 'nova' = criada por colaborador; 'editada' = texto alterado numa observação existente */
+  tipo?: 'nova' | 'editada'
   autor: string | null
   quando: string | null
 }
@@ -421,7 +424,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     try {
       const supabase = createClient()
       const mesRef = `${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}-01`
-      await supabase.from('lembretes_historico').insert({
+      const { error } = await supabase.from('lembretes_historico').insert({
         lembrete_id: item.id,
         lembrete_titulo: item.titulo,
         usuario_id: profile.id,
@@ -429,6 +432,12 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         usuario_login: profile.usuario ?? profile.email ?? profile.nome ?? 'Usuário',
         mes_referencia: mesRef,
       })
+      // 23505 = este usuário já confirmou o lembrete neste mês — segue como confirmado.
+      // Qualquer outro erro: mantém o item na lista em vez de fingir que foi confirmado.
+      if (error && error.code !== '23505') {
+        console.error('Erro ao confirmar lembrete:', error.message)
+        return
+      }
       setLembreteItems(prev => prev.filter(i => i.id !== item.id))
     } finally {
       setLembreteActingId(null)
@@ -526,7 +535,17 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       .channel(`dashboard-obs-rt-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'observacoes' }, () => load())
       .subscribe()
-    return () => { cancelled = true; void supabase.removeChannel(ch) }
+    // Rede de segurança caso o realtime da tabela não esteja ligado: reconfere a cada minuto
+    // (só com a aba visível) e assim que a pessoa volta para a aba.
+    const poll = setInterval(() => { if (document.visibilityState === 'visible') load() }, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(poll)
+      document.removeEventListener('visibilitychange', onVisible)
+      void supabase.removeChannel(ch)
+    }
   }, [role])
 
   // Designação de Reprovados — itens aguardando MINHA ciência. Some daqui na hora que
@@ -667,7 +686,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               <Link
                 key={o.id}
                 href={`/observacoes?cat=${encodeURIComponent(o.categoria)}`}
-                title={`${o.categoria} · ${o.coluna}${o.autor ? ` · ${o.autor}` : ''}`}
+                title={`${o.tipo === 'nova' ? 'Nova observação' : 'Observação editada'} · ${o.categoria} · ${o.coluna}${o.secao ? ` › ${o.secao}` : ''}${o.autor ? ` · ${o.autor}` : ''}`}
                 style={{
                   display: 'block', textDecoration: 'none',
                   padding: '5px 0',
@@ -678,8 +697,12 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                 <span style={{ fontSize: 13, color: '#1E293B', fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {o.motivo?.trim() || o.coluna}
                 </span>
-                <span style={{ fontSize: 11, color: '#6B7280' }}>
-                  {o.categoria}{o.autor ? ` · ${o.autor}` : ''}
+                <span style={{ fontSize: 11, color: '#6B7280', display: 'block' }}>
+                  <span style={{
+                    display: 'inline-block', marginRight: 6, padding: '0 6px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                    background: o.tipo === 'nova' ? '#DCFCE7' : '#EDE9FE', color: o.tipo === 'nova' ? '#15803D' : '#6D28D9',
+                  }}>{o.tipo === 'nova' ? 'NOVA' : 'EDITADA'}</span>
+                  {o.categoria} · {o.coluna}{o.secao ? ` › ${o.secao}` : ''}{o.autor ? ` · ${o.autor}` : ''}
                 </span>
               </Link>
             ))}

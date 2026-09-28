@@ -10,7 +10,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('observacoes')
-    .select('id, categoria, coluna, motivo, criado_por, atualizado_por, atualizado_em, created_at')
+    .select('id, categoria, coluna, motivo, group_name, parecer_anterior, criado_por, atualizado_por, atualizado_em, created_at')
     .eq('status_edicao', 'pendente_validacao')
     .order('atualizado_em', { ascending: false, nullsFirst: false })
 
@@ -29,6 +29,9 @@ export async function GET() {
     categoria: r.categoria,
     coluna: r.coluna,
     motivo: r.motivo,
+    secao: r.group_name ?? null,
+    // Sem texto anterior = observação criada agora; com texto anterior = edição de uma existente.
+    tipo: r.parecer_anterior == null ? 'nova' : 'editada',
     autor: nameMap[(r.atualizado_por ?? r.criado_por) as string] ?? null,
     quando: r.atualizado_em ?? r.created_at,
   })))
