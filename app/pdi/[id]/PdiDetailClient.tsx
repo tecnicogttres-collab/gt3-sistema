@@ -511,10 +511,11 @@ function ScoreCells({ scores, color, editable, onChange }: {
   )
 }
 
-function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFirst, isDbPdi, propComps, onCompsUpdated }: {
+function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onUpdateOthers, onDelete, isFirst, isDbPdi, propComps, onCompsUpdated }: {
   ciclo: Ciclo; pdi: PdiColaborador; papel: string
   colaboradorId: string | null
   onUpdate: (updated: Ciclo) => void
+  onUpdateOthers: (patches: Array<{ id: string; status: 'ativo' | 'arquivado'; arquivado_em: string | null }>) => void
   onDelete: (id: string) => void
   isFirst: boolean
   isDbPdi?: boolean
@@ -660,7 +661,20 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onDelete, isFir
         }),
       })
       if (!res.ok) throw new Error()
-      onUpdate({ ...ciclo, data_inicio: tempInicio || null, data_fim: tempFim || null })
+      const body = await res.json() as {
+        status: 'ativo' | 'arquivado'; arquivado_em: string | null
+        outros_fechados?: Array<{ id: string; arquivado_em: string }>
+      }
+      onUpdate({
+        ...ciclo,
+        data_inicio: tempInicio || null,
+        data_fim: tempFim || null,
+        status: body.status,
+        arquivado_em: body.arquivado_em,
+      })
+      if (body.outros_fechados?.length) {
+        onUpdateOthers(body.outros_fechados.map(o => ({ id: o.id, status: 'arquivado' as const, arquivado_em: o.arquivado_em })))
+      }
       setEditDatas(false)
     } catch { setErr('Erro ao salvar datas.') } finally { setSaving(null) }
   }
@@ -1089,6 +1103,15 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
     setCiclos(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
+  // Efeito colateral do backend ao reabrir um ciclo (tirar a data_fim): o ciclo que
+  // estava ativo é arquivado junto, se já tinha uma data_fim de hoje pra trás.
+  function handleUpdateOthers(patches: Array<{ id: string; status: 'ativo' | 'arquivado'; arquivado_em: string | null }>) {
+    setCiclos(prev => prev.map(c => {
+      const p = patches.find(x => x.id === c.id)
+      return p ? { ...c, status: p.status, arquivado_em: p.arquivado_em } : c
+    }))
+  }
+
   function handleDelete(id: string) {
     setCiclos(prev => {
       const remaining = prev.filter(c => c.id !== id)
@@ -1131,6 +1154,7 @@ function AvaliacoesTab({ pdi, papel, isDbPdi }: { pdi: PdiColaborador; papel: st
           papel={papel}
           colaboradorId={colaboradorId}
           onUpdate={handleUpdate}
+          onUpdateOthers={handleUpdateOthers}
           onDelete={handleDelete}
           isFirst={ciclo.numero_ciclo === 1}
           isDbPdi={isDbPdi}

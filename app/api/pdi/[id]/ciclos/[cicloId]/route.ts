@@ -32,7 +32,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     if (body.conversa_confirmada_em !== undefined) updates.conversa_confirmada_em = body.conversa_confirmada_em
     if (body.data_inicio !== undefined) updates.data_inicio = body.data_inicio ?? null
-    if (body.data_fim !== undefined) updates.data_fim = body.data_fim ?? null
+    // Tirar a data final reabre o ciclo; definir uma data de hoje pra trás arquiva —
+    // a data_fim passa a ser quem manda no status, sem precisar de um controle à parte.
+    if (body.data_fim !== undefined) {
+      const novaDataFim = (body.data_fim as string | null) ?? null
+      updates.data_fim = novaDataFim
+      const hoje = new Date().toISOString().split('T')[0]
+      if (novaDataFim === null || novaDataFim > hoje) {
+        updates.status = 'ativo'
+        updates.arquivado_em = null
+      } else {
+        updates.status = 'arquivado'
+        updates.arquivado_em = new Date().toISOString()
+      }
+    }
   }
 
   if (isColab || isGestorAdmin) {
@@ -66,12 +79,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .update(updates)
     .eq('id', cicloId)
     .eq('pdi_id', id)
-    .select('id, pdi_id, colaborador_id')
+    .select('id, pdi_id, colaborador_id, status, arquivado_em')
     .single()
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
   const colaboradorId = (data as { colaborador_id: string | null }).colaborador_id
+
+  // Reabrir este ciclo (via data_fim removida/futura) não pode deixar dois ciclos
+  // "ativo" ao mesmo tempo — arquiva automaticamente o outro, mas só se ele já
+  // tinha uma data_fim de hoje pra trás (senão não mexe, pra não fechar por engano
+  // um ciclo que ainda não tinha previsão de encerrar).
+  let outrosFechados: Array<{ id: string; arquivado_em: string }> = []
+  if (updates.status === 'ativo') {
+    const hoje = new Date().toISOString().split('T')[0]
+    const agora = new Date().toISOString()
+    const { data: outrosAtivos } = await admin
+      .from('pdi_ciclos')
+      .select('id, data_fim')
+      .eq('pdi_id', id)
+      .eq('status', 'ativo')
+      .neq('id', cicloId)
+    for (const outro of (outrosAtivos ?? []) as { id: string; data_fim: string | null }[]) {
+      if (outro.data_fim && outro.data_fim <= hoje) {
+        await admin.from('pdi_ciclos').update({ status: 'arquivado', arquivado_em: agora }).eq('id', outro.id)
+        outrosFechados.push({ id: outro.id, arquivado_em: agora })
+      }
+    }
+  }
 
   // Notifica colaborador quando gestor salva avaliação diretiva
   if (isGestorAdmin && body.avaliacao_diretiva !== undefined && colaboradorId) {
@@ -91,7 +126,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     })
   }
 
-  return Response.json(data)
+  return Response.json({ ...data, outros_fechados: outrosFechados })
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {

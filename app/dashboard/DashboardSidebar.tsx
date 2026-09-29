@@ -379,10 +379,16 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   }, [profile?.id])
 
   const todayStrLembretes = dateToStr(new Date())
-  const visibleLembreteItems = lembreteItems.filter(item => {
-    const hideUntil = adiamentos[item.id]
-    return !hideUntil || hideUntil <= todayStrLembretes
-  })
+  // Itens adiados/descartados continuam aparecendo (com "Adiado por X dias" no lugar
+  // de "Hoje"), em vez de sumir da lista até a data escolhida.
+  const visibleLembreteItems = lembreteItems
+
+  function diasAdiado(itemId: string): number | null {
+    const hideUntil = adiamentos[itemId]
+    if (!hideUntil || hideUntil <= todayStrLembretes) return null
+    const dias = Math.round((new Date(hideUntil + 'T00:00:00').getTime() - new Date(todayStrLembretes + 'T00:00:00').getTime()) / 86400000)
+    return dias > 0 ? dias : null
+  }
 
   async function persistAdiamento(lembreteId: string, mostrarAPartirDe: string) {
     if (!profile?.id) return
@@ -834,6 +840,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               ) : visibleLembreteItems.map((item, i) => {
                 const acting = lembreteActingId === item.id
                 const popoverOpen = adiarPopoverId === item.id
+                const adiadoPor = diasAdiado(item.id)
                 return (
                   <div key={item.id} style={{ padding: '7px 0', borderBottom: i < visibleLembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none' }}>
                     <button
@@ -847,8 +854,10 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                       <span style={{ fontWeight: 500, fontSize: 13, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {item.titulo}
                       </span>
-                      <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
-                        {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
+                      <span style={{ color: adiadoPor ? '#9CA3AF' : item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11, fontStyle: adiadoPor ? 'italic' : 'normal' }}>
+                        {adiadoPor
+                          ? `Adiado por ${adiadoPor} dia${adiadoPor === 1 ? '' : 's'}`
+                          : item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
                       </span>
                     </button>
 
