@@ -59,18 +59,12 @@ function Modal({ open, title, onClose, children, footer }: {
   open: boolean; title: string; onClose: () => void
   children: React.ReactNode; footer: React.ReactNode
 }) {
-  useEffect(() => {
-    if (!open) return
-    function handler(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [open, onClose])
-
   if (!open) return null
 
+  // Não fecha ao clicar fora nem com Esc — só pelo botão de fechar (×) ou pelas
+  // ações do rodapé, pra não perder o que já foi digitado com um clique sem querer.
   return (
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
       className="gt3-overlay-fade"
       style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}
     >
@@ -450,7 +444,26 @@ export default function CoisasAFazerClient() {
       // Um item por parágrafo (linha em branco entre eles)
       await navigator.clipboard.writeText(itensSelecionados.map(i => i.texto.trim()).join('\n\n'))
       showToast(itensSelecionados.length === 1 ? '1 item copiado' : `${itensSelecionados.length} itens copiados`)
+      setSelecionados(new Set())
     } catch { showToast('Erro ao copiar') }
+  }
+
+  async function finalizarSelecionados() {
+    const ativos = itensSelecionados.filter(i => i.status === 'ativo')
+    if (ativos.length === 0) return
+    try {
+      const resultados = await Promise.all(ativos.map(i =>
+        fetch(`/api/coisas-a-fazer/itens/${i.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'finalizado' }),
+        }).then(r => r.ok ? r.json() as Promise<Item> : null)
+      ))
+      const atualizados = resultados.filter((i): i is Item => i !== null)
+      setItens(prev => prev.map(i => atualizados.find(a => a.id === i.id) ?? i))
+      setSelecionados(new Set())
+      showToast(atualizados.length === 1 ? '1 item finalizado' : `${atualizados.length} itens finalizados`)
+    } catch { showToast('Erro ao finalizar itens') }
   }
 
   // ── Styles ─────────────────────────────────────────────────────────────────
@@ -584,6 +597,15 @@ export default function CoisasAFazerClient() {
           >
             📋 Copiar selecionados
           </button>
+          {canManage && itensSelecionados.some(i => i.status === 'ativo') && (
+            <button
+              onClick={() => void finalizarSelecionados()}
+              title="Marca todos os itens selecionados como finalizados"
+              style={{ border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', background: '#10B981', color: '#fff' }}
+            >
+              ✓ Finalizar selecionados
+            </button>
+          )}
           <button
             onClick={() => setSelecionados(new Set())}
             style={{ border: '1px solid rgba(255,255,255,0.4)', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', background: 'transparent', color: '#fff' }}

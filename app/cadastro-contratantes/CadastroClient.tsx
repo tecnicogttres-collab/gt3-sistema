@@ -695,10 +695,11 @@ function CompanyCard({
 
 // ── Modal wrapper ──────────────────────────────────────────────────────────
 
-function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function ModalOverlay({ children }: { children: React.ReactNode; onClose: () => void }) {
+  // Sem fechar ao clicar fora — só pelo botão "Cancelar"/"Salvar" dentro do modal,
+  // pra não perder o que já foi digitado com um clique sem querer.
   return (
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
       className="gt3-overlay-fade"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
