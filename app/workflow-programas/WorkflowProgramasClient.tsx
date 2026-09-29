@@ -825,7 +825,7 @@ export default function WorkflowProgramasClient() {
   const [emailOverride, setEmailOverride] = useState('')
 
   // banco
-  const [bancoAba, setBancoAba] = useState<'empresas' | 'relatorio'>('empresas')
+  const [bancoAba, setBancoAba] = useState<'empresas' | 'relatorio' | 'psico'>('empresas')
   const [bancoQ, setBancoQ] = useState('')
   const [bancoContratante, setBancoContratante] = useState('')
   const [bancoStatus, setBancoStatus] = useState('')
@@ -1618,6 +1618,79 @@ export default function WorkflowProgramasClient() {
     }).filter(l => l.tot + l.na + l.restr > 0).sort((a, b) => b.nao - a.nao)
   }
 
+  // Casa pelo TÍTULO, não pelo id — itens criados depois pela tela de "Itens de checklist"
+  // ganham um id aleatório (uid()), então só o título ainda diz que é psicossocial. Restrito
+  // a documento PGR — a "Avaliação Psicossocial" do PCMSO é outro exame, não entra aqui.
+  function itensPsicossociaisPgr(): ChecklistItem[] {
+    if (!catalog) return []
+    return catalog.itens.filter(i => i.titulo.toLowerCase().includes('psico') && i.documento === 'PGR')
+  }
+
+  /** Igual a `relatorioItens`, mas só para os itens de fatores de risco psicossociais do
+   *  PGR (base "NR-01" + variantes específicas por contratante, ex.: padrão SESMT Marcopolo,
+   *  Jungheinrich) — e agrupado por CONTRATANTE (Marcopolo Ana Rech, São Cristóvão, Volare...)
+   *  em vez de por empresa prestadora, que é o que o "Relatório por item" já faz.
+   *
+   *  Quando a análise tem mais de uma contratante selecionada junto (comum: a mesma
+   *  prestadora atende Marcopolo Ana Rech E São Cristóvão), o item psicossocial comum às
+   *  duas aparece só UMA vez em `itensDaAnalise` — mas cada uma delas "bateria" com ele.
+   *  Pra não contar a mesma resposta 2x (uma por contratante), cada resposta é atribuída a
+   *  só UM "dono": a primeira contratante, na ordem selecionada na análise, que realmente
+   *  tem esse item no próprio checklist. Assim a soma das colunas da tabela bate exatamente
+   *  com as ocorrências reais (soma de "Reprovação" = "Reprovações geradas" no topo; soma de
+   *  "Orientativo" = "Com orientativo" no topo — ver `psicoStats`). */
+  function relatorioPsicossocial(lista: AnaliseRow[]) {
+    if (!catalog) return []
+    const idsPsico = new Set(itensPsicossociaisPgr().map(i => i.id))
+    if (!idsPsico.size) return []
+
+    type Bucket = { ok: number; nao: number; orientativo: number; na: number; restr: number; empresasNao: string[]; empresasOrientativo: string[]; empresasOk: string[]; empresasRestr: string[] }
+    const novoBucket = (): Bucket => ({ ok: 0, nao: 0, orientativo: 0, na: 0, restr: 0, empresasNao: [], empresasOrientativo: [], empresasOk: [], empresasRestr: [] })
+    const porContratante = new Map<string, Bucket>()
+
+    lista.forEach(a => {
+      itensDaAnalise(a.dados).filter(i => idsPsico.has(i.id)).forEach(i => {
+        const r = a.dados.respostas[i.id]?.status
+        if (!r) return
+        const donoId = a.dados.contratanteIds.find(cid => catalog!.contratantes.find(c => c.id === cid)?.itens.some(l => l.itemId === i.id))
+        if (!donoId) return
+        const b = porContratante.get(donoId) ?? novoBucket()
+        if (r === 'ok') { b.ok++; b.empresasOk.push(a.empresa) }
+        // "nao" só vira Reprovação se o item for crítico — item não crítico marcado "não" é
+        // Orientativo, mesmo critério que `psicoStats` usa pros cartões do topo.
+        else if (r === 'nao' && i.critico) { b.nao++; b.empresasNao.push(a.empresa) }
+        else if (r === 'nao') { b.orientativo++; b.empresasOrientativo.push(a.empresa) }
+        else if (r === 'restricao') { b.restr++; b.empresasRestr.push(a.empresa) }
+        else b.na++
+        porContratante.set(donoId, b)
+      })
+    })
+
+    return catalog.contratantes.flatMap(c => {
+      const b = porContratante.get(c.id)
+      if (!b) return []
+      const tot = b.ok + b.nao + b.orientativo + b.restr + b.na
+      if (!tot) return []
+      return [{ c, ...b, tot }]
+    }).sort((a, b) => b.nao - a.nao)
+  }
+
+  /** Os 6 cartões de resumo do Banco de dados, recalculados só com os itens psicossociais
+   *  do PGR — em vez do status geral da análise (que soma todos os itens do checklist).
+   *  Somado diretamente das linhas de `relatorioPsicossocial` (a mesma tabela "por
+   *  contratante"), pra garantir por construção que os cartões do topo batem com a soma
+   *  das colunas da tabela — sem duas lógicas de contagem correndo em paralelo. O 6º
+   *  cartão vira "Não aplicável" nesta aba (a contagem de itens marcados N/A). */
+  function psicoStats(lista: AnaliseRow[]) {
+    const linhas = relatorioPsicossocial(lista)
+    const apr = linhas.reduce((s, l) => s + l.ok, 0)
+    const comRestricao = linhas.reduce((s, l) => s + l.restr, 0)
+    const comOrientativo = linhas.reduce((s, l) => s + l.orientativo, 0)
+    const reprovadas = linhas.reduce((s, l) => s + l.nao, 0)
+    const naoAplicavel = linhas.reduce((s, l) => s + l.na, 0)
+    return { tot: apr + comRestricao + comOrientativo + reprovadas, apr, comRestricao, comOrientativo, reprovadas, naoAplicavel }
+  }
+
   function exportarCsv() {
     const lista = bancoFiltrado
     const linhas: string[][] = [['Empresa', 'CNPJ', 'Contratante', 'Documentos', 'Data análise', 'Finalizada', 'Item', 'Documento', 'Resultado', 'Observação']]
@@ -2373,7 +2446,7 @@ export default function WorkflowProgramasClient() {
           status={bancoStatus} setStatus={setBancoStatus} de={bancoDe} setDe={setBancoDe} ate={bancoAte} setAte={setBancoAte}
           aberto={bancoAberto} setAberto={setBancoAberto} itemAberto={bancoItem} setItemAberto={setBancoItem}
           lista={bancoFiltrado} catalog={catalog} nomeC={nomeC} nomesContratantes={nomesContratantes} itensDaAnalise={itensDaAnalise}
-          statusAnalise={statusAnalise} relatorioItens={relatorioItens}
+          statusAnalise={statusAnalise} relatorioItens={relatorioItens} relatorioPsico={relatorioPsicossocial} psicoStats={psicoStats}
           onLimparFiltros={() => { setBancoQ(''); setBancoContratante(''); setBancoStatus(''); setBancoDe(''); setBancoAte('') }}
           onDelFiltro={bDelFiltro} onExportCsv={exportarCsv} onGerarRelatorio={abrirRelatorioModal} onDel={bDel} onReabrir={bReabrir}
         />
@@ -3117,8 +3190,8 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
 
 // ─── View: Banco de dados ───────────────────────────────────────────────────
 
-function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, nomeC, nomesContratantes, itensDaAnalise, statusAnalise, relatorioItens, onLimparFiltros, onDelFiltro, onExportCsv, onGerarRelatorio, onDel, onReabrir }: {
-  aba: 'empresas' | 'relatorio'; setAba: (v: 'empresas' | 'relatorio') => void
+function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, nomeC, nomesContratantes, itensDaAnalise, statusAnalise, relatorioItens, relatorioPsico, psicoStats, onLimparFiltros, onDelFiltro, onExportCsv, onGerarRelatorio, onDel, onReabrir }: {
+  aba: 'empresas' | 'relatorio' | 'psico'; setAba: (v: 'empresas' | 'relatorio' | 'psico') => void
   q: string; setQ: (v: string) => void; contratante: string; setContratante: (v: string) => void
   status: string; setStatus: (v: string) => void; de: string; setDe: (v: string) => void; ate: string; setAte: (v: string) => void
   aberto: string | null; setAberto: (v: string | null) => void; itemAberto: string | null; setItemAberto: (v: string | null) => void
@@ -3126,14 +3199,26 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
   statusAnalise: (r: AnaliseRow) => { t: string; c: 'ok' | 'no' | 'na' | 'acc' | 'default'; k: string }
   relatorioItens: (l: AnaliseRow[]) => { i: ChecklistItem; ok: number; nao: number; na: number; restr: number; tot: number; empresasNao: string[]; empresasOk: string[] }[]
+  relatorioPsico: (l: AnaliseRow[]) => { c: Contratante; ok: number; nao: number; orientativo: number; na: number; restr: number; tot: number; empresasNao: string[]; empresasOrientativo: string[]; empresasOk: string[]; empresasRestr: string[] }[]
+  psicoStats: (l: AnaliseRow[]) => { tot: number; apr: number; comRestricao: number; comOrientativo: number; reprovadas: number; naoAplicavel: number }
   onLimparFiltros: () => void; onDelFiltro: () => void; onExportCsv: () => void; onGerarRelatorio: () => void; onDel: (id: string, nome: string) => void; onReabrir: (r: AnaliseRow) => void
 }) {
-  const tot = lista.length
-  const apr = lista.filter(a => statusAnalise(a).k === 'aprovada').length
-  const comRestricao = lista.filter(a => statusAnalise(a).k === 'restricao').length
-  const comOrientativo = lista.filter(a => statusAnalise(a).k === 'orientativo').length
-  const reprovadas = lista.filter(a => statusAnalise(a).k === 'reprovada').length
-  const reprovacoesGeradas = lista.reduce((n, a) => n + itensDaAnalise(a.dados).filter(i => i.critico && a.dados.respostas[i.id]?.status === 'nao').length, 0)
+  // Na aba de Psicossociais os 6 cartões do topo passam a valer só pros itens
+  // psicossociais do PGR, em vez do status geral da análise inteira — e o 6º cartão
+  // (sextoLabel/sextoValor) muda de "Reprovações geradas" pra "Não aplicável", já que
+  // aqui "reprovadas" já é por ocorrência (bate com a soma da tabela por contratante).
+  const psico = aba === 'psico' ? psicoStats(lista) : null
+  const { tot, apr, comRestricao, comOrientativo, reprovadas, sextoLabel, sextoValor } = psico
+    ? { ...psico, sextoLabel: 'Não aplicável', sextoValor: psico.naoAplicavel }
+    : {
+        tot: lista.length,
+        apr: lista.filter(a => statusAnalise(a).k === 'aprovada').length,
+        comRestricao: lista.filter(a => statusAnalise(a).k === 'restricao').length,
+        comOrientativo: lista.filter(a => statusAnalise(a).k === 'orientativo').length,
+        reprovadas: lista.filter(a => statusAnalise(a).k === 'reprovada').length,
+        sextoLabel: 'Reprovações geradas',
+        sextoValor: lista.reduce((n, a) => n + itensDaAnalise(a.dados).filter(i => i.critico && a.dados.respostas[i.id]?.status === 'nao').length, 0),
+      }
 
   return (
     <div>
@@ -3142,6 +3227,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
         <div style={{ display: 'flex', gap: 8 }}>
           <Btn variant={aba === 'empresas' ? 'pri' : 'default'} onClick={() => setAba('empresas')}>🏢 Empresas</Btn>
           <Btn variant={aba === 'relatorio' ? 'pri' : 'default'} onClick={() => setAba('relatorio')}>📊 Relatório por item</Btn>
+          <Btn variant={aba === 'psico' ? 'pri' : 'default'} onClick={() => setAba('psico')}>🧠 Psicossociais por contratante</Btn>
         </div>
       </div>
 
@@ -3174,12 +3260,12 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {[
-          { l: 'Análises finalizadas', v: tot, c: TX },
+          { l: aba === 'psico' ? 'Itens psicossociais avaliados' : 'Análises finalizadas', v: tot, c: TX },
           { l: 'Aprovadas sem apontamento', v: apr, c: OK },
           { l: 'Aprovadas com restrição', v: comRestricao, c: AC },
           { l: 'Com orientativo', v: comOrientativo, c: P },
           { l: 'Reprovadas', v: reprovadas, c: NO },
-          { l: 'Reprovações geradas', v: reprovacoesGeradas, c: TX },
+          { l: sextoLabel, v: sextoValor, c: TX },
         ].map(s => (
           <div key={s.l} style={{ flex: 1, minWidth: 130, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: '12px 14px' }}>
             <b style={{ display: 'block', fontSize: 22, lineHeight: 1.2, color: s.c }}>{s.v}</b>
@@ -3223,6 +3309,58 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                                 <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Reprovações ({l.nao})</label>
                                   {l.empresasNao.length ? l.empresasNao.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
+                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Conformes ({l.ok})</label>
+                                  {l.empresasOk.length ? l.empresasOk.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
+                              </div>
+                            </td></tr>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )
+        })()
+      ) : aba === 'psico' ? (
+        (() => {
+          const linhas = relatorioPsico(lista)
+          if (!linhas.length) return <Empty title="Sem dados de psicossociais" sub="Nenhuma análise finalizada avaliou o item de fatores de risco psicossociais ainda." />
+          return (
+            <Card>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead><tr style={{ background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>{['Contratante', 'Conforme', 'Reprovação', 'Orientativo', 'Restrição', 'N/A', 'Taxa de conformidade'].map(h => (
+                    <th key={h} style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.9px', color: 'var(--text-mute)', textAlign: 'left', padding: '9px 10px', borderBottom: '1px solid var(--border-soft)' }}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {linhas.map(l => {
+                      const p = l.tot ? Math.round(l.ok / l.tot * 100) : 0
+                      const open = itemAberto === l.c.id
+                      return (
+                        <Fragment key={l.c.id}>
+                          <tr className="gt3-table-row-hover" style={{ cursor: 'pointer' }} onClick={() => setItemAberto(open ? null : l.c.id)}>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><b>{nomeC(l.c)}</b></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="ok">{l.ok}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="no">{l.nao}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag>{l.orientativo}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="acc">{l.restr}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="na">{l.na}</Tag></td>
+                            <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>
+                              <div style={{ height: 6, background: NOS, borderRadius: 99, minWidth: 90, overflow: 'hidden' }}><div style={{ height: '100%', width: p + '%', background: OK }} /></div>
+                              <span style={{ color: MU, fontSize: 11.5 }}>{p}% de {l.tot} avaliações</span>
+                            </td>
+                          </tr>
+                          {open && (
+                            <tr><td colSpan={7} style={{ padding: '8px 4px', borderBottom: `1px solid ${LINE}` }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
+                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Reprovações ({l.nao})</label>
+                                  {l.empresasNao.length ? l.empresasNao.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
+                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Orientativos ({l.orientativo})</label>
+                                  {l.empresasOrientativo.length ? l.empresasOrientativo.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
+                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Com restrição ({l.restr})</label>
+                                  {l.empresasRestr.length ? l.empresasRestr.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
                                 <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Conformes ({l.ok})</label>
                                   {l.empresasOk.length ? l.empresasOk.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
                               </div>
