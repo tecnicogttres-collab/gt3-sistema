@@ -398,6 +398,8 @@ export default function DesignacaoReprovadosClient() {
 
   // ── Formulário inline ──
   const [formOpen, setFormOpen]           = useState(false)
+  // Rascunho: ao trocar de aba com a designação em preenchimento, o formulário some mas os campos ficam guardados.
+  const [rascunho, setRascunho]           = useState(false)
   const [fEmpresa, setFEmpresa]           = useState('')
   const [fData, setFData]                 = useState('')
   const [fSetores, setFSetores]           = useState<string[]>([])
@@ -696,17 +698,30 @@ export default function DesignacaoReprovadosClient() {
 
   function abrirForm() {
     setQtdSessao(0)
+    setRascunho(false)
     setFEmpresa(''); setFData(hoje())
     limparCamposItem()
     setFormOpen(true)
     setTimeout(() => empresaInputRef.current?.focus(), 120)
   }
-  function fecharForm() { setFormOpen(false) }
+  function fecharForm() { setFormOpen(false); setRascunho(false) }
+  function retomarDesignacao() { setRascunho(false); setFormOpen(true) }
+
+  // Trocar de aba com o formulário aberto: a aba muda na hora e o que foi digitado vira rascunho.
+  useEffect(() => {
+    if (!formOpen) return
+    const temConteudo = fEmpresa.trim() || fSetores.length || fDocumentos.length || fResponsaveis.length || fMotivo.trim()
+    setFormOpen(false)
+    if (temConteudo) setRascunho(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   /** Botão "＋ Nova designação" do cabeçalho — disponível em qualquer aba. O formulário
    *  aparece por cima do conteúdo da aba atual, não precisa trocar de aba pra abrir. */
   function abrirNovaDesignacao() {
-    if (!formOpen) abrirForm()
+    if (formOpen) return
+    if (rascunho && !confirm('Há uma designação em rascunho. Iniciar uma nova descarta o rascunho. Continuar?')) return
+    abrirForm()
   }
 
   function toggleFormSetor(id: string) {
@@ -1253,7 +1268,12 @@ export default function DesignacaoReprovadosClient() {
             <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Verificação diária do Portal GT3 · encaminhamento ao responsável</div>
           </div>
         </div>
-        <button onClick={abrirNovaDesignacao} style={btnPrimary}>＋ Nova designação</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {rascunho && !formOpen && (
+            <button onClick={retomarDesignacao} style={{ ...btnAccent, fontWeight: 700 }}>📝 Retomar designação{fEmpresa.trim() ? ` — ${fEmpresa.trim()}` : ''}</button>
+          )}
+          <button onClick={abrirNovaDesignacao} style={btnPrimary}>＋ Nova designação</button>
+        </div>
       </div>
 
       {/* Tabs */}
