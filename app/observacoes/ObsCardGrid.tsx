@@ -203,6 +203,7 @@ function ObsCard({
 
   return (
     <div
+      id={card._id ? `obs-card-${card._id}` : undefined}
       role={editingInline ? undefined : 'button'}
       tabIndex={editingInline ? undefined : 0}
       onClick={editingInline ? undefined : handleCardClick}

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../lib/supabase'
 import { nthWeekdayOfMonth } from '../lib/lembretes'
+import { urgenciaDesig } from '../lib/desig-urgencia'
 import { useUser } from '../components/UserContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ type PdiConversaColaborador = {
 type ObsPendente = {
   id: string
   categoria: string
+  subtab?: string
   coluna: string
   motivo: string
   secao?: string | null
@@ -76,6 +78,8 @@ type DesigPendente = {
   id: string
   empresa: string
   data_verificacao: string
+  /** true = ainda falta a MINHA ciência; false = já dei ciência e o item segue em andamento */
+  aguardando_ciencia?: boolean
   setores: string[]
 }
 
@@ -390,13 +394,14 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     return dias > 0 ? dias : null
   }
 
-  async function persistAdiamento(lembreteId: string, mostrarAPartirDe: string) {
+  // adiado=true também move o lembrete no calendário do módulo; "Descartar" só some do Dashboard.
+  async function persistAdiamento(lembreteId: string, mostrarAPartirDe: string, adiado: boolean) {
     if (!profile?.id) return
     setAdiamentos(prev => ({ ...prev, [lembreteId]: mostrarAPartirDe }))
     const supabase = createClient()
     const { error } = await supabase
       .from('lembretes_adiamentos')
-      .upsert({ lembrete_id: lembreteId, usuario_id: profile.id, mostrar_a_partir_de: mostrarAPartirDe }, { onConflict: 'lembrete_id,usuario_id' })
+      .upsert({ lembrete_id: lembreteId, usuario_id: profile.id, mostrar_a_partir_de: mostrarAPartirDe, adiado }, { onConflict: 'lembrete_id,usuario_id' })
     if (error) console.error('Erro ao adiar/descartar lembrete:', error.message)
   }
 
@@ -430,7 +435,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     if (lembreteActingId) return
     setLembreteActingId(item.id)
     try {
-      await persistAdiamento(item.id, addDaysStr(item.dataOcorrencia, 1))
+      await persistAdiamento(item.id, addDaysStr(item.dataOcorrencia, 1), false)
     } finally {
       setLembreteActingId(null)
     }
@@ -441,7 +446,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     setLembreteActingId(item.id)
     setAdiarPopoverId(null)
     try {
-      await persistAdiamento(item.id, dataAlvo)
+      await persistAdiamento(item.id, dataAlvo, true)
     } finally {
       setLembreteActingId(null)
     }
@@ -551,7 +556,8 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   }, [])
 
   async function darCienciaGrupoDesig(ids: string[]) {
-    setDesigPendentes(prev => prev.filter(d => !ids.includes(d.id)))
+    // Ciência coloca o item em andamento: continua aqui, agora como "em andamento".
+    setDesigPendentes(prev => prev.map(d => ids.includes(d.id) ? { ...d, aguardando_ciencia: false } : d))
     await Promise.all(ids.map(id => fetch(`/api/designacao-reprovados/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ciencia' }),
     })))
@@ -667,7 +673,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             {obsPendentes.map((o, i) => (
               <Link
                 key={o.id}
-                href={`/observacoes?cat=${encodeURIComponent(o.categoria)}`}
+                href={`/observacoes?cat=${encodeURIComponent(o.categoria)}${o.subtab ? `&subtab=${encodeURIComponent(o.subtab)}` : ''}&obs=${encodeURIComponent(o.id)}`}
                 title={`${o.tipo === 'nova' ? 'Nova observação' : 'Observação editada'} · ${o.categoria} · ${o.coluna}${o.secao ? ` › ${o.secao}` : ''}${o.autor ? ` · ${o.autor}` : ''}`}
                 style={{
                   display: 'block', textDecoration: 'none',
@@ -956,12 +962,12 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           </div>
         )}
 
-        {/* ── Block 4b: Designação de Reprovados — aguardando minha ciência ── */}
+        {/* ── Block 4b: Designação de Reprovados — aguardando minha ciência / em andamento ── */}
         {desigPendentes.length > 0 && (
           <div style={{
-            background: '#EFF6FF',
+            background: '#fff',
             borderRadius: 8,
-            borderLeft: '4px solid #2A4F96',
+            borderLeft: `4px solid ${urgenciaDesig(desigPendentes.reduce((min, d) => d.data_verificacao < min ? d.data_verificacao : min, desigPendentes[0].data_verificacao)).fg}`,
             padding: '12px 14px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
           }}>
@@ -986,29 +992,36 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               return grupos.map((g, i) => {
                 const [y, m, dd] = g.data.split('-')
                 const setoresUnicos = [...new Set(g.itens.flatMap(x => x.setores))]
+                const aguardando = g.itens.some(x => x.aguardando_ciencia !== false)
+                // Cor da linha conforme os dias desde a designação: azul (até o 1º dia), laranja fraco (2º), vermelho (3º em diante).
+                const urg = urgenciaDesig(g.data)
                 return (
                   <div key={g.key} style={{
-                    padding: '7px 0', borderBottom: i < grupos.length - 1 ? '1px solid #DBEAFE' : 'none',
+                    marginTop: i === 0 ? 0 : 6, padding: '7px 9px',
+                    background: urg.bg, border: `1px solid ${urg.border}`, borderLeft: `4px solid ${urg.fg}`, borderRadius: 6,
                     display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between',
                   }}>
                     <Link href="/designacao-reprovados?caixa=1" style={{ textDecoration: 'none', minWidth: 0, flex: 1 }}>
-                      <span style={{ fontWeight: 500, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
+                      <span style={{ fontWeight: 600, color: urg.fg, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
                         {g.empresa}
                       </span>
                       <span style={{ color: '#6B7280', fontSize: 11 }}>
                         {dd}/{m}/{y.slice(2)} · {setoresUnicos.join(', ')}
                       </span>
+                      <span style={{ display: 'block', color: urg.fg, fontSize: 10.5, fontWeight: 700 }}>
+                        {aguardando ? '⏳ Aguardando ciência' : '▶ Em andamento'} · {urg.label}
+                      </span>
                     </Link>
-                    <button
-                      onClick={() => void darCienciaGrupoDesig(g.itens.map(x => x.id))}
-                      title="Dar ciência e tirar daqui"
+                    {aguardando && <button
+                      onClick={() => void darCienciaGrupoDesig(g.itens.filter(x => x.aguardando_ciencia !== false).map(x => x.id))}
+                      title="Dar ciência — o item passa para em andamento"
                       style={{
                         flexShrink: 0, fontSize: 11, fontWeight: 600, color: '#2A4F96', background: '#fff',
                         border: '1px solid #C7D2E8', borderRadius: 6, padding: '4px 9px', cursor: 'pointer',
                       }}
                     >
                       ✓ Ciência
-                    </button>
+                    </button>}
                   </div>
                 )
               })

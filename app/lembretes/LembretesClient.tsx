@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import { PERIODS, type Period, findMonthOccurrence, currentMonthOccurrence, isLembreteOverdue } from '../lib/lembretes'
+import { PERIODS, type Period, findMonthOccurrence, findMonthOccurrences, currentMonthOccurrence, isLembreteOverdue } from '../lib/lembretes'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -118,6 +118,9 @@ export default function LembretesClient() {
   const [calHistorico, setCalHistorico] = useState<HistoricoRow[]>([])
   const [calHistoricoLoading, setCalHistoricoLoading] = useState(false)
   const [users, setUsers] = useState<UserOption[]>([])
+  // Data para a qual o usuário adiou cada lembrete (Adiar no Dashboard ou no pop-up) — o lembrete
+  // aparece nessa data no calendário e nas listas, em vez da ocorrência original.
+  const [adiadosMap, setAdiadosMap] = useState<Record<string, string>>({})
   const [userSearch, setUserSearch] = useState('')
 
   // ── Lembretes de outros (gestor/admin) ─────────────────────────────────────
@@ -148,14 +151,27 @@ export default function LembretesClient() {
   )
 
   function isOverdue(r: Lembrete) {
-    return isLembreteOverdue(r, isDone(r))
+    return isLembreteOverdue(r, isDone(r), new Date(), adiadosMap[r.id])
+  }
+
+  // Datas do lembrete no mês atual (já com o adiamento aplicado), em ordem.
+  function datasDoMes(r: Lembrete): string[] {
+    const n = new Date()
+    return findMonthOccurrences(r, n.getFullYear(), n.getMonth(), adiadosMap[r.id]).sort()
+  }
+
+  // Ocorrência que representa o lembrete hoje: a atrasada mais antiga, senão a próxima.
+  function ocorrenciaAtual(r: Lembrete): Date | null {
+    const dates = datasDoMes(r)
+    if (dates.length === 0) return null
+    const hoje = fmtDateStr(todayLocal())
+    const ds = dates[0] < hoje ? dates[0] : (dates.find(d => d >= hoje) ?? dates[0])
+    return parseDate(ds)
   }
 
   function isToday(r: Lembrete) {
     if (isDone(r)) return false
-    const occ = currentMonthOccurrence(r)
-    if (!occ) return false
-    return fmtDateStr(occ) === fmtDateStr(todayLocal())
+    return datasDoMes(r).includes(fmtDateStr(todayLocal()))
   }
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -170,10 +186,16 @@ export default function LembretesClient() {
         .eq('mes_referencia', mesRef)
         .order('created_at', { ascending: false })
       const histQuery = !isGestorOrAdmin && profile?.id ? baseQuery.eq('usuario_id', profile.id) : baseQuery
-      const [lembretesRes, { data: histData }] = await Promise.all([
+      const [lembretesRes, { data: histData }, adiRes] = await Promise.all([
         fetch('/api/lembretes'),
         histQuery,
+        profile?.id
+          ? supabase.from('lembretes_adiamentos').select('lembrete_id, mostrar_a_partir_de').eq('usuario_id', profile.id).eq('adiado', true)
+          : Promise.resolve({ data: null }),
       ])
+      const adiMap: Record<string, string> = {}
+      for (const row of (adiRes.data ?? []) as { lembrete_id: string; mostrar_a_partir_de: string }[]) adiMap[row.lembrete_id] = row.mostrar_a_partir_de
+      setAdiadosMap(adiMap)
       if (lembretesRes.ok) setLembretes(await lembretesRes.json())
       const hist = histData ?? []
       setHistorico(hist)
@@ -276,8 +298,8 @@ export default function LembretesClient() {
   const now = useMemo(() => new Date(), [])
 
   const currentMonthLembretes = useMemo(() =>
-    lembretes.filter(r => findMonthOccurrence(r, now.getFullYear(), now.getMonth()) !== null),
-    [lembretes, now]
+    lembretes.filter(r => findMonthOccurrences(r, now.getFullYear(), now.getMonth(), adiadosMap[r.id]).length > 0),
+    [lembretes, now, adiadosMap]
   )
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -303,8 +325,8 @@ export default function LembretesClient() {
       const at = isToday(a),   bt = isToday(b)
       if (ao && !bo) return -1; if (!ao && bo) return 1
       if (at && !bt) return -1; if (!at && bt) return 1
-      const aOcc = currentMonthOccurrence(a)
-      const bOcc = currentMonthOccurrence(b)
+      const aOcc = ocorrenciaAtual(a)
+      const bOcc = ocorrenciaAtual(b)
       return (aOcc?.getTime() ?? 0) - (bOcc?.getTime() ?? 0)
     })
 
@@ -486,15 +508,14 @@ export default function LembretesClient() {
   const calDayMap = useMemo(() => {
     const map = new Map<string, Lembrete[]>()
     for (const r of lembretes) {
-      const ds = findMonthOccurrence(r, calYear, calMonth)
-      if (ds) {
+      for (const ds of findMonthOccurrences(r, calYear, calMonth, adiadosMap[r.id])) {
         const arr = map.get(ds) ?? []
         arr.push(r)
         map.set(ds, arr)
       }
     }
     return map
-  }, [lembretes, calYear, calMonth])
+  }, [lembretes, calYear, calMonth, adiadosMap])
 
   const calFirstDay  = new Date(calYear, calMonth, 1).getDay()
   const calTotalDays = new Date(calYear, calMonth + 1, 0).getDate()
@@ -528,7 +549,7 @@ export default function LembretesClient() {
     const done     = isDone(r)
     const overdue  = isOverdue(r)
     const todayFlag = isToday(r)
-    const occDate  = currentMonthOccurrence(r)
+    const occDate  = ocorrenciaAtual(r)
     const occStr   = occDate ? fmtDateStr(occDate) : r.data_inicio
     const confirmando = confirmandoIds.has(r.id)
 

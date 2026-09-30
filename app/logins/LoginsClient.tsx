@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useUser } from '../components/UserContext'
 import { useModules } from '../components/ModulesContext'
 import * as allPdis from '../../data/pdis/index'
@@ -26,6 +26,7 @@ export type UserRow = {
   created_at: string
   aniversario_dia: number | null
   aniversario_mes: number | null
+  assinatura_email?: string
 }
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
@@ -90,6 +91,8 @@ export default function LoginsClient() {
   const [editUser, setEditUser] = useState<UserRow | null>(null)
   const [editForm, setEditForm] = useState({ nome: '', usuario: '', papel: '', pdi_slug: '', aniversario_dia: '', aniversario_mes: '' })
   const [editModulos, setEditModulos] = useState<string[] | null>(null)
+  // Assinatura de e-mail (HTML) do usuário em edição — editor rico, preenchido manualmente.
+  const assinaturaRef = useRef<HTMLDivElement | null>(null)
   const [editModulosDashboard, setEditModulosDashboard] = useState<string[] | null>(null)
   const [editLoading, setEditLoading] = useState(false)
   const [editMsg, setEditMsg] = useState('')
@@ -204,6 +207,11 @@ export default function LoginsClient() {
     if (!editUser) return
     setEditLoading(true)
     setEditMsg('')
+    const editor = assinaturaRef.current
+    // Editor sem texto nem imagem (só <br> deixado pelo navegador) conta como assinatura vazia.
+    const assinaturaAtual = editor
+      ? (!editor.textContent?.trim() && !editor.querySelector('img') ? '' : editor.innerHTML)
+      : (editUser.assinatura_email ?? '')
 
     const res = await fetch(`/api/admin/users/${editUser.id}`, {
       method: 'PATCH',
@@ -217,6 +225,8 @@ export default function LoginsClient() {
         modulos_dashboard: editModulosDashboard,
         aniversario_dia: editForm.aniversario_dia ? Number(editForm.aniversario_dia) : null,
         aniversario_mes: editForm.aniversario_mes ? Number(editForm.aniversario_mes) : null,
+        // Só envia se mudou, para não interferir no restante do cadastro.
+        ...(assinaturaAtual !== (editUser.assinatura_email ?? '') ? { assinatura_email: assinaturaAtual } : {}),
       }),
     })
 
@@ -233,6 +243,7 @@ export default function LoginsClient() {
           ? {
               ...u, nome: editForm.nome, usuario: editForm.usuario, papel: editForm.papel, pdi_slug: editForm.pdi_slug || null, modulos_permitidos: editModulos, modulos_dashboard: editModulosDashboard,
               aniversario_dia: editForm.aniversario_dia ? Number(editForm.aniversario_dia) : null, aniversario_mes: editForm.aniversario_mes ? Number(editForm.aniversario_mes) : null,
+              assinatura_email: assinaturaAtual,
             }
           : u
       )
@@ -868,6 +879,26 @@ export default function LoginsClient() {
                     <option value="">Mês</option>
                     {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                   </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 5 }}>Assinatura de e-mail</label>
+                <div
+                  key={editUser.id}
+                  ref={el => {
+                    // Preenche uma vez por usuário aberto (editor não controlado, preserva a formatação colada).
+                    if (el && el.dataset.init !== editUser.id) { el.innerHTML = editUser.assinatura_email ?? ''; el.dataset.init = editUser.id }
+                    assinaturaRef.current = el
+                  }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  role="textbox"
+                  aria-label="Assinatura de e-mail"
+                  style={{ minHeight: 96, maxHeight: 220, overflowY: 'auto', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1D5DB', fontSize: 14, color: '#1E293B', outline: 'none', boxSizing: 'border-box', backgroundColor: '#fff' }}
+                />
+                <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 5, lineHeight: 1.4 }}>
+                  Digite ou cole a assinatura (com formatação e imagem, se quiser). Ela vai automaticamente ao fim de todo .eml e de todo &quot;Abrir no Outlook&quot; gerado por este usuário, em qualquer módulo.
                 </div>
               </div>
 

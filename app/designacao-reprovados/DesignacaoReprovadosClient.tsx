@@ -18,6 +18,9 @@ type EmailConfig = {
   historico_dias: number
 }
 
+import { urgenciaDesig } from '../lib/desig-urgencia'
+import { baixarEml as emlBaixar, abrirNoOutlook } from '../lib/email-envio'
+
 type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido' | 'excluido'
 
 /** Itens finalizados (resolvido ou doc(s) excluído) saem de Ativas e vão pro Histórico */
@@ -134,11 +137,8 @@ function montaComVariavelDestacada(template: string, varName: string, valorTexto
   return template.split(marcador).map(escapeHtml).join(`<b>${escapeHtml(valorTexto)}</b>`).replace(/\n/g, '<br>')
 }
 
-/** "E-mail" da empresa aceita vários endereços separados por ";" — mailto: e o cabeçalho
- *  To: do .eml exigem vírgula, então convertemos aqui na hora de enviar. */
-function emailsParaEnvio(destino: string): string {
-  return destino.split(';').map(e => e.trim()).filter(Boolean).join(', ')
-}
+/** Todo e-mail gerado por este módulo sai com o cadastro em cópia. */
+const EMAIL_CC = 'cadastro@gttres.com.br'
 
 const CONFIG_PADRAO: EmailConfig = {
   id: 'default',
@@ -187,6 +187,11 @@ function buildDesignacaoEmail(
     const docs = documentos.filter(d => d.setor_id === s.id && docIds.includes(d.id))
     if (!docs.length) return ''
     const itens = docs.map(d => `<li>${escapeHtml(d.nome)}</li>`).join('')
+    // Setor cujo nome já está nos próprios documentos (ex.: "PGR PCMSO LTCAT" → "PGR - ...", "PCMSO - ...")
+    // não repete o título: a saudação já cita o setor e a lista fala por si.
+    const palavras = s.nome.split(/[\s/&,+-]+/).map(p => p.trim().toUpperCase()).filter(p => p.length >= 3)
+    const nomeJaNosDocs = palavras.length > 1 && docs.every(d => palavras.some(p => d.nome.toUpperCase().includes(p)))
+    if (nomeJaNosDocs) return `<ul style="margin:10px 0 0 18px;padding:0">${itens}</ul>`
     return `<div style="font-weight:700;text-decoration:underline;margin-top:12px">${escapeHtml(s.nome)}</div><ul style="margin:6px 0 0 18px;padding:0">${itens}</ul>`
   }).join('')
 
@@ -508,21 +513,16 @@ export default function DesignacaoReprovadosClient() {
     return empresas.find(e => e.nome.trim().toLowerCase() === alvo)?.email ?? ''
   }
 
-  /** Baixa um .eml já endereçado (To:) e com o assunto padrão configurado — abre pronto
-   *  para envio em qualquer cliente de e-mail (Outlook, etc.), sem precisar copiar/colar. */
-  function baixarEml(assunto: string, corpoHtml: string, destinoEmail: string, empresaNome: string) {
-    const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)))
-    const html = `<html><head><meta charset="utf-8"></head><body>${corpoHtml}</body></html>`
-    const linhas = ['Subject: =?UTF-8?B?' + b64(assunto) + '?=']
-    if (destinoEmail) linhas.unshift('To: ' + emailsParaEnvio(destinoEmail))
-    linhas.push('X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', html)
-    const eml = linhas.join('\r\n')
-    const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
-    const el = document.createElement('a')
-    el.href = url
-    el.download = ('GT3 - ' + (empresaNome || 'empresa')).replace(/[\\/:*?"<>|]/g, '') + '.eml'
-    el.click(); URL.revokeObjectURL(url)
+  /** .eml e "Abrir no Outlook" saem pelo módulo compartilhado (app/lib/email-envio.ts): já vão
+   *  com o Cc do cadastro e a assinatura do usuário logado. Sem e-mail da empresa cadastrado, Para fica em branco. */
+  async function baixarEml(assunto: string, corpoHtml: string, destinoEmail: string, empresaNome: string) {
+    await emlBaixar({ to: destinoEmail, cc: EMAIL_CC, assunto, corpoHtml, nomeArquivo: 'GT3 - ' + (empresaNome || 'empresa') })
     showToast(destinoEmail ? 'Arquivo .eml gerado, já endereçado.' : 'Arquivo .eml gerado — e-mail da empresa não cadastrado, To: em branco.')
+  }
+
+  async function abrirNoEmail(assunto: string, corpoHtml: string, destinoEmail: string) {
+    if (!destinoEmail) showToast('E-mail da empresa não cadastrado — Para em branco.')
+    await abrirNoOutlook({ to: destinoEmail, cc: EMAIL_CC, assunto, corpoHtml })
   }
 
   function sitTag(id: string | null) {
@@ -756,7 +756,7 @@ export default function DesignacaoReprovadosClient() {
     if (res.ok) {
       const updated: Designacao = await res.json()
       setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
-      showToast('Ciência registrada — o aviso sai do dashboard.')
+      showToast('Ciência registrada — o item passa para em andamento.')
     } else {
       const e = await res.json().catch(() => ({}))
       showToast((e as { error?: string }).error ?? 'Erro ao registrar ciência.')
@@ -1037,9 +1037,11 @@ export default function DesignacaoReprovadosClient() {
     const jaCiente = d.ciencia_por.includes(userId)
     const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, d.motivo, setores, documentos, emailConfig)
     const destinoEmail = getEmpresaEmail(d.empresa)
+    // Itens ativos ganham cor de urgência conforme os dias desde a designação (azul → laranja → vermelho).
+    const urg = finalizada(d.tratativa) ? null : urgenciaDesig(d.data_verificacao)
     return (
       <div key={d.id} style={{
-        background: SURF, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`,
+        background: urg ? urg.bg : SURF, border: `1px solid ${urg ? urg.border : BORDER}`, borderLeft: `4px solid ${urg ? urg.fg : TRAT_COLORS[d.tratativa]}`,
         borderRadius: RADIUS, padding: '16px 18px', marginBottom: 12, boxShadow: SHADOW,
         opacity: finalizada(d.tratativa) ? .78 : 1,
       }}>
@@ -1063,6 +1065,7 @@ export default function DesignacaoReprovadosClient() {
                 🔁 Empresa retornou
               </span>
             )}
+            {urg && <span style={{ fontSize: 11, fontWeight: 700, color: urg.fg, background: '#fff', border: `1px solid ${urg.border}`, borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>⏱ {urg.label}</span>}
             <TratativaBadge t={d.tratativa} />
             <button onClick={() => excluirDesignacao(d.id)} title="Excluir designação" style={btnDangerIcon}>🗑</button>
           </div>
@@ -1079,7 +1082,7 @@ export default function DesignacaoReprovadosClient() {
             <div style={{ padding: '7px 14px', background: '#F6F9FC', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY, borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <span>✉️ E-mail pronto</span>
               <span style={{ marginLeft: 'auto', fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: destinoEmail ? '#16A34A' : '#B45309' }}>
-                Para: {destinoEmail || 'não cadastrado'}
+                Para: {destinoEmail || 'não cadastrado'} · Cc: {EMAIL_CC}
               </span>
             </div>
             <div
@@ -1100,7 +1103,10 @@ export default function DesignacaoReprovadosClient() {
               dangerouslySetInnerHTML={{ __html: email.corpo }} />
             <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 11, color: MUTED }}>🖱 clique no assunto ou no e-mail para copiar</span>
-              <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={sm(btnGhost)}>⬇ Baixar .eml</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={{ ...sm(btnAccent), fontWeight: 700, boxShadow: '0 2px 6px rgba(209,174,110,.45)' }}>⬇ Baixe o e-mail pronto</button>
+                <button onClick={() => abrirNoEmail(email.assunto, email.corpo, destinoEmail)} style={sm(btnGhost)}>↗ Abrir no Outlook</button>
+              </div>
             </div>
           </div>
         )}
@@ -1137,18 +1143,19 @@ export default function DesignacaoReprovadosClient() {
   function renderGrupoAcordeao(grupo: GrupoDiaEmpresa, opts: { aberto: string | null; setAberto: (k: string | null) => void; mostrarResponsaveis: boolean }) {
     const isOpen = opts.aberto === grupo.key
     const r = resumoGrupo(grupo.itens)
+    const urg = grupo.itens.some(d => !finalizada(d.tratativa)) ? urgenciaDesig(grupo.data) : null
     return (
-      <div key={grupo.key} className="gt3-fade-up" style={{ marginBottom: 14, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
+      <div key={grupo.key} className="gt3-fade-up" style={{ marginBottom: 14, border: `1px solid ${urg ? urg.border : BORDER}`, borderLeft: urg ? `5px solid ${urg.fg}` : undefined, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
         <div onClick={() => opts.setAberto(isOpen ? null : grupo.key)}
           onMouseEnter={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = '#F0F4FA' }}
-          onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = '#FAFCFE' }}
+          onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = urg ? urg.bg : '#FAFCFE' }}
           style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer',
-            background: isOpen ? PRIMARY_SOFT : '#FAFCFE', flexWrap: 'wrap', transition: 'background-color 180ms var(--ease-gt3)',
+            background: isOpen ? (urg ? urg.bg : PRIMARY_SOFT) : (urg ? urg.bg : '#FAFCFE'), flexWrap: 'wrap', transition: 'background-color 180ms var(--ease-gt3)',
           }}>
           <span style={{ fontSize: 11, transition: 'transform 220ms var(--ease-gt3)', transform: isOpen ? 'rotate(90deg)' : 'none', color: MUTED }}>▶</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: PRIMARY, color: '#fff', borderRadius: 999, padding: '5px 13px 5px 11px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-            📅 {fmtData(grupo.data)}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: urg ? urg.fg : PRIMARY, color: '#fff', borderRadius: 999, padding: '5px 13px 5px 11px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            📅 {fmtData(grupo.data)}{urg ? ` · ${urg.label}` : ''}
           </span>
           <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>🏢 {grupo.empresa}</span>
           <span style={{ fontSize: 11, color: MUTED }}>{grupo.itens.length} item(ns)</span>
@@ -1434,7 +1441,7 @@ export default function DesignacaoReprovadosClient() {
                 background: 'linear-gradient(135deg,#FEF4F3,#FDEDEC)', border: '1px solid #F7CDCA', borderLeft: '4px solid #C53030',
                 color: '#8E2C27', borderRadius: RADIUS, padding: '12px 16px', fontSize: 12.5, marginBottom: 18, display: 'flex', alignItems: 'center', gap: 10,
               }}>
-                ⚠️ <span><b>{minhaCaixaPendentes}</b> item(ns) aguardando sua ciência. O aviso permanece no dashboard até você dar ciência aqui dentro.</span>
+                ⚠️ <span><b>{minhaCaixaPendentes}</b> item(ns) aguardando sua ciência. Ao dar ciência, o item passa para em andamento e continua no dashboard.</span>
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>

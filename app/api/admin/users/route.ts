@@ -21,6 +21,9 @@ export async function GET() {
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
   const { data: profiles } = await admin.from('profiles').select('id, nome, usuario, papel, pdi_slug, modulos_permitidos, modulos_dashboard, aniversario_dia, aniversario_mes')
+  // Assinatura de e-mail em consulta à parte e tolerante: se a coluna ainda não existir, a lista segue normal.
+  const { data: assinaturas } = await admin.from('profiles').select('id, assinatura_email')
+  const assinaturaMap = new Map(((assinaturas ?? []) as { id: string; assinatura_email: string | null }[]).map(a => [a.id, a.assinatura_email ?? '']))
   const profileMap = new Map(
     (profiles ?? []).map((p: Record<string, unknown>) => [p.id as string, p])
   )
@@ -42,6 +45,7 @@ export async function GET() {
       modulos_dashboard: profile?.modulos_dashboard ?? null,
       aniversario_dia: profile?.aniversario_dia ?? null,
       aniversario_mes: profile?.aniversario_mes ?? null,
+      assinatura_email: assinaturaMap.get(u.id) ?? '',
     }
   })
 

@@ -55,7 +55,7 @@ export async function DELETE(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const { user, papel } = await getCaller()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
-  if (!['gestor', 'admin'].includes(papel ?? '')) {
+  if (!['colaborador', 'gestor', 'admin'].includes(papel ?? '')) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }
 

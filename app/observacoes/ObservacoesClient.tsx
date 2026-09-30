@@ -200,7 +200,15 @@ function buildColumnUI(col: { title: string; isFixed?: boolean; imageOnly?: bool
   const dbOrphan: DbObservacao[] = []
   for (const row of colDbRows) {
     if (col.cards.some(c => c.motivo === row.motivo)) {
-      dbByMotivo.set(row.motivo, row)
+      // Vários registros com o mesmo título (ex.: colaborador criou uma observação repetida):
+      // um deles assume o card da planilha — de preferência o que aguarda validação, para nunca
+      // ficar escondido — e os demais aparecem como cards próprios em vez de sumirem.
+      const atual = dbByMotivo.get(row.motivo)
+      if (!atual) dbByMotivo.set(row.motivo, row)
+      else if (row.status_edicao === 'pendente_validacao' && atual.status_edicao !== 'pendente_validacao') {
+        dbByMotivo.set(row.motivo, row)
+        dbOrphan.push(atual)
+      } else dbOrphan.push(row)
     } else {
       dbOrphan.push(row)
     }
@@ -247,9 +255,9 @@ type ModalState = {
   imageOnly: boolean
   uploadError: string
   saving: boolean
-  /** Seções já existentes na coluna (na ordem em que aparecem) — opções do campo obrigatório "Seção". */
+  /** Seções já existentes na coluna (na ordem em que aparecem) — opções do campo opcional "Seção". */
   secoes: string[]
-  /** Seção escolhida, '' (nada escolhido) ou NOVA_SECAO (digitar uma nova). */
+  /** Seção escolhida, '' (sem seção) ou NOVA_SECAO (digitar uma nova). */
   secao: string
   secaoNova: string
 }
@@ -310,8 +318,12 @@ export default function ObservacoesClient() {
   const [activeCatKey, setActiveCatKey] = useState<string>(initialCat)
   // Coluna de categorias recolhe ao escolher uma categoria (seta → reabre)
   const [navCollapsed, setNavCollapsed] = useState<boolean>(!!initialCat)
+  // Vindo do aviso "Observações a validar" do dashboard: abre direto na subcategoria da observação
+  // (?subtab=) e destaca o card (?obs=).
+  const initialSubtab = searchParams.get('subtab')
+  const targetObsRef = useRef<string | null>(searchParams.get('obs'))
   const [activeSubtabKey, setActiveSubtabKey] = useState<string>(
-    CATEGORIES.find(c => c.key === initialCat)?.subtabs[0]?.key ?? ''
+    initialCat && initialSubtab ? subtabCanonico(initialSubtab) : (CATEGORIES.find(c => c.key === initialCat)?.subtabs[0]?.key ?? '')
   )
   const [search, setSearch] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -354,7 +366,6 @@ export default function ObservacoesClient() {
   const [savingTemplate, setSavingTemplate] = useState(false)
 
   // ── Observação avulsa (itens fora da planilha) ───────────────────────────────
-  const [avulsaOpen, setAvulsaOpen] = useState(false)
   const [avulsaTexto, setAvulsaTexto] = useState('')
   const [avulsaCopiado, setAvulsaCopiado] = useState(false)
   const avulsaCopiadoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -428,6 +439,22 @@ export default function ObservacoesClient() {
     return () => { cancelled = true }
   }, [activeCatKey])
 
+  // Rola até o card indicado em ?obs= e o destaca por um instante (uma vez só).
+  useEffect(() => {
+    const id = targetObsRef.current
+    if (!id || !dbObs.some(o => o.id === id)) return
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`obs-card-${id}`)
+      if (!el) return
+      targetObsRef.current = null
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+      el.style.transition = 'box-shadow 0.4s'
+      el.style.boxShadow = '0 0 0 4px rgba(124,58,237,0.55)'
+      setTimeout(() => { el.style.boxShadow = '' }, 2600)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [dbObs, activeSubtabKey, dbSubtabsByCategoria])
+
   // Realtime: propaga validações e edições de outros usuários sem precisar recarregar
   useEffect(() => {
     if (!activeCatKey) return
@@ -449,6 +476,12 @@ export default function ObservacoesClient() {
               }
             : o
         ))
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'observacoes' }, (payload) => {
+        const row = payload.new as DbObservacao
+        if (!row?.id || row.categoria !== activeCatKey) return
+        // Já veio do POST próprio? Então só ignora; senão (criada por outra pessoa) entra na hora.
+        setDbObs(prev => prev.some(o => o.id === row.id) ? prev : [...prev, { ...row, atualizado_por_profile: null }])
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'observacoes' }, (payload) => {
         const row = payload.old as { id: string }
@@ -792,8 +825,8 @@ export default function ObservacoesClient() {
     const sub = allSubtabs.find(s => s.key === subtabKey)
     const col = sub?.columns.find(c => c.title === coluna)
     const imageOnly = col?.imageOnly === true || isImageOnlyColuna(coluna)
-    // Coluna sem nenhuma seção: já abre no modo "nova seção" (a escolha da seção é obrigatória).
-    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly, secoes, secao: secoes.length === 0 ? NOVA_SECAO : '', parecerBody: imageOnly ? '' : FAVOR_REVER })
+    // A seção é opcional: abre sem seção escolhida.
+    setModal({ ...MODAL_INIT, open: true, mode: 'create', coluna, subtabKey, imageOnly, secoes, secao: '', parecerBody: imageOnly ? '' : FAVOR_REVER })
   }, [allSubtabs])
 
   const handleEditOpen = useCallback((id: string, motivo: string, parecer: string, coluna: string, subtabKey: string, imagemUrl: string) => {
@@ -908,10 +941,6 @@ export default function ObservacoesClient() {
     } else {
       if (!modal.motivo.trim() || !corpoObs) return
     }
-    if (precisaSecao && !secaoFinal) {
-      setModal(m => ({ ...m, uploadError: 'Indique a seção da observação.' }))
-      return
-    }
     const motivo = imageOnly
       ? (modal.imagemFile?.name.replace(/\.[^.]+$/, '') ?? `imagem-${Date.now()}`)
       : modal.motivo.trim()
@@ -938,29 +967,57 @@ export default function ObservacoesClient() {
       setModal(m => ({ ...m, saving: false, uploadError: e instanceof Error ? e.message : 'Erro no upload' }))
       return
     }
-    const res = await fetch('/api/observacoes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        categoria: activeCatKey,
-        subtab: modal.subtabKey,
-        coluna: modal.coluna,
-        motivo,
-        parecer: buildParecer(),
-        imagem_url: imagemUrl,
-        ...(precisaSecao ? { group_name: secaoFinal, exigir_secao: true } : {}),
-      }),
-    })
-    if (res.ok) {
+    // Otimista: o card aparece e o modal fecha na hora; o servidor confirma em segundo plano.
+    const isPriv = ['gestor', 'admin'].includes(papel)
+    const parecerFinal = buildParecer()
+    const agora = new Date().toISOString()
+    const tempId = `tmp-${Date.now()}`
+    const categoria = activeCatKey
+    const snapshot = modal
+    const temp: DbObservacao = {
+      id: tempId, categoria, subtab: modal.subtabKey, coluna: modal.coluna, motivo, parecer: parecerFinal,
+      parecer_anterior: null, group_name: precisaSecao && secaoFinal ? secaoFinal : null, imagem_url: imagemUrl,
+      criado_por: profile?.id ?? null, editado_por: null,
+      atualizado_por: isPriv ? null : (profile?.id ?? null), atualizado_em: isPriv ? null : agora,
+      status_edicao: isPriv ? 'original' : 'pendente_validacao',
+      atualizado_por_profile: isPriv ? null : { nome: profile?.nome ?? '' },
+      created_at: agora, updated_at: agora,
+    }
+    setDbObs(prev => [...prev, temp])
+    setModal(MODAL_INIT)
+    mostrarAviso(isPriv
+      ? 'Observação criada.'
+      : 'Observação enviada — o gestor/admin recebe um aviso no dashboard para validar.')
+    try {
+      const res = await fetch('/api/observacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoria,
+          subtab: snapshot.subtabKey,
+          coluna: snapshot.coluna,
+          motivo,
+          parecer: parecerFinal,
+          imagem_url: imagemUrl,
+          ...(precisaSecao && secaoFinal ? { group_name: secaoFinal } : {}),
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? 'Não foi possível salvar a observação.')
+      }
       const created: DbObservacao = await res.json()
-      setDbObs(prev => [...prev, created])
-      closeModal()
-      mostrarAviso(['gestor', 'admin'].includes(papel)
-        ? 'Observação criada.'
-        : 'Observação enviada — o gestor/admin recebe um aviso no dashboard para validar.')
-    } else {
-      const body = await res.json().catch(() => ({}))
-      setModal(m => ({ ...m, saving: false, uploadError: body.error ?? 'Não foi possível salvar a observação.' }))
+      if (snapshot.imagemPreview.startsWith('blob:')) URL.revokeObjectURL(snapshot.imagemPreview)
+      // O realtime pode já ter trazido a linha real: troca o temporário sem duplicar.
+      const real = { ...created, atualizado_por_profile: temp.atualizado_por_profile }
+      setDbObs(prev => prev.some(o => o.id === created.id)
+        ? prev.filter(o => o.id !== tempId)
+        : prev.map(o => o.id === tempId ? real : o))
+    } catch (e) {
+      // Falhou: tira o card provisório e devolve o formulário preenchido com o erro.
+      setDbObs(prev => prev.filter(o => o.id !== tempId))
+      setAviso('')
+      setModal({ ...snapshot, saving: false, uploadError: e instanceof Error ? e.message : 'Não foi possível salvar a observação.' })
     }
   }
 
@@ -992,27 +1049,44 @@ export default function ObservacoesClient() {
     if (res.ok) setDbObs(prev => prev.filter(o => o.id !== id))
   }
 
-  const canManageSubtabs = ['gestor', 'admin'].includes(papel)
+  // Colaborador também cria subcategoria (ex.: um novo contratante); excluir segue só com gestor/admin.
+  const canManageSubtabs = ['colaborador', 'gestor', 'admin'].includes(papel)
   const canEditLayout = ['gestor', 'admin'].includes(papel)
   const hasSubtabs = allSubtabsOrdered.length > 1 || canManageSubtabs
 
   async function handleCreateSubtab() {
     const name = subtabModal.name.trim()
     if (!name) return
-    setSubtabModal(s => ({ ...s, saving: true, error: '' }))
-    const res = await fetch('/api/observacoes/subtabs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoria: activeCatKey, subtab: name }),
-    })
-    if (res.ok) {
+    const categoria = activeCatKey
+    if (allSubtabs.some(s => _ascii(s.key) === _ascii(name))) {
+      setSubtabModal(s => ({ ...s, error: 'Já existe uma subcategoria com esse nome' }))
+      return
+    }
+    // Otimista: a guia aparece e fica ativa na hora; o servidor confirma em segundo plano.
+    const tempId = `tmp-${Date.now()}`
+    const anteriorAtiva = activeSubtabKey
+    setDbSubtabsByCategoria(prev => ({
+      ...prev,
+      [categoria]: [...(prev[categoria] ?? []), { id: tempId, categoria, subtab: name, criado_por: profile?.id ?? null, created_at: new Date().toISOString() }],
+    }))
+    if (!GUIA_UNICA[categoria]) setActiveSubtabKey(name)
+    setSubtabModal({ open: false, name: '', saving: false, error: '' })
+    try {
+      const res = await fetch('/api/observacoes/subtabs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoria, subtab: name }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? 'Erro ao criar subcategoria')
+      }
       const created: DbSubtab = await res.json()
-      setDbSubtabsByCategoria(prev => ({ ...prev, [activeCatKey]: [...(prev[activeCatKey] ?? []), created] }))
-      if (!GUIA_UNICA[activeCatKey]) setActiveSubtabKey(created.subtab)
-      setSubtabModal({ open: false, name: '', saving: false, error: '' })
-    } else {
-      const body = await res.json().catch(() => ({}))
-      setSubtabModal(s => ({ ...s, saving: false, error: body.error ?? 'Erro ao criar subcategoria' }))
+      setDbSubtabsByCategoria(prev => ({ ...prev, [categoria]: (prev[categoria] ?? []).map(d => d.id === tempId ? created : d) }))
+    } catch (e) {
+      setDbSubtabsByCategoria(prev => ({ ...prev, [categoria]: (prev[categoria] ?? []).filter(d => d.id !== tempId) }))
+      if (!GUIA_UNICA[categoria]) setActiveSubtabKey(anteriorAtiva)
+      setSubtabModal({ open: true, name, saving: false, error: e instanceof Error ? e.message : 'Erro ao criar subcategoria' })
     }
   }
 
@@ -1262,20 +1336,19 @@ export default function ObservacoesClient() {
                 {precisaSecao && (
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                      Seção <span style={{ color: '#DC2626' }}>*</span>
-                      <span style={{ fontWeight: 500, color: MUTED }}> — obrigatório</span>
+                      Seção
+                      <span style={{ fontWeight: 500, color: MUTED }}> — opcional</span>
                     </label>
                     <select
                       value={modal.secao}
                       onChange={e => setModal(m => ({ ...m, secao: e.target.value, uploadError: '' }))}
-                      autoFocus
                       style={{
                         width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
-                        border: `1.5px solid ${modal.secao ? BORDER : '#FCA5A5'}`, outline: 'none', boxSizing: 'border-box',
+                        border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
                         fontFamily: 'inherit', color: modal.secao ? INK : MUTED, background: '#fff',
                       }}
                     >
-                      <option value="">Selecione a seção…</option>
+                      <option value="">Sem seção</option>
                       {modal.secoes.map(sc => <option key={sc} value={sc}>{sc}</option>)}
                       <option value={NOVA_SECAO}>＋ Nova seção…</option>
                     </select>
@@ -1288,15 +1361,15 @@ export default function ObservacoesClient() {
                         autoFocus
                         style={{
                           width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13, marginTop: 8,
-                          border: `1.5px solid ${modal.secaoNova.trim() ? BORDER : '#FCA5A5'}`, outline: 'none', boxSizing: 'border-box',
+                          border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
                           fontFamily: 'inherit', color: INK,
                         }}
                       />
                     )}
                     <p style={{ margin: '6px 0 0', fontSize: 11.5, color: MUTED, lineHeight: 1.4 }}>
                       {modal.secoes.length === 0
-                        ? 'Esta coluna ainda não tem seções — informe o nome da primeira.'
-                        : 'Indique em qual seção da coluna esta observação deve aparecer.'}
+                        ? 'Esta coluna ainda não tem seções — se quiser, crie a primeira aqui.'
+                        : 'Se quiser, indique em qual seção da coluna esta observação deve aparecer.'}
                     </p>
                   </div>
                 )}
@@ -1321,7 +1394,7 @@ export default function ObservacoesClient() {
                     value={modal.motivo}
                     onChange={e => setModal(m => ({ ...m, motivo: e.target.value }))}
                     placeholder="Ex: Outro coordenador"
-                    autoFocus={!precisaSecao}
+                    autoFocus
                     style={{
                       width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
                       border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
@@ -1388,7 +1461,7 @@ export default function ObservacoesClient() {
                 onClick={handleSave}
                 disabled={modal.saving || (isImageOnlyColuna(modal.coluna)
                   ? (!modal.imagemFile && !modal.imagemUrl)
-                  : (!modal.motivo.trim() || !corpoObs || (precisaSecao && !secaoFinal))
+                  : (!modal.motivo.trim() || !corpoObs)
                 )}
                 style={{
                   padding: '8px 20px', borderRadius: 8, border: 'none',
@@ -1396,7 +1469,7 @@ export default function ObservacoesClient() {
                   fontSize: 13, cursor: modal.saving ? 'not-allowed' : 'pointer', fontWeight: 700,
                   opacity: (isImageOnlyColuna(modal.coluna)
                     ? (!modal.imagemFile && !modal.imagemUrl)
-                    : (!modal.motivo.trim() || !corpoObs || (precisaSecao && !secaoFinal))
+                    : (!modal.motivo.trim() || !corpoObs)
                   ) ? 0.5 : 1,
                 }}
               >
@@ -1597,98 +1670,6 @@ export default function ObservacoesClient() {
               >
                 {savingTemplate ? 'Salvando…' : 'Salvar'}
               </button>
-            </div>
-          </div>
-        </Backdrop>
-      )}
-
-      {avulsaOpen && (
-        <Backdrop>
-          <div className="gt3-drop-in" style={{
-            background: '#fff', borderRadius: 12, width: '100%', maxWidth: 480,
-            boxShadow: '0 20px 60px rgba(30,37,61,0.2)', overflow: 'hidden',
-          }}>
-            <div style={{
-              background: `linear-gradient(135deg, ${PRIMARY} 0%, #1E3A6E 100%)`,
-              padding: '16px 20px',
-            }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
-                📝 Observação avulsa
-              </h3>
-              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
-                Para itens fora da planilha — já sai com data, hora e seu nome
-              </p>
-            </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  Texto da observação
-                </label>
-                <textarea
-                  value={avulsaTexto}
-                  onChange={e => setAvulsaTexto(e.target.value)}
-                  placeholder="Ex: Favor rever documento X — motivo Y"
-                  autoFocus
-                  rows={3}
-                  style={{
-                    width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 13,
-                    border: `1.5px solid ${BORDER}`, outline: 'none', boxSizing: 'border-box',
-                    fontFamily: 'inherit', color: INK, resize: 'vertical',
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  Pré-visualização
-                </label>
-                <div style={{
-                  padding: '10px 12px', borderRadius: 8, background: '#F8FAFC', border: `1px solid ${BORDER}`,
-                  fontSize: 13, color: INK, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                }}>
-                  {avulsaTexto.trim()
-                    ? avulsaFormatada
-                    : <span style={{ color: MUTED }}>Digite a observação acima para ver como ela sai formatada.</span>}
-                </div>
-              </div>
-            </div>
-            <div style={{
-              padding: '12px 20px', borderTop: `1px solid ${BORDER}`,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
-            }}>
-              <button
-                onClick={() => setAvulsaTexto('')}
-                disabled={!avulsaTexto}
-                style={{
-                  padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
-                  background: '#fff', color: MUTED, fontSize: 13, fontWeight: 500,
-                  cursor: avulsaTexto ? 'pointer' : 'default', opacity: avulsaTexto ? 1 : 0.5,
-                }}
-              >
-                Limpar
-              </button>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setAvulsaOpen(false)}
-                  style={{
-                    padding: '8px 16px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
-                    background: '#fff', color: INK, fontSize: 13, cursor: 'pointer', fontWeight: 500,
-                  }}
-                >
-                  Fechar
-                </button>
-                <button
-                  onClick={copiarAvulsa}
-                  disabled={!avulsaTexto.trim()}
-                  style={{
-                    padding: '8px 20px', borderRadius: 8, border: 'none',
-                    background: avulsaCopiado ? '#16A34A' : (!avulsaTexto.trim() ? MUTED : PRIMARY), color: '#fff',
-                    fontSize: 13, cursor: !avulsaTexto.trim() ? 'not-allowed' : 'pointer', fontWeight: 700,
-                    opacity: !avulsaTexto.trim() && !avulsaCopiado ? 0.5 : 1,
-                  }}
-                >
-                  {avulsaCopiado ? '✓ Copiado!' : 'Copiar'}
-                </button>
-              </div>
             </div>
           </div>
         </Backdrop>
@@ -1924,18 +1905,37 @@ export default function ObservacoesClient() {
               </span>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
-              <button
-                onClick={() => setAvulsaOpen(true)}
-                title="Gerar uma observação avulsa com data, hora e seu nome — para itens fora da planilha"
-                style={{
-                  padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
-                  background: '#fff', color: MUTED, fontSize: 12,
-                  cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
-                  display: 'flex', alignItems: 'center', gap: 5,
-                }}
+              <div
+                title="Observação avulsa: para itens fora da planilha — sai com data, hora e seu nome"
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               >
-                📝 Observação avulsa
-              </button>
+                <textarea
+                  value={avulsaTexto}
+                  onChange={e => setAvulsaTexto(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); copiarAvulsa() } }}
+                  placeholder="📝 Observação avulsa — digite aqui"
+                  rows={avulsaTexto.length > 38 || avulsaTexto.includes('\n') ? 3 : 1}
+                  style={{
+                    width: 300, padding: '7px 10px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.4,
+                    border: `1.5px solid ${avulsaTexto ? PRIMARY : BORDER}`, outline: 'none', boxSizing: 'border-box',
+                    fontFamily: 'inherit', color: INK, resize: 'none', background: '#fff',
+                  }}
+                />
+                <button
+                  onClick={copiarAvulsa}
+                  disabled={!avulsaTexto.trim() && !avulsaCopiado}
+                  title={avulsaTexto.trim() ? avulsaFormatada : 'Digite a observação para copiar já formatada (Ctrl+Enter)'}
+                  style={{
+                    padding: '7px 14px', borderRadius: 8, border: 'none', alignSelf: 'flex-start',
+                    background: avulsaCopiado ? '#16A34A' : (!avulsaTexto.trim() ? MUTED : PRIMARY), color: '#fff',
+                    fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                    cursor: !avulsaTexto.trim() ? 'not-allowed' : 'pointer',
+                    opacity: !avulsaTexto.trim() && !avulsaCopiado ? 0.5 : 1,
+                  }}
+                >
+                  {avulsaCopiado ? '✓ Copiado!' : 'Copiar'}
+                </button>
+              </div>
               {canEditLayout && (
                 layoutMode ? (
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

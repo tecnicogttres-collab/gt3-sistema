@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { useUser, displayName } from '../components/UserContext'
+import { baixarEml as emlBaixar, abrirNoOutlook } from '../lib/email-envio'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -251,12 +252,6 @@ function joinDocs(itens: string[]): string {
   if (itens.length === 1) return itens[0]
   if (itens.length === 2) return itens[0] + ' e ' + itens[1]
   return itens.slice(0, -1).join(', ') + ' e ' + itens[itens.length - 1]
-}
-
-/** "E-mail de destino" aceita vários endereços separados por ";" (formato pedido pelo
- *  usuário) — mailto: e o cabeçalho To: do .eml exigem vírgula, então convertemos aqui. */
-function emailsParaEnvio(destino: string): string {
-  return destino.split(';').map(e => e.trim()).filter(Boolean).join(', ')
 }
 
 /** Normaliza nome de empresa pra comparação de duplicidade — ignora diferenças de espaço
@@ -1495,27 +1490,17 @@ export default function WorkflowProgramasClient() {
     setEmailEditado(false)
   }
 
-  function baixarEml() {
+  /** .eml e "abrir no e-mail" saem pelo módulo compartilhado (app/lib/email-envio.ts), que já
+   *  anexa a assinatura do usuário logado. */
+  async function baixarEml() {
     if (!draft || !emailBuilt) return
-    const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)))
-    const html = `<html><head><meta charset="utf-8"></head><body>${emailCorpo}</body></html>`
-    const eml = [
-      'To: ' + emailsParaEnvio(draft.emailDestino), 'Subject: =?UTF-8?B?' + b64(emailBuilt.assunto) + '?=',
-      'X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', html,
-    ].join('\r\n')
-    const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
-    const el = document.createElement('a')
-    el.href = url
-    el.download = ('SST - ' + (draft.empresa || 'empresa')).replace(/[\\/:*?"<>|]/g, '') + '.eml'
-    el.click(); URL.revokeObjectURL(url)
+    await emlBaixar({ to: draft.emailDestino, assunto: emailBuilt.assunto, corpoHtml: emailCorpo, nomeArquivo: 'SST - ' + (draft.empresa || 'empresa') })
     showToast('Arquivo .eml gerado')
   }
 
-  /** mailto: só suporta corpo em texto puro (RFC 6068) — não existe forma de carregar HTML
-   *  por esse canal em nenhum cliente de e-mail, então a formatação não sobrevive aqui. */
-  function abrirMailto() {
+  async function abrirMailto() {
     if (!draft || !emailBuilt) return
-    location.href = 'mailto:' + emailsParaEnvio(draft.emailDestino) + '?subject=' + encodeURIComponent(emailBuilt.assunto) + '&body=' + encodeURIComponent(htmlToPlainText(emailCorpo))
+    await abrirNoOutlook({ to: draft.emailDestino, assunto: emailBuilt.assunto, corpoHtml: emailCorpo })
   }
 
   /** Copia com formatação (text/html) e um fallback em texto puro (text/plain) — é o que faz
@@ -3157,7 +3142,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
             </div>
             <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: `1px solid ${LINE}`, flexWrap: 'wrap', alignItems: 'center' }}>
               <Btn variant="pri" small disabled={!podeFinalizarOuCopiar} onClick={onCopiar} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>📋 Copiar</Btn>
-              <Btn small disabled={!podeFinalizarOuCopiar} onClick={onEml} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>⬇️ Baixar .eml</Btn>
+              <Btn variant="acc" small disabled={!podeFinalizarOuCopiar} onClick={onEml} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>⬇️ Baixe o e-mail pronto</Btn>
               <Btn small disabled={!podeFinalizarOuCopiar} onClick={onMailto} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>↗ Abrir no e-mail</Btn>
               <Btn variant="gho" small onClick={onRegerar}>↻ Regerar</Btn>
               {!podeFinalizarOuCopiar && (

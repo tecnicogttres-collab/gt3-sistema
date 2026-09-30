@@ -83,19 +83,34 @@ export function currentMonthOccurrence(r: LembreteOcorrencia, now: Date = new Da
   return ds ? parseDate(ds) : null
 }
 
+/** Datas (YYYY-MM-DD) em que o lembrete aparece no mês, considerando um adiamento do
+ *  usuário (data para a qual a ocorrência foi empurrada). Sem adiamento é a própria
+ *  ocorrência do mês. Com adiamento: se a ocorrência do mês é anterior à data adiada, ela
+ *  foi a adiada (some daqui e aparece na data nova, se esta cair no mês); se é posterior,
+ *  a adiada era a ocorrência do mês anterior, que aparece na data nova além da do mês. */
+export function findMonthOccurrences(r: LembreteOcorrencia, year: number, month: number, adiamento?: string | null): string[] {
+  const base = findMonthOccurrence(r, year, month)
+  if (!adiamento) return base ? [base] : []
+  const a = parseDate(adiamento)
+  const inMonth = a.getFullYear() === year && a.getMonth() === month
+  if (base && base < adiamento) return inMonth ? [adiamento] : []
+  if (inMonth) return base ? [adiamento, base] : [adiamento]
+  return base ? [base] : []
+}
+
 // Um lembrete só conta como atrasado se tiver uma ocorrência real neste mês
 // (não apenas uma data_inicio antiga) e ainda não tiver sido confirmado.
-export function isLembreteOverdue(r: LembreteOcorrencia, confirmed: boolean, now: Date = new Date()): boolean {
+export function isLembreteOverdue(r: LembreteOcorrencia, confirmed: boolean, now: Date = new Date(), adiamento?: string | null): boolean {
   if (confirmed) return false
-  const occ = currentMonthOccurrence(r, now)
-  if (!occ) return false
-  if (r.hora_inicio) {
-    const [h, m] = r.hora_inicio.split(':').map(Number)
-    const deadline = new Date(occ)
-    deadline.setHours(h, m, 0, 0)
-    return deadline < now
-  }
   const today = new Date(now)
   today.setHours(0, 0, 0, 0)
-  return occ < today
+  return findMonthOccurrences(r, now.getFullYear(), now.getMonth(), adiamento).some(ds => {
+    const occ = parseDate(ds)
+    if (r.hora_inicio) {
+      const [h, m] = r.hora_inicio.split(':').map(Number)
+      occ.setHours(h, m, 0, 0)
+      return occ < now
+    }
+    return occ < today
+  })
 }

@@ -340,6 +340,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [enqueteQueue, setEnqueteQueue] = useState<Array<{ id: string; titulo: string }>>([])
   const [lembreteCount, setLembreteCount] = useState(0)
   const [showLembreteNotif, setShowLembreteNotif] = useState(false)
+  // Lembretes que o pop-up está avisando — "Adiar" no pop-up adia cada um de verdade.
+  const [lembretesVencidosIds, setLembretesVencidosIds] = useState<string[]>([])
 
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
   const [legislacoesPendentes, setLegislacoesPendentes] = useState(0)
@@ -493,7 +495,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!mounted || !res.ok) return
-        const data: Array<{ data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'mensal_dia_semana'; hora_inicio: string | null; dia_semana?: number | null; semana_ordinal?: number | null; concluido: boolean; confirmado?: boolean; criado_por: string | null }> = await res.json()
+        const data: Array<{ id: string; data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'mensal_dia_semana'; hora_inicio: string | null; dia_semana?: number | null; semana_ordinal?: number | null; concluido: boolean; confirmado?: boolean; criado_por: string | null }> = await res.json()
         const today = new Date().toISOString().split('T')[0]
         const snoozedAte = getLembreteSnoozedAte(userId)
         if (snoozedAte && today <= snoozedAte) return
@@ -505,8 +507,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // Só conta como atrasado quem tem ocorrência real neste mês (não apenas
         // uma data_inicio antiga) — senão um lembrete "único" já confirmado no
         // passado volta a acusar atraso todo mês, sem nenhuma forma de resolver.
-        const count = meus.filter(r => isLembreteOverdue(r, !!r.confirmado)).length
-        if (count > 0) { setLembreteCount(count); setShowLembreteNotif(true) }
+        const { data: adiRows } = await supabase
+          .from('lembretes_adiamentos')
+          .select('lembrete_id, mostrar_a_partir_de')
+          .eq('usuario_id', userId)
+          .eq('adiado', true)
+        const adiados = new Map((adiRows ?? []).map(a => [a.lembrete_id as string, a.mostrar_a_partir_de as string]))
+        const vencidos = meus.filter(r => isLembreteOverdue(r, !!r.confirmado, new Date(), adiados.get(r.id)))
+        if (vencidos.length > 0) {
+          setLembretesVencidosIds(vencidos.map(r => r.id))
+          setLembreteCount(vencidos.length)
+          setShowLembreteNotif(true)
+        }
       } catch { /* noop */ }
     }
 
@@ -1016,7 +1028,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             snoozeLembreteNotifStorage(profile.id, new Date().toISOString().split('T')[0])
             router.push('/lembretes')
           }}
-          onAdiar={ateIso => { setShowLembreteNotif(false); snoozeLembreteNotifStorage(profile.id, ateIso) }}
+          onAdiar={ateIso => {
+            setShowLembreteNotif(false)
+            snoozeLembreteNotifStorage(profile.id, ateIso)
+            if (lembretesVencidosIds.length === 0) return
+            void createClient().from('lembretes_adiamentos').upsert(
+              lembretesVencidosIds.map(id => ({ lembrete_id: id, usuario_id: profile.id, mostrar_a_partir_de: ateIso, adiado: true })),
+              { onConflict: 'lembrete_id,usuario_id' },
+            ).then(({ error }) => { if (error) console.error('Erro ao adiar lembretes:', error.message) })
+          }}
           onDescartar={() => {
             setShowLembreteNotif(false)
             snoozeLembreteNotifStorage(profile.id, new Date().toISOString().split('T')[0])

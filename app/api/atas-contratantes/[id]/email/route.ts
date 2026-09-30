@@ -4,6 +4,7 @@ import { requireGestorAdmin } from '../../../../lib/api-helpers'
 import { variaveisEmailAta, aplicaVariaveisEmail, corpoParaHtml, resolverDestinatarios, separarGt3, combinarCcGt3, DOMINIO_GT3 } from '../../../../lib/ata-email'
 import { nomeArquivoAta, type AtaHtmlData } from '../../../../lib/ata-html'
 import { gerarAtaPdfBuffer } from '../../../../lib/ata-pdf'
+import { getAssinaturaEmail } from '../../../../lib/email-assinatura'
 import { ASSUNTO_PADRAO, CORPO_PADRAO, CC_GT3_PADRAO, type EmailConfigDados } from '../../email-config/route'
 import type { Participante, Topico } from '../../../../atas/AtasEditor'
 
@@ -103,11 +104,15 @@ export async function POST(req: NextRequest, { params }: Params) {
   const pdfBuffer = await gerarAtaPdfBuffer(ataHtmlData, topicos, partes)
   const pdfFilename = `${nomeArquivoAta(ataHtmlData)}.pdf`
 
+  // Assinatura de e-mail do usuário que está gerando o .eml (Usuários → Assinatura de e-mail).
+  const assinatura = await getAssinaturaEmail(caller.user.id)
+  const corpoComAssinatura = assinatura ? `${corpoHtml}<br><br><div class="assinatura">${assinatura}</div>` : corpoHtml
+
   const eml = montarEml({
     to: destinatarios.join(', '),
     cc: ccGt3,
     subject: assunto,
-    htmlBody: `<html><head><meta charset="utf-8"></head><body>${corpoHtml}</body></html>`,
+    htmlBody: `<html><head><meta charset="utf-8"></head><body>${corpoComAssinatura}</body></html>`,
     pdfBuffer,
     pdfFilename,
   })

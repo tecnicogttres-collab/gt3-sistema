@@ -14,7 +14,8 @@ type Props = {
 function addDaysIso(n: number): string {
   const d = new Date()
   d.setDate(d.getDate() + n)
-  return d.toISOString().split('T')[0]
+  const pad = (v: number) => String(v).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 export default function LembreteNotificacao({ count, onVerAgora, onAdiar, onDescartar }: Props) {

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { createClient } from '../../../../lib/supabase-server'
+import { sanitizarAssinatura } from '../../../../lib/email-assinatura'
 
 async function getCaller(): Promise<{ role: string | null; id: string | null }> {
   const serverClient = await createClient()
@@ -39,6 +40,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if ('modulos_dashboard' in body) profileUpdates.modulos_dashboard = body.modulos_dashboard ?? null
   if ('aniversario_dia' in body) profileUpdates.aniversario_dia = body.aniversario_dia ?? null
   if ('aniversario_mes' in body) profileUpdates.aniversario_mes = body.aniversario_mes ?? null
+  // Assinatura de e-mail (HTML) — vai automaticamente em todo .eml / "abrir no Outlook" deste usuário.
+  if ('assinatura_email' in body) profileUpdates.assinatura_email = sanitizarAssinatura(String(body.assinatura_email ?? '')) || null
   if (Object.keys(profileUpdates).length > 0) {
     const { error: updateErr } = await admin.from('profiles').update(profileUpdates).eq('id', id)
     if (updateErr) return Response.json({ error: updateErr.message }, { status: 500 })

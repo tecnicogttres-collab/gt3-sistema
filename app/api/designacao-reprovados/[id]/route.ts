@@ -48,8 +48,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     const novaCiencia = [...cienciaPor, caller.user.id]
     update = { ciencia_por: novaCiencia }
-    if (atual.tratativa === 'aguardando') update.tratativa = 'ciente'
-    acaoHistorico = 'Ciência registrada'
+    // Dar ciência já coloca o item em andamento (o aviso passa a ficar no dashboard como andamento).
+    if (['aguardando', 'ciente'].includes(atual.tratativa)) update.tratativa = 'andamento'
+    acaoHistorico = 'Ciência registrada — em andamento'
   } else if (action === 'tratativa') {
     const novo = body?.tratativa as string
     if (!['andamento', 'resolvido', 'excluido'].includes(novo)) {

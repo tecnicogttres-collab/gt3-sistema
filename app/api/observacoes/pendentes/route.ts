@@ -10,7 +10,7 @@ export async function GET() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('observacoes')
-    .select('id, categoria, coluna, motivo, group_name, parecer_anterior, criado_por, atualizado_por, atualizado_em, created_at')
+    .select('id, categoria, subtab, coluna, motivo, group_name, parecer_anterior, criado_por, atualizado_por, atualizado_em, created_at')
     .eq('status_edicao', 'pendente_validacao')
     .order('atualizado_em', { ascending: false, nullsFirst: false })
 
@@ -27,6 +27,7 @@ export async function GET() {
   return Response.json(rows.map(r => ({
     id: r.id,
     categoria: r.categoria,
+    subtab: r.subtab,
     coluna: r.coluna,
     motivo: r.motivo,
     secao: r.group_name ?? null,
