@@ -39,10 +39,11 @@ export async function buscarAssinatura(): Promise<string> {
   }
 }
 
-/** Corpo do e-mail com a assinatura ao final. */
+/** Corpo do e-mail com a assinatura ao final. Sem class/estilos próprios: a formatação da
+ *  assinatura colada pelo usuário é preservada como veio. */
 export function corpoComAssinatura(corpoHtml: string, assinaturaHtml: string): string {
   if (!assinaturaHtml) return corpoHtml
-  return `${corpoHtml}<br><br><div class="assinatura">${assinaturaHtml}</div>`
+  return `${corpoHtml}<br><br><div>${assinaturaHtml}</div>`
 }
 
 export type OpcoesEmail = {
@@ -53,16 +54,26 @@ export type OpcoesEmail = {
   corpoHtml: string
 }
 
-/** Baixa um .eml (rascunho X-Unsent) já com Para, Cc, assunto, corpo e assinatura do usuário. */
+/** Quebra o base64 em linhas de 76 caracteres (exigência do MIME). */
+function base64Linhas(s: string): string {
+  const b64 = btoa(unescape(encodeURIComponent(s)))
+  return (b64.match(/.{1,76}/g) ?? []).join('\r\n')
+}
+
+/** Baixa um .eml (rascunho X-Unsent) já com Para, Cc, assunto, corpo e assinatura do usuário.
+ *  Ao abrir o arquivo, o Outlook clássico monta a mensagem em HTML, com a assinatura formatada. */
 export async function baixarEml(opts: OpcoesEmail & { nomeArquivo: string }): Promise<void> {
   const assinatura = await buscarAssinatura()
   const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)))
-  const html = `<html><head><meta charset="utf-8"></head><body>${corpoComAssinatura(opts.corpoHtml, assinatura)}</body></html>`
+  // Calibri 11 = padrão do Outlook clássico; sem isso o corpo cai em Times e desalinha da assinatura.
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">` +
+    `<style>body,p,div,td,li{font-family:Calibri,Arial,sans-serif;font-size:11pt}p{margin:0}</style></head>` +
+    `<body>${corpoComAssinatura(opts.corpoHtml, assinatura)}</body></html>`
   const linhas: string[] = []
   if (opts.to?.trim()) linhas.push('To: ' + emailsParaEnvio(opts.to))
   if (opts.cc?.trim()) linhas.push('Cc: ' + emailsParaEnvio(opts.cc))
   linhas.push('Subject: =?UTF-8?B?' + b64(opts.assunto) + '?=', 'X-Unsent: 1', 'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', html)
+    'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: base64', '', base64Linhas(html))
   const url = URL.createObjectURL(new Blob([linhas.join('\r\n')], { type: 'message/rfc822' }))
   const el = document.createElement('a')
   el.href = url
@@ -71,16 +82,9 @@ export async function baixarEml(opts: OpcoesEmail & { nomeArquivo: string }): Pr
   URL.revokeObjectURL(url)
 }
 
-/** Abre o e-mail direto no cliente padrão (Outlook) com Para, Cc, assunto e corpo. O mailto:
- *  só carrega texto puro — a assinatura entra como texto (sem imagens/formatação); para
- *  manter a assinatura formatada, use o .eml. */
+/** "Abrir no Outlook": gera o .eml (que abre no Outlook clássico, com assinatura e formatação
+ *  íntegras). Não usa mailto: — ele só leva texto puro e abre no cliente padrão, que pode ser
+ *  o Outlook novo. */
 export async function abrirNoOutlook(opts: OpcoesEmail): Promise<void> {
-  const assinatura = await buscarAssinatura()
-  const corpo = htmlParaTexto(opts.corpoHtml) + (assinatura ? '\n\n' + htmlParaTexto(assinatura) : '')
-  const params = [
-    opts.cc?.trim() ? 'cc=' + encodeURIComponent(emailsParaEnvio(opts.cc)) : '',
-    'subject=' + encodeURIComponent(opts.assunto),
-    'body=' + encodeURIComponent(corpo),
-  ].filter(Boolean).join('&')
-  window.location.assign('mailto:' + emailsParaEnvio(opts.to ?? '') + '?' + params)
+  await baixarEml({ ...opts, nomeArquivo: 'GT3 - ' + opts.assunto.slice(0, 60) })
 }

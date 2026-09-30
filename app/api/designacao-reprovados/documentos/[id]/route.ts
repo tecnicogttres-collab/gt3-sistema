@@ -1,15 +1,17 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
-import { requireGestorAdmin } from '../../../../lib/api-helpers'
+import { getCaller, requireGestorAdmin } from '../../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
-  const caller = await requireGestorAdmin()
-  if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
-
   const body = await req.json()
+  // Mover documento entre pastas (reordenar) é liberado a qualquer login; o resto exige gestor/admin.
+  const soMover = Object.keys(body).every(k => k === 'pasta_id')
+  const caller = soMover ? await getCaller() : await requireGestorAdmin()
+  if (!caller) return Response.json({ error: soMover ? 'Não autenticado' : 'Sem permissão' }, { status: soMover ? 401 : 403 })
+
   const update: Record<string, unknown> = {}
   if (body.nome !== undefined) update.nome = String(body.nome).trim()
   if (body.ativo !== undefined) update.ativo = Boolean(body.ativo)

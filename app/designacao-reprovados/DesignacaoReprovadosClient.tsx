@@ -404,6 +404,7 @@ export default function DesignacaoReprovadosClient() {
   const [fSetores, setFSetores]           = useState<string[]>([])
   const [fDocumentos, setFDocumentos]     = useState<string[]>([])
   const [fSituacao, setFSituacao]         = useState('')
+  const [fMotivo, setFMotivo]             = useState('')
   const [fResponsaveis, setFResponsaveis] = useState<string[]>([])
   const [saving, setSaving]               = useState(false)
   const [qtdSessao, setQtdSessao]         = useState(0)
@@ -432,6 +433,9 @@ export default function DesignacaoReprovadosClient() {
   const [novoDocInline, setNovoDocInline]     = useState<Record<string, string>>({})
   const [novoDocInlinePasta, setNovoDocInlinePasta] = useState<Record<string, string>>({})
   const [destaqueDocId, setDestaqueDocId]     = useState<string | null>(null)
+  // Atalho: empresa digitada/colada no formulário que não está cadastrada
+  const [cadRapido, setCadRapido] = useState<{ nome: string; contratante: string; email: string } | null>(null)
+  const [cadRapidoSaving, setCadRapidoSaving] = useState(false)
   const [novaEmpresaNome, setNovaEmpresaNome] = useState('')
   const [novaEmpresaContratante, setNovaEmpresaContratante] = useState('')
   const [novaEmpresaEmail, setNovaEmpresaEmail] = useState('')
@@ -591,8 +595,8 @@ export default function DesignacaoReprovadosClient() {
   // KPIs da Visão geral — refletem o mesmo recorte (Ativas/Histórico + filtros) do resto da aba.
   const kpis = useMemo(() => ({
     aguardando: itensGeralAtual.filter(d => d.tratativa === 'aguardando').length,
-    ciente:     itensGeralAtual.filter(d => d.tratativa === 'ciente').length,
-    andamento:  itensGeralAtual.filter(d => d.tratativa === 'andamento').length,
+    // Ciência já move o item para "em andamento"; eventual legado 'ciente' conta como andamento.
+    andamento:  itensGeralAtual.filter(d => d.tratativa === 'andamento' || d.tratativa === 'ciente').length,
     resolvido:  itensGeralAtual.filter(d => d.tratativa === 'resolvido').length,
     excluido:   itensGeralAtual.filter(d => d.tratativa === 'excluido').length,
     total: itensGeralAtual.length,
@@ -662,7 +666,7 @@ export default function DesignacaoReprovadosClient() {
   function limparCamposItem() {
     setFSetores([]); setFDocumentos([])
     setFSituacao(situacoes.find(s => s.ativo)?.id ?? '')
-    setFResponsaveis([])
+    setFResponsaveis([]); setFMotivo('')
   }
 
   function abrirForm() {
@@ -716,6 +720,7 @@ export default function DesignacaoReprovadosClient() {
         documentos: fDocumentos,
         situacao_id: fSituacao,
         responsaveis: fResponsaveis,
+        motivo: fMotivo.trim(),
       }),
     })
     setSaving(false)
@@ -957,6 +962,30 @@ export default function DesignacaoReprovadosClient() {
     } else showToast('Erro ao atualizar pertinência.')
   }
 
+  // ── Atalho: cadastrar empresa direto do formulário ──
+  function verificarEmpresaNaoCadastrada() {
+    const nome = fEmpresa.trim()
+    if (nome.length < 2 || cadRapido) return
+    if (empresas.some(e => e.nome.trim().toLowerCase() === nome.toLowerCase())) return
+    setCadRapido({ nome, contratante: '', email: '' })
+  }
+  async function salvarCadRapido() {
+    if (!cadRapido || !cadRapido.nome.trim()) { showToast('Informe a empresa.'); return }
+    setCadRapidoSaving(true)
+    const res = await fetch('/api/designacao-reprovados/empresas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cadRapido),
+    })
+    setCadRapidoSaving(false)
+    if (res.ok) {
+      const created: Empresa = await res.json()
+      setEmpresas(prev => [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
+      setFEmpresa(created.nome)
+      setCadRapido(null)
+      showToast('Empresa cadastrada.')
+    } else { const e = await res.json().catch(() => ({})); showToast((e as { error?: string }).error ?? 'Erro ao cadastrar empresa.') }
+  }
+
   // ── Config: empresas ──
   async function addEmpresa() {
     if (!novaEmpresaNome.trim()) { showToast('Informe a empresa.'); return }
@@ -1072,7 +1101,12 @@ export default function DesignacaoReprovadosClient() {
         </div>
         <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
           <b>{d.documentos.map(getDocNome).join(' · ')}</b>
-          {d.motivo && <div style={{ marginTop: 6 }}>{d.motivo}</div>}
+          {d.motivo && (
+            <div style={{ marginTop: 8, background: '#FFF8E1', border: '1px solid #F5D77A', borderLeft: '4px solid #E0A800', borderRadius: 8, padding: '9px 12px', color: '#5C4400' }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 3 }}>📝 Observação</div>
+              {d.motivo}
+            </div>
+          )}
         </div>
 
         {/* E-mail pronto para encaminhar à empresa — só quem recebe a designação vê isso montado.
@@ -1263,7 +1297,7 @@ export default function DesignacaoReprovadosClient() {
                     <div>
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 8 }}>Empresa</div>
                       <input ref={empresaInputRef} type="text" list="dlEmpresasDesig" autoComplete="off" placeholder="Digite para buscar..."
-                        value={fEmpresa} onChange={e => setFEmpresa(e.target.value)} style={inputStyle({ width: '100%' })} />
+                        value={fEmpresa} onChange={e => setFEmpresa(e.target.value)} onBlur={verificarEmpresaNaoCadastrada} style={inputStyle({ width: '100%' })} />
                       <datalist id="dlEmpresasDesig">
                         {empresas.map(e => <option key={e.id} value={e.nome}>{e.contratante}</option>)}
                       </datalist>
@@ -1405,6 +1439,16 @@ export default function DesignacaoReprovadosClient() {
                         </SubBlock>
                       )
                     })}
+                  </div>
+
+                  {/* Observação (opcional) */}
+                  <div style={{ background: '#FFF8E1', border: '1px solid #F5D77A', borderLeft: '4px solid #E0A800', borderRadius: RADIUS, padding: 14 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: '#5C4400', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 10 }}>
+                      📝 Observação <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>(opcional)</span>
+                    </div>
+                    <textarea value={fMotivo} onChange={e => setFMotivo(e.target.value)} rows={3}
+                      placeholder="Texto livre — aparece para os responsáveis e no e-mail da designação."
+                      style={inputStyle({ width: '100%', resize: 'vertical', fontFamily: 'inherit' })} />
                   </div>
 
                 </div>
@@ -1556,7 +1600,6 @@ export default function DesignacaoReprovadosClient() {
             {/* KPIs — refletem Ativas/Histórico + filtros ativos */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
               <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} icon={KPI_ICON.aguardando} />
-              <Kpi label="Ciente" value={kpis.ciente} color={TRAT_COLORS.ciente} icon={KPI_ICON.ciente} />
               <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} icon={KPI_ICON.andamento} />
               <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} icon={KPI_ICON.resolvido} />
               <Kpi label="Doc(s) excluído" value={kpis.excluido} color={TRAT_COLORS.excluido} icon={KPI_ICON.excluido} />
@@ -1979,6 +2022,26 @@ export default function DesignacaoReprovadosClient() {
           </>
         )}
       </div>
+
+      {/* Atalho: empresa não cadastrada */}
+      {cadRapido && (
+        <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,.2)', padding: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 6 }}>⚠️ Empresa não cadastrada</div>
+            <div style={{ fontSize: 13, color: MUTED, marginBottom: 16 }}>
+              &quot;{cadRapido.nome}&quot; não existe no cadastro. Cadastre agora para o e-mail já ir na designação.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input value={cadRapido.nome} onChange={e => setCadRapido({ ...cadRapido, nome: e.target.value })} placeholder="Razão social / fantasia" style={inputStyle({ width: '100%' })} />
+              <input value={cadRapido.email} onChange={e => setCadRapido({ ...cadRapido, email: e.target.value })} placeholder="e-mail1@x.com;e-mail2@x.com" style={inputStyle({ width: '100%' })} />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+              <button onClick={() => setCadRapido(null)} style={btnGhost}>Continuar sem cadastrar</button>
+              <button onClick={salvarCadRapido} disabled={cadRapidoSaving} style={btnAccent}>{cadRapidoSaving ? 'Salvando...' : 'Cadastrar empresa'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       <div style={{

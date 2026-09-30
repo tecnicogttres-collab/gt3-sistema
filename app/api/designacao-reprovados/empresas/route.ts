@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
-import { getCaller, requireGestorAdmin } from '../../../lib/api-helpers'
+import { getCaller } from '../../../lib/api-helpers'
 
 export async function GET() {
   const caller = await getCaller()
@@ -29,8 +29,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const caller = await requireGestorAdmin()
-  if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  const caller = await getCaller()
+  if (!caller) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const { nome, contratante, email } = await req.json()
   if (!nome?.trim()) return Response.json({ error: 'Nome obrigatório' }, { status: 400 })
