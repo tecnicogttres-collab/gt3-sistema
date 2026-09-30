@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createClient } from '../lib/supabase'
 import { useUser, displayName } from '../components/UserContext'
+import { GRADIENTE_AZUL, SOMBRA_AZUL_SUAVE } from '../lib/ui-destaque'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,8 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   return (
     <button onClick={onClick} className="mn-chip" style={{
       padding: '6px 13px', borderRadius: 999, fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit',
-      border: `1.5px solid ${on ? PRIMARY : BORDER}`, background: on ? PRIMARY : '#fff', color: on ? '#fff' : MUTED, whiteSpace: 'nowrap',
+      border: `1.5px solid ${on ? PRIMARY : BORDER}`, background: on ? GRADIENTE_AZUL : '#fff', color: on ? '#fff' : MUTED, whiteSpace: 'nowrap',
+      boxShadow: on ? SOMBRA_AZUL_SUAVE : 'none', transition: 'all .2s',
     }}>{children}</button>
   )
 }

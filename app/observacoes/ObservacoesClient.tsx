@@ -8,6 +8,7 @@ import { createClient } from '../lib/supabase'
 import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
 import { ObsImageModal } from './ObsImageModal'
+import { GRADIENTE_AZUL, SOMBRA_AZUL, SOMBRA_AZUL_SUAVE, ANEL_AZUL } from '../lib/ui-destaque'
 
 // Nomes imageOnly — lista explícita com e sem acentos para comparação case-insensitive simples
 const IMAGE_ONLY_NAMES = [
@@ -1907,7 +1908,12 @@ export default function ObservacoesClient() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
               <div
                 title="Observação avulsa: para itens fora da planilha — sai com data, hora e seu nome"
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: 5, borderRadius: 12,
+                  border: `1.5px solid ${avulsaTexto ? PRIMARY : '#C9D6EE'}`,
+                  background: avulsaTexto ? 'linear-gradient(135deg, #EEF3FC, #F8FAFF)' : '#F8FAFF',
+                  boxShadow: avulsaTexto ? `${SOMBRA_AZUL_SUAVE}, ${ANEL_AZUL}` : 'none', transition: 'all .25s',
+                }}
               >
                 <textarea
                   value={avulsaTexto}
@@ -1927,7 +1933,8 @@ export default function ObservacoesClient() {
                   title={avulsaTexto.trim() ? avulsaFormatada : 'Digite a observação para copiar já formatada (Ctrl+Enter)'}
                   style={{
                     padding: '7px 14px', borderRadius: 8, border: 'none', alignSelf: 'flex-start',
-                    background: avulsaCopiado ? '#16A34A' : (!avulsaTexto.trim() ? MUTED : PRIMARY), color: '#fff',
+                    background: avulsaCopiado ? '#16A34A' : (!avulsaTexto.trim() ? MUTED : GRADIENTE_AZUL), color: '#fff',
+                    boxShadow: avulsaTexto.trim() && !avulsaCopiado ? SOMBRA_AZUL : 'none', transition: 'all .25s',
                     fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
                     cursor: !avulsaTexto.trim() ? 'not-allowed' : 'pointer',
                     opacity: !avulsaTexto.trim() && !avulsaCopiado ? 0.5 : 1,

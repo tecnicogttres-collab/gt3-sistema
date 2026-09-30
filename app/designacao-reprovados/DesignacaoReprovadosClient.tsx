@@ -21,6 +21,7 @@ type EmailConfig = {
 
 import { urgenciaDesig } from '../lib/desig-urgencia'
 import { baixarEml as emlBaixar, abrirNoOutlook } from '../lib/email-envio'
+import { GRADIENTE_AZUL, SOMBRA_AZUL_SUAVE } from '../lib/ui-destaque'
 
 type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido' | 'excluido'
 
@@ -243,20 +244,22 @@ const avatarStyle: React.CSSProperties = {
 function Flag({ label, on, onClick, small, colorOn, sub }: {
   label: React.ReactNode; on: boolean; onClick: () => void; small?: boolean; colorOn?: string; sub?: React.ReactNode
 }) {
-  const color = on ? (colorOn ?? PRIMARY) : TEXT
+  const color = on ? (colorOn ?? '#fff') : TEXT
   const border = on ? (colorOn ?? PRIMARY) : BORDER
-  const bg = on ? (colorOn ? `${colorOn}14` : PRIMARY_SOFT) : SURF
+  const bg = on ? (colorOn ? `${colorOn}14` : GRADIENTE_AZUL) : SURF
+  const destaque = on && !colorOn   // padrão: azul GT3 em gradiente, texto branco
   return (
     <div onClick={onClick} style={{
       display: 'inline-flex', alignItems: 'center', gap: small ? 6 : 9,
       border: `1.5px solid ${border}`, borderRadius: small ? 8 : 10, cursor: 'pointer', userSelect: 'none',
-      padding: small ? '6px 11px 6px 9px' : '9px 14px 9px 11px', background: bg, color,
+      padding: small ? '6px 11px 6px 9px' : '9px 14px 9px 11px', background: bg, color: destaque ? '#fff' : (on ? colorOn : color),
       fontSize: small ? 12 : 13, fontWeight: 600, lineHeight: 1.15,
+      boxShadow: on ? (destaque ? SOMBRA_AZUL_SUAVE : `0 3px 10px ${colorOn}33`) : 'none', transition: 'all .2s',
     }}>
       <span style={{
         width: small ? 14 : 17, height: small ? 14 : 17, borderRadius: 4, flexShrink: 0,
-        border: `1.5px solid ${on ? color : '#B8C6D8'}`, background: on ? color : '#fff',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 900,
+        border: `1.5px solid ${on ? (destaque ? '#fff' : colorOn) : '#B8C6D8'}`, background: on ? (destaque ? '#fff' : colorOn) : '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: destaque ? PRIMARY : '#fff', fontWeight: 900,
       }}>{on ? '✓' : ''}</span>
       <span>{label}{sub && <small style={{ fontWeight: 400, opacity: .65, marginLeft: 5 }}>{sub}</small>}</span>
     </div>
@@ -711,6 +714,7 @@ export default function DesignacaoReprovadosClient() {
   useEffect(() => {
     if (!formOpen) return
     const temConteudo = fEmpresa.trim() || fSetores.length || fDocumentos.length || fResponsaveis.length || fMotivo.trim()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reação a troca de aba (pode vir de vários pontos)
     setFormOpen(false)
     if (temConteudo) setRascunho(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
