@@ -832,6 +832,9 @@ function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
   const [draft, setDraft] = useState<DraftItem[]>(initial)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [overKey, setOverKey] = useState<string | null>(null)
+  // Arrastar na lista de seções (painel "Ordem das seções")
+  const [dragSec, setDragSec] = useState<string | null>(null)
+  const [overSec, setOverSec] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -859,11 +862,19 @@ function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
   // Sobe/desce a seção inteira (todos os cards dela) — a ordem das seções na coluna é a ordem
   // em que aparecem, então basta reordenar os blocos; "Sem seção" fica sempre no topo.
   function moveSection(group: string, dir: -1 | 1) {
+    const i = sections.indexOf(group)
+    if (i < 0) return
+    placeSection(group, i + dir)
+  }
+
+  // Coloca a seção na posição `to` da lista de seções (0 = primeira) e reordena os blocos de cards.
+  function placeSection(group: string, to: number) {
     setDraft(prev => {
       const order = Array.from(new Set(prev.map(it => it.group).filter((g): g is string => !!g)))
-      const i = order.indexOf(group), j = i + dir
-      if (i < 0 || j < 0 || j >= order.length) return prev
-      ;[order[i], order[j]] = [order[j], order[i]]
+      const i = order.indexOf(group)
+      if (i < 0 || to < 0 || to >= order.length || to === i) return prev
+      order.splice(i, 1)
+      order.splice(to, 0, group)
       return [
         ...prev.filter(it => it.group === null),
         ...order.flatMap(g => prev.filter(it => it.group === g)),
@@ -1013,7 +1024,7 @@ function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0,
       }}>
         <span style={{ fontSize: 11.5, fontWeight: 600, color: PRIMARY, flex: 1, minWidth: 140 }}>
-          Arraste para reordenar. Soltar em outra seção muda a seção; use ▲ ▼ no título para ordenar as seções.
+          Arraste os cards para reordenar; soltar em outra seção muda a seção. Para ordenar as seções, arraste-as (ou use ▲ ▼) na lista &quot;Ordem das seções&quot;.
         </span>
         <button
           onClick={onClose}
@@ -1036,6 +1047,44 @@ function ObsOrganizeList({ cards, onSave, onClose, onEdit, onDelete }: {
         {error && <span style={{ fontSize: 11, color: '#DC2626', width: '100%' }}>{error}</span>}
       </div>
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflowY: 'auto' }}>
+        {sections.length > 1 && (
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, background: '#F8FAFC', padding: 8, marginBottom: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: MUTED, marginBottom: 6 }}>
+              Ordem das seções
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {sections.map((sec, pos) => {
+                const isOver = overSec === sec && dragSec !== null && dragSec !== sec
+                const qtd = draft.filter(it => it.group === sec).length
+                return (
+                  <div
+                    key={sec}
+                    draggable
+                    onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragSec(sec) }}
+                    onDragOver={e => { if (dragSec !== null) { e.preventDefault(); setOverSec(sec) } }}
+                    onDrop={() => { if (dragSec !== null && dragSec !== sec) placeSection(dragSec, pos); setDragSec(null); setOverSec(null) }}
+                    onDragEnd={() => { setDragSec(null); setOverSec(null) }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: '#fff',
+                      border: `1px solid ${BORDER}`, borderTop: isOver ? `3px solid ${PRIMARY}` : `1px solid ${BORDER}`,
+                      opacity: dragSec === sec ? 0.4 : 1, cursor: 'grab',
+                    }}
+                  >
+                    <span style={{ color: MUTED, fontSize: 13, lineHeight: 1, userSelect: 'none', letterSpacing: -1 }}>⠿</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: PRIMARY, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec}</span>
+                    <span style={{ fontSize: 10.5, color: MUTED, flexShrink: 0 }}>{qtd} card{qtd === 1 ? '' : 's'}</span>
+                    <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
+                      <button onClick={() => moveSection(sec, -1)} disabled={pos === 0} title="Subir seção"
+                        style={{ width: 22, height: 20, padding: 0, borderRadius: 5, fontSize: 10, fontWeight: 700, border: `1px solid ${BORDER}`, background: '#fff', color: PRIMARY, cursor: pos === 0 ? 'not-allowed' : 'pointer', opacity: pos === 0 ? 0.35 : 1 }}>▲</button>
+                      <button onClick={() => moveSection(sec, 1)} disabled={pos === sections.length - 1} title="Descer seção"
+                        style={{ width: 22, height: 20, padding: 0, borderRadius: 5, fontSize: 10, fontWeight: 700, border: `1px solid ${BORDER}`, background: '#fff', color: PRIMARY, cursor: pos === sections.length - 1 ? 'not-allowed' : 'pointer', opacity: pos === sections.length - 1 ? 0.35 : 1 }}>▼</button>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {rows}
       </div>
     </>

@@ -29,6 +29,9 @@ export type UserRow = {
   assinatura_email?: string
 }
 
+type SortKey = 'nome' | 'usuario' | 'papel' | 'pdi' | 'status' | 'acesso'
+const SORT_KEYS: Record<string, SortKey> = { 'Nome': 'nome', 'Usuário': 'usuario', 'Papel': 'papel', 'PDI vinculado': 'pdi', 'Status': 'status', 'Último acesso': 'acesso' }
+
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 const PAPEIS_CRIACAO = ['colaborador', 'gestor', 'trainee'] as const
@@ -137,8 +140,50 @@ export default function LoginsClient() {
       (u.papel ?? '').toLowerCase().includes(q)
     )
   })
-  const activeUsers = filtered.filter((u) => !u.banned)
-  const archivedUsers = filtered.filter((u) => u.banned)
+  // Ordenação ao clicar no cabeçalho — padrão: Nome em ordem alfabética crescente.
+  const [sortKey, setSortKey] = useState<SortKey>('nome')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+  function sortValue(u: UserRow, key: SortKey): string | number | null {
+    switch (key) {
+      case 'nome': return (u.nome ?? '').trim() || null
+      case 'usuario': return (u.usuario || toUsername(u.email) || '').trim() || null
+      case 'papel': return u.papel ? (PAPEL_LABELS[u.papel] ?? u.papel) : null
+      case 'pdi': return PDI_OPTIONS.find((p) => p.value === u.pdi_slug)?.label ?? null
+      case 'status': return u.banned ? 1 : 0
+      case 'acesso': return u.last_sign_in ? new Date(u.last_sign_in).getTime() : null
+    }
+  }
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    const va = sortValue(a, sortKey), vb = sortValue(b, sortKey)
+    // Sem valor (—) sempre por último, em qualquer direção.
+    if (va === null && vb === null) return 0
+    if (va === null) return 1
+    if (vb === null) return -1
+    const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'pt-BR', { sensitivity: 'base' })
+    return (sortDir === 'asc' ? cmp : -cmp) || (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR')
+  })
+  const activeUsers = sortedFiltered.filter((u) => !u.banned)
+  const archivedUsers = sortedFiltered.filter((u) => u.banned)
+
+  function renderTh(col: string) {
+    const key = SORT_KEYS[col]
+    const ativo = key === sortKey
+    return (
+      <th
+        key={col}
+        onClick={key ? () => toggleSort(key) : undefined}
+        aria-sort={ativo ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+        title={key ? `Ordenar por ${col}` : undefined}
+        style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: ativo ? '#2A4F96' : 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap', cursor: key ? 'pointer' : 'default', userSelect: 'none' }}
+      >
+        {col}{key && <span style={{ marginLeft: 5, opacity: ativo ? 1 : 0.35 }}>{ativo ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>}
+      </th>
+    )
+  }
 
   // ── Create user ──────────────────────────────────────────────
   async function handleCreate(e: React.FormEvent) {
@@ -477,11 +522,7 @@ export default function LoginsClient() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-soft)', background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
-                {['Nome', 'Usuário', 'Papel', 'PDI vinculado', 'Status', 'Último acesso', 'Ações'].map((col) => (
-                  <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap' }}>
-                    {col}
-                  </th>
-                ))}
+                {['Nome', 'Usuário', 'Papel', 'PDI vinculado', 'Status', 'Último acesso', 'Ações'].map(renderTh)}
               </tr>
             </thead>
             <tbody>
@@ -625,11 +666,7 @@ export default function LoginsClient() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-soft)', background: 'linear-gradient(to bottom, #FAFCFE, #F5F8FC)' }}>
-                    {['Nome', 'Usuário', 'Papel', 'Último acesso', 'Ações'].map((col) => (
-                      <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.9px', whiteSpace: 'nowrap' }}>
-                        {col}
-                      </th>
-                    ))}
+                    {['Nome', 'Usuário', 'Papel', 'Último acesso', 'Ações'].map(renderTh)}
                   </tr>
                 </thead>
                 <tbody>
