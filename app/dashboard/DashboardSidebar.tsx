@@ -552,7 +552,16 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       .channel(`dashboard-desig-rt-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'designacoes' }, () => load())
       .subscribe()
-    return () => { cancelled = true; void supabase.removeChannel(ch) }
+    // Rede de segurança caso o realtime falhe: revalida ao voltar para a aba e a cada 20s.
+    const onVis = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVis)
+    const poll = setInterval(() => { if (document.visibilityState === 'visible') load() }, 20000)
+    return () => {
+      cancelled = true
+      clearInterval(poll)
+      document.removeEventListener('visibilitychange', onVis)
+      void supabase.removeChannel(ch)
+    }
   }, [])
 
   async function darCienciaGrupoDesig(ids: string[]) {

@@ -5,9 +5,9 @@
 // do usuário logado (Usuários → campo "Assinatura de e-mail"). Não montar .eml/mailto na mão.
 // (No servidor, use getAssinaturaEmail de app/lib/email-assinatura.ts.)
 
-/** "A; B" → "A, B" — mailto: e o cabeçalho To:/Cc: do .eml exigem vírgula. */
+/** Vários e-mails separados por ponto e vírgula ("A, B" → "A; B"), padrão do Outlook. */
 export function emailsParaEnvio(destino: string): string {
-  return (destino ?? '').split(/[;,]/).map(e => e.trim()).filter(Boolean).join(', ')
+  return (destino ?? '').split(/[;,]/).map(e => e.trim()).filter(Boolean).join('; ')
 }
 
 /** HTML → texto puro preservando quebras de linha e tópicos (mailto: só aceita texto). */

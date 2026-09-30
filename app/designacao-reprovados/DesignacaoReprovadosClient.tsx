@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
+import { createClient } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ function agruparPorDiaEmpresa(lista: Designacao[]): GrupoDiaEmpresa[] {
  *  Caixa. Um bloco em negrito+sublinhado por setor, com os documentos dele listados em
  *  tópicos — texto se adapta sozinho a 1 ou mais setores/documentos. */
 function buildDesignacaoEmail(
-  empresaNome: string, setorIds: string[], docIds: string[], motivo: string,
+  empresaNome: string, setorIds: string[], docIds: string[],
   setores: Setor[], documentos: Documento[], cfg: EmailConfig,
 ): { assunto: string; corpo: string } {
   const setoresSel = setorIds.map(id => setores.find(s => s.id === id)).filter((s): s is Setor => !!s)
@@ -195,11 +196,9 @@ function buildDesignacaoEmail(
     return `<div style="font-weight:700;text-decoration:underline;margin-top:12px">${escapeHtml(s.nome)}</div><ul style="margin:6px 0 0 18px;padding:0">${itens}</ul>`
   }).join('')
 
-  const motivoBloco = motivo.trim() ? `<div style="margin-top:12px">${escapeHtml(motivo.trim()).replace(/\n/g, '<br>')}</div>` : ''
-
   const fechamento = `<div style="margin-top:12px">${escapeHtml(cfg.fechamento_template).replace(/\n/g, '<br>')}</div>`
 
-  return { assunto, corpo: saudacao + blocosSetor + motivoBloco + fechamento }
+  return { assunto, corpo: saudacao + blocosSetor + fechamento }
 }
 
 // ─── Estilos reutilizáveis ─────────────────────────────────────────────────────
@@ -477,6 +476,32 @@ export default function DesignacaoReprovadosClient() {
     }
     showToast('E-mail copiado.')
   }
+
+  // ── Realtime: designações atualizam na hora (INSERT/UPDATE/DELETE de qualquer usuário) ──
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const recarregar = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        fetch('/api/designacao-reprovados', { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d)) setDesignacoes(d) })
+          .catch(() => {})
+      }, 150)
+    }
+    const supabase = createClient()
+    const ch = supabase
+      .channel(`desig-modulo-rt-${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'designacoes' }, recarregar)
+      .subscribe()
+    const onVis = () => { if (document.visibilityState === 'visible') recarregar() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVis)
+      void supabase.removeChannel(ch)
+    }
+  }, [])
 
   // ── Load ──
   useEffect(() => {
@@ -1064,7 +1089,7 @@ export default function DesignacaoReprovadosClient() {
   function renderCardDesignacao(d: Designacao, opts: { mostrarResponsaveis: boolean }) {
     const souResponsavel = d.responsaveis.includes(userId)
     const jaCiente = d.ciencia_por.includes(userId)
-    const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, d.motivo, setores, documentos, emailConfig)
+    const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, setores, documentos, emailConfig)
     const destinoEmail = getEmpresaEmail(d.empresa)
     // Itens ativos ganham cor de urgência conforme os dias desde a designação (azul → laranja → vermelho).
     const urg = finalizada(d.tratativa) ? null : urgenciaDesig(d.data_verificacao)
