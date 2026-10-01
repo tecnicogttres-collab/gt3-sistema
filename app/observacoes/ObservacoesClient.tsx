@@ -8,7 +8,7 @@ import { createClient } from '../lib/supabase'
 import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
 import type { CardUI, ColumnUI } from './ObsCardGrid'
 import { ObsImageModal } from './ObsImageModal'
-import { GRADIENTE_AZUL, SOMBRA_AZUL, SOMBRA_AZUL_SUAVE, ANEL_AZUL } from '../lib/ui-destaque'
+import { GRADIENTE_AZUL, SOMBRA_AZUL } from '../lib/ui-destaque'
 
 // Nomes imageOnly — lista explícita com e sem acentos para comparação case-insensitive simples
 const IMAGE_ONLY_NAMES = [
@@ -367,7 +367,6 @@ export default function ObservacoesClient() {
   const [savingTemplate, setSavingTemplate] = useState(false)
 
   // ── Observação avulsa (itens fora da planilha) ───────────────────────────────
-  const [avulsaTexto, setAvulsaTexto] = useState('')
   const [avulsaCopiado, setAvulsaCopiado] = useState(false)
   const avulsaCopiadoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -380,9 +379,17 @@ export default function ObservacoesClient() {
     }).catch(() => {})
   }, [])
 
+  // Preferência (por navegador): assinar o texto copiado com o nome completo do cadastro, e não só o primeiro nome.
+  const NOME_COMPLETO_KEY = 'gt3-obs-nome-completo'
+  const [nomeCompleto, setNomeCompletoState] = useState(() => { try { return localStorage.getItem(NOME_COMPLETO_KEY) === '1' } catch { return false } })
+  function setNomeCompleto(v: boolean) {
+    setNomeCompletoState(v)
+    try { localStorage.setItem(NOME_COMPLETO_KEY, v ? '1' : '0') } catch { /* sem storage */ }
+  }
+
   const meuNomeAssinatura = useMemo(
-    () => nomeParaAssinatura(displayName(profile, ''), todosNomes),
-    [profile, todosNomes]
+    () => nomeCompleto ? displayName(profile, '').trim().replace(/\s+/g, ' ') : nomeParaAssinatura(displayName(profile, ''), todosNomes),
+    [profile, todosNomes, nomeCompleto]
   )
 
   async function salvarTemplateCopia() {
@@ -398,19 +405,17 @@ export default function ObservacoesClient() {
     } finally { setSavingTemplate(false) }
   }
 
-  const avulsaFormatada = useMemo(
-    () => aplicarTemplateCopia(copyTemplate, avulsaTexto.trim(), meuNomeAssinatura),
-    [copyTemplate, avulsaTexto, meuNomeAssinatura]
+  /** Estrutura pronta para escrever no Portal: data/hora de agora + texto de exemplo + nome. */
+  const estruturaPortal = useMemo(
+    () => aplicarTemplateCopia(copyTemplate, 'Texto da observação copiada aqui.', meuNomeAssinatura || 'Seu Nome'),
+    [copyTemplate, meuNomeAssinatura]
   )
 
-  function copiarAvulsa() {
-    if (!avulsaTexto.trim()) return
-    escreverClipboard(avulsaFormatada)
-    // Já copiou — limpa o campo pra próxima observação avulsa
-    setAvulsaTexto('')
+  function copiarEstruturaPortal() {
+    escreverClipboard(aplicarTemplateCopia(copyTemplate, 'Texto da observação copiada aqui.', meuNomeAssinatura || 'Seu Nome'))
     setAvulsaCopiado(true)
     if (avulsaCopiadoTimeoutRef.current) clearTimeout(avulsaCopiadoTimeoutRef.current)
-    avulsaCopiadoTimeoutRef.current = setTimeout(() => setAvulsaCopiado(false), 1600)
+    avulsaCopiadoTimeoutRef.current = setTimeout(() => setAvulsaCopiado(false), 1800)
   }
 
   useEffect(() => {
@@ -1645,6 +1650,10 @@ export default function ObservacoesClient() {
                   {aplicarTemplateCopia(templateDraft, 'Texto da observação copiada aqui.', meuNomeAssinatura || 'Seu Nome')}
                 </div>
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, color: INK, cursor: 'pointer' }}>
+                <input type="checkbox" checked={nomeCompleto} onChange={e => setNomeCompleto(e.target.checked)} style={{ width: 16, height: 16, accentColor: PRIMARY }} />
+                Assinar com o <b>nome completo</b> do meu cadastro (em vez de só o primeiro nome)
+              </label>
             </div>
             <div style={{
               padding: '12px 20px', borderTop: `1px solid ${BORDER}`,
@@ -1906,43 +1915,23 @@ export default function ObservacoesClient() {
               </span>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
-              <div
-                title="Observação avulsa: para itens fora da planilha — sai com data, hora e seu nome"
+              <button
+                onClick={copiarEstruturaPortal}
+                title={estruturaPortal}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: 5, borderRadius: 12,
-                  border: `1.5px solid ${avulsaTexto ? PRIMARY : '#C9D6EE'}`,
-                  background: avulsaTexto ? 'linear-gradient(135deg, #EEF3FC, #F8FAFF)' : '#F8FAFF',
-                  boxShadow: avulsaTexto ? `${SOMBRA_AZUL_SUAVE}, ${ANEL_AZUL}` : 'none', transition: 'all .25s',
+                  display: 'inline-flex', alignItems: 'center', gap: 9, padding: '8px 16px', borderRadius: 12, cursor: 'pointer',
+                  border: `1.5px solid ${avulsaCopiado ? '#16A34A' : PRIMARY}`,
+                  background: avulsaCopiado ? 'linear-gradient(135deg, #15803D, #22A05B)' : GRADIENTE_AZUL,
+                  color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  boxShadow: avulsaCopiado ? '0 6px 18px rgba(22,163,74,.32)' : SOMBRA_AZUL, transition: 'all .25s',
                 }}
               >
-                <textarea
-                  value={avulsaTexto}
-                  onChange={e => setAvulsaTexto(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); copiarAvulsa() } }}
-                  placeholder="📝 Observação avulsa — digite aqui"
-                  rows={avulsaTexto.length > 38 || avulsaTexto.includes('\n') ? 3 : 1}
-                  style={{
-                    width: 300, padding: '7px 10px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.4,
-                    border: `1.5px solid ${avulsaTexto ? PRIMARY : BORDER}`, outline: 'none', boxSizing: 'border-box',
-                    fontFamily: 'inherit', color: INK, resize: 'none', background: '#fff',
-                  }}
-                />
-                <button
-                  onClick={copiarAvulsa}
-                  disabled={!avulsaTexto.trim() && !avulsaCopiado}
-                  title={avulsaTexto.trim() ? avulsaFormatada : 'Digite a observação para copiar já formatada (Ctrl+Enter)'}
-                  style={{
-                    padding: '7px 14px', borderRadius: 8, border: 'none', alignSelf: 'flex-start',
-                    background: avulsaCopiado ? '#16A34A' : (!avulsaTexto.trim() ? MUTED : GRADIENTE_AZUL), color: '#fff',
-                    boxShadow: avulsaTexto.trim() && !avulsaCopiado ? SOMBRA_AZUL : 'none', transition: 'all .25s',
-                    fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                    cursor: !avulsaTexto.trim() ? 'not-allowed' : 'pointer',
-                    opacity: !avulsaTexto.trim() && !avulsaCopiado ? 0.5 : 1,
-                  }}
-                >
-                  {avulsaCopiado ? '✓ Copiado!' : 'Copiar'}
-                </button>
-              </div>
+                <span style={{ fontSize: 15 }}>{avulsaCopiado ? '✓' : '📋'}</span>
+                <span style={{ textAlign: 'left', lineHeight: 1.2 }}>
+                  <span style={{ display: 'block' }}>{avulsaCopiado ? 'Copiado!' : 'Estrutura de obs pronta para escrever no Portal'}</span>
+                  <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, opacity: .85 }}>{avulsaCopiado ? 'Cole no Portal e escreva a observação' : 'Clique para copiar'}</span>
+                </span>
+              </button>
               {canEditLayout && (
                 layoutMode ? (
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

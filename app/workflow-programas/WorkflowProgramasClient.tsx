@@ -2507,26 +2507,65 @@ export default function WorkflowProgramasClient() {
       </div>
       </div>
 
-      {/* ── Modal: Empresa duplicada no banco ── */}
-      {dupEmpresa && (
-        <div
-          onClick={e => { if (e.target === e.currentTarget) setDupEmpresa(null) }}
-          className="gt3-overlay-fade"
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-        >
-          <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 10, width: '100%', maxWidth: 440, padding: 22, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: TX, marginBottom: 8 }}>Empresa já está no banco de dados</div>
-            <div style={{ fontSize: 13, color: MU, lineHeight: 1.6, marginBottom: 18 }}>
-              Já existe uma análise para <b>{dupEmpresa.empresa}</b> ({dupEmpresa.finalizada ? 'finalizada' : 'em andamento'}, criada em {new Date(dupEmpresa.created_at).toLocaleDateString('pt-BR')}).
-              Quer começar um novo preenchimento, substituindo o registro anterior? Assim a empresa não fica duplicada no banco.
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <Btn variant="gho" onClick={() => setDupEmpresa(null)}>Não, manter separado</Btn>
-              <Btn variant="pri" onClick={substituirEmpresaDuplicada}>Sim, substituir</Btn>
+      {/* ── Modal: Empresa já cadastrada no banco (aprovada = verde, reprovada = vermelho) ── */}
+      {dupEmpresa && (() => {
+        const st = statusAnalise(dupEmpresa)
+        const tipo: 'reprovado' | 'aprovado' | 'andamento' = st.k === 'reprovada' ? 'reprovado' : st.k === 'analise' ? 'andamento' : 'aprovado'
+        const cor = tipo === 'reprovado' ? NO : tipo === 'aprovado' ? OK : P
+        const corSuave = tipo === 'reprovado' ? NOS : tipo === 'aprovado' ? OKS : '#EAF0FB'
+        const rotulo = tipo === 'reprovado' ? 'WORKFLOW REPROVADO' : tipo === 'aprovado' ? 'WORKFLOW APROVADO' : 'WORKFLOW EM ANDAMENTO'
+        const icone = tipo === 'reprovado' ? '✖' : tipo === 'aprovado' ? '✔' : '⏳'
+        const idsItens = () => new Set(itensDaAnalise(dupEmpresa.dados).map(i => i.id))
+        const continuarExistente = () => { abrirAnalise(dupEmpresa); setDupEmpresa(null); showToast('Partindo da análise existente de ' + dupEmpresa.empresa) }
+        const novaSobrescrevendo = () => { substituirEmpresaDuplicada() }
+        const pdfEAntiga = () => {
+          exportarRelatorioPdf([dupEmpresa], idsItens(), 'empresa', new Set(TODOS_TONES))
+          substituirEmpresaDuplicada()
+        }
+        return (
+          <div
+            onClick={e => { if (e.target === e.currentTarget) setDupEmpresa(null) }}
+            className="gt3-overlay-fade"
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          >
+            <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 500, overflow: 'hidden', border: `2px solid ${cor}`, boxShadow: `0 12px 40px ${cor}40` }}>
+              <div style={{ background: cor, color: '#fff', padding: '12px 22px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 18, fontWeight: 800 }}>{icone}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '.6px' }}>{rotulo}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, opacity: .9 }}>{st.t}</span>
+              </div>
+              <div style={{ padding: 22 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: TX, marginBottom: 4 }}>Já há um workflow cadastrado para esta empresa</div>
+                <div style={{ fontSize: 12.5, color: MU, marginBottom: 14 }}>
+                  <b style={{ color: TX }}>{dupEmpresa.empresa}</b> · criado em {new Date(dupEmpresa.created_at).toLocaleDateString('pt-BR')}
+                  {dupEmpresa.finalizada ? ` · finalizado em ${new Date((dupEmpresa.data_final || dupEmpresa.updated_at) + (dupEmpresa.data_final ? 'T12:00:00' : '')).toLocaleDateString('pt-BR')}` : ' · em andamento'}
+                </div>
+                <div style={{ background: corSuave, border: `1px solid ${cor}55`, borderLeft: `5px solid ${cor}`, borderRadius: 8, padding: '12px 14px', fontSize: 13, color: TX, lineHeight: 1.6, marginBottom: 18 }}>
+                  {tipo === 'reprovado' && (<>
+                    <b style={{ color: NO }}>Análise reprovada.</b> Partiremos <b>de uma análise existente</b>: o preenchimento anterior será aberto para você continuar de onde parou.
+                  </>)}
+                  {tipo === 'aprovado' && (<>
+                    <b style={{ color: OK }}>Análise aprovada.</b> Partiremos de uma <b>nova análise</b>, <b>sobrescrevendo a anterior</b>: ela será eliminada das estatísticas e do banco de dados.
+                    Se precisar do registro antigo, escolha <i>“OK e gerar PDF da avaliação antiga”</i>.
+                  </>)}
+                  {tipo === 'andamento' && (<>
+                    Há uma análise <b>em andamento</b>. Partiremos <b>de uma análise existente</b>, retomando o preenchimento anterior.
+                  </>)}
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <Btn variant="gho" onClick={() => setDupEmpresa(null)}>Cancelar</Btn>
+                  {tipo === 'aprovado' ? (<>
+                    <Btn variant="pri" onClick={novaSobrescrevendo}>OK</Btn>
+                    <Btn variant="acc" onClick={pdfEAntiga} title="Baixa/imprime o PDF da avaliação antiga e depois inicia a nova">OK e gerar PDF da avaliação antiga</Btn>
+                  </>) : (
+                    <Btn variant="pri" onClick={continuarExistente}>OK</Btn>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Modal: Contratante ── */}
       {modalContratante && (
