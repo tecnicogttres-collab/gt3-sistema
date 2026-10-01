@@ -409,7 +409,12 @@ export default function CafeClient() {
   async function handleFinalize() {
     if (!current) return
     const label = `${MONTHS_PT[current.monthIdx]} de ${current.year}`
-    if (!window.confirm(`Finalizar ${label} e mover para o histórico?\n\nO próximo mês será gerado automaticamente. Se a última semana for quebrada, quem está escalado continua automaticamente nos dias restantes.`)) return
+    // Mês ainda em andamento (o do calendário ou futuro): pede confirmação com aviso. Mês já passado: finaliza direto.
+    const hoje = new Date()
+    const aindaVigente = current.year * 12 + current.monthIdx >= hoje.getFullYear() * 12 + hoje.getMonth()
+    if (aindaVigente && !window.confirm(
+      `⚠️ ${label} é o MÊS VIGENTE — ele ainda está em andamento.\n\nFinalizar agora move o mês para o histórico e gera o próximo. Só faça isso se o mês realmente acabou.\n\n(Se finalizar sem querer, dá para trazê-lo de volta pelo Histórico.)\n\nDeseja finalizar ${label}?`
+    )) return
 
     const { year: ny, monthIdx: nm } = nextMonthOf(current.year, current.monthIdx)
     const supabase = createClient()
@@ -448,6 +453,43 @@ export default function CafeClient() {
   }
 
   // ── History actions ──────────────────────────────────────────────────────
+
+  /** Traz um mês do histórico de volta como mês vigente; o vigente atual vai para o histórico. */
+  async function handleRestoreAsCurrent(year: number, month: number) {
+    const sheet = history[year]?.[month]
+    if (!sheet?.id) return
+    const label = `${MONTHS_PT[month]} de ${year}`
+    const atual = current ? `${MONTHS_PT[current.monthIdx]} de ${current.year}` : null
+    if (!window.confirm(`Trazer ${label} de volta como mês vigente?${atual ? `\n\n${atual} (o vigente de hoje) será movido para o histórico, sem perder nada.` : ''}`)) return
+
+    const supabase = createClient()
+    if (current?.id) {
+      const { error: e1 } = await supabase.from('cafe_sheets').update({ is_current: false }).eq('id', current.id)
+      if (e1) { console.error('Erro ao arquivar o mês vigente:', e1); window.alert('Não foi possível arquivar o mês vigente atual.'); return }
+    }
+    const { data, error: e2 } = await supabase.from('cafe_sheets').update({ is_current: true }).eq('id', sheet.id).select().single()
+    if (e2 || !data) {
+      console.error('Erro ao restaurar mês:', e2)
+      // desfaz o arquivamento para não ficar sem mês vigente
+      if (current?.id) await supabase.from('cafe_sheets').update({ is_current: true }).eq('id', current.id)
+      window.alert('Não foi possível trazer o mês de volta.')
+      return
+    }
+
+    const previous = current
+    setHistory(prev => {
+      const h: HistoryData = { ...prev }
+      const yr = { ...(h[year] ?? {}) }
+      delete yr[month]
+      if (Object.keys(yr).length === 0) delete h[year]; else h[year] = yr
+      if (previous) h[previous.year] = { ...(h[previous.year] ?? {}), [previous.monthIdx]: previous }
+      return h
+    })
+    setCurrent(rowToSheet(data))
+    if (Array.isArray(data.people) && data.people.length) setPeople(data.people)
+    setHistPath({ year: null, month: null })
+    setView('current')
+  }
 
   async function handleDeleteArchived(year: number, month: number) {
     const sheet = history[year]?.[month]
@@ -646,6 +688,7 @@ export default function CafeClient() {
 
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setHistPath({ year, month: null })} style={btnSecondary}>← Voltar para {year}</button>
+                <button onClick={() => handleRestoreAsCurrent(year, month)} style={btnPrimary} title="Reabre este mês como mês vigente (o vigente atual vai para o histórico)">↩ Trazer de volta como mês vigente</button>
                 <button onClick={() => handleDeleteArchived(year, month)} style={{ ...btnDanger, marginLeft: 'auto' }}>
                   🗑 Excluir do histórico
                 </button>
