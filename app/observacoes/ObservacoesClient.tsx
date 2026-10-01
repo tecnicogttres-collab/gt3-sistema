@@ -327,6 +327,27 @@ export default function ObservacoesClient() {
     initialCat && initialSubtab ? subtabCanonico(initialSubtab) : (CATEGORIES.find(c => c.key === initialCat)?.subtabs[0]?.key ?? '')
   )
   const [search, setSearch] = useState('')
+  // Novo link ?obs= com o módulo já aberto (as abas ficam montadas): reaplica categoria/subcategoria/destaque.
+  const obsParam = searchParams.get('obs')
+  const catParam = searchParams.get('cat')
+  const subParam = searchParams.get('subtab')
+  const obsAplicadaRef = useRef<string | null>(obsParam)
+  const [alvoTick, setAlvoTick] = useState(0)
+  useEffect(() => {
+    if (!obsParam || obsParam === obsAplicadaRef.current) return
+    obsAplicadaRef.current = obsParam
+    targetObsRef.current = obsParam
+    const cat = CATEGORIES.find(x => x.key === catParam)
+    /* eslint-disable react-hooks/set-state-in-effect -- reação a navegação por link (?obs=) com o módulo já montado */
+    setSearch('')
+    if (cat) {
+      setActiveCatKey(cat.key)
+      setNavCollapsed(true)
+      setActiveSubtabKey(subParam ? subtabCanonico(subParam) : (cat.subtabs[0]?.key ?? ''))
+    }
+    setAlvoTick(t => t + 1)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [obsParam, catParam, subParam])
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const topScrollRef = useRef<HTMLDivElement>(null)
@@ -449,17 +470,24 @@ export default function ObservacoesClient() {
   useEffect(() => {
     const id = targetObsRef.current
     if (!id || !dbObs.some(o => o.id === id)) return
-    const timer = setTimeout(() => {
+    // O card só existe depois que categoria/subcategoria terminam de renderizar — tenta por até ~3s.
+    let tentativas = 0
+    let timer: ReturnType<typeof setTimeout>
+    const tentar = () => {
       const el = document.getElementById(`obs-card-${id}`)
-      if (!el) return
+      if (!el) {
+        if (++tentativas < 12) timer = setTimeout(tentar, 250)
+        return
+      }
       targetObsRef.current = null
       el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
       el.style.transition = 'box-shadow 0.4s'
       el.style.boxShadow = '0 0 0 4px rgba(124,58,237,0.55)'
       setTimeout(() => { el.style.boxShadow = '' }, 2600)
-    }, 250)
+    }
+    timer = setTimeout(tentar, 250)
     return () => clearTimeout(timer)
-  }, [dbObs, activeSubtabKey, dbSubtabsByCategoria])
+  }, [dbObs, activeSubtabKey, dbSubtabsByCategoria, alvoTick])
 
   // Realtime: propaga validações e edições de outros usuários sem precisar recarregar
   useEffect(() => {
