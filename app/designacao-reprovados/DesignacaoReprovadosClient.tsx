@@ -1146,8 +1146,19 @@ export default function DesignacaoReprovadosClient() {
         <div style={{ fontSize: 13, lineHeight: 1.6, background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
           <b>{d.documentos.map(getDocNome).join(' · ')}</b>
           {d.motivo && (
-            <div style={{ marginTop: 8, background: '#FFF8E1', border: '1px solid #F5D77A', borderLeft: '4px solid #E0A800', borderRadius: 8, padding: '9px 12px', color: '#5C4400' }}>
-              <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 3 }}>📝 Observação</div>
+            <div
+              onClick={() => { navigator.clipboard.writeText(d.motivo || ''); showToast('Observação copiada.') }}
+              title="Clique para copiar a observação"
+              style={{ marginTop: 8, background: '#FFF8E1', border: '1px solid #F5D77A', borderLeft: '4px solid #E0A800', borderRadius: 8, padding: '9px 12px', color: '#5C4400', cursor: 'pointer' }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span>📝 Observação</span>
+                <button
+                  onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(d.motivo || ''); showToast('Observação copiada.') }}
+                  title="Copiar observação"
+                  style={{ border: '1px solid #E0A800', background: '#fff', color: '#5C4400', borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700, cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
+                  📋 Copiar
+                </button>
+              </div>
               {d.motivo}
             </div>
           )}

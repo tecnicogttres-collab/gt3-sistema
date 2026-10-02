@@ -13,6 +13,15 @@ export type TableField = {
 
 export type Field = TextField | TableField
 
+export type FeriasColetivas = {
+  /** AAAA-MM-DD */
+  inicio: string
+  /** AAAA-MM-DD */
+  fim: string
+  contato: string
+  email: string
+}
+
 export type Company = {
   id: string
   sheetName: string
@@ -20,6 +29,7 @@ export type Company = {
   segment: string
   updated: string
   fields: Field[]
+  feriasColetivas?: FeriasColetivas | null
 }
 
 export const SEGMENTS = [

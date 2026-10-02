@@ -1125,14 +1125,21 @@ export default function WorkflowProgramasClient() {
       aprovacao: () => aplicaVars(getT(c?.aprovadoId || catalog?.config.aprovadoId)?.corpo || '', ctx),
       observacoes: () => {
         const partes: string[] = []
-        if (restricoes.length) {
-          const plural = restricoes.length > 1
-          const itensHtml = restricoes.map((i, n) => {
+        // Item sem texto vinculado e sem observação digitada não tem nada a dizer no parecer —
+        // fica de fora (em vez de imprimir o aviso "sem texto vinculado — cadastre…" ao cliente).
+        const restricoesComTexto = restricoes.filter(i => getT(i.textoRestricaoId) || a.respostas[i.id]?.obs)
+        const restantesComTexto = restantes.filter(i => {
+          const status = a.respostas[i.id]?.status
+          return (status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)) || a.respostas[i.id]?.obs
+        })
+        if (restricoesComTexto.length) {
+          const plural = restricoesComTexto.length > 1
+          const itensHtml = restricoesComTexto.map((i, n) => {
             const t = getT(i.textoRestricaoId)
             const obs = a.respostas[i.id]?.obs
             const ctxItem = { ...ctxParaItem(ctx, i, a), prazorestricao: String(prazoRestricaoComum) }
-            let linha = `${n + 1} - ${aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxItem)}`
-            if (obs) linha += `<br>Observação: ${obs}`
+            let linha = `${n + 1} - ${t ? aplicaVars(t.corpo, ctxItem) : ''}`
+            if (obs) linha += `${t ? '<br>' : ''}Observação: ${obs}`
             return `<div>${linha}</div>`
           }).join('')
           const diasLabel = prazoRestricaoComum === 1 ? '1 DIA' : `${prazoRestricaoComum} DIAS`
@@ -1141,14 +1148,14 @@ export default function WorkflowProgramasClient() {
             `<div style="font-weight:700;margin-bottom:4px">${titulo}</div>${itensHtml}`
           )
         }
-        if (restantes.length) {
-          partes.push(htmlJoinBlocos(restantes.map((i, n) => {
+        if (restantesComTexto.length) {
+          partes.push(htmlJoinBlocos(restantesComTexto.map((i, n) => {
             const status = a.respostas[i.id]?.status
             const t = status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
             const obs = a.respostas[i.id]?.obs
             const tag = status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
-            let bloco = `<div style="font-weight:700;margin-bottom:4px">${restricoes.length + n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
-              aplicaVars(t ? t.corpo : '(sem texto vinculado — cadastre na Biblioteca de textos)', ctxParaItem(ctx, i, a))
+            let bloco = `<div style="font-weight:700;margin-bottom:4px">${restricoesComTexto.length + n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
+              (t ? aplicaVars(t.corpo, ctxParaItem(ctx, i, a)) : '')
             if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
             return bloco
           })))

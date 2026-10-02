@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Company, Field, SEGMENT_COLORS } from './types'
+import { Company, Field, FeriasColetivas, SEGMENT_COLORS } from './types'
 import { createClient } from '../lib/supabase'
 
 function rowToCompany(row: {
@@ -11,6 +11,7 @@ function rowToCompany(row: {
   segment: string
   updated: string
   fields: unknown
+  ferias_coletivas?: FeriasColetivas | null
 }): Company {
   const fields = (row.fields as Field[]) ?? []
   const withoutInteg = fields.filter(f => !/integra[çc][ãa]o/i.test(f.label))
@@ -23,7 +24,28 @@ function rowToCompany(row: {
     segment: row.segment,
     updated: row.updated,
     fields: [...withoutInteg, integField],
+    feriasColetivas: row.ferias_coletivas ?? null,
   }
+}
+
+/** Data de hoje no fuso local, AAAA-MM-DD (comparável como texto com os campos date). */
+function hojeISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function dataBR(iso: string) {
+  const [y, m, d] = iso.split('-')
+  return y && m && d ? `${d}/${m}/${y}` : iso
+}
+
+/** 'ativa' = hoje dentro do período; 'futura' = ainda vai começar; null = não cadastrada ou já encerrada. */
+function feriasStatus(c: Company): 'ativa' | 'futura' | null {
+  const f = c.feriasColetivas
+  if (!f || !f.inicio || !f.fim) return null
+  const hoje = hojeISO()
+  if (hoje > f.fim) return null
+  return hoje >= f.inicio ? 'ativa' : 'futura'
 }
 
 function getContactName(c: Company) {
@@ -80,6 +102,7 @@ export default function CadastroClient() {
   const [toast, setToast] = useState<string | null>(null)
   const [editTextModal, setEditTextModal] = useState<EditTextModal>({ open: false })
   const [newCompanyModal, setNewCompanyModal] = useState<NewCompanyModal>({ open: false })
+  const [feriasModal, setFeriasModal] = useState(false)
   const [newCompanyName, setNewCompanyName] = useState('')
   const [newCompanySeg, setNewCompanySeg] = useState<string>('Bertolini')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -91,7 +114,7 @@ export default function CadastroClient() {
     async function init() {
       try {
         const [compRes, favsRes] = await Promise.all([
-          supabase.from('contratantes').select('id, name, sheet_name, segment, updated, fields').order('name'),
+          supabase.from('contratantes').select('*').order('name'),
           supabase.from('contratantes_favs').select('company_id'),
         ])
         if (cancelled) return
@@ -181,6 +204,16 @@ export default function CadastroClient() {
       })
       .eq('id', id)
     if (error) console.error('Erro ao salvar contratante:', error)
+  }, [])
+
+  const saveFerias = useCallback(async (id: string, ferias: FeriasColetivas | null) => {
+    setCompanies(prev => prev.map(c => c.id === id ? { ...c, feriasColetivas: ferias } : c))
+    const supabase = createClient()
+    const { error } = await supabase.from('contratantes').update({ ferias_coletivas: ferias }).eq('id', id)
+    if (error) {
+      console.error('Erro ao salvar férias coletivas:', error)
+      alert('Não foi possível salvar as férias coletivas. Confirme que o SQL sql/contratantes-ferias-coletivas.sql foi executado.')
+    }
   }, [])
 
   const updateCompany = useCallback((id: string, updater: (c: Company) => Company) => {
@@ -430,6 +463,7 @@ export default function CadastroClient() {
                   company={c}
                   isActive={c.id === currentId}
                   isFav={true}
+                  ferias={feriasStatus(c) === 'ativa'}
                   onSelect={() => setCurrentId(c.id)}
                   onToggleFav={e => void toggleFavorite(c.id, e)}
                 />
@@ -454,6 +488,7 @@ export default function CadastroClient() {
               company={c}
               isActive={c.id === currentId}
               isFav={false}
+              ferias={feriasStatus(c) === 'ativa'}
               onSelect={() => setCurrentId(c.id)}
               onToggleFav={e => void toggleFavorite(c.id, e)}
             />
@@ -504,9 +539,20 @@ export default function CadastroClient() {
             onRename={renameCompany}
             onChangeSegment={openSegmentModal}
             onDelete={() => void deleteCompany()}
+            onFerias={() => setFeriasModal(true)}
           />
         )}
       </div>
+
+      {feriasModal && currentCompany && (
+        <FeriasModal
+          key={currentCompany.id}
+          company={currentCompany}
+          onCopy={copyText}
+          onSave={f => { void saveFerias(currentCompany.id, f); setFeriasModal(false) }}
+          onClose={() => setFeriasModal(false)}
+        />
+      )}
 
       {/* ── Toast ──────────────────────────────────────────────────────── */}
       {toast && (
@@ -621,9 +667,10 @@ export default function CadastroClient() {
 // ── Company card ───────────────────────────────────────────────────────────
 
 function CompanyCard({
-  company: c, isActive, isFav, onSelect, onToggleFav,
+  company: c, isActive, isFav, ferias, onSelect, onToggleFav,
 }: {
   company: Company
+  ferias: boolean
   isActive: boolean
   isFav: boolean
   onSelect: () => void
@@ -642,9 +689,9 @@ function CompanyCard({
       onMouseLeave={() => setHov(false)}
       style={{
         padding: '8px 8px 8px 9px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
-        background: isActive ? '#EEF2FF' : hov ? '#F0F3F8' : '#F7F9FC',
-        border: isActive ? '1px solid #BFD0FF' : '1px solid transparent',
-        borderLeft: `3px solid ${isActive ? dot : 'transparent'}`,
+        background: ferias ? (hov ? '#FFEFC2' : '#FFF6D6') : isActive ? '#EEF2FF' : hov ? '#F0F3F8' : '#F7F9FC',
+        border: ferias ? '1px solid #F5D77A' : isActive ? '1px solid #BFD0FF' : '1px solid transparent',
+        borderLeft: `3px solid ${ferias ? '#E0A800' : isActive ? dot : 'transparent'}`,
         boxShadow: isActive ? '0 1px 4px rgba(42,79,150,0.1)' : 'none',
         display: 'flex', alignItems: 'flex-start', gap: 6,
         transition: 'background-color 0.15s, border-color 0.15s, box-shadow 0.15s',
@@ -665,6 +712,12 @@ function CompanyCard({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, display: 'inline-block', flexShrink: 0 }} />
+          {ferias && (
+            <span style={{
+              fontSize: 10, padding: '1px 6px', borderRadius: 10, fontWeight: 700,
+              background: '#FFF8E1', color: '#8A5A00', border: '1px solid #E0A800',
+            }}>🏖 Férias coletivas</span>
+          )}
           {auth && (
             <span style={{
               fontSize: 10, padding: '1px 6px', borderRadius: 10, fontWeight: 600,
@@ -690,6 +743,105 @@ function CompanyCard({
         {isFav ? '★' : '☆'}
       </button>
     </div>
+  )
+}
+
+// ── Férias coletivas ───────────────────────────────────────────────────────
+
+function FeriasModal({
+  company: c, onCopy, onSave, onClose,
+}: {
+  company: Company
+  onCopy: (text: string) => void
+  onSave: (f: FeriasColetivas | null) => void
+  onClose: () => void
+}) {
+  const atual = c.feriasColetivas
+  const [editando, setEditando] = useState(!atual)
+  const [inicio, setInicio] = useState(atual?.inicio ?? '')
+  const [fim, setFim] = useState(atual?.fim ?? '')
+  const [contato, setContato] = useState(atual?.contato ?? '')
+  const [email, setEmail] = useState(atual?.email ?? '')
+  const inputSt: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8,
+    border: '1px solid #CBD5E0', fontSize: 13, outline: 'none',
+  }
+  const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#718096', display: 'block', marginBottom: 4 }
+  const st = feriasStatus(c)
+
+  function salvar() {
+    if (!inicio || !fim) { alert('Informe a data inicial e a data final.'); return }
+    if (fim < inicio) { alert('A data final não pode ser anterior à inicial.'); return }
+    onSave({ inicio, fim, contato: contato.trim(), email: email.trim() })
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: '#2D3748' }}>🏖 Férias coletivas — {c.name}</div>
+      {editando ? (
+        <>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>INÍCIO</label>
+              <input type="date" value={inicio} onChange={e => setInicio(e.target.value)} style={inputSt} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>FIM</label>
+              <input type="date" value={fim} onChange={e => setFim(e.target.value)} style={inputSt} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={lbl}>RESPONSÁVEL PELO CONTATO</label>
+            <input value={contato} onChange={e => setContato(e.target.value)} style={inputSt} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={lbl}>E-MAIL</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputSt} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <div>
+              {atual && (
+                <button
+                  onClick={() => { if (confirm('Remover as férias coletivas desta contratante?')) onSave(null) }}
+                  style={{ ...btnSecondary, color: '#E53E3E', borderColor: '#FEB2B2' }}
+                >Remover</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => (atual ? setEditando(false) : onClose())} style={btnSecondary}>Cancelar</button>
+              <button onClick={salvar} style={btnPrimary}>Salvar</button>
+            </div>
+          </div>
+        </>
+      ) : atual && (
+        <>
+          <div style={{
+            background: st ? '#FFF8E1' : '#F7F9FC', border: `1px solid ${st ? '#F5D77A' : '#E2E8F0'}`,
+            borderLeft: `4px solid ${st ? '#E0A800' : '#CBD5E0'}`, borderRadius: 8, padding: '12px 14px', fontSize: 13, color: '#2D3748', lineHeight: 1.7,
+          }}>
+            <div><b>Período:</b> {dataBR(atual.inicio)} a {dataBR(atual.fim)}
+              {st === 'ativa' && <span style={{ marginLeft: 8, color: '#8A5A00', fontWeight: 700 }}>· em andamento</span>}
+              {!st && <span style={{ marginLeft: 8, color: '#A0AEC0' }}>· encerrada</span>}
+            </div>
+            <div><b>Responsável:</b> {atual.contato || '—'}</div>
+            <div>
+              <b>E-mail:</b>{' '}
+              {atual.email ? (
+                <span
+                  onClick={() => onCopy(atual.email)}
+                  title="Clique para copiar"
+                  style={{ cursor: 'pointer', color: '#2A4F96', textDecoration: 'underline dotted' }}
+                >{atual.email}</span>
+              ) : '—'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button onClick={() => setEditando(true)} style={btnSecondary}>Editar</button>
+            <button onClick={onClose} style={btnPrimary}>Fechar</button>
+          </div>
+        </>
+      )}
+    </ModalOverlay>
   )
 }
 
@@ -832,14 +984,16 @@ type DetailPanelProps = {
   onRename: () => void
   onChangeSegment: () => void
   onDelete: () => void
+  onFerias: () => void
 }
 
 function DetailPanel({
   company: c,
   onCopy, onEditText, onUpdateLabel, onUpdateCell, onUpdateHeader,
   onMoveField, onReorderField, onRemoveField, onAddField, onAddTableRow, onAddTableCol, onRemoveTableRow,
-  onRename, onChangeSegment, onDelete,
+  onRename, onChangeSegment, onDelete, onFerias,
 }: DetailPanelProps) {
+  const feriasSt = feriasStatus(c)
   const color = SEGMENT_COLORS[c.segment] ?? '#8C6EDC'
   const txtCount = c.fields.filter(f => f.type === 'text').length
   const tblCount = c.fields.filter(f => f.type === 'table').length
@@ -900,7 +1054,21 @@ function DetailPanel({
             Ficha editável · {txtCount} campo{txtCount !== 1 ? 's' : ''}{tblCount ? ` · ${tblCount} tabela${tblCount !== 1 ? 's' : ''}` : ''} · atualizada em {c.updated}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onFerias}
+            title={c.feriasColetivas ? 'Ver / editar férias coletivas' : 'Cadastrar férias coletivas'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8,
+              fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+              border: feriasSt ? '1px solid #E0A800' : '1px solid #E2E8F0',
+              background: feriasSt === 'ativa' ? 'linear-gradient(135deg,#FFD65A,#F5B800)' : feriasSt === 'futura' ? '#FFF1BF' : '#fff',
+              color: feriasSt ? '#5C4400' : '#4A5568',
+              boxShadow: feriasSt ? '0 2px 8px rgba(224,168,0,0.35)' : 'none',
+            }}
+          >
+            🏖 Férias coletivas{feriasSt === 'ativa' ? ' · em andamento' : feriasSt === 'futura' && c.feriasColetivas ? ` · a partir de ${dataBR(c.feriasColetivas.inicio)}` : ''}
+          </button>
           <LabelBtn onClick={onRename} icon={<IconPencil />}>Renomear</LabelBtn>
           <LabelBtn onClick={onChangeSegment} icon={<IconSwap />}>Segmento</LabelBtn>
           <LabelBtn onClick={onDelete} icon={<IconTrash />} danger>Excluir</LabelBtn>
