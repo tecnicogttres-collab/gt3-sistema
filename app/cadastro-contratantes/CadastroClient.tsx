@@ -11,7 +11,7 @@ function rowToCompany(row: {
   segment: string
   updated: string
   fields: unknown
-  ferias_coletivas?: FeriasColetivas | null
+  ferias_coletivas?: Partial<FeriasColetivas> | Partial<FeriasColetivas>[] | null
 }): Company {
   const fields = (row.fields as Field[]) ?? []
   const withoutInteg = fields.filter(f => !/integra[çc][ãa]o/i.test(f.label))
@@ -24,8 +24,16 @@ function rowToCompany(row: {
     segment: row.segment,
     updated: row.updated,
     fields: [...withoutInteg, integField],
-    feriasColetivas: row.ferias_coletivas ?? null,
+    feriasColetivas: normalizaFerias(row.ferias_coletivas),
   }
+}
+
+/** Aceita o formato antigo (um objeto só) e o atual (lista de períodos, um por unidade). */
+function normalizaFerias(raw: Partial<FeriasColetivas> | Partial<FeriasColetivas>[] | null | undefined): FeriasColetivas[] {
+  const lista = Array.isArray(raw) ? raw : raw ? [raw] : []
+  return lista.map(f => ({
+    unidade: f.unidade ?? '', inicio: f.inicio ?? '', fim: f.fim ?? '', contato: f.contato ?? '', email: f.email ?? '',
+  }))
 }
 
 /** Data de hoje no fuso local, AAAA-MM-DD (comparável como texto com os campos date). */
@@ -39,15 +47,19 @@ function dataBR(iso: string) {
   return y && m && d ? `${d}/${m}/${y}` : iso
 }
 
-/** 'ativa' = hoje dentro do período; 'futura' = ainda vai começar; null = não cadastrada ou já encerrada. */
-function feriasStatus(c: Company): 'ativa' | 'futura' | null {
-  const f = c.feriasColetivas
-  if (!f || !f.inicio || !f.fim) return null
+/** Situação de um período: 'ativa' = hoje dentro dele; 'futura' = ainda vai começar; null = encerrado/incompleto. */
+function periodoStatus(f: FeriasColetivas): 'ativa' | 'futura' | null {
+  if (!f.inicio || !f.fim) return null
   const hoje = hojeISO()
   if (hoje > f.fim) return null
   return hoje >= f.inicio ? 'ativa' : 'futura'
 }
 
+/** Situação da contratante: 'ativa' se qualquer unidade está em férias coletivas agora; senão 'futura' se há alguma por vir. */
+function feriasStatus(c: Company): 'ativa' | 'futura' | null {
+  const sts = (c.feriasColetivas ?? []).map(periodoStatus)
+  return sts.includes('ativa') ? 'ativa' : sts.includes('futura') ? 'futura' : null
+}
 function getContactName(c: Company) {
   const f = c.fields.find(x => x.type === 'text' && /CONTATO/i.test(x.label))
   return f && f.type === 'text' ? (f.value || '').split('\n')[0].trim() : ''
@@ -206,10 +218,10 @@ export default function CadastroClient() {
     if (error) console.error('Erro ao salvar contratante:', error)
   }, [])
 
-  const saveFerias = useCallback(async (id: string, ferias: FeriasColetivas | null) => {
+  const saveFerias = useCallback(async (id: string, ferias: FeriasColetivas[]) => {
     setCompanies(prev => prev.map(c => c.id === id ? { ...c, feriasColetivas: ferias } : c))
     const supabase = createClient()
-    const { error } = await supabase.from('contratantes').update({ ferias_coletivas: ferias }).eq('id', id)
+    const { error } = await supabase.from('contratantes').update({ ferias_coletivas: ferias.length ? ferias : null }).eq('id', id)
     if (error) {
       console.error('Erro ao salvar férias coletivas:', error)
       alert('Não foi possível salvar as férias coletivas. Confirme que o SQL sql/contratantes-ferias-coletivas.sql foi executado.')
@@ -753,93 +765,112 @@ function FeriasModal({
 }: {
   company: Company
   onCopy: (text: string) => void
-  onSave: (f: FeriasColetivas | null) => void
+  onSave: (f: FeriasColetivas[]) => void
   onClose: () => void
 }) {
-  const atual = c.feriasColetivas
-  const [editando, setEditando] = useState(!atual)
-  const [inicio, setInicio] = useState(atual?.inicio ?? '')
-  const [fim, setFim] = useState(atual?.fim ?? '')
-  const [contato, setContato] = useState(atual?.contato ?? '')
-  const [email, setEmail] = useState(atual?.email ?? '')
+  const atual = c.feriasColetivas ?? []
+  const vazio = (): FeriasColetivas => ({ unidade: '', inicio: '', fim: '', contato: '', email: '' })
+  const [editando, setEditando] = useState(atual.length === 0)
+  const [lista, setLista] = useState<FeriasColetivas[]>(atual.length ? atual : [vazio()])
   const inputSt: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8,
     border: '1px solid #CBD5E0', fontSize: 13, outline: 'none',
   }
   const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#718096', display: 'block', marginBottom: 4 }
-  const st = feriasStatus(c)
+
+  const setItem = (i: number, patch: Partial<FeriasColetivas>) =>
+    setLista(prev => prev.map((f, j) => (j === i ? { ...f, ...patch } : f)))
 
   function salvar() {
-    if (!inicio || !fim) { alert('Informe a data inicial e a data final.'); return }
-    if (fim < inicio) { alert('A data final não pode ser anterior à inicial.'); return }
-    onSave({ inicio, fim, contato: contato.trim(), email: email.trim() })
+    for (const f of lista) {
+      if (!f.inicio || !f.fim) { alert('Informe a data inicial e a data final de todos os períodos.'); return }
+      if (f.fim < f.inicio) { alert('A data final não pode ser anterior à inicial.'); return }
+    }
+    onSave(lista.map(f => ({ ...f, unidade: f.unidade.trim(), contato: f.contato.trim(), email: f.email.trim() })))
   }
 
   return (
     <ModalOverlay onClose={onClose}>
       <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: '#2D3748' }}>🏖 Férias coletivas — {c.name}</div>
-      {editando ? (
-        <>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label style={lbl}>INÍCIO</label>
-              <input type="date" value={inicio} onChange={e => setInicio(e.target.value)} style={inputSt} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={lbl}>FIM</label>
-              <input type="date" value={fim} onChange={e => setFim(e.target.value)} style={inputSt} />
-            </div>
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <label style={lbl}>RESPONSÁVEL PELO CONTATO</label>
-            <input value={contato} onChange={e => setContato(e.target.value)} style={inputSt} />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={lbl}>E-MAIL</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputSt} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-            <div>
-              {atual && (
-                <button
-                  onClick={() => { if (confirm('Remover as férias coletivas desta contratante?')) onSave(null) }}
-                  style={{ ...btnSecondary, color: '#E53E3E', borderColor: '#FEB2B2' }}
-                >Remover</button>
+      <div style={{ maxHeight: '62vh', overflowY: 'auto', paddingRight: 2 }}>
+        {editando ? lista.map((f, i) => (
+          <div key={i} style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: 12, marginBottom: 10, background: '#FBFCFE' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={lbl}>UNIDADE <span style={{ fontWeight: 400 }}>(opcional)</span></label>
+                <input value={f.unidade} onChange={e => setItem(i, { unidade: e.target.value })} placeholder="Ex.: Unidade 1" style={inputSt} />
+              </div>
+              {lista.length > 1 && (
+                <button onClick={() => setLista(prev => prev.filter((_, j) => j !== i))} title="Remover este período"
+                  style={{ ...btnSecondary, color: '#E53E3E', borderColor: '#FEB2B2', padding: '8px 10px' }}>✕</button>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => (atual ? setEditando(false) : onClose())} style={btnSecondary}>Cancelar</button>
-              <button onClick={salvar} style={btnPrimary}>Salvar</button>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={lbl}>INÍCIO</label>
+                <input type="date" value={f.inicio} onChange={e => setItem(i, { inicio: e.target.value })} style={inputSt} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={lbl}>FIM</label>
+                <input type="date" value={f.fim} onChange={e => setItem(i, { fim: e.target.value })} style={inputSt} />
+              </div>
             </div>
-          </div>
-        </>
-      ) : atual && (
-        <>
-          <div style={{
-            background: st ? '#FFF8E1' : '#F7F9FC', border: `1px solid ${st ? '#F5D77A' : '#E2E8F0'}`,
-            borderLeft: `4px solid ${st ? '#E0A800' : '#CBD5E0'}`, borderRadius: 8, padding: '12px 14px', fontSize: 13, color: '#2D3748', lineHeight: 1.7,
-          }}>
-            <div><b>Período:</b> {dataBR(atual.inicio)} a {dataBR(atual.fim)}
-              {st === 'ativa' && <span style={{ marginLeft: 8, color: '#8A5A00', fontWeight: 700 }}>· em andamento</span>}
-              {!st && <span style={{ marginLeft: 8, color: '#A0AEC0' }}>· encerrada</span>}
+            <div style={{ marginBottom: 10 }}>
+              <label style={lbl}>RESPONSÁVEL PELO CONTATO</label>
+              <input value={f.contato} onChange={e => setItem(i, { contato: e.target.value })} style={inputSt} />
             </div>
-            <div><b>Responsável:</b> {atual.contato || '—'}</div>
             <div>
-              <b>E-mail:</b>{' '}
-              {atual.email ? (
-                <span
-                  onClick={() => onCopy(atual.email)}
-                  title="Clique para copiar"
-                  style={{ cursor: 'pointer', color: '#2A4F96', textDecoration: 'underline dotted' }}
-                >{atual.email}</span>
-              ) : '—'}
+              <label style={lbl}>E-MAIL</label>
+              <input type="email" value={f.email} onChange={e => setItem(i, { email: e.target.value })} style={inputSt} />
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-            <button onClick={() => setEditando(true)} style={btnSecondary}>Editar</button>
-            <button onClick={onClose} style={btnPrimary}>Fechar</button>
+        )) : atual.map((f, i) => {
+          const st = periodoStatus(f)
+          return (
+            <div key={i} style={{
+              background: st ? '#FFF8E1' : '#F7F9FC', border: `1px solid ${st ? '#F5D77A' : '#E2E8F0'}`,
+              borderLeft: `4px solid ${st ? '#E0A800' : '#CBD5E0'}`, borderRadius: 8, padding: '12px 14px', marginBottom: 10,
+              fontSize: 13, color: '#2D3748', lineHeight: 1.7,
+            }}>
+              {f.unidade && <div style={{ fontWeight: 700 }}>{f.unidade}</div>}
+              <div><b>Período:</b> {dataBR(f.inicio)} a {dataBR(f.fim)}
+                {st === 'ativa' && <span style={{ marginLeft: 8, color: '#8A5A00', fontWeight: 700 }}>· em andamento</span>}
+                {st === 'futura' && <span style={{ marginLeft: 8, color: '#8A5A00' }}>· agendada</span>}
+                {!st && <span style={{ marginLeft: 8, color: '#A0AEC0' }}>· encerrada</span>}
+              </div>
+              <div><b>Responsável:</b> {f.contato || '—'}</div>
+              <div>
+                <b>E-mail:</b>{' '}
+                {f.email ? (
+                  <span onClick={() => onCopy(f.email)} title="Clique para copiar"
+                    style={{ cursor: 'pointer', color: '#2A4F96', textDecoration: 'underline dotted' }}>{f.email}</span>
+                ) : '—'}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {editando ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setLista(prev => [...prev, vazio()])} style={btnSecondary}>+ Unidade / período</button>
+            {atual.length > 0 && (
+              <button
+                onClick={() => { if (confirm('Remover todas as férias coletivas desta contratante?')) onSave([]) }}
+                style={{ ...btnSecondary, color: '#E53E3E', borderColor: '#FEB2B2' }}
+              >Remover tudo</button>
+            )}
           </div>
-        </>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { if (atual.length) { setLista(atual); setEditando(false) } else onClose() }} style={btnSecondary}>Cancelar</button>
+            <button onClick={salvar} style={btnPrimary}>Salvar</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          <button onClick={() => setEditando(true)} style={btnSecondary}>Editar</button>
+          <button onClick={onClose} style={btnPrimary}>Fechar</button>
+        </div>
       )}
     </ModalOverlay>
   )
@@ -1057,7 +1088,7 @@ function DetailPanel({
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <button
             onClick={onFerias}
-            title={c.feriasColetivas ? 'Ver / editar férias coletivas' : 'Cadastrar férias coletivas'}
+            title={c.feriasColetivas?.length ? 'Ver / editar férias coletivas' : 'Cadastrar férias coletivas'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8,
               fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
@@ -1067,7 +1098,7 @@ function DetailPanel({
               boxShadow: feriasSt ? '0 2px 8px rgba(224,168,0,0.35)' : 'none',
             }}
           >
-            🏖 Férias coletivas{feriasSt === 'ativa' ? ' · em andamento' : feriasSt === 'futura' && c.feriasColetivas ? ` · a partir de ${dataBR(c.feriasColetivas.inicio)}` : ''}
+            🏖 Férias coletivas{feriasSt === 'ativa' ? ' · em andamento' : feriasSt === 'futura' ? ` · a partir de ${dataBR((c.feriasColetivas ?? []).filter(f => periodoStatus(f) === 'futura').map(f => f.inicio).sort()[0])}` : ''}
           </button>
           <LabelBtn onClick={onRename} icon={<IconPencil />}>Renomear</LabelBtn>
           <LabelBtn onClick={onChangeSegment} icon={<IconSwap />}>Segmento</LabelBtn>

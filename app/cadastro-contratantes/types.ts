@@ -14,6 +14,8 @@ export type TableField = {
 export type Field = TextField | TableField
 
 export type FeriasColetivas = {
+  /** Unidade a que se refere o período (opcional — contratantes com mais de uma unidade têm um período por unidade) */
+  unidade: string
   /** AAAA-MM-DD */
   inicio: string
   /** AAAA-MM-DD */
@@ -29,7 +31,7 @@ export type Company = {
   segment: string
   updated: string
   fields: Field[]
-  feriasColetivas?: FeriasColetivas | null
+  feriasColetivas?: FeriasColetivas[]
 }
 
 export const SEGMENTS = [
