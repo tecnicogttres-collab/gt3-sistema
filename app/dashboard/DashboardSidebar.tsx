@@ -552,10 +552,10 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       .channel(`dashboard-desig-rt-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'designacoes' }, () => load())
       .subscribe()
-    // Rede de segurança caso o realtime falhe: revalida ao voltar para a aba e a cada 20s.
+    // Rede de segurança caso o realtime falhe: revalida ao voltar para a aba e a cada 3 min.
     const onVis = () => { if (document.visibilityState === 'visible') load() }
     document.addEventListener('visibilitychange', onVis)
-    const poll = setInterval(() => { if (document.visibilityState === 'visible') load() }, 20000)
+    const poll = setInterval(() => { if (document.visibilityState === 'visible') load() }, 180_000)
     return () => {
       cancelled = true
       clearInterval(poll)
