@@ -570,6 +570,8 @@ export default function QuestionariosClient() {
                 <button className="btn" onClick={() => abrirEditor(qn)}>Abrir</button>
                 <button className="btn ghost" onClick={() => irPara('convites', qn.id)}>Convites</button>
                 <button className="btn ghost" onClick={() => irPara('painel', qn.id)}>Respostas</button>
+                <button className="btn danger" title="Excluir questionário" aria-label={`Excluir questionário ${qn.titulo}`}
+                  onClick={() => void excluirQn(qn)}>Excluir</button>
               </div>
             </div>
           )
