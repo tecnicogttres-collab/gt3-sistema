@@ -627,16 +627,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [profile, isColabOrTrainee, loadLegislacoesPendentes])
 
-  // Reload unread banner when navigating away from atas / legislacoes
+  // Recarrega os avisos de atas/legislações só ao SAIR dessas telas (é lá que "lida" muda).
+  // A carga inicial já acontece no efeito acima; antes, toda troca de tela refazia as duas consultas.
+  const pathAnterior = useRef(pathname)
   useEffect(() => {
-    if (!profile || !isColabOrTrainee) return
-    loadUnreadAtas(profile.id, profile.created_at)
-  }, [pathname, profile, isColabOrTrainee, loadUnreadAtas])
-
-  useEffect(() => {
-    if (!profile) return
-    loadLegislacoesPendentes(profile.created_at)
-  }, [pathname, profile, loadLegislacoesPendentes])
+    const anterior = pathAnterior.current
+    pathAnterior.current = pathname
+    if (anterior === pathname || !profile) return
+    if (anterior === '/atas' && isColabOrTrainee) loadUnreadAtas(profile.id, profile.created_at)
+    if (anterior === '/legislacoes') loadLegislacoesPendentes(profile.created_at)
+  }, [pathname, profile, isColabOrTrainee, loadUnreadAtas, loadLegislacoesPendentes])
 
   // Login e link público do questionário (respondente externo) aparecem sem o shell do sistema
   if (pathname === '/login' || pathname.startsWith('/questionario/')) return <>{children}</>
