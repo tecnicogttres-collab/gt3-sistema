@@ -53,7 +53,8 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
     // sessão estar anexada ao socket deixa ele "SUBSCRIBED" mas nunca entrega evento nenhum
     // (broadcast fica bloqueado em silêncio). Por isso espera a sessão carregar primeiro,
     // igual já é feito em outros canais do sistema (ex.: DashboardSidebar).
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null
       if (!user || !mounted) return
       const channel = supabase
         .channel('modulos-config-realtime')

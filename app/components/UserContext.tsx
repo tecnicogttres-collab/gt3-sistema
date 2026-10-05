@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useMemo } from 'react'
+import { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '../lib/supabase'
 
@@ -52,6 +52,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [rawProfile, setRawProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  // Último usuário cujo perfil foi carregado: eventos de sessão repetidos (ex.: voltar o foco
+  // para a aba) não refazem /api/me se for a mesma pessoa.
+  const perfilCarregadoDe = useRef<string | null>(null)
   const [roleOverride, setRoleOverrideState] = useState<PapelRole | null>(() => {
     if (typeof window === 'undefined') return null
     return (sessionStorage.getItem(OVERRIDE_KEY) as PapelRole | null)
@@ -84,7 +87,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user)
-      if (user) loadProfile(user.id)
+      if (user) { perfilCarregadoDe.current = user.id; loadProfile(user.id) }
       setLoading(false)
     }).catch(() => {
       setLoading(false)
@@ -93,8 +96,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null
       setUser(u)
-      if (u) loadProfile(u.id)
-      else setRawProfile(null)
+      if (u) {
+        if (perfilCarregadoDe.current !== u.id) { perfilCarregadoDe.current = u.id; loadProfile(u.id) }
+      } else {
+        perfilCarregadoDe.current = null
+        setRawProfile(null)
+      }
     })
 
     return () => subscription.unsubscribe()

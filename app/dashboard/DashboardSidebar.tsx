@@ -462,7 +462,8 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     let cleanup = () => {}
     const supabase = createClient()
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null
       if (!user || cancelled) return
       const ch = supabase
         .channel(`pdi-conversa-rt-${Math.random().toString(36).slice(2)}`)
