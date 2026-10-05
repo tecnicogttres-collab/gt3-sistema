@@ -582,8 +582,9 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       {/* ── Right panel ────────────────────────────────────────────────────── */}
       <div
         style={{
-          width: sidebarWidth,
-          flexShrink: 0,
+          flex: `1 1 ${sidebarWidth}px`,
+          maxWidth: sidebarWidth,
+          minWidth: 0,
           position: 'sticky',
           top: 0,
           maxHeight: 'calc(100vh - 120px)',
@@ -598,6 +599,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         }}
       >
         {/* ── Block 1: Prioridades ──────────────────────────────────────── */}
+        {priorities.length > 0 && (
         <div style={{
           background: '#fff',
           borderRadius: 8,
@@ -665,6 +667,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             )
           })()}
         </div>
+        )}
 
         {/* ── Block 1b: Observações a validar (gestor/admin) ────────────── */}
         {role && ['gestor', 'admin'].includes(role) && obsPendentes.length > 0 && (
@@ -710,34 +713,24 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         <div style={{
           background: '#fff',
           borderRadius: 8,
-          padding: '12px 14px',
+          padding: '8px 14px',
           boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
         }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#2A4F96', marginBottom: 10 }}>
-            Hoje
-          </div>
-          <div>
-            <div style={{
-              fontSize: 11, color: '#64748B', textTransform: 'uppercase',
-              letterSpacing: '0.05em', fontWeight: 600, marginBottom: 6,
-            }}>
-              📋 Revisão BSA
-            </div>
-            {bsaPerson ? (
-              isManager ? (
-                <Link
-                  href="/controle-revisao"
-                  style={{ fontSize: 13, color: '#2A4F96', fontWeight: 500, textDecoration: 'none' }}
-                >
-                  {bsaPerson}
-                </Link>
-              ) : (
-                <div style={{ fontSize: 13, color: '#1E293B' }}>{bsaPerson}</div>
-              )
+          <span style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+            📋 Hoje · Revisão BSA
+          </span>
+          {bsaPerson ? (
+            isManager ? (
+              <Link href="/controle-revisao" style={{ fontSize: 13, color: '#2A4F96', fontWeight: 600, textDecoration: 'none' }}>
+                {bsaPerson}
+              </Link>
             ) : (
-              <div style={{ fontSize: 13, color: '#9CA3AF' }}>—</div>
-            )}
-          </div>
+              <span style={{ fontSize: 13, color: '#1E293B', fontWeight: 600 }}>{bsaPerson}</span>
+            )
+          ) : (
+            <span style={{ fontSize: 13, color: '#9CA3AF' }}>—</span>
+          )}
         </div>
 
         {/* ── Block 3: Próximas Conversas PDI (conditional, gestor/admin) ── */}
@@ -971,8 +964,48 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           </div>
         )}
 
-        {/* ── Block 4b: Designação de Reprovados — aguardando minha ciência / em andamento ── */}
-        {desigPendentes.length > 0 && (
+        {/* ── Block 5: Aniversários (conditional) ─────────────────────── */}
+        {bdayItems.length > 0 && (
+          <div style={{
+            background: '#FFF5F5',
+            borderRadius: 8,
+            borderLeft: '4px solid #F87171',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#991B1B', marginBottom: 10 }}>
+              🎂 Aniversários
+            </div>
+            {bdayItems.map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  fontSize: 13,
+                  color: '#1E293B',
+                  padding: '5px 0',
+                  borderBottom: i < bdayItems.length - 1 ? '1px solid #FEE2E2' : 'none',
+                  lineHeight: 1.5,
+                }}
+              >
+                <span style={{ fontWeight: 500 }}>{item.name}</span>
+                <span style={{ color: '#6B7280', marginLeft: 6 }}>
+                  🎂 {pad2(item.day)}/{pad2(item.month0 + 1)}
+                </span>
+                <span style={{ color: '#991B1B', fontSize: 11, marginLeft: 6 }}>
+                  {item.daysLeft === 0
+                    ? 'Hoje!'
+                    : item.daysLeft === 1
+                    ? 'Amanhã'
+                    : `Em ${item.daysLeft} dias`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* ── Coluna à direita: Designação de Reprovados (só aparece quando há itens) ── */}
+      {desigPendentes.length > 0 && (
+        <div style={{ flex: '1 1 300px', maxWidth: 400, minWidth: 0, position: 'sticky', top: 0, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}>
           <div style={{
             background: '#fff',
             borderRadius: 8,
@@ -1036,47 +1069,8 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               })
             })()}
           </div>
-        )}
-
-        {/* ── Block 5: Aniversários (conditional) ─────────────────────── */}
-        {bdayItems.length > 0 && (
-          <div style={{
-            background: '#FFF5F5',
-            borderRadius: 8,
-            borderLeft: '4px solid #F87171',
-            padding: '12px 14px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#991B1B', marginBottom: 10 }}>
-              🎂 Aniversários
-            </div>
-            {bdayItems.map((item, i) => (
-              <div
-                key={i}
-                style={{
-                  fontSize: 13,
-                  color: '#1E293B',
-                  padding: '5px 0',
-                  borderBottom: i < bdayItems.length - 1 ? '1px solid #FEE2E2' : 'none',
-                  lineHeight: 1.5,
-                }}
-              >
-                <span style={{ fontWeight: 500 }}>{item.name}</span>
-                <span style={{ color: '#6B7280', marginLeft: 6 }}>
-                  🎂 {pad2(item.day)}/{pad2(item.month0 + 1)}
-                </span>
-                <span style={{ color: '#991B1B', fontSize: 11, marginLeft: 6 }}>
-                  {item.daysLeft === 0
-                    ? 'Hoje!'
-                    : item.daysLeft === 1
-                    ? 'Amanhã'
-                    : `Em ${item.daysLeft} dias`}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Modal: detalhes da prioridade ──────────────────────────────────── */}
       {modalPrio && (

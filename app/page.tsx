@@ -101,9 +101,9 @@ export default function DashboardPage() {
   )
 
   return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', paddingLeft: 216 }}>
-      {/* Main content */}
-      <div style={{ flex: 1, minWidth: 0, maxWidth: 960 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start', paddingLeft: 216 }}>
+      {/* Main content — quebra os painéis laterais para baixo quando não houver largura */}
+      <div style={{ flex: '1 1 560px', minWidth: 0, maxWidth: 960 }}>
         {avisoFerias && (
           <style>{`
             @keyframes gt3FeriasIn {

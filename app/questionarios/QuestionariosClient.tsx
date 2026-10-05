@@ -53,17 +53,18 @@ const CSS = `
 .qnm .status-tag.ativo{background:rgba(12,163,12,.15);color:var(--st-good-text)}
 .qnm .status-tag.rascunho{background:var(--surface-2);color:var(--text-muted)}
 .qnm .status-tag.encerrado{background:rgba(250,178,25,.2);color:var(--st-warning-text)}
-.qnm .hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-.qnm .qn-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px}
-.qnm .qn-card h3{font-size:16px;font-weight:800;margin:0;line-height:1.25}
+.qnm .hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:14px}
+.qnm .qn-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px;min-width:0;overflow:hidden}
+.qnm .qn-card h3{font-size:16px;font-weight:800;margin:0;line-height:1.25;min-width:0;overflow-wrap:anywhere}
+.qnm .qn-card .pill-tag{max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .qnm .qn-numbers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--border);padding-top:12px}
 .qnm .qn-numbers div{display:flex;flex-direction:column}
 .qnm .qn-numbers b{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
 .qnm .qn-numbers span{font-size:11px;color:var(--text-muted)}
 .qnm .qn-progress{height:6px;border-radius:100px;background:var(--surface-2);overflow:hidden}
 .qnm .qn-progress i{display:block;height:100%;background:var(--st-good);border-radius:100px}
-.qnm .qn-actions{display:flex;gap:8px;margin-top:auto}
-.qnm .qn-actions .btn{flex:1}
+.qnm .qn-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto}
+.qnm .qn-actions .btn{flex:1 1 auto;min-width:0;white-space:nowrap;padding-left:10px;padding-right:10px}
 .qnm .qn-new{border:1.5px dashed var(--border);background:transparent;box-shadow:none;justify-content:center;min-height:200px}
 .qnm .qn-new-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:none;border:none;cursor:pointer;color:var(--primary);font-weight:700;font-size:14px;min-height:160px;border-radius:10px;width:100%}
 .qnm .qn-new-btn:hover{background:var(--surface-2)}
