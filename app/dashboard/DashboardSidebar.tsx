@@ -523,9 +523,9 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       .channel(`dashboard-obs-rt-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'observacoes' }, () => load())
       .subscribe()
-    // Rede de segurança caso o realtime da tabela não esteja ligado: reconfere a cada minuto
+    // Rede de segurança caso o realtime da tabela não esteja ligado: reconfere a cada 5 min
     // (só com a aba visível) e assim que a pessoa volta para a aba.
-    const poll = setInterval(() => { if (document.visibilityState === 'visible') load() }, 60_000)
+    const poll = setInterval(() => { if (document.visibilityState === 'visible') load() }, 300_000)
     const onVisible = () => { if (document.visibilityState === 'visible') load() }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
