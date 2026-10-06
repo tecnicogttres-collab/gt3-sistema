@@ -146,6 +146,14 @@ export const MODULES: Module[] = [
     allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
+    id: 'campanhas',
+    label: 'Campanhas',
+    color: '#4A90D9',
+    path: '/campanhas',
+    description: 'Divulgações da empresa com aviso fixo até abrir o link e controle de quem leu',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'revisoes-docs',
     label: 'Revisões Documentos',
     color: '#4A90D9',

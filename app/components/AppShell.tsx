@@ -234,6 +234,17 @@ export async function markPrioridadeVista(id: string, userId: string) {
 
 // ─── Atas helpers ─────────────────────────────────────────────────────────────
 
+type CampanhaAviso = { id: string; titulo: string; link: string; cor: string; lida: boolean; para_mim: boolean; created_at: string }
+
+/** Texto da barra de campanha: branco em cor escura, escuro em cor clara (ex.: amarelo). */
+function corTextoSobre(hex: string) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex)
+  if (!m) return '#fff'
+  const n = parseInt(m[1], 16)
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return lum > 0.65 ? '#1F2937' : '#fff'
+}
+
 type AtaNotif = { id: string; data: string; titulo: string | null; created_at: string }
 
 /** Itens criados antes da conta do usuário existir não devem virar notificação/leitura pendente. */
@@ -345,6 +356,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
   const [legislacoesPendentes, setLegislacoesPendentes] = useState(0)
+  const [campanhasPendentes, setCampanhasPendentes] = useState<CampanhaAviso[]>([])
   const [pdiConversaBanner, setPdiConversaBanner] = useState<PdiConversaBanner | null>(null)
   const [pdiNotifBanner, setPdiNotifBanner] = useState<PdiNotifBanner | null>(null)
   const [pdiCriadoNotif, setPdiCriadoNotif] = useState<PdiNotifBanner | null>(null)
@@ -381,6 +393,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       setLegislacoesPendentes(data.filter(l => !l.lida && l.para_mim && criadoAposConta(l.created_at, profileCreatedAt)).length)
     } catch { /* noop */ }
   }, [])
+
+  // Campanhas pendentes: o aviso fica fixo no topo (na cor da campanha) até a pessoa abrir o link.
+  const loadCampanhasPendentes = useCallback(async (profileCreatedAt: string | null | undefined) => {
+    try {
+      const res = await fetch('/api/campanhas')
+      if (!res.ok) return
+      const data: CampanhaAviso[] = await res.json()
+      setCampanhasPendentes(data.filter(c => !c.lida && c.para_mim && criadoAposConta(c.created_at, profileCreatedAt)))
+    } catch { /* noop */ }
+  }, [])
+
+  function abrirCampanha(c: CampanhaAviso) {
+    window.open(c.link, '_blank')
+    setCampanhasPendentes(prev => prev.filter(x => x.id !== c.id))
+    fetch(`/api/campanhas/${c.id}/lida`, { method: 'POST' }).catch(() => {})
+  }
 
   const loadUnreadAtas = useCallback(async (userId: string, profileCreatedAt: string | null | undefined) => {
     if (!isColabOrTrainee) return
@@ -531,7 +559,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       checkUnseenEnquetes(),
       checkLembretesPendentes(),
       loadLegislacoesPendentes(profile.created_at),
+      loadCampanhasPendentes(profile.created_at),
     ])
+
+    // Campanha criada/excluída/editada (por aqui ou por outra pessoa): recarrega os avisos.
+    const recarregarCampanhas = () => { void loadCampanhasPendentes(profile.created_at) }
+    window.addEventListener('campanhas:atualizar', recarregarCampanhas)
 
     let pollTimer: ReturnType<typeof setInterval> | null = null
     function startPoll() {
@@ -585,6 +618,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         }
       )
       .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'campanhas' },
+        () => { recarregarCampanhas() }
+      )
+      .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sugestoes' },
         (payload) => {
           if (isColabOrTrainee) return
@@ -622,10 +659,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('campanhas:atualizar', recarregarCampanhas)
       stopPoll()
       supabase.removeChannel(channel)
     }
-  }, [profile, isColabOrTrainee, loadLegislacoesPendentes])
+  }, [profile, isColabOrTrainee, loadLegislacoesPendentes, loadCampanhasPendentes])
 
   // Recarrega os avisos de atas/legislações só ao SAIR dessas telas (é lá que "lida" muda).
   // A carga inicial já acontece no efeito acima; antes, toda troca de tela refazia as duas consultas.
@@ -896,6 +934,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           )}
+
+          {/* Campanhas: uma barra por campanha pendente, na cor escolhida — só some ao abrir o link. */}
+          {campanhasPendentes.map(c => {
+            const fg = corTextoSobre(c.cor || '#B45309')
+            return (
+              <div key={c.id} style={{
+                backgroundColor: c.cor || '#B45309', color: fg,
+                padding: '10px 24px', display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', flexShrink: 0, gap: 12,
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>
+                  📣 {c.titulo}
+                  <span style={{ fontWeight: 400, marginLeft: 6, opacity: .9 }}>— abra a divulgação para dispensar este aviso</span>
+                </span>
+                <button
+                  onClick={() => abrirCampanha(c)}
+                  style={{
+                    padding: '4px 14px', borderRadius: 6, border: 'none',
+                    background: fg, color: c.cor || '#B45309', fontSize: 12,
+                    fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  }}
+                >
+                  Abrir divulgação ↗
+                </button>
+              </div>
+            )
+          })}
 
           <Tabbar />
 
