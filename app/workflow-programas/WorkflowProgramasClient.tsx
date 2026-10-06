@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { useUser, displayName } from '../components/UserContext'
 import { baixarEml as emlBaixar, abrirNoOutlook } from '../lib/email-envio'
+import { TEMPLATE_COPIA_PADRAO, aplicarTemplateObs, lerNomeCompleto, nomeParaAssinatura } from '../lib/obs-assinatura'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -819,6 +820,23 @@ export default function WorkflowProgramasClient() {
   const [emailEditado, setEmailEditado] = useState(false)
   const [emailOverride, setEmailOverride] = useState('')
 
+  // Modelo "{{data}} {{hora}} - {{observacao}} - {{nome}}" do módulo de Observações, usado
+  // nos quadros de reprovação (um por documento).
+  const [obsTemplate, setObsTemplate] = useState(TEMPLATE_COPIA_PADRAO)
+  const [obsNomes, setObsNomes] = useState<string[]>([])
+  const [obsNomeCompleto, setObsNomeCompleto] = useState(false)
+  useEffect(() => {
+    setObsNomeCompleto(lerNomeCompleto())
+    fetch('/api/observacoes/copy-config').then(r => r.ok ? r.json() : null).then(d => { if (d?.template) setObsTemplate(d.template) }).catch(() => {})
+    fetch('/api/observacoes/usuarios').then(r => r.ok ? r.json() : []).then((data: { nome: string | null }[]) => {
+      setObsNomes((Array.isArray(data) ? data : []).map(u => u.nome).filter((n): n is string => !!n))
+    }).catch(() => {})
+  }, [])
+  const obsAssinatura = useMemo(
+    () => obsNomeCompleto ? displayName(profile, '').trim().replace(/\s+/g, ' ') : nomeParaAssinatura(displayName(profile, ''), obsNomes),
+    [profile, obsNomes, obsNomeCompleto],
+  )
+
   // banco
   const [bancoAba, setBancoAba] = useState<'empresas' | 'relatorio' | 'psico'>('empresas')
   const [bancoQ, setBancoQ] = useState('')
@@ -1177,18 +1195,32 @@ export default function WorkflowProgramasClient() {
 
   /** Reprovação — só item crítico marcado como não conforme entra aqui. */
   function buildReprovacao(a: AnaliseDados, criticosReprovados: ItemDaAnalise[]) {
-    const c = getC(a.contratanteIds[0])
     const ctx = ctxDe(a, itensDaAnalise(a))
-    const plural = criticosReprovados.length > 1
-    const itensHtml = criticosReprovados.map((i, n) => {
-      const t = getR(i.textoReprovacaoId)
-      return `<div>${n + 1} - ${aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxParaItem(ctx, i, a))}</div>`
-    }).join('')
-    const abertura = `<div>Favor rever ${plural ? 'os seguintes itens' : 'o seguinte item'}:</div>` + itensHtml
-    const corpo = htmlJoinBlocos([abertura, aplicaVars(getT(c?.assinaturaId || catalog?.config.assinaturaId)?.corpo || '', ctx)])
+    // Um quadro por documento (PGR, PCMSO, LTCAT...), cada um no modelo do módulo de
+    // Observações: "{{data}} {{hora}} - {{observacao}} - {{nome}}".
+    const docs = DOC_ORDER.filter(d => criticosReprovados.some(i => i.documento === d))
+    const quadros = docs.map(doc => {
+      // Itens do mesmo documento com o mesmo texto de reprovação (ex.: "faltou frente de serviço"
+      // em Marcopolo Ana Rech, São Cristóvão e Volare) viram UMA linha só, com as contratantes
+      // separadas por vírgula — em vez de uma observação por contratante.
+      const entradas: { item: ItemDaAnalise; contratanteIds: string[] }[] = []
+      criticosReprovados.filter(i => i.documento === doc).forEach(i => {
+        const igual = i.textoReprovacaoId ? entradas.find(e => e.item.textoReprovacaoId === i.textoReprovacaoId) : undefined
+        if (igual) i.contratanteIds.forEach(cid => { if (!igual.contratanteIds.includes(cid)) igual.contratanteIds.push(cid) })
+        else entradas.push({ item: i, contratanteIds: [...i.contratanteIds] })
+      })
+      const linhas = entradas.map(({ item, contratanteIds }, n) => {
+        const t = getR(item.textoReprovacaoId)
+        const ctxItem = { ...ctxParaItem(ctx, item, a), contratante: contratanteIds.map(cid => nomeC(getC(cid))).filter(Boolean).join(', ') || ctx.contratante }
+        return `<div>${entradas.length > 1 ? `${n + 1} - ` : ''}${aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxItem)}</div>`
+      }).join('')
+      const observacao = `<div>Favor rever ${entradas.length > 1 ? 'os seguintes itens' : 'o seguinte item'}:</div>${linhas}`
+      return { doc, html: aplicarTemplateObs(obsTemplate, observacao, obsAssinatura) }
+    })
+    const corpo = htmlJoinBlocos(quadros.map(q => `<div style="border:1px solid #C9D3E3;border-radius:6px;padding:8px 10px"><div style="font-weight:700;margin-bottom:4px">${q.doc}</div>${q.html}</div>`))
     return {
       assunto: 'GT3 · Reprovação de cadastro — ' + ctx.empresa + ' — ' + ctx.contratante,
-      corpo,
+      corpo, quadros,
       restricoes: 0, orientativos: 0, aprovados: 0, criticos: criticosReprovados.length, total: criticosReprovados.length, marcados: criticosReprovados.length,
     }
   }
@@ -1209,7 +1241,7 @@ export default function WorkflowProgramasClient() {
   const reprovacaoBuilt = useMemo(
     () => (draft && modoReprovacao ? buildReprovacao(draft, criticosReprovados) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [draft, catalog, modoReprovacao, criticosReprovados],
+    [draft, catalog, modoReprovacao, criticosReprovados, obsTemplate, obsAssinatura],
   )
   const emailBuilt = modoReprovacao ? reprovacaoBuilt : emailBuiltNormal
   const emailCorpo = emailEditado ? emailOverride : (emailBuilt?.corpo ?? '')
@@ -1512,6 +1544,20 @@ export default function WorkflowProgramasClient() {
 
   /** Copia com formatação (text/html) e um fallback em texto puro (text/plain) — é o que faz
    *  negrito/grifado sobreviverem ao colar num cliente de e-mail. */
+  async function copiarQuadro(doc: string, html: string) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([htmlToPlainText(html)], { type: 'text/plain' }),
+        }),
+      ])
+    } catch {
+      await navigator.clipboard.writeText(htmlToPlainText(html))
+    }
+    showToast(`Observação de ${doc} copiada`)
+  }
+
   async function copiarParecer() {
     try {
       await navigator.clipboard.write([
@@ -1644,7 +1690,9 @@ export default function WorkflowProgramasClient() {
       itensDaAnalise(a.dados).filter(i => idsPsico.has(i.id)).forEach(i => {
         const r = a.dados.respostas[i.id]?.status
         if (!r) return
-        const donoId = a.dados.contratanteIds.find(cid => catalog!.contratantes.find(c => c.id === cid)?.itens.some(l => l.itemId === i.id))
+        // Com uma contratante filtrada, só ela é dona — filtrar Jungheinrich não pode trazer a
+        // linha de Marcopolo só porque a mesma análise atende as duas.
+        const donoId = a.dados.contratanteIds.find(cid => (!bancoContratante || cid === bancoContratante) && catalog!.contratantes.find(c => c.id === cid)?.itens.some(l => l.itemId === i.id))
         if (!donoId) return
         const b = porContratante.get(donoId) ?? novoBucket()
         if (r === 'ok') { b.ok++; b.empresasOk.push(a.empresa) }
@@ -2424,6 +2472,7 @@ export default function WorkflowProgramasClient() {
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise} onDescartar={descartarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
           onCopiar={copiarParecer}
+          quadros={modoReprovacao ? (reprovacaoBuilt?.quadros ?? []) : []} onCopiarQuadro={copiarQuadro}
           onCopiarAssunto={() => { navigator.clipboard.writeText(emailBuilt?.assunto || ''); showToast('Assunto copiado') }}
           onEml={baixarEml} onMailto={abrirMailto}
           onRegerar={() => { setEmailEditado(false); showToast('E-mail regerado') }}
@@ -2738,7 +2787,8 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, quadros, onCopiarQuadro, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+  quadros: { doc: string; html: string }[]; onCopiarQuadro: (doc: string, html: string) => void
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
@@ -3187,7 +3237,10 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                 lockedMessage={`Faltam ${semMarcar} item(ns) sem marcação — edição e cópia liberam quando o checklist estiver completo`} />
             </div>
             <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: `1px solid ${LINE}`, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Btn variant="pri" small disabled={!podeFinalizarOuCopiar} onClick={onCopiar} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>📋 Copiar</Btn>
+              {quadros.map(q => (
+                <Btn key={q.doc} variant="pri" small disabled={!podeFinalizarOuCopiar} onClick={() => onCopiarQuadro(q.doc, q.html)} title={`Copiar só a observação de ${q.doc}`}>📋 Copiar {q.doc}</Btn>
+              ))}
+              <Btn variant={quadros.length ? 'default' : 'pri'} small disabled={!podeFinalizarOuCopiar} onClick={onCopiar} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>📋 Copiar {quadros.length ? 'tudo' : ''}</Btn>
               <Btn variant="acc" small disabled={!podeFinalizarOuCopiar} onClick={onEml} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>⬇️ Baixe o e-mail pronto</Btn>
               <Btn small disabled={!podeFinalizarOuCopiar} onClick={onMailto} title={podeFinalizarOuCopiar ? undefined : `Faltam ${semMarcar} item(ns) sem marcação`}>↗ Abrir no e-mail</Btn>
               <Btn variant="gho" small onClick={onRegerar}>↻ Regerar</Btn>
