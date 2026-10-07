@@ -15,7 +15,7 @@ import {
   type SplitState,
 } from './SplitView'
 import { createClient } from '../lib/supabase'
-import { isLembreteOverdue } from '../lib/lembretes'
+import { isLembreteOverdue, findMonthOccurrences } from '../lib/lembretes'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
 import SugestaoNotificacao from './SugestaoNotificacao'
@@ -352,7 +352,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [lembreteCount, setLembreteCount] = useState(0)
   const [showLembreteNotif, setShowLembreteNotif] = useState(false)
   // Lembretes que o pop-up está avisando — "Adiar" no pop-up adia cada um de verdade.
-  const [lembretesVencidosIds, setLembretesVencidosIds] = useState<string[]>([])
+  // Lembretes atrasados + data original da ocorrência (vai para lembretes_adiamentos.data_original ao adiar)
+  const [lembretesVencidos, setLembretesVencidos] = useState<{ id: string; original: string | null }[]>([])
 
   const [unreadAtas, setUnreadAtas] = useState<AtaNotif[]>([])
   const [legislacoesPendentes, setLegislacoesPendentes] = useState(0)
@@ -537,13 +538,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // passado volta a acusar atraso todo mês, sem nenhuma forma de resolver.
         const { data: adiRows } = await supabase
           .from('lembretes_adiamentos')
-          .select('lembrete_id, mostrar_a_partir_de')
+          .select('lembrete_id, mostrar_a_partir_de, data_original')
           .eq('usuario_id', userId)
           .eq('adiado', true)
         const adiados = new Map((adiRows ?? []).map(a => [a.lembrete_id as string, a.mostrar_a_partir_de as string]))
+        const originais = new Map((adiRows ?? []).map(a => [a.lembrete_id as string, (a.data_original as string | null) ?? null]))
         const vencidos = meus.filter(r => isLembreteOverdue(r, !!r.confirmado, new Date(), adiados.get(r.id)))
         if (vencidos.length > 0) {
-          setLembretesVencidosIds(vencidos.map(r => r.id))
+          const agora = new Date()
+          setLembretesVencidos(vencidos.map(r => {
+            const occ = findMonthOccurrences(r, agora.getFullYear(), agora.getMonth(), adiados.get(r.id)).sort()[0] ?? null
+            // Se a ocorrência atrasada já é a data de um adiamento, mantém a data original guardada nele.
+            const original = occ && occ === adiados.get(r.id) ? (originais.get(r.id) ?? occ) : occ
+            return { id: r.id, original }
+          }))
           setLembreteCount(vencidos.length)
           setShowLembreteNotif(true)
         }
@@ -1096,9 +1104,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onAdiar={ateIso => {
             setShowLembreteNotif(false)
             snoozeLembreteNotifStorage(profile.id, ateIso)
-            if (lembretesVencidosIds.length === 0) return
+            if (lembretesVencidos.length === 0) return
             void createClient().from('lembretes_adiamentos').upsert(
-              lembretesVencidosIds.map(id => ({ lembrete_id: id, usuario_id: profile.id, mostrar_a_partir_de: ateIso, adiado: true })),
+              lembretesVencidos.map(v => ({ lembrete_id: v.id, usuario_id: profile.id, mostrar_a_partir_de: ateIso, adiado: true, data_original: v.original })),
               { onConflict: 'lembrete_id,usuario_id' },
             ).then(({ error }) => { if (error) console.error('Erro ao adiar lembretes:', error.message) })
           }}
