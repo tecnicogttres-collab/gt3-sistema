@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '../lib/supabase'
+import { ausenciaNoPeriodo, carregarAusencias, rotuloAusencia, type Ausencia } from '../lib/disponibilidade-ferias'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,9 @@ const MUTED = '#6B7A99'
 const INK = '#1E253D'
 const BROKEN_BG = '#FEF3E2'
 const BROKEN_TEXT = '#92400E'
+const CONFLITO_BG = '#FEF2F2'
+const CONFLITO_BORDER = '#FCA5A5'
+const CONFLITO_TEXT = '#B91C1C'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -81,6 +85,15 @@ function buildWeeks(year: number, monthIdx: number): CafeWeek[] {
   }
   return weeks
 }
+
+/** Segunda a sexta da semana (YYYY-MM-DD) — período usado para checar férias/folgas. */
+function periodoSemana(weekKey: string): { de: string; ate: string } {
+  const sexta = new Date(weekKey + 'T00:00:00')
+  sexta.setDate(sexta.getDate() + 4)
+  return { de: weekKey, ate: isoDate(sexta) }
+}
+
+const fmtDiaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
 function buildSheet(year: number, monthIdx: number): Sheet {
   return { year, monthIdx, name: monthKey(year, monthIdx), weeks: buildWeeks(year, monthIdx) }
@@ -182,11 +195,14 @@ function WeekTable({
   people,
   readOnly,
   onShiftChange,
+  ausencias = [],
 }: {
   sheet: Sheet
   people: string[]
   readOnly: boolean
   onShiftChange?: (weekKey: string, turno: 'manha' | 'tarde', person: string) => void
+  /** Férias/folgas do Calendário de férias — bloqueia quem está ausente em algum dia útil da semana */
+  ausencias?: Ausencia[]
 }) {
   const selectStyle: React.CSSProperties = {
     width: '100%', height: 36, border: 'none', background: 'transparent',
@@ -232,31 +248,49 @@ function WeekTable({
               </td>
             )
 
+            const { de, ate } = periodoSemana(week.weekKey)
+
             function shiftTd(turno: 'manha' | 'tarde') {
               const value = week[turno]
               const isLast = turno === 'tarde'
+              // Pessoa já escalada que tem férias/folga em algum dia útil desta semana
+              const conflito = ausenciaNoPeriodo(value, de, ate, ausencias)
               const borderStyle = {
-                borderLeft: `1px solid ${BORDER}`,
+                borderLeft: `1px solid ${conflito ? CONFLITO_BORDER : BORDER}`,
                 borderRight: isLast ? `1px solid ${BORDER}` : undefined,
-                borderBottom: `1px solid ${BORDER}`,
+                borderBottom: `1px solid ${conflito ? CONFLITO_BORDER : BORDER}`,
               }
+              const cellBg = conflito ? CONFLITO_BG : bg
+              const avisoConflito = conflito && (
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: CONFLITO_TEXT, padding: '0 10px 6px' }}>
+                  ⚠ {rotuloAusencia(conflito)} {fmtDiaMes(conflito.inicio > de ? conflito.inicio : de)}–{fmtDiaMes(conflito.fim < ate ? conflito.fim : ate)}
+                </div>
+              )
               if (readOnly) {
                 return (
-                  <td style={{ background: bg, ...borderStyle, padding: '8px 14px', textAlign: 'center' }}>
-                    <span style={{ fontSize: 13, color: value ? INK : '#C0C8D8' }}>{value || '—'}</span>
+                  <td style={{ background: cellBg, ...borderStyle, padding: '8px 14px', textAlign: 'center' }}>
+                    <span style={{ fontSize: 13, color: conflito ? CONFLITO_TEXT : value ? INK : '#C0C8D8' }}>{value || '—'}</span>
+                    {avisoConflito}
                   </td>
                 )
               }
               return (
-                <td style={{ background: bg, ...borderStyle, padding: 0 }}>
+                <td
+                  title={conflito ? `${value} está de ${rotuloAusencia(conflito)} nesta semana — escolha outra pessoa` : undefined}
+                  style={{ background: cellBg, ...borderStyle, padding: 0 }}>
                   <select
                     value={value}
                     onChange={e => onShiftChange?.(week.weekKey, turno, e.target.value)}
-                    style={{ ...selectStyle, color: value ? INK : MUTED }}
+                    style={{ ...selectStyle, color: conflito ? CONFLITO_TEXT : value ? INK : MUTED, fontWeight: conflito ? 700 : 400 }}
                   >
                     <option value="">—</option>
-                    {people.map(p => <option key={p} value={p}>{p}</option>)}
+                    {people.map(p => {
+                      const aus = ausenciaNoPeriodo(p, de, ate, ausencias)
+                      // Quem tem férias/folga na semana não pode ser escolhido (aparece desabilitado).
+                      return <option key={p} value={p} disabled={!!aus && p !== value}>{aus ? `${p} — de ${rotuloAusencia(aus)}` : p}</option>
+                    })}
                   </select>
+                  {avisoConflito}
                 </td>
               )
             }
@@ -287,6 +321,20 @@ export default function CafeClient() {
   const [newPersonInput, setNewPersonInput] = useState('')
 
   const [showGenerate, setShowGenerate] = useState(false)
+  // Férias/folgas do Calendário de férias — ninguém é escalado numa semana em que estará ausente
+  const [ausencias, setAusencias] = useState<Ausencia[]>([])
+  useEffect(() => { void carregarAusencias(createClient()).then(setAusencias) }, [])
+
+  /** Turnos do mês vigente com pessoa de férias/folga na semana */
+  const conflitosCafe = current
+    ? current.weeks.flatMap(w => {
+        const { de, ate } = periodoSemana(w.weekKey)
+        return (['manha', 'tarde'] as const).flatMap(t => {
+          const a = ausenciaNoPeriodo(w[t], de, ate, ausencias)
+          return a ? [`${fmtDiaMes(de)}–${fmtDiaMes(ate)} ${t === 'manha' ? 'manhã' : 'tarde'}: ${w[t]} (${rotuloAusencia(a)})`] : []
+        })
+      })
+    : []
 
   // ── Load from Supabase ──
   useEffect(() => {
@@ -383,6 +431,9 @@ export default function CafeClient() {
 
   function handleShiftChange(weekKey: string, turno: 'manha' | 'tarde', person: string) {
     if (!current) return
+    const { de, ate } = periodoSemana(weekKey)
+    const aus = ausenciaNoPeriodo(person, de, ate, ausencias)
+    if (aus) { window.alert(`${person} está de ${rotuloAusencia(aus)} nesta semana (Calendário de férias). Escolha outra pessoa.`); return }
     const weeks = current.weeks.map(w => w.weekKey === weekKey ? { ...w, [turno]: person } : w)
     void saveCurrentWeeks(weeks, { ...current, weeks })
   }
@@ -639,12 +690,20 @@ export default function CafeClient() {
                 />
               </div>
 
+              {conflitosCafe.length > 0 && (
+                <div style={{ marginBottom: 12, padding: '10px 12px', background: CONFLITO_BG, border: `1px solid ${CONFLITO_BORDER}`, borderLeft: `4px solid ${CONFLITO_TEXT}`, borderRadius: 8, fontSize: 12.5, color: '#7F1D1D' }}>
+                  <b>⚠ Pessoa indisponível em {conflitosCafe.length} turno(s)</b> — conforme o Calendário de férias:
+                  <div style={{ marginTop: 4 }}>{conflitosCafe.join(' · ')}</div>
+                </div>
+              )}
+
               {/* Table */}
               <WeekTable
                 sheet={current}
                 people={people}
                 readOnly={false}
                 onShiftChange={handleShiftChange}
+                ausencias={ausencias}
               />
 
               {/* Actions */}

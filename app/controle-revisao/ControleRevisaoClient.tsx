@@ -5,7 +5,7 @@ import { createClient } from '../lib/supabase'
 import { RevisaoTable, RevisionRow, btnPrimary, btnSecondary, inputStyle } from './RevisaoTable'
 import { RevisaoEquipe, ScheduleTable } from './RevisaoEquipe'
 import type { RowType, Revision, ScheduleRow, Sheet, HistoryData } from './types'
-import { ausenciaNoDia, rotuloAusencia, type Ausencia } from './disponibilidade'
+import { ausenciaNoDia, rotuloAusencia, type Ausencia } from '../lib/disponibilidade-ferias'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 

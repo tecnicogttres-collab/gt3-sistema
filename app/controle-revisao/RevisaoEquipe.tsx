@@ -1,7 +1,7 @@
 'use client'
 
 import type { Sheet, ScheduleRow } from './types'
-import { ausenciaNoDia, rotuloAusencia, type Ausencia } from './disponibilidade'
+import { ausenciaNoDia, rotuloAusencia, type Ausencia } from '../lib/disponibilidade-ferias'
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
