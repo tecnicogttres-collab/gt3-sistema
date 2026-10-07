@@ -46,6 +46,8 @@ type Designacao = {
   retorno_em: string | null
   ligacao_em: string | null
   ligacao_por: string | null
+  /** Cada geração de e-mail (.eml / Outlook) — "Empresa contatada sobre a reprovação". */
+  contatos_email: { em: string; por: string }[] | null
   criado_por: string
   created_at: string
   updated_at: string
@@ -430,6 +432,8 @@ export default function DesignacaoReprovadosClient() {
 
   // ── Minha Caixa / Visão geral: sub-view e acordeão (nunca abre sozinho, só no clique) ──
   const [caixaSub, setCaixaSub]   = useState<'ativas' | 'historico'>('ativas')
+  // Minha Caixa: o que foi designado para mim, ou o que eu designei para outros (acompanhar/tratar).
+  const [caixaOrigem, setCaixaOrigem] = useState<'recebidas' | 'designadas'>('recebidas')
   const [geralSub, setGeralSub]   = useState<'ativas' | 'historico'>('ativas')
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [caixaAberto, setCaixaAberto] = useState<string | null>(null)
@@ -451,6 +455,23 @@ export default function DesignacaoReprovadosClient() {
     setGeralZoom(z => z ? { ...z, aberto: false } : z)
     zoomTimer.current = window.setTimeout(() => setGeralZoom(null), 170)
   }
+  // Clique numa empresa dentro do zoom: abre o colaborador já com aquele grupo aberto e rola até ele.
+  const [rolarParaGrupo, setRolarParaGrupo] = useState<string | null>(null)
+  function abrirEmpresaDoZoom(uid: string, grupoKey: string) {
+    window.clearTimeout(zoomTimer.current)
+    setGeralZoom(null)
+    setGeralColaborador(uid)
+    setGeralAberto(grupoKey)
+    setRolarParaGrupo(grupoKey)
+  }
+  useEffect(() => {
+    if (!rolarParaGrupo) return
+    const t = window.setTimeout(() => {
+      document.querySelector(`[data-grupo="${CSS.escape(rolarParaGrupo)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setRolarParaGrupo(null)
+    }, 60)
+    return () => window.clearTimeout(t)
+  }, [rolarParaGrupo])
   useEffect(() => {
     if (!geralZoom) return
     const fechar = () => { window.clearTimeout(zoomTimer.current); setGeralZoom(null) }
@@ -619,6 +640,18 @@ export default function DesignacaoReprovadosClient() {
     await abrirNoOutlook({ to: destinoEmail, cc: EMAIL_CC, assunto, corpoHtml })
   }
 
+  /** Após gerar o .eml / abrir no Outlook: registra "Empresa contatada sobre a reprovação"
+   *  com data/hora e usuário (gravado no servidor, aparece abaixo do e-mail no card). */
+  async function registrarContatoEmail(id: string) {
+    const res = await fetch(`/api/designacao-reprovados/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'contato_email' }),
+    })
+    if (res.ok) {
+      const updated: Designacao = await res.json()
+      setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
+    }
+  }
+
   function sitTag(id: string | null) {
     const s = getSituacao(id)
     return <span style={{ display: 'inline-block', background: `${s.cor}1A`, color: s.cor, borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>{s.nome}</span>
@@ -661,7 +694,11 @@ export default function DesignacaoReprovadosClient() {
 
   const minhaAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas.filter(d => d.responsaveis.includes(userId))), [designacoesAtivas, userId])
   const minhaHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico.filter(d => d.responsaveis.includes(userId))), [designacoesHistorico, userId])
-  const minhaAtual = caixaSub === 'ativas' ? minhaAtivas : minhaHistorico
+  const designadasAtivas    = useMemo(() => agruparPorDiaEmpresa(designacoesAtivas.filter(d => d.criado_por === userId)), [designacoesAtivas, userId])
+  const designadasHistorico = useMemo(() => agruparPorDiaEmpresa(designacoesHistorico.filter(d => d.criado_por === userId)), [designacoesHistorico, userId])
+  const caixaAtivas    = caixaOrigem === 'recebidas' ? minhaAtivas : designadasAtivas
+  const caixaHistorico = caixaOrigem === 'recebidas' ? minhaHistorico : designadasHistorico
+  const minhaAtual = caixaSub === 'ativas' ? caixaAtivas : caixaHistorico
 
   // Visão geral: mesmo recorte por prazo, mas passando pelos filtros (setor/status/
   // tratativa/responsável/busca) antes de agrupar — só essa aba é filtrável, não a Minha Caixa.
@@ -1181,7 +1218,12 @@ export default function DesignacaoReprovadosClient() {
   // ── Minha Caixa / Visão geral: card de item + bloco de grupo (acordeão) ──
   function renderCardDesignacao(d: Designacao, opts: { mostrarResponsaveis: boolean }) {
     const souResponsavel = d.responsaveis.includes(userId)
+    // Quem designou acompanha o item e pode tratá-lo também (sem precisar dar ciência).
+    const souCriador = d.criado_por === userId
+    const podeTratar = souResponsavel || souCriador
     const jaCiente = d.ciencia_por.includes(userId)
+    const liberaTratativa = jaCiente || souCriador
+    const contatos = [...(d.contatos_email ?? [])].sort((a, b) => a.em.localeCompare(b.em))
     const email = buildDesignacaoEmail(d.empresa, d.setores, d.documentos, setores, documentos, emailConfig)
     const destinoEmail = getEmpresaEmail(d.empresa)
     // Itens ativos ganham cor de urgência conforme os dias desde a designação (azul → laranja → vermelho).
@@ -1213,7 +1255,7 @@ export default function DesignacaoReprovadosClient() {
               </span>
             )}
             {urg && <span style={{ fontSize: 11, fontWeight: 700, color: urg.fg, background: '#fff', border: `1px solid ${urg.border}`, borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>⏱ {urg.label}</span>}
-            {souResponsavel ? (
+            {podeTratar ? (
               <button
                 onClick={() => marcarLigacao(d.id, !d.ligacao_em)}
                 title={d.ligacao_em ? `Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)} — clique para desmarcar` : 'Marcar que uma ligação foi feita'}
@@ -1276,21 +1318,36 @@ export default function DesignacaoReprovadosClient() {
             <div style={{ padding: '8px 16px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 11, color: MUTED }}>🖱 clique no assunto ou no e-mail para copiar</span>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa)} style={{ ...sm(btnAccent), fontWeight: 700, boxShadow: '0 2px 6px rgba(209,174,110,.45)' }}>⬇ Baixe o e-mail pronto</button>
-                <button onClick={() => abrirNoEmail(email.assunto, email.corpo, destinoEmail)} style={sm(btnGhost)}>↗ Abrir no Outlook</button>
+                <button onClick={async () => { await baixarEml(email.assunto, email.corpo, destinoEmail, d.empresa); void registrarContatoEmail(d.id) }} style={{ ...sm(btnAccent), fontWeight: 700, boxShadow: '0 2px 6px rgba(209,174,110,.45)' }}>⬇ Baixe o e-mail pronto</button>
+                <button onClick={async () => { await abrirNoEmail(email.assunto, email.corpo, destinoEmail); void registrarContatoEmail(d.id) }} style={sm(btnGhost)}>↗ Abrir no Outlook</button>
               </div>
             </div>
           </div>
         )}
 
-        {souResponsavel && (
+        {/* Registro automático de cada e-mail gerado (.eml / Outlook) — data/hora + quem gerou. */}
+        {contatos.length > 0 && (
+          <div style={{ marginBottom: 12, background: '#EFF6FF', border: '1px solid #BFDBFE', borderLeft: '4px solid #2D8FD5', borderRadius: 8, padding: '9px 12px', color: '#1E3A5F' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 4 }}>📨 Observação de contato</div>
+            {contatos.map((c, i) => (
+              <div key={i} style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                Empresa contatada sobre a reprovação em <b>{fmtDataHoraLig(c.em)}</b> · {getUsuarioNome(c.por)}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {podeTratar && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {!jaCiente ? (
+            {souCriador && !souResponsavel && (
+              <span title="Você designou este item — pode acompanhar e atualizar a tratativa" style={{ fontSize: 11, fontWeight: 700, color: PRIMARY, background: PRIMARY_SOFT, borderRadius: 999, padding: '4px 10px' }}>📤 Designado por você</span>
+            )}
+            {souResponsavel && (!jaCiente ? (
               <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Ciente e e-mail enviado</button>
             ) : (
               <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciente e e-mail enviado</span>
-            )}
-            {jaCiente && !finalizada(d.tratativa) && (
+            ))}
+            {liberaTratativa && !finalizada(d.tratativa) && (
               <>
                 <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
                 <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
@@ -1384,13 +1441,28 @@ export default function DesignacaoReprovadosClient() {
               const ativo = g.itens.some(d => !finalizada(d.tratativa))
               const urg = ativo ? urgenciaDesig(g.data) : null
               const lig = g.itens.filter(d => d.ligacao_em).sort((a, b) => (b.ligacao_em ?? '').localeCompare(a.ligacao_em ?? ''))[0]
+              const bordaBase = urg ? urg.border : '#CBD5E1'
               return (
-                <div key={g.key} style={{ border: `1px solid ${urg ? urg.border : BORDER}`, borderLeft: `4px solid ${urg ? urg.fg : MUTED}`, borderRadius: 10, overflow: 'hidden' }}>
+                // Cada empresa é um alvo de clique próprio: borda reforçada + "Abrir →" deixam
+                // claro que leva direto àquela empresa (e não à lista geral do colaborador).
+                <div key={g.key}
+                  role="button"
+                  title={`Abrir ${g.empresa} (${fmtData(g.data)})`}
+                  onClick={e => { e.stopPropagation(); abrirEmpresaDoZoom(uid, g.key) }}
+                  onMouseEnter={e => { const s = e.currentTarget.style; s.borderTopColor = s.borderRightColor = s.borderBottomColor = PRIMARY; s.boxShadow = `0 0 0 3px ${PRIMARY_SOFT}, 0 4px 12px rgba(42,79,150,.18)`; s.transform = 'translateY(-1px)' }}
+                  onMouseLeave={e => { const s = e.currentTarget.style; s.borderTopColor = s.borderRightColor = s.borderBottomColor = bordaBase; s.boxShadow = '0 1px 2px rgba(15,23,42,.06)'; s.transform = 'none' }}
+                  style={{
+                    border: `1.5px solid ${bordaBase}`, borderLeft: `4px solid ${urg ? urg.fg : MUTED}`, borderRadius: 10, overflow: 'hidden', flexShrink: 0,
+                    cursor: 'pointer', boxShadow: '0 1px 2px rgba(15,23,42,.06)', transition: 'border-color .15s, box-shadow .15s, transform .15s',
+                  }}>
                   <div style={{ padding: '9px 12px', background: urg ? urg.bg : BG }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-                      <b style={{ fontSize: 14, color: TEXT }}>🏢 {g.empresa}</b>
+                      <b style={{ fontSize: 14, color: TEXT, flex: 1, minWidth: 0 }}>🏢 {g.empresa}</b>
                       <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: urg ? urg.fg : MUTED, borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>
                         📅 {fmtData(g.data)}{urg ? ` · ${urg.label}` : ''}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: PRIMARY, background: '#fff', border: `1.5px solid ${PRIMARY}`, borderRadius: 999, padding: '1px 9px', whiteSpace: 'nowrap' }}>
+                        Abrir →
                       </span>
                     </div>
                     {/* Ligação em destaque */}
@@ -1422,7 +1494,7 @@ export default function DesignacaoReprovadosClient() {
           </div>
 
           <div style={{ padding: '9px 18px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', fontSize: 11.5, color: PRIMARY, fontWeight: 700, textAlign: 'right' }}>
-            Clique para ver as designações de {nome.split(' ')[0]} →
+            Clique numa empresa para abrir direto nela · ou aqui para ver todas de {nome.split(' ')[0]} →
           </div>
         </div>
       </>,
@@ -1435,7 +1507,7 @@ export default function DesignacaoReprovadosClient() {
     const r = resumoGrupo(grupo.itens)
     const urg = grupo.itens.some(d => !finalizada(d.tratativa)) ? urgenciaDesig(grupo.data) : null
     return (
-      <div key={grupo.key} className="gt3-fade-up" style={{ marginBottom: 14, border: `1px solid ${urg ? urg.border : BORDER}`, borderLeft: urg ? `5px solid ${urg.fg}` : undefined, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
+      <div key={grupo.key} data-grupo={grupo.key} className="gt3-fade-up" style={{ scrollMarginTop: 16, marginBottom: 14, border: `1px solid ${urg ? urg.border : BORDER}`, borderLeft: urg ? `5px solid ${urg.fg}` : undefined, borderRadius: RADIUS, overflow: 'hidden', background: SURF, boxShadow: SHADOW }}>
         <div onClick={() => opts.setAberto(isOpen ? null : grupo.key)}
           onMouseEnter={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = '#F0F4FA' }}
           onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLDivElement).style.background = urg ? urg.bg : '#FAFCFE' }}
@@ -1749,19 +1821,33 @@ export default function DesignacaoReprovadosClient() {
                 ⚠️ <span><b>{minhaCaixaPendentes}</b> item(ns) aguardando sua ciência. Ao dar ciência, o item passa para em andamento e continua no dashboard.</span>
               </div>
             )}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'inline-flex', background: SURF, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 3, gap: 3 }}>
+                {([
+                  { id: 'recebidas' as const, label: '📥 Designadas para mim' },
+                  { id: 'designadas' as const, label: '📤 Designadas por mim' },
+                ]).map(o => (
+                  <button key={o.id} onClick={() => { setCaixaOrigem(o.id); setCaixaAberto(null) }} style={{
+                    border: 'none', borderRadius: 8, padding: '7px 13px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                    background: caixaOrigem === o.id ? PRIMARY : 'transparent', color: caixaOrigem === o.id ? '#fff' : MUTED,
+                  }}>{o.label}</button>
+                ))}
+              </div>
+              <span style={{ width: 1, height: 24, background: BORDER, margin: '0 4px' }} />
               <button onClick={() => setCaixaSub('ativas')} style={caixaSub === 'ativas' ? btnPrimary : btnGhost}>
-                Ativas {minhaAtivas.length ? `(${minhaAtivas.length})` : ''}
+                Ativas {caixaAtivas.length ? `(${caixaAtivas.length})` : ''}
               </button>
               <button onClick={() => setCaixaSub('historico')} style={caixaSub === 'historico' ? btnPrimary : btnGhost}>
-                🕘 Histórico {minhaHistorico.length ? `(${minhaHistorico.length})` : ''}
+                🕘 Histórico {caixaHistorico.length ? `(${caixaHistorico.length})` : ''}
               </button>
             </div>
             {minhaAtual.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                 <p style={{ fontWeight: 600, margin: 0 }}>
-                  {caixaSub === 'ativas' ? 'Nenhum item ativo designado para você.' : 'Nada no histórico (itens resolvidos ou com doc(s) excluído).'}
+                  {caixaSub === 'historico'
+                    ? 'Nada no histórico (itens resolvidos ou com doc(s) excluído).'
+                    : caixaOrigem === 'recebidas' ? 'Nenhum item ativo designado para você.' : 'Nenhum item ativo designado por você.'}
                 </p>
               </div>
             ) : minhaAtual.map((grupo, i) => (
@@ -1769,7 +1855,7 @@ export default function DesignacaoReprovadosClient() {
                 {i > 0 && minhaAtual[i - 1].data !== grupo.data && (
                   <div style={{ height: 1, background: BORDER, margin: '2px 0 16px' }} />
                 )}
-                {renderGrupoAcordeao(grupo, { aberto: caixaAbertoEfetivo, setAberto: setCaixaAberto, mostrarResponsaveis: false })}
+                {renderGrupoAcordeao(grupo, { aberto: caixaAbertoEfetivo, setAberto: setCaixaAberto, mostrarResponsaveis: caixaOrigem === 'designadas' })}
               </Fragment>
             ))}
           </div>
