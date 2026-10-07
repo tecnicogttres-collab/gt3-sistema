@@ -1,13 +1,12 @@
 import { NextRequest } from 'next/server'
 import { randomBytes } from 'crypto'
 import { createAdminClient } from '../../../../lib/supabase-admin'
-import { createClient } from '../../../../lib/supabase-server'
+import { getAuthUser } from '../../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
 async function requireGestor() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { error: Response.json({ error: 'Não autenticado' }, { status: 401 }) }
 
   const admin = createAdminClient()

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
-import { createClient } from '../../../../lib/supabase-server'
+import { getAuthUser } from '../../../../lib/api-helpers'
 
 type Params = { params: Promise<{ cliente: string }> }
 
@@ -9,8 +9,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { cliente: rawCliente } = await params
   const cliente = decodeURIComponent(rawCliente)
 
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
