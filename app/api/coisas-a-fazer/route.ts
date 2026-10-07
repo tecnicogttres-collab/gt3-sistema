@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '../../lib/supabase-server'
+import { getAuthUser } from '../../lib/api-helpers'
 import { createAdminClient } from '../../lib/supabase-admin'
 import { MODULES } from '../../lib/modules'
 
@@ -58,7 +59,7 @@ async function syncSystemModules(admin: AdminClient) {
 
 export async function GET() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase
@@ -89,7 +90,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase
@@ -137,7 +138,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase

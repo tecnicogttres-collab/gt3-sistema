@@ -1,5 +1,5 @@
-import { createClient } from '../../../../../lib/supabase-server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
+import { getAuthUser } from '../../../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -8,8 +8,7 @@ type Params = { params: Promise<{ id: string }> }
 export async function GET(_req: Request, { params }: Params) {
   const { id } = await params
 
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()

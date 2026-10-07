@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
+import { getAuthUser } from '../../../lib/api-helpers'
 
 export async function GET() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({})
 
   const admin = createAdminClient()
@@ -22,8 +21,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { modulo } = await request.json() as { modulo: string }

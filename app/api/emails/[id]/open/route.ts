@@ -1,5 +1,5 @@
-import { createClient } from '../../../../lib/supabase-server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
+import { getAuthUser } from '../../../../lib/api-helpers'
 
 type FileData = { name: string; size: number; data?: string }
 type Params = { params: Promise<{ id: string }> }
@@ -13,8 +13,7 @@ const MIME_BY_EXT: Record<string, string> = {
 export async function GET(_req: Request, { params }: Params) {
   const { id } = await params
 
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return new Response('Não autenticado', { status: 401 })
 
   const admin = createAdminClient()

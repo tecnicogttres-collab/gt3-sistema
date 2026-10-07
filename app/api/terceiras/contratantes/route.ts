@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
+import { getAuthUser } from '../../../lib/api-helpers'
 
 async function getCaller() {
-  const server = await createClient()
-  const { data: { user } } = await server.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('nome, papel').eq('id', user.id).single()

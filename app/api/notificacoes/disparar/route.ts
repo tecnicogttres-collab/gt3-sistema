@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
+import { getAuthUser } from '../../../lib/api-helpers'
 
 /**
  * POST /api/notificacoes/disparar
@@ -11,8 +11,7 @@ import { createAdminClient } from '../../../lib/supabase-admin'
  * perfis_notificados — excluindo quem acabou de agir (o caller).
  */
 export async function POST(request: NextRequest) {
-  const serverClient = await createClient()
-  const { data: { user: caller } } = await serverClient.auth.getUser()
+  const caller = await getAuthUser()
   if (!caller) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { modulo } = await request.json() as { modulo?: string }

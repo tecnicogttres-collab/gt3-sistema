@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '../../../../lib/supabase-server'
+import { getAuthUser } from '../../../../lib/api-helpers'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase
