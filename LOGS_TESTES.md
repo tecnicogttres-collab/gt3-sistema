@@ -69,3 +69,53 @@ Se algo quebrar em **produção**: Vercel → projeto → aba **Deployments** �
 
 ## Lembrete
 Só faça o `git push` depois que todos os testes acima passarem, e de preferência **fora do horário de uso da equipe**.
+
+---
+
+# Rodada 2 — checagem de login com `getClaims()`
+
+Pré-requisito confirmado: o projeto Supabase usa chave de assinatura **ECC (P-256)** (Project Settings → JWT Keys). Ponto de retorno: commit **`4c14ce2`**.
+
+## O que mudou
+| Commit | Mudança |
+|--------|---------|
+| `fef906d` | `proxy.ts` (porteiro das páginas): `getUser()` → `getClaims()` |
+| `a662374` | `api-helpers.ts` (`getCaller`, `getCallerWithNome`, `getAuthUser`): `getClaims()`; quem não tem perfil é recusado |
+| `577dbc1` | Lote 1 — rotas de Atas e Atas de contratantes passam a usar `getAuthUser` |
+| `a3ec05d` | Lote 2 — rotas e páginas de PDI |
+| `7e20a53` | Lote 3 — revisões, terceiras, lembretes, enquetes, observações, notificações, coisas a fazer, sugestões, e-mails, usuários |
+
+Antes: cada página e cada chamada de `/api/*` consultava o Auth do Supabase (`GET /auth/v1/user`). Agora o token é validado no servidor com a chave pública; o Supabase só é consultado quando o token precisa ser renovado (~1 vez por hora).
+
+**Ficaram de fora de propósito:** `app/api/admin/*` (criar/banir/excluir usuários — críticas e pouco usadas), `/api/me` (usa `created_at`, que não vem no token) e `UserContext.tsx` (navegador, tratado na Rodada 1).
+
+**Diferença de comportamento conhecida:** usuário desativado em Usuários continua acessando por até ~1 h (até o token vencer). Antes o corte era imediato. Login excluído é recusado na hora (não tem mais perfil).
+
+## Testes (com login — colaborador e gestor)
+- [x] Login/logout, navegar pelos módulos sem cair no login nem entrar em loop (testes rápidos ok).
+- [ ] Uma ação simples em cada módulo: ler ata, abrir PDI, listar revisões, abrir terceira, confirmar lembrete, abrir Coisas a fazer, editar observação, responder enquete.
+- [ ] Colaborador continua sem acesso a Usuários e módulos restritos.
+- [ ] Deixar o sistema aberto > 1 h → continua logado (token renovado sozinho).
+- [ ] Apagar os cookies com o sistema aberto → vai para `/login`.
+- [ ] DevTools → Network, filtrar `auth/v1/user`: ao navegar, quase nada deve aparecer.
+
+Testes sem login já feitos: páginas redirecionam para `/login`, APIs devolvem 401 (inclusive com cookie falso), `/questionario/...` continua público, `npm run build` ok.
+
+## Depois do deploy
+- Primeiras horas: atenção a relatos de "deslogou sozinho" ou "não autenticado".
+- No dia seguinte: comparar os logs de Auth do Supabase com os de antes (`GET /user` deve cair bastante).
+
+## Como desfazer
+Produção, na hora: Vercel → **Deployments** → deployment anterior → **Instant Rollback**.
+
+No código, só um lote (se o problema for em um módulo):
+```
+git revert 7e20a53   # lote 3 (demais rotas)
+git revert a3ec05d   # lote 2 (PDI)
+git revert 577dbc1   # lote 1 (atas)
+```
+
+Rodada 2 inteira:
+```
+git revert 7e20a53 a3ec05d 577dbc1 a662374 fef906d
+```
