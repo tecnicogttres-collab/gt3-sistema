@@ -39,10 +39,13 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  let user = null
+  // getClaims() valida a assinatura do token localmente (chave ECC do projeto) e só vai
+  // ao Supabase quando o token precisa ser renovado — antes, getUser() consultava o Auth
+  // em toda navegação/prefetch de página.
+  let user: string | null = null
   try {
-    const { data } = await supabase.auth.getUser()
-    user = data.user
+    const { data } = await supabase.auth.getClaims()
+    user = data?.claims?.sub ?? null
   } catch {
     return supabaseResponse
   }
