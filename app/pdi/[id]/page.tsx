@@ -1,9 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '../../lib/supabase-server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import * as allPdis from '../../../data/pdis/index'
 import type { PdiColaborador, EneagramaRank, Animal } from '../../../data/pdis/types'
 import PdiDetailClient from './PdiDetailClient'
+import { getAuthUser } from '../../lib/api-helpers'
 
 const pdisMap = Object.values(allPdis).reduce<Record<string, PdiColaborador>>((acc, pdi) => {
   acc[(pdi as PdiColaborador).id] = pdi as PdiColaborador
@@ -80,8 +80,7 @@ function dbRowToColaborador(row: DbPdiRow): PdiColaborador {
 export default async function PdiDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const admin = createAdminClient()

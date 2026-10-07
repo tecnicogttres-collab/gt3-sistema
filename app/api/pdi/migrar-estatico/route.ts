@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
 import * as allPdis from '../../../../data/pdis/index'
 import type { PdiColaborador } from '../../../../data/pdis/types'
+import { getAuthUser } from '../../../lib/api-helpers'
 
 const pdisMap = Object.values(allPdis).reduce<Record<string, PdiColaborador>>((acc, pdi) => {
   acc[(pdi as PdiColaborador).id] = pdi as PdiColaborador
@@ -10,8 +10,7 @@ const pdisMap = Object.values(allPdis).reduce<Record<string, PdiColaborador>>((a
 }, {})
 
 export async function POST(req: NextRequest) {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()

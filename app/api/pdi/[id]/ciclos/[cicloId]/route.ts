@@ -1,12 +1,11 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../../../lib/supabase-server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
+import { getAuthUser } from '../../../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string; cicloId: string }> }
 
 async function getAuth() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { user: null, papel: null, pdiSlug: null }
   const admin = createAdminClient()
   const { data: p } = await admin.from('profiles').select('papel, pdi_slug').eq('id', user.id).single()

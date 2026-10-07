@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../../../lib/supabase-server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
+import { getAuthUser } from '../../../../../lib/api-helpers'
 
 async function requireGestorAdmin() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return { user: null, ok: false as const }
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('papel').eq('id', user.id).single()

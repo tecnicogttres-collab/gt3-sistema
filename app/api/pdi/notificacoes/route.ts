@@ -1,9 +1,8 @@
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
+import { getAuthUser } from '../../../lib/api-helpers'
 
 export async function GET() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ count: 0, pdiId: null })
 
   const admin = createAdminClient()

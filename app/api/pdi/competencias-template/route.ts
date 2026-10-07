@@ -1,11 +1,10 @@
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
 import * as allPdis from '../../../../data/pdis/index'
 import type { PdiColaborador } from '../../../../data/pdis/types'
+import { getAuthUser } from '../../../lib/api-helpers'
 
 export async function GET() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json([], { status: 401 })
 
   const admin = createAdminClient()

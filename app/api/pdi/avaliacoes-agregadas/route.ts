@@ -1,7 +1,7 @@
-import { createClient } from '../../../lib/supabase-server'
 import { createAdminClient } from '../../../lib/supabase-admin'
 import * as allPdis from '../../../../data/pdis/index'
 import type { PdiColaborador } from '../../../../data/pdis/types'
+import { getAuthUser } from '../../../lib/api-helpers'
 
 const staticMap = Object.values(allPdis).reduce<Record<string, { nome: string; competencias: string[] }>>((acc, p) => {
   const pdi = p as PdiColaborador
@@ -16,8 +16,7 @@ function shortenName(nome: string): string {
 }
 
 export async function GET() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()

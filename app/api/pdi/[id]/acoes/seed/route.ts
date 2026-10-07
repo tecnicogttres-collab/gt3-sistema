@@ -1,13 +1,12 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../../../lib/supabase-server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
 import type { AcaoPdi } from '../../../../../../data/pdis/types'
+import { getAuthUser } from '../../../../../lib/api-helpers'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()

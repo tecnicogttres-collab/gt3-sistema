@@ -1,7 +1,7 @@
 ﻿import { redirect } from 'next/navigation'
-import { createClient } from '../lib/supabase-server'
 import { createAdminClient } from '../lib/supabase-admin'
 import PdiListClient from './PdiListClient'
+import { getAuthUser } from '../lib/api-helpers'
 
 export const metadata = { title: 'PDI — Sistema Interno GT3' }
 
@@ -29,8 +29,7 @@ export type DbCicloScore = {
 }
 
 export default async function PdiPage() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const admin = createAdminClient()

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '../../../../../lib/supabase-server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
+import { getAuthUser } from '../../../../../lib/api-helpers'
 
 export async function POST(
   _req: NextRequest,
@@ -8,8 +8,7 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
