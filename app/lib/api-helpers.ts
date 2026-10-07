@@ -1,30 +1,42 @@
 import { createClient } from './supabase-server'
 import { createAdminClient } from './supabase-admin'
 
-export async function getCaller() {
+export type AuthUser = { id: string; email: string | null }
+
+/** Usuário logado a partir do token da sessão. getClaims() valida a assinatura localmente
+ *  (chave ECC do projeto) e só consulta o Auth do Supabase quando o token precisa ser
+ *  renovado — antes, getUser() ia ao Auth em toda chamada de /api/*. */
+async function getSessionUser(): Promise<AuthUser | null> {
   const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const { data, error } = await serverClient.auth.getClaims()
+  const sub = data?.claims?.sub
+  if (error || !sub) return null
+  return { id: sub, email: (data.claims.email as string | undefined) ?? null }
+}
+
+export async function getCaller() {
+  const user = await getSessionUser()
   if (!user) return null
   const admin = createAdminClient()
-  const { data } = await admin.from('profiles').select('papel').eq('id', user.id).single()
-  const raw = (data?.papel as string) ?? 'colaborador'
+  const { data } = await admin.from('profiles').select('papel').eq('id', user.id).maybeSingle()
+  // Sem perfil = login excluído (o perfil cai junto, ON DELETE CASCADE) mas token ainda válido.
+  if (!data) return null
+  const raw = (data.papel as string) ?? 'colaborador'
   return { user, role: raw === 'trainee' ? 'colaborador' : raw }
 }
 
 export async function getCallerWithNome() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
+  const user = await getSessionUser()
   if (!user) return null
   const admin = createAdminClient()
-  const { data } = await admin.from('profiles').select('papel, nome').eq('id', user.id).single()
-  const raw = (data?.papel as string) ?? 'colaborador'
-  return { user, role: raw === 'trainee' ? 'colaborador' : raw, nome: (data?.nome as string) ?? '' }
+  const { data } = await admin.from('profiles').select('papel, nome').eq('id', user.id).maybeSingle()
+  if (!data) return null
+  const raw = (data.papel as string) ?? 'colaborador'
+  return { user, role: raw === 'trainee' ? 'colaborador' : raw, nome: (data.nome as string) ?? '' }
 }
 
 export async function getAuthUser() {
-  const serverClient = await createClient()
-  const { data: { user } } = await serverClient.auth.getUser()
-  return user ?? null
+  return getSessionUser()
 }
 
 export async function requireGestorAdmin() {
