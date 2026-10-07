@@ -75,9 +75,9 @@ export default function IntroScreen({ name, isBirthday, onDone }: { name: string
   const [confete] = useState<Confete[]>(buildConfete)
 
   useEffect(() => {
-    const exitAt = isBirthday ? 2500 : 1650
-    const doneAt = isBirthday ? 2800 : 1900
-    const t1 = setTimeout(() => setPhase('text'), 180)
+    const exitAt = isBirthday ? 2500 : 750
+    const doneAt = isBirthday ? 2800 : 900
+    const t1 = setTimeout(() => setPhase('text'), isBirthday ? 180 : 20)
     const t2 = setTimeout(() => setPhase('exit'), exitAt)
     const t3 = setTimeout(() => { setPhase('done'); markIntroShown(); onDone?.() }, doneAt)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
@@ -134,7 +134,7 @@ export default function IntroScreen({ name, isBirthday, onDone }: { name: string
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden',
-          animation: isExit ? 'gt3-fade-out 0.25s ease forwards' : 'none',
+          animation: isExit ? `gt3-fade-out ${isBirthday ? 0.25 : 0.15}s ease forwards` : 'none',
         }}
       >
         {isBirthday ? (
@@ -216,7 +216,7 @@ export default function IntroScreen({ name, isBirthday, onDone }: { name: string
               letterSpacing: '.18em',
               textTransform: 'uppercase',
               lineHeight: 1.4,
-              animation: 'gt3-from-top .8s cubic-bezier(.2,.7,.3,1) forwards',
+              animation: `gt3-from-top ${isBirthday ? '.8s' : '.4s'} cubic-bezier(.2,.7,.3,1) forwards`,
               opacity: 0,
             }}>
               {isBirthday ? 'Feliz aniversário' : 'Bem-vindo de volta'}
@@ -230,7 +230,7 @@ export default function IntroScreen({ name, isBirthday, onDone }: { name: string
               textTransform: 'uppercase',
               lineHeight: 1.1,
               marginTop: 12,
-              animation: 'gt3-from-bottom .95s cubic-bezier(.2,.7,.3,1) .25s forwards',
+              animation: `gt3-from-bottom ${isBirthday ? '.95s' : '.45s'} cubic-bezier(.2,.7,.3,1) ${isBirthday ? '.25s' : '.08s'} forwards`,
               opacity: 0,
               textShadow: isBirthday ? '0 2px 20px rgba(184,92,122,.22)' : '0 2px 20px rgba(42,79,150,.18)',
             }}>
