@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
@@ -43,6 +44,8 @@ type Designacao = {
   ciencia_por: string[]
   retorno_recebido: boolean
   retorno_em: string | null
+  ligacao_em: string | null
+  ligacao_por: string | null
   criado_por: string
   created_at: string
   updated_at: string
@@ -88,6 +91,20 @@ const CORES_SITUACAO = ['#DC2626', '#D97706', '#0284C7', '#059669', '#6B21A8', '
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function hoje() { return new Date().toISOString().slice(0, 10) }
+
+function fmtDataHoraLig(iso: string) {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} às ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** Bolinha de ligação: vazia (cinza) = não ligou; preenchida (verde) = ligação registrada. */
+const bolinhaLigacaoStyle = (ativa: boolean): React.CSSProperties => ({
+  width: 26, height: 26, borderRadius: '50%', fontSize: 12, lineHeight: 1, padding: 0,
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+  border: `2px solid ${ativa ? '#16A34A' : '#CBD5E1'}`, background: ativa ? '#16A34A' : '#fff',
+  opacity: ativa ? 1 : .6,
+})
 
 function fmtData(iso: string) {
   if (!iso) return '—'
@@ -398,6 +415,29 @@ export default function DesignacaoReprovadosClient() {
   const [caixaAberto, setCaixaAberto] = useState<string | null>(null)
   const [geralAberto, setGeralAberto] = useState<string | null>(null)
   const [geralColaborador, setGeralColaborador] = useState<string | null>(null)
+  // Zoom do card de colaborador na Visão geral: ao parar o mouse, uma versão ampliada do card
+  // vem para a frente da tela (crescendo a partir do próprio card) e volta ao tirar o mouse.
+  const [geralZoom, setGeralZoom] = useState<{ userId: string; rect: DOMRect; aberto: boolean } | null>(null)
+  const zoomTimer = useRef<number | undefined>(undefined)
+  function abrirZoom(userId: string, el: HTMLElement) {
+    window.clearTimeout(zoomTimer.current)
+    zoomTimer.current = window.setTimeout(() => {
+      setGeralZoom({ userId, rect: el.getBoundingClientRect(), aberto: false })
+      requestAnimationFrame(() => requestAnimationFrame(() => setGeralZoom(z => z && z.userId === userId ? { ...z, aberto: true } : z)))
+    }, 90)
+  }
+  function fecharZoom() {
+    window.clearTimeout(zoomTimer.current)
+    setGeralZoom(z => z ? { ...z, aberto: false } : z)
+    zoomTimer.current = window.setTimeout(() => setGeralZoom(null), 170)
+  }
+  useEffect(() => {
+    if (!geralZoom) return
+    const fechar = () => { window.clearTimeout(zoomTimer.current); setGeralZoom(null) }
+    window.addEventListener('scroll', fechar, true)
+    window.addEventListener('resize', fechar)
+    return () => { window.removeEventListener('scroll', fechar, true); window.removeEventListener('resize', fechar) }
+  }, [geralZoom])
 
   // ── Formulário inline ──
   const [formOpen, setFormOpen]           = useState(false)
@@ -805,10 +845,24 @@ export default function DesignacaoReprovadosClient() {
     if (res.ok) {
       const updated: Designacao = await res.json()
       setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
-      showToast('Ciência registrada — o item passa para em andamento.')
+      showToast('Ciente e e-mail enviado — o item passa para em andamento.')
     } else {
       const e = await res.json().catch(() => ({}))
       showToast((e as { error?: string }).error ?? 'Erro ao registrar ciência.')
+    }
+  }
+  /** Bolinha "ligação feita": guarda data/hora e quem marcou. Alterna. */
+  async function marcarLigacao(id: string, ligar: boolean) {
+    const res = await fetch(`/api/designacao-reprovados/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ligacao', ligacao: ligar }),
+    })
+    if (res.ok) {
+      const updated: Designacao = await res.json()
+      setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
+      showToast(ligar ? 'Ligação registrada.' : 'Ligação desmarcada.')
+    } else {
+      const e = await res.json().catch(() => ({}))
+      showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
     }
   }
   async function mudarTratativa(id: string, novo: 'andamento' | 'resolvido' | 'excluido') {
@@ -1139,6 +1193,15 @@ export default function DesignacaoReprovadosClient() {
               </span>
             )}
             {urg && <span style={{ fontSize: 11, fontWeight: 700, color: urg.fg, background: '#fff', border: `1px solid ${urg.border}`, borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>⏱ {urg.label}</span>}
+            {souResponsavel ? (
+              <button
+                onClick={() => marcarLigacao(d.id, !d.ligacao_em)}
+                title={d.ligacao_em ? `Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)} — clique para desmarcar` : 'Marcar que uma ligação foi feita'}
+                style={bolinhaLigacaoStyle(!!d.ligacao_em)}
+              >📞</button>
+            ) : d.ligacao_em && (
+              <span title={`Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)}`} style={bolinhaLigacaoStyle(true)}>📞</span>
+            )}
             <TratativaBadge t={d.tratativa} />
             <button onClick={() => excluirDesignacao(d.id)} title="Excluir designação" style={btnDangerIcon}>🗑</button>
           </div>
@@ -1203,9 +1266,9 @@ export default function DesignacaoReprovadosClient() {
         {souResponsavel && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             {!jaCiente ? (
-              <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Dar ciência</button>
+              <button onClick={() => darCiencia(d.id)} style={sm(btnPrimary)}>✓ Ciente e e-mail enviado</button>
             ) : (
-              <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciência registrada</span>
+              <span style={{ fontSize: 12, color: TRAT_COLORS.resolvido, fontWeight: 600 }}>✓ Ciente e e-mail enviado</span>
             )}
             {jaCiente && !finalizada(d.tratativa) && (
               <>
@@ -1226,6 +1289,124 @@ export default function DesignacaoReprovadosClient() {
           </div>
         )}
       </div>
+    )
+  }
+
+  function renderZoomColaborador() {
+    if (!geralZoom || typeof document === 'undefined') return null
+    const { userId: uid, rect, aberto } = geralZoom
+    const nome = getUsuarioNome(uid)
+    const itens = itensGeralAtual.filter(d => d.responsaveis.includes(uid))
+    const total = itens.length
+    const cont = (t: Tratativa) => itens.filter(d => d.tratativa === t).length
+    const resolvidos = cont('resolvido')
+    const pct = total ? Math.round((resolvidos / total) * 100) : 0
+    const grupos = agruparPorDiaEmpresa(itens)
+    const comLigacao = grupos.filter(g => g.itens.some(d => d.ligacao_em)).length
+
+    const vw = window.innerWidth, vh = window.innerHeight
+    const W = Math.min(480, vw - 32)
+    const left = Math.min(Math.max(rect.left + rect.width / 2 - W / 2, 16), vw - W - 16)
+    const top = Math.min(Math.max(rect.top - 24, 16), Math.max(16, vh - 360))
+    const origem = `${rect.left + rect.width / 2 - left}px ${rect.top + rect.height / 2 - top}px`
+
+    const chip = (cor: string, txt: string) => (
+      <span style={{ fontSize: 12, fontWeight: 700, color: cor, background: `${cor}14`, border: `1px solid ${cor}33`, borderRadius: 999, padding: '4px 11px' }}>{txt}</span>
+    )
+
+    return createPortal(
+      <>
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 900, pointerEvents: 'none',
+          background: 'rgba(15,23,42,.22)', backdropFilter: 'blur(2px)',
+          opacity: aberto ? 1 : 0, transition: 'opacity 170ms ease-out',
+        }} />
+        <div
+          onMouseLeave={fecharZoom}
+          onClick={() => { window.clearTimeout(zoomTimer.current); setGeralZoom(null); setGeralColaborador(uid) }}
+          style={{
+            position: 'fixed', left, top, width: W, maxHeight: vh - top - 16, zIndex: 901,
+            display: 'flex', flexDirection: 'column', overflow: 'hidden', cursor: 'pointer',
+            background: SURF, borderRadius: 16, border: `1px solid ${BORDER}`,
+            boxShadow: '0 24px 60px rgba(15,23,42,.28), 0 6px 18px rgba(42,79,150,.18)',
+            transformOrigin: origem,
+            transform: aberto ? 'scale(1)' : `scale(${Math.min(1, rect.width / W)})`,
+            opacity: aberto ? 1 : 0,
+            transition: 'transform 180ms cubic-bezier(.2,.8,.2,1), opacity 150ms ease-out',
+            pointerEvents: aberto ? 'auto' : 'none',
+          }}>
+          {/* Cabeçalho */}
+          <div style={{ padding: '16px 18px 14px', background: GRADIENTE_AZUL, color: '#fff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ ...avatarStyle, width: 42, height: 42, fontSize: 15, borderRadius: 12, background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.35)' }}>{iniciais(nome)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 800 }}>{nome}</div>
+                <div style={{ fontSize: 12, opacity: .85 }}>{grupos.length} empresa(s) · {total} item(ns) · {pct}% resolvido</div>
+              </div>
+            </div>
+            <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,.22)', overflow: 'hidden', marginTop: 12 }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: '#fff', borderRadius: 999 }} />
+            </div>
+          </div>
+
+          {/* Resumo */}
+          <div style={{ padding: '12px 18px', display: 'flex', gap: 7, flexWrap: 'wrap', borderBottom: `1px solid ${BORDER}` }}>
+            {cont('aguardando') > 0 && chip(TRAT_COLORS.aguardando, `⏳ ${cont('aguardando')} aguardando`)}
+            {cont('andamento') + cont('ciente') > 0 && chip(TRAT_COLORS.andamento, `▶ ${cont('andamento') + cont('ciente')} em andamento`)}
+            {resolvidos > 0 && chip(TRAT_COLORS.resolvido, `✔ ${resolvidos} resolvido`)}
+            {cont('excluido') > 0 && chip(TRAT_COLORS.excluido, `🗑 ${cont('excluido')} doc(s) excluído`)}
+            {chip(comLigacao ? '#16A34A' : '#94A3B8', `📞 ${comLigacao}/${grupos.length} com ligação`)}
+          </div>
+
+          {/* Empresas */}
+          <div style={{ padding: '12px 18px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {grupos.map(g => {
+              const ativo = g.itens.some(d => !finalizada(d.tratativa))
+              const urg = ativo ? urgenciaDesig(g.data) : null
+              const lig = g.itens.filter(d => d.ligacao_em).sort((a, b) => (b.ligacao_em ?? '').localeCompare(a.ligacao_em ?? ''))[0]
+              return (
+                <div key={g.key} style={{ border: `1px solid ${urg ? urg.border : BORDER}`, borderLeft: `4px solid ${urg ? urg.fg : MUTED}`, borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '9px 12px', background: urg ? urg.bg : BG }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                      <b style={{ fontSize: 14, color: TEXT }}>🏢 {g.empresa}</b>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: urg ? urg.fg : MUTED, borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>
+                        📅 {fmtData(g.data)}{urg ? ` · ${urg.label}` : ''}
+                      </span>
+                    </div>
+                    {/* Ligação em destaque */}
+                    <div style={{
+                      marginTop: 7, display: 'flex', alignItems: 'center', gap: 8, borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700,
+                      ...(lig
+                        ? { background: '#16A34A', color: '#fff' }
+                        : { background: '#fff', color: '#94A3B8', border: '1.5px dashed #CBD5E1' }),
+                    }}>
+                      <span style={{ fontSize: 14 }}>📞</span>
+                      {lig
+                        ? <span>Ligação feita por {getUsuarioNome(lig.ligacao_por ?? '')} · {fmtDataHoraLig(lig.ligacao_em!)}</span>
+                        : <span>Nenhuma ligação registrada</span>}
+                    </div>
+                  </div>
+                  <div style={{ padding: '6px 12px 8px', background: SURF }}>
+                    {g.itens.map(d => (
+                      <div key={d.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 0', fontSize: 12.5, borderBottom: `1px dashed ${BORDER}` }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: TRAT_COLORS[d.tratativa], flexShrink: 0, alignSelf: 'center' }} />
+                        <span style={{ flex: 1, color: TEXT }}>{d.documentos.map(getDocNome).join(' · ')}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: TRAT_COLORS[d.tratativa], whiteSpace: 'nowrap' }}>{TRAT_LABEL[d.tratativa]}</span>
+                        {d.retorno_recebido && <span title="Empresa retornou" style={{ fontSize: 11 }}>🔁</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ padding: '9px 18px', borderTop: `1px solid ${BORDER}`, background: '#F6F9FC', fontSize: 11.5, color: PRIMARY, fontWeight: 700, textAlign: 'right' }}>
+            Clique para ver as designações de {nome.split(' ')[0]} →
+          </div>
+        </div>
+      </>,
+      document.body,
     )
   }
 
@@ -1298,7 +1479,7 @@ export default function DesignacaoReprovadosClient() {
           { id: 'caixa' as const, label: `📥 Minha Caixa${minhaCaixaPendentes ? ` (${minhaCaixaPendentes})` : ''}` },
           { id: 'config' as const, label: '⚙️ Configurações' },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => { setTab(t.id); if (t.id === 'geral') { setGeralColaborador(null); setGeralAberto(null) } }}
             className={`gt3-tab${tab === t.id ? ' gt3-tab-active' : ''}`}
             style={{
               background: 'none', border: 'none', borderBottom: '2.5px solid transparent',
@@ -1576,7 +1757,7 @@ export default function DesignacaoReprovadosClient() {
           <div style={{ maxWidth: 1100 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
               {geralColaborador ? (
-                <button onClick={() => setGeralColaborador(null)} style={sm(btnGhost)}>← Voltar para todos</button>
+                <button onClick={() => { setGeralColaborador(null); setGeralAberto(null) }} style={{ ...btnPrimary, background: GRADIENTE_AZUL, boxShadow: SOMBRA_AZUL_SUAVE, fontWeight: 700, fontSize: 13.5, padding: '9px 18px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>← Voltar para todos os colaboradores</button>
               ) : (
                 <div style={{ fontSize: 12.5, color: MUTED }}>Por colaborador — clique no nome para ver as designações dele(a).</div>
               )}
@@ -1675,11 +1856,14 @@ export default function DesignacaoReprovadosClient() {
                   </p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14, alignItems: 'start' }}>
+                  {renderZoomColaborador()}
                   {statsColaboradores.map((s, i) => {
                     const pct = s.total ? Math.round((s.resolvido / s.total) * 100) : 0
                     return (
                       <div key={s.userId} onClick={() => setGeralColaborador(s.userId)}
+                        onMouseEnter={e => abrirZoom(s.userId, e.currentTarget)}
+                        onMouseLeave={() => { if (!geralZoom) window.clearTimeout(zoomTimer.current) }}
                         className="gt3-card-hover gt3-fade-up"
                         style={{
                           cursor: 'pointer', background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS,

@@ -4,7 +4,7 @@ import { getCaller } from '../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
-const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, criado_por, created_at, updated_at'
+const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, ligacao_em, ligacao_por, criado_por, created_at, updated_at'
 
 const TRAT_LABEL: Record<string, string> = {
   aguardando: 'Aguardando ciência',
@@ -50,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     update = { ciencia_por: novaCiencia }
     // Dar ciência já coloca o item em andamento (o aviso passa a ficar no dashboard como andamento).
     if (['aguardando', 'ciente'].includes(atual.tratativa)) update.tratativa = 'andamento'
-    acaoHistorico = 'Ciência registrada — em andamento'
+    acaoHistorico = 'Ciente e e-mail enviado — em andamento'
   } else if (action === 'tratativa') {
     const novo = body?.tratativa as string
     if (!['andamento', 'resolvido', 'excluido'].includes(novo)) {
@@ -71,6 +71,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const ligar = body?.retorno !== false
     update = { retorno_recebido: ligar, retorno_em: ligar ? new Date().toISOString() : null }
     acaoHistorico = ligar ? 'Empresa retornou' : 'Retorno da empresa desmarcado'
+  } else if (action === 'ligacao') {
+    // Bolinha "ligação feita": guarda quando e quem marcou. Alterna (permite desmarcar se foi engano).
+    const ligar = body?.ligacao !== false
+    update = { ligacao_em: ligar ? new Date().toISOString() : null, ligacao_por: ligar ? caller.user.id : null }
+    acaoHistorico = ligar ? 'Ligação feita' : 'Ligação desmarcada'
   } else {
     return Response.json({ error: 'Ação inválida' }, { status: 400 })
   }

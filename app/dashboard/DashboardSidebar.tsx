@@ -81,6 +81,10 @@ type DesigPendente = {
   /** true = ainda falta a MINHA ciência; false = já dei ciência e o item segue em andamento */
   aguardando_ciencia?: boolean
   setores: string[]
+  documentos?: string[]
+  motivo?: string
+  ligacao_em?: string | null
+  ligacao_por_nome?: string | null
 }
 
 function fmtDateShort(iso: string) {
@@ -188,6 +192,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const [pdiConversaColaborador, setPdiConversaColaborador] = useState<PdiConversaColaborador | null>(null)
   const [obsPendentes, setObsPendentes] = useState<ObsPendente[]>([])
   const [desigPendentes, setDesigPendentes] = useState<DesigPendente[]>([])
+  const [desigHover, setDesigHover] = useState<string | null>(null)
 
   async function loadPrioridades() {
     const supabase = createClient()
@@ -566,8 +571,8 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   }, [])
 
   async function darCienciaGrupoDesig(ids: string[]) {
-    // Ciência coloca o item em andamento: continua aqui, agora como "em andamento".
-    setDesigPendentes(prev => prev.map(d => ids.includes(d.id) ? { ...d, aguardando_ciencia: false } : d))
+    // "Ciente e e-mail enviado": a empresa sai do dashboard.
+    setDesigPendentes(prev => prev.filter(d => !ids.includes(d.id)))
     await Promise.all(ids.map(id => fetch(`/api/designacao-reprovados/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ciencia' }),
     })))
@@ -1035,36 +1040,56 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               return grupos.map((g, i) => {
                 const [y, m, dd] = g.data.split('-')
                 const setoresUnicos = [...new Set(g.itens.flatMap(x => x.setores))]
-                const aguardando = g.itens.some(x => x.aguardando_ciencia !== false)
                 // Cor da linha conforme os dias desde a designação: azul (até o 1º dia), laranja fraco (2º), vermelho (3º em diante).
                 const urg = urgenciaDesig(g.data)
+                const aberto = desigHover === g.key
                 return (
-                  <div key={g.key} style={{
-                    marginTop: i === 0 ? 0 : 6, padding: '7px 9px',
-                    background: urg.bg, border: `1px solid ${urg.border}`, borderLeft: `4px solid ${urg.fg}`, borderRadius: 6,
-                    display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between',
-                  }}>
-                    <Link href="/designacao-reprovados?caixa=1" style={{ textDecoration: 'none', minWidth: 0, flex: 1 }}>
-                      <span style={{ fontWeight: 600, color: urg.fg, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
-                        {g.empresa}
-                      </span>
-                      <span style={{ color: '#6B7280', fontSize: 11 }}>
-                        {dd}/{m}/{y.slice(2)} · {setoresUnicos.join(', ')}
-                      </span>
-                      <span style={{ display: 'block', color: urg.fg, fontSize: 10.5, fontWeight: 700 }}>
-                        {aguardando ? '⏳ Aguardando ciência' : '▶ Em andamento'} · {urg.label}
-                      </span>
-                    </Link>
-                    {aguardando && <button
-                      onClick={() => void darCienciaGrupoDesig(g.itens.filter(x => x.aguardando_ciencia !== false).map(x => x.id))}
-                      title="Dar ciência — o item passa para em andamento"
-                      style={{
-                        flexShrink: 0, fontSize: 11, fontWeight: 600, color: '#2A4F96', background: '#fff',
-                        border: '1px solid #C7D2E8', borderRadius: 6, padding: '4px 9px', cursor: 'pointer',
-                      }}
-                    >
-                      ✓ Ciência
-                    </button>}
+                  <div key={g.key}
+                    onMouseEnter={() => setDesigHover(g.key)}
+                    onMouseLeave={() => setDesigHover(h => h === g.key ? null : h)}
+                    style={{
+                      marginTop: i === 0 ? 0 : 6, padding: '7px 9px',
+                      background: urg.bg, border: `1px solid ${urg.border}`, borderLeft: `4px solid ${urg.fg}`, borderRadius: 6,
+                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                      <Link href="/designacao-reprovados?caixa=1" style={{ textDecoration: 'none', minWidth: 0, flex: 1 }}>
+                        <span style={{ fontWeight: 600, color: urg.fg, display: 'block', overflow: aberto ? 'visible' : 'hidden', textOverflow: 'ellipsis', whiteSpace: aberto ? 'normal' : 'nowrap', fontSize: 13 }}>
+                          {g.empresa}
+                        </span>
+                        <span style={{ color: '#6B7280', fontSize: 11 }}>
+                          {dd}/{m}/{y.slice(2)} · {setoresUnicos.join(', ')}
+                        </span>
+                        <span style={{ display: 'block', color: urg.fg, fontSize: 10.5, fontWeight: 700 }}>
+                          ⏳ Aguardando ciência · {urg.label} · {g.itens.length} item(ns)
+                        </span>
+                      </Link>
+                      <button
+                        onClick={() => void darCienciaGrupoDesig(g.itens.map(x => x.id))}
+                        title="Ciente e e-mail enviado — a empresa sai do dashboard"
+                        style={{
+                          flexShrink: 0, fontSize: 11, fontWeight: 600, color: '#2A4F96', background: '#fff',
+                          border: '1px solid #C7D2E8', borderRadius: 6, padding: '4px 9px', cursor: 'pointer',
+                        }}
+                      >
+                        ✓ Ciente e e-mail enviado
+                      </button>
+                    </div>
+                    {aberto && (
+                      <div className="gt3-slide-down" style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${urg.border}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {g.itens.map(x => (
+                          <div key={x.id} style={{ fontSize: 11.5, color: '#374151', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 5, padding: '5px 8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                              <b>{(x.documentos ?? []).join(' · ') || '—'}</b>
+                              {x.ligacao_em && (
+                                <span title={`Ligação feita por ${x.ligacao_por_nome ?? 'Usuário'} em ${fmtDateShort(x.ligacao_em)}`} style={{ flexShrink: 0, width: 10, height: 10, borderRadius: '50%', background: '#16A34A', marginTop: 3 }} />
+                              )}
+                            </div>
+                            {x.motivo && <div style={{ color: '#6B7280', marginTop: 2, whiteSpace: 'pre-wrap' }}>📝 {x.motivo}</div>}
+                            {x.ligacao_em && <div style={{ color: '#16A34A', marginTop: 2, fontSize: 10.5 }}>📞 {x.ligacao_por_nome ?? 'Usuário'} · {fmtDateShort(x.ligacao_em)}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })
