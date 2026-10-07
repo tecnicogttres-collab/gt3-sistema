@@ -5,6 +5,7 @@ import { createClient } from '../lib/supabase'
 import { RevisaoTable, RevisionRow, btnPrimary, btnSecondary, inputStyle } from './RevisaoTable'
 import { RevisaoEquipe, ScheduleTable } from './RevisaoEquipe'
 import type { RowType, Revision, ScheduleRow, Sheet, HistoryData } from './types'
+import { ausenciaNoDia, rotuloAusencia, type Ausencia } from './disponibilidade'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -182,6 +183,27 @@ export default function ControleRevisaoClient() {
   const [newPersonInput, setNewPersonInput] = useState('')
   const [showGenerate, setShowGenerate] = useState(false)
   const [holidayModal, setHolidayModal] = useState<'mark' | 'unmark' | null>(null)
+  // Férias/folgas do Calendário de férias — ninguém pode ser escalado num dia em que não está disponível
+  const [ausencias, setAusencias] = useState<Ausencia[]>([])
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await createClient()
+        .from('ferias')
+        .select('pessoa, inicio, fim, tipo')
+      if (error) { console.error('Erro ao carregar férias/folgas:', error.message); return }
+      setAusencias((data ?? []).map(r => ({ pessoa: r.pessoa as string, inicio: r.inicio as string, fim: r.fim as string, tipo: r.tipo === 'folga' ? 'folga' : 'ferias' })))
+    })()
+  }, [])
+
+  /** Dias da escala do mês vigente com revisor de férias/folga */
+  const conflitosEscala = current
+    ? current.schedule.flatMap(r => {
+        if (r.type !== 'normal' || !r.person) return []
+        const a = ausenciaNoDia(r.person, `${current.year}-${pad(current.monthIdx + 1)}-${pad(r.day)}`, ausencias)
+        return a ? [{ day: r.day, person: r.person, tipo: rotuloAusencia(a) }] : []
+      })
+    : []
 
   useEffect(() => {
     async function load() {
@@ -282,6 +304,8 @@ export default function ControleRevisaoClient() {
 
   function handlePersonChange(day: number, person: string) {
     if (!current) return
+    const aus = ausenciaNoDia(person, `${current.year}-${pad(current.monthIdx + 1)}-${pad(day)}`, ausencias)
+    if (aus) { window.alert(`${person} está de ${rotuloAusencia(aus)} em ${pad(day)}/${pad(current.monthIdx + 1)} (Calendário de férias). Escolha outro revisor.`); return }
     const schedule = current.schedule.map(r => r.day === day ? { ...r, person } : r)
     void saveCurrentSheet({ ...current, schedule })
   }
@@ -509,7 +533,15 @@ export default function ControleRevisaoClient() {
                     onAddPerson={handleAddPerson}
                     onRemovePerson={handleRemovePerson}
                   />
-                  <ScheduleTable sheet={current} people={people} readOnly={false} onPersonChange={handlePersonChange} />
+                  {conflitosEscala.length > 0 && (
+                    <div style={{ marginBottom: 12, padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderLeft: '4px solid #B91C1C', borderRadius: 8, fontSize: 12.5, color: '#7F1D1D', maxWidth: 420 }}>
+                      <b>⚠ Revisor indisponível em {conflitosEscala.length} dia(s)</b> — conforme o Calendário de férias:
+                      <div style={{ marginTop: 4 }}>
+                        {conflitosEscala.map(c => `${pad(c.day)}/${pad(current.monthIdx + 1)} ${c.person} (${c.tipo})`).join(' · ')}
+                      </div>
+                    </div>
+                  )}
+                  <ScheduleTable sheet={current} people={people} readOnly={false} onPersonChange={handlePersonChange} ausencias={ausencias} />
                   <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                     <button onClick={() => setHolidayModal('mark')} style={btnSecondary}>⭐ Marcar feriado</button>
                     <button onClick={() => setHolidayModal('unmark')} style={btnSecondary}>↺ Desmarcar feriado</button>

@@ -1,6 +1,7 @@
 'use client'
 
 import type { Sheet, ScheduleRow } from './types'
+import { ausenciaNoDia, rotuloAusencia, type Ausencia } from './disponibilidade'
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
@@ -11,16 +12,21 @@ const WEEKEND_BG = '#C7DAEF'
 const WEEKEND_TEXT = '#1E3A6E'
 const HOLIDAY_BG = '#E8E6DC'
 const HOLIDAY_TEXT = '#4A4339'
+const CONFLITO_BG = '#FEF2F2'
+const CONFLITO_BORDER = '#FCA5A5'
+const CONFLITO_TEXT = '#B91C1C'
 
 const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
 
 function pad(n: number) { return String(n).padStart(2, '0') }
 
-export function ScheduleTable({ sheet, people, readOnly, onPersonChange }: {
+export function ScheduleTable({ sheet, people, readOnly, onPersonChange, ausencias = [] }: {
   sheet: Sheet
   people: string[]
   readOnly: boolean
   onPersonChange?: (day: number, person: string) => void
+  /** Férias/folgas do Calendário de férias — bloqueia quem não está disponível no dia */
+  ausencias?: Ausencia[]
 }) {
   return (
     <div style={{ overflowX: 'auto', maxWidth: 420 }}>
@@ -38,29 +44,48 @@ export function ScheduleTable({ sheet, people, readOnly, onPersonChange }: {
             const bg = isWknd ? WEEKEND_BG : isHol ? HOLIDAY_BG : '#fff'
             const dayClr = isWknd ? WEEKEND_TEXT : isHol ? HOLIDAY_TEXT : MUTED
             const dateStr = `${pad(row.day)}/${MONTHS_SHORT[sheet.monthIdx]}`
+            const dataIso = `${sheet.year}-${pad(sheet.monthIdx + 1)}-${pad(row.day)}`
+            // Revisor já escalado que está de férias/folga neste dia
+            const conflito = !isWknd && !isHol ? ausenciaNoDia(row.person, dataIso, ausencias) : null
+            const cellBg = conflito ? CONFLITO_BG : bg
             return (
               <tr key={row.day}>
-                <td style={{ background: bg, border: `1px solid var(--border-soft)`, height: 34, textAlign: 'center', padding: '0 14px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: dayClr }}>{dateStr}</span>
+                <td style={{ background: cellBg, border: `1px solid var(--border-soft)`, height: 34, textAlign: 'center', padding: '0 14px' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: conflito ? CONFLITO_TEXT : dayClr }}>{dateStr}</span>
                 </td>
-                <td style={{ background: bg, border: `1px solid var(--border-soft)`, borderLeft: 'none', height: 34, padding: 0 }}>
+                <td
+                  title={conflito ? `${row.person} está de ${rotuloAusencia(conflito)} neste dia — escolha outro revisor` : undefined}
+                  style={{ background: cellBg, border: `1px solid ${conflito ? CONFLITO_BORDER : 'var(--border-soft)'}`, borderLeft: 'none', height: 34, padding: 0, position: 'relative' }}>
                   {isWknd || isHol ? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: isWknd ? WEEKEND_TEXT : HOLIDAY_TEXT }}>{row.label || 'FERIADO'}</span>
                     </div>
                   ) : readOnly ? (
                     <div style={{ padding: '0 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                      <span style={{ fontSize: 13, color: row.person ? INK : '#C0C8D8' }}>{row.person || '—'}</span>
+                      <span style={{ fontSize: 13, color: conflito ? CONFLITO_TEXT : row.person ? INK : '#C0C8D8' }}>
+                        {row.person || '—'}{conflito ? ` ⚠ ${rotuloAusencia(conflito)}` : ''}
+                      </span>
                     </div>
                   ) : (
-                    <select
-                      value={row.person}
-                      onChange={e => onPersonChange?.(row.day, e.target.value)}
-                      style={{ width: '100%', height: 34, border: 'none', background: 'transparent', padding: '0 10px', fontSize: 13, color: row.person ? INK : MUTED, fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}
-                    >
-                      <option value="">—</option>
-                      {people.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                    <>
+                      <select
+                        value={row.person}
+                        onChange={e => onPersonChange?.(row.day, e.target.value)}
+                        style={{ width: '100%', height: 34, border: 'none', background: 'transparent', padding: conflito ? '0 78px 0 10px' : '0 10px', fontSize: 13, color: conflito ? CONFLITO_TEXT : row.person ? INK : MUTED, fontWeight: conflito ? 700 : 400, fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}
+                      >
+                        <option value="">—</option>
+                        {people.map(p => {
+                          const aus = ausenciaNoDia(p, dataIso, ausencias)
+                          // Quem está de férias/folga no dia não pode ser escolhido (só aparece, desabilitado).
+                          return <option key={p} value={p} disabled={!!aus && p !== row.person}>{aus ? `${p} — de ${rotuloAusencia(aus)}` : p}</option>
+                        })}
+                      </select>
+                      {conflito && (
+                        <span style={{ position: 'absolute', right: 26, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: 10.5, fontWeight: 800, color: '#fff', background: CONFLITO_TEXT, borderRadius: 999, padding: '2px 7px' }}>
+                          ⚠ {rotuloAusencia(conflito)}
+                        </span>
+                      )}
+                    </>
                   )}
                 </td>
               </tr>
