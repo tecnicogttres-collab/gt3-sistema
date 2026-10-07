@@ -100,11 +100,31 @@ function fmtDataHoraLig(iso: string) {
 
 /** Bolinha de ligação: vazia (cinza) = não ligou; preenchida (verde) = ligação registrada. */
 const bolinhaLigacaoStyle = (ativa: boolean): React.CSSProperties => ({
-  width: 26, height: 26, borderRadius: '50%', fontSize: 12, lineHeight: 1, padding: 0,
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-  border: `2px solid ${ativa ? '#16A34A' : '#CBD5E1'}`, background: ativa ? '#16A34A' : '#fff',
-  opacity: ativa ? 1 : .6,
+  display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap',
+  fontSize: 11.5, fontWeight: 700, lineHeight: 1, padding: '5px 11px 5px 9px', borderRadius: 999,
+  // Fundo sólido próprio (branco ou verde) — não deixa a cor de urgência do card vazar.
+  background: ativa ? '#16A34A' : '#FFFFFF',
+  color: ativa ? '#FFFFFF' : '#475569',
+  border: `1px solid ${ativa ? '#15803D' : '#CBD5E1'}`,
+  boxShadow: ativa ? '0 2px 6px rgba(22,163,74,.30)' : '0 1px 2px rgba(15,23,42,.06)',
+  transition: 'background-color .15s, color .15s, box-shadow .15s',
 })
+
+/** Ícone de telefone em SVG (herda a cor do botão, não do card). */
+function IconeTelefone({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  )
+}
+
+function ConteudoLigacao({ em }: { em: string | null }) {
+  if (!em) return <><IconeTelefone /> Registrar ligação</>
+  const d = new Date(em)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return <><IconeTelefone /> ✓ Ligação feita · {pad(d.getDate())}/{pad(d.getMonth() + 1)} {pad(d.getHours())}:{pad(d.getMinutes())}</>
+}
 
 function fmtData(iso: string) {
   if (!iso) return '—'
@@ -1198,9 +1218,9 @@ export default function DesignacaoReprovadosClient() {
                 onClick={() => marcarLigacao(d.id, !d.ligacao_em)}
                 title={d.ligacao_em ? `Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)} — clique para desmarcar` : 'Marcar que uma ligação foi feita'}
                 style={bolinhaLigacaoStyle(!!d.ligacao_em)}
-              >📞</button>
+              ><ConteudoLigacao em={d.ligacao_em} /></button>
             ) : d.ligacao_em && (
-              <span title={`Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)}`} style={bolinhaLigacaoStyle(true)}>📞</span>
+              <span title={`Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)}`} style={{ ...bolinhaLigacaoStyle(true), cursor: 'default' }}><ConteudoLigacao em={d.ligacao_em} /></span>
             )}
             <TratativaBadge t={d.tratativa} />
             <button onClick={() => excluirDesignacao(d.id)} title="Excluir designação" style={btnDangerIcon}>🗑</button>
