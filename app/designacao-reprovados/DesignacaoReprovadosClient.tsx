@@ -44,6 +44,10 @@ type Designacao = {
   ciencia_por: string[]
   retorno_recebido: boolean
   retorno_em: string | null
+  /** Como a empresa retornou — guardado à parte para mensurar (ligação/WhatsApp x e-mail x outro). */
+  retorno_tipo: RetornoTipo | null
+  retorno_obs: string | null
+  retorno_por: string | null
   ligacao_em: string | null
   ligacao_por: string | null
   /** Cada geração de e-mail (.eml / Outlook) — "Empresa contatada sobre a reprovação". */
@@ -88,6 +92,13 @@ const TRAT_OPTIONS: { id: Tratativa; label: string }[] = [
   { id: 'excluido',   label: 'Doc(s) excluído' },
 ]
 
+type RetornoTipo = 'ligacao' | 'email' | 'outro'
+const RETORNO_TIPO_LABEL: Record<RetornoTipo, string> = {
+  ligacao: '📞 Ligação ou WhatsApp',
+  email:   '✉️ E-mail',
+  outro:   '💬 Outro',
+}
+
 const CORES_SITUACAO = ['#DC2626', '#D97706', '#0284C7', '#059669', '#6B21A8', '#64748B']
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -100,7 +111,7 @@ function fmtDataHoraLig(iso: string) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} às ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** Bolinha de ligação: vazia (cinza) = não ligou; preenchida (verde) = ligação registrada. */
+/** Bolinha de ligação ou WhatsApp: vazia (cinza) = não contatou; preenchida (verde) = registrado. */
 const bolinhaLigacaoStyle = (ativa: boolean): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap',
   fontSize: 11.5, fontWeight: 700, lineHeight: 1, padding: '5px 11px 5px 9px', borderRadius: 999,
@@ -122,10 +133,10 @@ function IconeTelefone({ size = 13 }: { size?: number }) {
 }
 
 function ConteudoLigacao({ em }: { em: string | null }) {
-  if (!em) return <><IconeTelefone /> Registrar ligação</>
+  if (!em) return <><IconeTelefone /> Registrar ligação ou WhatsApp</>
   const d = new Date(em)
   const pad = (n: number) => String(n).padStart(2, '0')
-  return <><IconeTelefone /> ✓ Ligação feita · {pad(d.getDate())}/{pad(d.getMonth() + 1)} {pad(d.getHours())}:{pad(d.getMinutes())}</>
+  return <><IconeTelefone /> ✓ Ligação ou WhatsApp · {pad(d.getDate())}/{pad(d.getMonth() + 1)} {pad(d.getHours())}:{pad(d.getMinutes())}</>
 }
 
 function fmtData(iso: string) {
@@ -443,6 +454,9 @@ export default function DesignacaoReprovadosClient() {
   // vem para a frente da tela (crescendo a partir do próprio card) e volta ao tirar o mouse.
   const [geralZoom, setGeralZoom] = useState<{ userId: string; rect: DOMRect; aberto: boolean } | null>(null)
   const zoomTimer = useRef<number | undefined>(undefined)
+  const zoomCardRef = useRef<HTMLDivElement>(null)
+  /** Formulário "Marcar retorno da empresa" aberto em um item: como retornou + texto livre. */
+  const [retornoForm, setRetornoForm] = useState<{ id: string; tipo: RetornoTipo | null; obs: string } | null>(null)
   function abrirZoom(userId: string, el: HTMLElement) {
     window.clearTimeout(zoomTimer.current)
     zoomTimer.current = window.setTimeout(() => {
@@ -475,9 +489,14 @@ export default function DesignacaoReprovadosClient() {
   useEffect(() => {
     if (!geralZoom) return
     const fechar = () => { window.clearTimeout(zoomTimer.current); setGeralZoom(null) }
-    window.addEventListener('scroll', fechar, true)
+    // Rolar dentro do próprio card ampliado não fecha — só rolar a página.
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && zoomCardRef.current?.contains(e.target)) return
+      fechar()
+    }
+    window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', fechar)
-    return () => { window.removeEventListener('scroll', fechar, true); window.removeEventListener('resize', fechar) }
+    return () => { window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', fechar) }
   }, [geralZoom])
 
   // ── Formulário inline ──
@@ -916,7 +935,7 @@ export default function DesignacaoReprovadosClient() {
     if (res.ok) {
       const updated: Designacao = await res.json()
       setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
-      showToast(ligar ? 'Ligação registrada.' : 'Ligação desmarcada.')
+      showToast(ligar ? 'Ligação ou WhatsApp registrado.' : 'Ligação ou WhatsApp desmarcado.')
     } else {
       const e = await res.json().catch(() => ({}))
       showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
@@ -935,14 +954,16 @@ export default function DesignacaoReprovadosClient() {
       showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
     }
   }
-  /** Marcador independente da tratativa — a empresa respondeu ao e-mail. Alterna. */
-  async function marcarRetorno(id: string, ligar: boolean) {
+  /** Marcador independente da tratativa — a empresa respondeu. Ao marcar, informa como
+   *  (ligação ou WhatsApp / e-mail / outro) + texto livre; ligação já marca "ligação feita". */
+  async function marcarRetorno(id: string, ligar: boolean, tipo?: RetornoTipo, obs?: string) {
     const res = await fetch(`/api/designacao-reprovados/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'retorno', retorno: ligar }),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'retorno', retorno: ligar, tipo, obs }),
     })
     if (res.ok) {
       const updated: Designacao = await res.json()
       setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
+      setRetornoForm(null)
       showToast(ligar ? 'Marcado: empresa retornou.' : 'Retorno desmarcado.')
     } else {
       const e = await res.json().catch(() => ({}))
@@ -1258,11 +1279,11 @@ export default function DesignacaoReprovadosClient() {
             {podeTratar ? (
               <button
                 onClick={() => marcarLigacao(d.id, !d.ligacao_em)}
-                title={d.ligacao_em ? `Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)} — clique para desmarcar` : 'Marcar que uma ligação foi feita'}
+                title={d.ligacao_em ? `Ligação ou WhatsApp feito por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)} — clique para desmarcar` : 'Marcar que uma ligação ou WhatsApp foi feito'}
                 style={bolinhaLigacaoStyle(!!d.ligacao_em)}
               ><ConteudoLigacao em={d.ligacao_em} /></button>
             ) : d.ligacao_em && (
-              <span title={`Ligação feita por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)}`} style={{ ...bolinhaLigacaoStyle(true), cursor: 'default' }}><ConteudoLigacao em={d.ligacao_em} /></span>
+              <span title={`Ligação ou WhatsApp feito por ${getUsuarioNome(d.ligacao_por ?? '')} em ${fmtDataHoraLig(d.ligacao_em)}`} style={{ ...bolinhaLigacaoStyle(true), cursor: 'default' }}><ConteudoLigacao em={d.ligacao_em} /></span>
             )}
             <TratativaBadge t={d.tratativa} />
             <button onClick={() => excluirDesignacao(d.id)} title="Excluir designação" style={btnDangerIcon}>🗑</button>
@@ -1360,9 +1381,73 @@ export default function DesignacaoReprovadosClient() {
                 </button>
               </>
             )}
-            <button onClick={() => marcarRetorno(d.id, !d.retorno_recebido)} style={sm(btnGhost)}>
-              {d.retorno_recebido ? '↺ Desmarcar retorno' : '🔁 Marcar retorno da empresa'}
-            </button>
+            {d.retorno_recebido ? (
+              <button onClick={() => { if (confirm('Desmarcar o retorno da empresa? O texto registrado será apagado.')) void marcarRetorno(d.id, false) }} style={sm(btnGhost)}>
+                ↺ Desmarcar retorno
+              </button>
+            ) : retornoForm?.id !== d.id && (
+              <button onClick={() => setRetornoForm({ id: d.id, tipo: null, obs: '' })} style={sm(btnGhost)}>
+                🔁 Marcar retorno da empresa
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Marcar retorno: 1º escolhe como a empresa retornou, depois texto livre. */}
+        {podeTratar && !d.retorno_recebido && retornoForm?.id === d.id && (
+          <div style={{ marginTop: 12, background: '#EDFBF6', border: '1px solid #A9E6D2', borderLeft: '4px solid #0A7A5E', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#0A7A5E', marginBottom: 8 }}>🔁 Como a empresa retornou?</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: retornoForm.tipo ? 10 : 0 }}>
+              {(Object.keys(RETORNO_TIPO_LABEL) as RetornoTipo[]).map(t => {
+                const sel = retornoForm.tipo === t
+                return (
+                  <button key={t} onClick={() => setRetornoForm({ ...retornoForm, tipo: t })}
+                    style={{ ...sm(btnGhost), ...(sel ? { background: '#0A7A5E', color: '#fff', border: '1px solid #0A7A5E', fontWeight: 700 } : {}) }}>
+                    {RETORNO_TIPO_LABEL[t]}
+                  </button>
+                )
+              })}
+            </div>
+            {retornoForm.tipo && (
+              <>
+                {retornoForm.tipo === 'ligacao' && !d.ligacao_em && (
+                  <div style={{ fontSize: 11.5, color: '#0A7A5E', marginBottom: 6 }}>✓ “Ligação ou WhatsApp” também será marcado neste item.</div>
+                )}
+                <textarea
+                  autoFocus
+                  value={retornoForm.obs}
+                  onChange={e => setRetornoForm({ ...retornoForm, obs: e.target.value })}
+                  placeholder="O que a empresa informou? (opcional)"
+                  rows={3}
+                  maxLength={2000}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', background: '#fff' }}
+                />
+              </>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+              <button onClick={() => setRetornoForm(null)} style={sm(btnGhost)}>Cancelar</button>
+              <button
+                disabled={!retornoForm.tipo}
+                onClick={() => { if (retornoForm.tipo) void marcarRetorno(d.id, true, retornoForm.tipo, retornoForm.obs) }}
+                style={{ ...sm(btnPrimary), opacity: retornoForm.tipo ? 1 : .5, cursor: retornoForm.tipo ? 'pointer' : 'not-allowed' }}>
+                Salvar retorno
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Retorno registrado: como + texto + quem/quando. */}
+        {d.retorno_recebido && (d.retorno_tipo || d.retorno_obs) && (
+          <div style={{ marginTop: 12, background: '#EDFBF6', border: '1px solid #A9E6D2', borderLeft: '4px solid #0A7A5E', borderRadius: 8, padding: '9px 12px', color: '#0B4A3A' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 4 }}>
+              🔁 Retorno da empresa{d.retorno_tipo ? ` · ${RETORNO_TIPO_LABEL[d.retorno_tipo]}` : ''}
+            </div>
+            {d.retorno_obs && <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{d.retorno_obs}</div>}
+            {d.retorno_em && (
+              <div style={{ fontSize: 11.5, color: '#3F6B5E', marginTop: 4 }}>
+                {fmtDataHoraLig(d.retorno_em)}{d.retorno_por ? ` · ${getUsuarioNome(d.retorno_por)}` : ''}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1382,9 +1467,10 @@ export default function DesignacaoReprovadosClient() {
     const comLigacao = grupos.filter(g => g.itens.some(d => d.ligacao_em)).length
 
     const vw = window.innerWidth, vh = window.innerHeight
-    const W = Math.min(480, vw - 32)
+    // Card ampliado grande (o dobro do antigo) — mais área pro mouse, menos fechamento sem querer.
+    const W = Math.min(960, vw - 32)
     const left = Math.min(Math.max(rect.left + rect.width / 2 - W / 2, 16), vw - W - 16)
-    const top = Math.min(Math.max(rect.top - 24, 16), Math.max(16, vh - 360))
+    const top = Math.min(Math.max(rect.top - 24, 16), Math.max(16, Math.round(vh * 0.08)))
     const origem = `${rect.left + rect.width / 2 - left}px ${rect.top + rect.height / 2 - top}px`
 
     const chip = (cor: string, txt: string) => (
@@ -1399,10 +1485,13 @@ export default function DesignacaoReprovadosClient() {
           opacity: aberto ? 1 : 0, transition: 'opacity 170ms ease-out',
         }} />
         <div
+          ref={zoomCardRef}
           onMouseLeave={fecharZoom}
           onClick={() => { window.clearTimeout(zoomTimer.current); setGeralZoom(null); setGeralColaborador(uid) }}
           style={{
             position: 'fixed', left, top, width: W, maxHeight: vh - top - 16, zIndex: 901,
+            // Sempre cobre o card de origem (o mouse não "cai fora" logo ao abrir).
+            minHeight: Math.min(vh - top - 16, Math.max(rect.bottom - top + 24, 520)),
             display: 'flex', flexDirection: 'column', overflow: 'hidden', cursor: 'pointer',
             background: SURF, borderRadius: 16, border: `1px solid ${BORDER}`,
             boxShadow: '0 24px 60px rgba(15,23,42,.28), 0 6px 18px rgba(42,79,150,.18)',
@@ -1432,11 +1521,14 @@ export default function DesignacaoReprovadosClient() {
             {cont('andamento') + cont('ciente') > 0 && chip(TRAT_COLORS.andamento, `▶ ${cont('andamento') + cont('ciente')} em andamento`)}
             {resolvidos > 0 && chip(TRAT_COLORS.resolvido, `✔ ${resolvidos} resolvido`)}
             {cont('excluido') > 0 && chip(TRAT_COLORS.excluido, `🗑 ${cont('excluido')} doc(s) excluído`)}
-            {chip(comLigacao ? '#16A34A' : '#94A3B8', `📞 ${comLigacao}/${grupos.length} com ligação`)}
+            {chip(comLigacao ? '#16A34A' : '#94A3B8', `📞 ${comLigacao}/${grupos.length} com ligação ou WhatsApp`)}
           </div>
 
           {/* Empresas */}
-          <div style={{ padding: '12px 18px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{
+            padding: '12px 18px', overflowY: 'auto', overscrollBehavior: 'contain', flex: 1, minHeight: 0,
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 420px), 1fr))', gap: 10, alignContent: 'start',
+          }}>
             {grupos.map(g => {
               const ativo = g.itens.some(d => !finalizada(d.tratativa))
               const urg = ativo ? urgenciaDesig(g.data) : null
@@ -1474,8 +1566,8 @@ export default function DesignacaoReprovadosClient() {
                     }}>
                       <span style={{ fontSize: 14 }}>📞</span>
                       {lig
-                        ? <span>Ligação feita por {getUsuarioNome(lig.ligacao_por ?? '')} · {fmtDataHoraLig(lig.ligacao_em!)}</span>
-                        : <span>Nenhuma ligação registrada</span>}
+                        ? <span>Ligação ou WhatsApp feito por {getUsuarioNome(lig.ligacao_por ?? '')} · {fmtDataHoraLig(lig.ligacao_em!)}</span>
+                        : <span>Nenhuma ligação ou WhatsApp registrado</span>}
                     </div>
                   </div>
                   <div style={{ padding: '6px 12px 8px', background: SURF }}>

@@ -4,7 +4,7 @@ import { getCaller } from '../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
-const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, ligacao_em, ligacao_por, contatos_email, criado_por, created_at, updated_at'
+const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, retorno_tipo, retorno_obs, retorno_por, ligacao_em, ligacao_por, contatos_email, criado_por, created_at, updated_at'
 
 const TRAT_LABEL: Record<string, string> = {
   aguardando: 'Aguardando ciência',
@@ -12,6 +12,12 @@ const TRAT_LABEL: Record<string, string> = {
   andamento: 'Em andamento',
   resolvido: 'Resolvido',
   excluido: 'Doc(s) excluído',
+}
+
+const RETORNO_TIPO_LABEL: Record<string, string> = {
+  ligacao: 'ligação ou WhatsApp',
+  email: 'e-mail',
+  outro: 'outro',
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
@@ -25,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const admin = createAdminClient()
   const { data: atual, error: fetchError } = await admin
     .from('designacoes')
-    .select('id, tratativa, ciencia_por, responsaveis, criado_por, contatos_email')
+    .select('id, tratativa, ciencia_por, responsaveis, criado_por, contatos_email, ligacao_em')
     .eq('id', id)
     .single()
 
@@ -81,14 +87,31 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   } else if (action === 'retorno') {
     // Marcador independente da tratativa — a empresa respondeu ao e-mail, mesmo que o
     // caso ainda não esteja resolvido. Alterna (permite desmarcar se foi engano).
+    // Ao marcar, registra como a empresa retornou + texto livre (para mensurar depois).
     const ligar = body?.retorno !== false
-    update = { retorno_recebido: ligar, retorno_em: ligar ? new Date().toISOString() : null }
-    acaoHistorico = ligar ? 'Empresa retornou' : 'Retorno da empresa desmarcado'
+    const agora = new Date().toISOString()
+    if (ligar) {
+      const tipo = body?.tipo as string
+      if (!RETORNO_TIPO_LABEL[tipo]) {
+        return Response.json({ error: 'Informe como a empresa retornou' }, { status: 400 })
+      }
+      const obs = typeof body?.obs === 'string' ? body.obs.trim().slice(0, 2000) : ''
+      update = { retorno_recebido: true, retorno_em: agora, retorno_tipo: tipo, retorno_obs: obs || null, retorno_por: caller.user.id }
+      // Retorno por ligação/WhatsApp já conta como "ligação feita".
+      if (tipo === 'ligacao' && !atual.ligacao_em) {
+        update.ligacao_em = agora
+        update.ligacao_por = caller.user.id
+      }
+      acaoHistorico = `Empresa retornou (${RETORNO_TIPO_LABEL[tipo]})${obs ? `: ${obs}` : ''}`
+    } else {
+      update = { retorno_recebido: false, retorno_em: null, retorno_tipo: null, retorno_obs: null, retorno_por: null }
+      acaoHistorico = 'Retorno da empresa desmarcado'
+    }
   } else if (action === 'ligacao') {
     // Bolinha "ligação feita": guarda quando e quem marcou. Alterna (permite desmarcar se foi engano).
     const ligar = body?.ligacao !== false
     update = { ligacao_em: ligar ? new Date().toISOString() : null, ligacao_por: ligar ? caller.user.id : null }
-    acaoHistorico = ligar ? 'Ligação feita' : 'Ligação desmarcada'
+    acaoHistorico = ligar ? 'Ligação ou WhatsApp feito' : 'Ligação ou WhatsApp desmarcado'
   } else {
     return Response.json({ error: 'Ação inválida' }, { status: 400 })
   }

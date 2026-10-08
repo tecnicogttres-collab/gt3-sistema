@@ -1091,7 +1091,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                               <b>{(x.documentos ?? []).join(' · ') || '—'}</b>
                               {x.ligacao_em && (
-                                <span title={`Ligação feita por ${x.ligacao_por_nome ?? 'Usuário'} em ${fmtDateShort(x.ligacao_em)}`} style={{ flexShrink: 0, width: 10, height: 10, borderRadius: '50%', background: '#16A34A', marginTop: 3 }} />
+                                <span title={`Ligação ou WhatsApp feito por ${x.ligacao_por_nome ?? 'Usuário'} em ${fmtDateShort(x.ligacao_em)}`} style={{ flexShrink: 0, width: 10, height: 10, borderRadius: '50%', background: '#16A34A', marginTop: 3 }} />
                               )}
                             </div>
                             {x.motivo && <div style={{ color: '#6B7280', marginTop: 2, whiteSpace: 'pre-wrap' }}>📝 {x.motivo}</div>}
