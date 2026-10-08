@@ -1385,54 +1385,11 @@ export default function DesignacaoReprovadosClient() {
               <button onClick={() => { if (confirm('Desmarcar o retorno da empresa? O texto registrado será apagado.')) void marcarRetorno(d.id, false) }} style={sm(btnGhost)}>
                 ↺ Desmarcar retorno
               </button>
-            ) : retornoForm?.id !== d.id && (
+            ) : (
               <button onClick={() => setRetornoForm({ id: d.id, tipo: null, obs: '' })} style={sm(btnGhost)}>
                 🔁 Marcar retorno da empresa
               </button>
             )}
-          </div>
-        )}
-
-        {/* Marcar retorno: 1º escolhe como a empresa retornou, depois texto livre. */}
-        {podeTratar && !d.retorno_recebido && retornoForm?.id === d.id && (
-          <div style={{ marginTop: 12, background: '#EDFBF6', border: '1px solid #A9E6D2', borderLeft: '4px solid #0A7A5E', borderRadius: 8, padding: '10px 12px' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#0A7A5E', marginBottom: 8 }}>🔁 Como a empresa retornou?</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: retornoForm.tipo ? 10 : 0 }}>
-              {(Object.keys(RETORNO_TIPO_LABEL) as RetornoTipo[]).map(t => {
-                const sel = retornoForm.tipo === t
-                return (
-                  <button key={t} onClick={() => setRetornoForm({ ...retornoForm, tipo: t })}
-                    style={{ ...sm(btnGhost), ...(sel ? { background: '#0A7A5E', color: '#fff', border: '1px solid #0A7A5E', fontWeight: 700 } : {}) }}>
-                    {RETORNO_TIPO_LABEL[t]}
-                  </button>
-                )
-              })}
-            </div>
-            {retornoForm.tipo && (
-              <>
-                {retornoForm.tipo === 'ligacao' && !d.ligacao_em && (
-                  <div style={{ fontSize: 11.5, color: '#0A7A5E', marginBottom: 6 }}>✓ “Ligação ou WhatsApp” também será marcado neste item.</div>
-                )}
-                <textarea
-                  autoFocus
-                  value={retornoForm.obs}
-                  onChange={e => setRetornoForm({ ...retornoForm, obs: e.target.value })}
-                  placeholder="O que a empresa informou? (opcional)"
-                  rows={3}
-                  maxLength={2000}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', background: '#fff' }}
-                />
-              </>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-              <button onClick={() => setRetornoForm(null)} style={sm(btnGhost)}>Cancelar</button>
-              <button
-                disabled={!retornoForm.tipo}
-                onClick={() => { if (retornoForm.tipo) void marcarRetorno(d.id, true, retornoForm.tipo, retornoForm.obs) }}
-                style={{ ...sm(btnPrimary), opacity: retornoForm.tipo ? 1 : .5, cursor: retornoForm.tipo ? 'pointer' : 'not-allowed' }}>
-                Salvar retorno
-              </button>
-            </div>
           </div>
         )}
 
@@ -2464,6 +2421,56 @@ export default function DesignacaoReprovadosClient() {
           </>
         )}
       </div>
+
+      {/* Marcar retorno da empresa: 1º como retornou, depois texto livre. Só fecha por Cancelar/Salvar. */}
+      {retornoForm && (() => {
+        const d = designacoes.find(x => x.id === retornoForm.id)
+        if (!d) return null
+        return (
+          <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,.2)', padding: 24 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 4 }}>🔁 Retorno da empresa</div>
+              <div style={{ fontSize: 13, color: MUTED, marginBottom: 14 }}>{d.empresa} · como a empresa retornou?</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {(Object.keys(RETORNO_TIPO_LABEL) as RetornoTipo[]).map(t => {
+                  const sel = retornoForm.tipo === t
+                  return (
+                    <button key={t} onClick={() => setRetornoForm({ ...retornoForm, tipo: t })}
+                      style={{ ...btnGhost, textAlign: 'left', ...(sel ? { background: '#0A7A5E', color: '#fff', border: '1px solid #0A7A5E', fontWeight: 700 } : {}) }}>
+                      {RETORNO_TIPO_LABEL[t]}
+                    </button>
+                  )
+                })}
+              </div>
+              {retornoForm.tipo && (
+                <div style={{ marginTop: 14 }}>
+                  {retornoForm.tipo === 'ligacao' && !d.ligacao_em && (
+                    <div style={{ fontSize: 11.5, color: '#0A7A5E', marginBottom: 6 }}>✓ “Ligação ou WhatsApp” também será marcado neste item.</div>
+                  )}
+                  <textarea
+                    autoFocus
+                    value={retornoForm.obs}
+                    onChange={e => setRetornoForm({ ...retornoForm, obs: e.target.value })}
+                    placeholder="O que a empresa informou? (opcional)"
+                    rows={3}
+                    maxLength={2000}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }}
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+                <button onClick={() => setRetornoForm(null)} style={btnGhost}>Cancelar</button>
+                <button
+                  disabled={!retornoForm.tipo}
+                  onClick={() => { if (retornoForm.tipo) void marcarRetorno(d.id, true, retornoForm.tipo, retornoForm.obs) }}
+                  style={{ ...btnPrimary, opacity: retornoForm.tipo ? 1 : .5, cursor: retornoForm.tipo ? 'pointer' : 'not-allowed' }}>
+                  Salvar retorno
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Atalho: empresa não cadastrada */}
       {cadRapido && (
