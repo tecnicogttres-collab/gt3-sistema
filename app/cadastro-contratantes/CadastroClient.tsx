@@ -203,19 +203,38 @@ export default function CadastroClient() {
     }
   }, [favorites])
 
-  const saveCompanyFields = useCallback(async (id: string, updatedCompany: Company) => {
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('contratantes')
-      .update({
-        name: updatedCompany.name,
-        sheet_name: updatedCompany.sheetName,
-        segment: updatedCompany.segment,
-        updated: updatedCompany.updated,
-        fields: updatedCompany.fields,
-      })
-      .eq('id', id)
-    if (error) console.error('Erro ao salvar contratante:', error)
+  // Salva aplicando a alteração sobre a versão ATUAL do banco, não sobre a cópia da tela.
+  // Antes gravava a ficha inteira da tela: quem estava com a página aberta há tempo
+  // (cópia antiga) desfazia a edição de outra pessoa ao mexer em qualquer campo.
+  // Fila sequencial pra cliques rápidos (subir/descer) não gravarem fora de ordem.
+  const saveQueue = useRef<Promise<void>>(Promise.resolve())
+  const persistCompany = useCallback((id: string, updater: (c: Company) => Company, stamp: string) => {
+    saveQueue.current = saveQueue.current.then(async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase.from('contratantes').select('*').eq('id', id).single()
+      if (error || !data) {
+        console.error('Erro ao ler contratante antes de salvar:', error)
+        alert('Não foi possível salvar a alteração. Recarregue a página (F5) e tente de novo.')
+        return
+      }
+      const fresh = updater({ ...rowToCompany(data), updated: stamp })
+      const { error: upErr } = await supabase
+        .from('contratantes')
+        .update({
+          name: fresh.name,
+          sheet_name: fresh.sheetName,
+          segment: fresh.segment,
+          updated: fresh.updated,
+          fields: fresh.fields,
+        })
+        .eq('id', id)
+      if (upErr) {
+        console.error('Erro ao salvar contratante:', upErr)
+        alert('Não foi possível salvar a alteração. Recarregue a página (F5) e tente de novo.')
+        return
+      }
+      setCompanies(prev => prev.map(c => c.id === id ? fresh : c))
+    })
   }, [])
 
   const saveFerias = useCallback(async (id: string, ferias: FeriasColetivas[]) => {
@@ -229,13 +248,10 @@ export default function CadastroClient() {
   }, [])
 
   const updateCompany = useCallback((id: string, updater: (c: Company) => Company) => {
-    setCompanies(prev => {
-      const updated = prev.map(c => c.id === id ? updater({ ...c, updated: todayBR() }) : c)
-      const updatedCo = updated.find(c => c.id === id)
-      if (updatedCo) void saveCompanyFields(id, updatedCo)
-      return updated
-    })
-  }, [saveCompanyFields])
+    const stamp = todayBR()
+    setCompanies(prev => prev.map(c => c.id === id ? updater({ ...c, updated: stamp }) : c))
+    persistCompany(id, updater, stamp)
+  }, [persistCompany])
 
   const currentCompany = companies.find(c => c.id === currentId) ?? null
   const term = searchTerm.trim().toLowerCase()
@@ -1211,7 +1227,10 @@ function FieldCard({
             contentEditable
             suppressContentEditableWarning
             spellCheck={false}
-            onBlur={() => onUpdateLabel(labelRef.current?.textContent?.trim() || 'CAMPO')}
+            onBlur={() => {
+              const val = labelRef.current?.textContent?.trim() || 'CAMPO'
+              if (val !== f.label) onUpdateLabel(val)
+            }}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); labelRef.current?.blur() } }}
             style={{
               fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: '#4A5568',
@@ -1374,7 +1393,10 @@ function EditableHeader({ value, onSave }: { value: string; onSave: (v: string) 
       contentEditable
       suppressContentEditableWarning
       spellCheck={false}
-      onBlur={() => onSave(ref.current?.textContent?.trim() ?? '')}
+      onBlur={() => {
+        const val = ref.current?.textContent?.trim() ?? ''
+        if (val !== value) onSave(val)
+      }}
       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ref.current?.blur() } }}
       style={{
         padding: '3px 6px', border: '1px solid var(--border-soft)', textAlign: 'left',
@@ -1405,7 +1427,8 @@ function EditableCell({ value, onCopy: _onCopy, onSave }: { value: string; onCop
 
   const stopEdit = () => {
     setEditing(false)
-    onSave(ref.current?.textContent?.trim() ?? '')
+    const val = ref.current?.textContent?.trim() ?? ''
+    if (val !== value) onSave(val)
   }
 
   return (
