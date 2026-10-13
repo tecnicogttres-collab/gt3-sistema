@@ -1,13 +1,13 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
-import { requireGestorAdmin } from '../../../lib/api-helpers'
+import { getCaller } from '../../../lib/api-helpers'
 import { QN_SELECT } from '../../../questionarios/types'
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
-  if (!await requireGestorAdmin()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  if (!await getCaller()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json() as Record<string, unknown>
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 /** Exclui o questionário e, em cascata, os convites e respostas dele. */
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params
-  if (!await requireGestorAdmin()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  if (!await getCaller()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const admin = createAdminClient()
   const { error } = await admin.from('questionarios').delete().eq('id', id)

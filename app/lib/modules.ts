@@ -298,7 +298,7 @@ export const MODULES: Module[] = [
     color: '#4A90D9',
     path: '/questionarios',
     description: 'Questionários para contratantes e prestadores, com link único por destinatário e painel de respostas',
-    allowedRoles: ['gestor', 'admin'],
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
   },
   {
     id: 'cronogramas',

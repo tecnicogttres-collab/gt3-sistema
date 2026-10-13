@@ -1,11 +1,11 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
-import { requireGestorAdmin } from '../../lib/api-helpers'
+import { getCaller } from '../../lib/api-helpers'
 import { QN_SELECT, CONVITE_SELECT } from '../../questionarios/types'
 
 /** Tudo de uma vez: questionários + convites (metadados pequenos, o painel filtra no cliente). */
 export async function GET() {
-  if (!await requireGestorAdmin()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  if (!await getCaller()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const admin = createAdminClient()
   const [qns, convs] = await Promise.all([
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const caller = await requireGestorAdmin()
+  const caller = await getCaller()
   if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json() as { titulo?: string; publico?: string }

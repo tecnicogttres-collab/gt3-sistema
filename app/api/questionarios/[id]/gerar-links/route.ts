@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
-import { requireGestorAdmin } from '../../../../lib/api-helpers'
+import { getCaller } from '../../../../lib/api-helpers'
 import { CONVITE_SELECT, gerarToken } from '../../../../questionarios/types'
 
 type Params = { params: Promise<{ id: string }> }
@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> }
 /** Gera o link único de cada destinatário ainda sem link (pendente → enviado). */
 export async function POST(_req: NextRequest, { params }: Params) {
   const { id } = await params
-  if (!await requireGestorAdmin()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  if (!await getCaller()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const admin = createAdminClient()
   const { data: qn } = await admin.from('questionarios').select('status').eq('id', id).single()

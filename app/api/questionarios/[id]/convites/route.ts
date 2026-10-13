@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
-import { requireGestorAdmin } from '../../../../lib/api-helpers'
+import { getCaller } from '../../../../lib/api-helpers'
 import { CONVITE_SELECT } from '../../../../questionarios/types'
 
 type Params = { params: Promise<{ id: string }> }
@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> }
 /** Adiciona um destinatário (sem link ainda — status "pendente"). */
 export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params
-  if (!await requireGestorAdmin()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  if (!await getCaller()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json() as { nome?: string; email?: string; empresa?: string; tipo?: string; vinculo?: string }
   const nome = String(body.nome ?? '').trim()
