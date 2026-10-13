@@ -661,6 +661,38 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   return <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 10, boxShadow: '0 1px 2px rgba(27,36,50,.06), 0 4px 16px rgba(27,36,50,.06)', ...style }}>{children}</div>
 }
 
+/** Painel que abre ao clicar numa linha dos relatórios do Banco (por item / psicossociais):
+ *  uma coluna por resultado, na mesma ordem das colunas da tabela. Grupo vazio não aparece;
+ *  cada empresa numa linha, com a nota (ex.: "NR-01 geral: orientativo") menor, embaixo. */
+type EmpresaNota = { empresa: string; nota?: string }
+function PainelEmpresas({ grupos }: { grupos: { titulo: string; tone: 'ok' | 'no' | 'acc' | 'default'; empresas: EmpresaNota[] }[] }) {
+  const comEmpresas = grupos.filter(g => g.empresas.length)
+  return (
+    <div style={{ background: '#FAFCFE', borderTop: `1px solid ${LINE}`, padding: '12px 14px' }}>
+      {!comEmpresas.length ? <span style={{ color: MU, fontSize: 12.5 }}>Nenhuma empresa nesta linha.</span> : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'start' }}>
+          {comEmpresas.map(g => (
+            <div key={g.titulo} style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Tag tone={g.tone}>{g.empresas.length}</Tag>
+                <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: MU, fontWeight: 600 }}>{g.titulo}</span>
+              </div>
+              <div style={{ maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
+                {g.empresas.map((e, i) => (
+                  <div key={i} style={{ padding: '4px 0', borderBottom: i < g.empresas.length - 1 ? `1px dashed ${LINE}` : 'none', fontSize: 12.5, lineHeight: 1.35 }}>
+                    <div style={{ color: TX }}>{e.empresa || '(sem nome)'}</div>
+                    {e.nota && <div style={{ color: MU, fontSize: 11 }}>{e.nota}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Empty({ title, sub }: { title: string; sub: string }) {
   return (
     <Card style={{ textAlign: 'center', padding: '44px 20px', color: MU }}>
@@ -1675,7 +1707,7 @@ export default function WorkflowProgramasClient() {
    *  - Contratante com mais de um item psicossocial (Marcopolo Ana Rech / São Cristóvão /
    *    Volare têm o "NR-01" geral E o "Psicossociais Marcopolo"): a empresa conta 1x. Quem
    *    decide é o item ESPECÍFICO da contratante; o geral só entra se o específico não foi
-   *    avaliado (ou ficou N/A). Quando o geral diverge, isso aparece como nota ao lado do
+   *    avaliado (ou ficou N/A). Quando o geral diverge, isso aparece como nota embaixo do
    *    nome da empresa na lista expandida — não muda a contagem.
    *  - Análise que atende duas contratantes ao mesmo tempo conta 1x em CADA uma delas. */
   type PsicoKind = 'ok' | 'restr' | 'orientativo' | 'nao' | 'na'
@@ -1723,12 +1755,12 @@ export default function WorkflowProgramasClient() {
    *  pelo último status (ver `psicoSituacoes`). */
   function relatorioPsicossocial(lista: AnaliseRow[]) {
     if (!catalog) return []
-    type Bucket = { ok: number; nao: number; orientativo: number; na: number; restr: number; empresasNao: string[]; empresasOrientativo: string[]; empresasOk: string[]; empresasRestr: string[] }
+    type Bucket = { ok: number; nao: number; orientativo: number; na: number; restr: number; empresasNao: EmpresaNota[]; empresasOrientativo: EmpresaNota[]; empresasOk: EmpresaNota[]; empresasRestr: EmpresaNota[] }
     const novoBucket = (): Bucket => ({ ok: 0, nao: 0, orientativo: 0, na: 0, restr: 0, empresasNao: [], empresasOrientativo: [], empresasOk: [], empresasRestr: [] })
     const porContratante = new Map<string, Bucket>()
     psicoSituacoes(lista).forEach(s => {
       const b = porContratante.get(s.cid) ?? novoBucket()
-      const nome = (s.empresa || '(sem nome)') + (s.nota ? ` (${s.nota})` : '')
+      const nome: EmpresaNota = { empresa: s.empresa, nota: s.nota }
       if (s.kind === 'ok') { b.ok++; b.empresasOk.push(nome) }
       else if (s.kind === 'nao') { b.nao++; b.empresasNao.push(nome) }
       else if (s.kind === 'orientativo') { b.orientativo++; b.empresasOrientativo.push(nome) }
@@ -3317,7 +3349,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
   itensDaAnalise: (a: AnaliseDados) => ItemDaAnalise[]
   statusAnalise: (r: AnaliseRow) => { t: string; c: 'ok' | 'no' | 'na' | 'acc' | 'default'; k: string }
   relatorioItens: (l: AnaliseRow[]) => { i: ChecklistItem; ok: number; nao: number; na: number; restr: number; tot: number; empresasNao: string[]; empresasOk: string[] }[]
-  relatorioPsico: (l: AnaliseRow[]) => { c: Contratante; ok: number; nao: number; orientativo: number; na: number; restr: number; tot: number; empresasNao: string[]; empresasOrientativo: string[]; empresasOk: string[]; empresasRestr: string[] }[]
+  relatorioPsico: (l: AnaliseRow[]) => { c: Contratante; ok: number; nao: number; orientativo: number; na: number; restr: number; tot: number; empresasNao: EmpresaNota[]; empresasOrientativo: EmpresaNota[]; empresasOk: EmpresaNota[]; empresasRestr: EmpresaNota[] }[]
   psicoStats: (l: AnaliseRow[]) => { tot: number; apr: number; comRestricao: number; comOrientativo: number; reprovadas: number; naoAplicavel: number }
   onLimparFiltros: () => void; onDelFiltro: () => void; onExportCsv: () => void; onGerarRelatorio: () => void; onDel: (id: string, nome: string) => void; onReabrir: (r: AnaliseRow) => void
 }) {
@@ -3423,13 +3455,11 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                             </td>
                           </tr>
                           {open && (
-                            <tr><td colSpan={6} style={{ padding: '8px 4px', borderBottom: `1px solid ${LINE}` }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Reprovações ({l.nao})</label>
-                                  {l.empresasNao.length ? l.empresasNao.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
-                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Conformes ({l.ok})</label>
-                                  {l.empresasOk.length ? l.empresasOk.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
-                              </div>
+                            <tr><td colSpan={6} style={{ padding: 0, borderBottom: `1px solid ${LINE}` }}>
+                              <PainelEmpresas grupos={[
+                                { titulo: 'Conformes', tone: 'ok', empresas: l.empresasOk.map(empresa => ({ empresa })) },
+                                { titulo: 'Reprovações', tone: 'no', empresas: l.empresasNao.map(empresa => ({ empresa })) },
+                              ]} />
                             </td></tr>
                           )}
                         </Fragment>
@@ -3471,17 +3501,13 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                             </td>
                           </tr>
                           {open && (
-                            <tr><td colSpan={7} style={{ padding: '8px 4px', borderBottom: `1px solid ${LINE}` }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
-                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Reprovações ({l.nao})</label>
-                                  {l.empresasNao.length ? l.empresasNao.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
-                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Orientativos ({l.orientativo})</label>
-                                  {l.empresasOrientativo.length ? l.empresasOrientativo.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
-                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Com restrição ({l.restr})</label>
-                                  {l.empresasRestr.length ? l.empresasRestr.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
-                                <div><label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600 }}>Conformes ({l.ok})</label>
-                                  {l.empresasOk.length ? l.empresasOk.map((e, i) => <div key={i}>• {e || '(sem nome)'}</div>) : <span style={{ color: MU }}>—</span>}</div>
-                              </div>
+                            <tr><td colSpan={7} style={{ padding: 0, borderBottom: `1px solid ${LINE}` }}>
+                              <PainelEmpresas grupos={[
+                                { titulo: 'Conformes', tone: 'ok', empresas: l.empresasOk },
+                                { titulo: 'Reprovações', tone: 'no', empresas: l.empresasNao },
+                                { titulo: 'Orientativos', tone: 'default', empresas: l.empresasOrientativo },
+                                { titulo: 'Com restrição', tone: 'acc', empresas: l.empresasRestr },
+                              ]} />
                             </td></tr>
                           )}
                         </Fragment>
