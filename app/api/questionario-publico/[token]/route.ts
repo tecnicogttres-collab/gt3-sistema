@@ -5,7 +5,8 @@ import type { Pergunta } from '../../../questionarios/types'
 type Params = { params: Promise<{ token: string }> }
 
 /* Rota PÚBLICA (sem login) — o token do convite é a única credencial. Só expõe o que o
-   respondente precisa ver: título, empresa e perguntas. Nada de outros convites/respostas. */
+   respondente precisa ver: título, nome da empresa e perguntas. Nada de outros convites/respostas,
+   nem nome/e-mail do destinatário ou contratante vinculada. */
 
 const TOKEN_RE = /^[a-f0-9]{16,64}$/
 
@@ -14,7 +15,7 @@ async function carregar(token: string) {
   const admin = createAdminClient()
   const { data: conv } = await admin
     .from('questionario_convites')
-    .select('id, questionario_id, nome, empresa, vinculo, status')
+    .select('id, questionario_id, empresa, status')
     .eq('token', token)
     .maybeSingle()
   if (!conv) return null
@@ -34,7 +35,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return Response.json({
     titulo: r.qn.titulo,
     empresa: r.conv.empresa,
-    vinculo: r.conv.vinculo,
     disponivel: r.qn.status === 'ativo',
     respondido: r.conv.status === 'respondido',
     perguntas: r.qn.status === 'ativo' && r.conv.status !== 'respondido' ? r.qn.perguntas : [],
@@ -78,5 +78,5 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (error) return Response.json({ error: 'Erro ao registrar a resposta.' }, { status: 500 })
   if (!data?.length) return Response.json({ error: 'Este link já foi utilizado.' }, { status: 409 })
 
-  return Response.json({ ok: true, empresa: r.conv.empresa, vinculo: r.conv.vinculo })
+  return Response.json({ ok: true, empresa: r.conv.empresa })
 }

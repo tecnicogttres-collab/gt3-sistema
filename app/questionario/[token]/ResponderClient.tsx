@@ -16,7 +16,6 @@ const DANGER = '#C53030'
 type Dados = {
   titulo: string
   empresa: string
-  vinculo: string | null
   disponivel: boolean
   respondido: boolean
   perguntas: Pergunta[]
@@ -92,7 +91,7 @@ export default function ResponderClient({ token }: { token: string }) {
     conteudo = <>{topo(null)}{aviso('!', '#B7791F', 'Link inválido', 'Não encontramos este questionário. Confira se o link foi copiado por completo.')}</>
   } else if (estado.k === 'enviado') {
     const d = estado.d
-    conteudo = <>{topo(d)}{aviso('✓', '#0B7A0B', 'Resposta registrada', `Obrigado! Sua resposta foi registrada para ${d.empresa}${d.vinculo ? ` (contratante: ${d.vinculo})` : ''}.`)}</>
+    conteudo = <>{topo(d)}{aviso('✓', '#0B7A0B', 'Resposta registrada', `Obrigado! Sua resposta foi registrada para ${d.empresa}.`)}</>
   } else {
     const d = estado.d
     if (d.respondido) {

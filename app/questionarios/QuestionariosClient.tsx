@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   type Questionario, type Convite, type Pergunta, type TipoPergunta, type Publico, type StatusQn,
-  type StatusConvite, type PainelConfig,
-  TYPE_NAME, TYPE_DESC, STATUS_QN_NAME,
+  type StatusExib, type PainelConfig,
+  TYPE_NAME, TYPE_DESC, STATUS_QN_NAME, STATUS_EXIB_LABEL, statusExib, linkConvite, primeiroNome,
 } from './types'
 
 // ─── Tokens (mesma paleta do HTML de referência) ─────────────────────────────
 
 const ORD_COLOR = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281']
 const CAT_COLOR = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948']
-const ST_COLOR: Record<StatusConvite, string> = { respondido: '#0ca30c', enviado: '#fab219', pendente: '#898781' }
-const STATUS_CONVITE_LABEL: Record<StatusConvite, string> = { pendente: 'Sem link', enviado: 'Enviado', respondido: 'Respondido' }
+const ST_COLOR: Record<StatusExib, string> = { respondido: '#0ca30c', enviado: '#fab219', nao_enviado: '#898781' }
+
+const fmtData = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('pt-BR') : ''
+
+/** Linha da lista "Incluir do Cadastro de Contratantes" (vem de /api/questionarios/[id]/cadastro). */
+type LinhaCadastro = { contratanteId: string; empresa: string; email: string; origem: string; nome: string; jaIncluido: boolean }
 
 const CSS = `
 .qnm{--bg:#F4F6FA;--surface:#fff;--surface-2:#EBF0F9;--chart-surface:#fcfcfb;--primary:#2A4F96;--primary-dark:#1B3A73;--primary-soft:#E2E9F6;
@@ -190,7 +194,29 @@ const CSS = `
 .qnm .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .qnm .badge.respondido{background:rgba(12,163,12,.15);color:var(--st-good-text)}
 .qnm .badge.enviado{background:rgba(250,178,25,.2);color:var(--st-warning-text)}
-.qnm .badge.pendente{background:var(--surface-2);color:var(--text-muted)}
+.qnm .badge.nao_enviado{background:var(--surface-2);color:var(--text-muted)}
+.qnm .envio-sub{display:block;font-size:11px;color:var(--text-muted);margin-top:3px;white-space:nowrap}
+.qnm .warn-sub{display:block;font-size:11.5px;color:var(--danger);font-weight:600}
+.qnm .chk{width:16px;height:16px;cursor:pointer;accent-color:var(--primary);margin:0}
+.qnm .chk:disabled{cursor:not-allowed;opacity:.4}
+.qnm .bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--primary);background:var(--primary-soft);border-radius:10px;margin-bottom:10px;font-size:13px;font-weight:600}
+.qnm .bulk-bar .sp{margin-right:auto}
+.qnm .modal-bg{position:fixed;inset:0;background:rgba(15,25,45,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
+.qnm .modal{background:var(--surface);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);width:min(980px,100%);max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden}
+.qnm .modal-head{padding:16px 20px;border-bottom:1px solid var(--border)}
+.qnm .modal-head h2{margin:0 0 2px;font-size:16px;font-weight:800}
+.qnm .modal-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.qnm .modal-tools input[type=text]{flex:1 1 220px;min-width:0}
+.qnm .modal-body{overflow:auto;padding:4px 20px 14px}
+.qnm .modal-foot{display:flex;gap:10px;align-items:center;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--border);background:var(--surface-2);flex-wrap:wrap}
+.qnm .imp-emp{margin-top:14px}
+.qnm .imp-emp h3{font-size:13px;font-weight:800;margin:0 0 6px}
+.qnm .imp-row{display:grid;grid-template-columns:20px minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;padding:6px 0;border-top:1px dashed var(--border);font-size:12.8px}
+.qnm .imp-row.off{color:var(--text-muted)}
+.qnm .imp-row input[type=text]{width:100%;padding:5px 8px;font-size:12.5px}
+.qnm .imp-email{overflow-wrap:anywhere;font-weight:600}
+.qnm .imp-origem{font-size:11px;color:var(--text-muted);overflow-wrap:anywhere}
+@media (max-width:640px){.qnm .imp-row{grid-template-columns:20px 1fr}.qnm .imp-row > :nth-child(n+3){grid-column:2}}
 .qnm .dash{color:var(--text-muted)}
 .qnm .empty-row td{text-align:center;color:var(--text-muted);padding:26px 10px;font-size:13px}
 .qnm .tbl-foot{font-size:12px;color:var(--text-muted);margin-top:8px}
@@ -302,10 +328,24 @@ export default function QuestionariosClient() {
   const [naErr, setNaErr] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Exportar / marcar envio / incluir destinatários: só admin e gestor (o servidor valida de novo)
+  const [podeGerir, setPodeGerir] = useState(false)
+  const [selConv, setSelConv] = useState<Set<string>>(new Set())
+  const [fEnvio, setFEnvio] = useState<'todos' | StatusExib>('todos')
+
+  // Incluir do Cadastro de Contratantes
+  const [impOpen, setImpOpen] = useState(false)
+  const [impLoading, setImpLoading] = useState(false)
+  const [impErr, setImpErr] = useState('')
+  const [impLinhas, setImpLinhas] = useState<LinhaCadastro[]>([])
+  const [impSemEmail, setImpSemEmail] = useState<{ contratanteId: string; empresa: string }[]>([])
+  const [impSel, setImpSel] = useState<Set<string>>(new Set())
+  const [impNomes, setImpNomes] = useState<Record<string, string>>({})
+  const [impBusca, setImpBusca] = useState('')
 
   // Painel — filtros
   const [fContratante, setFContratante] = useState('all')
-  const [fStatus, setFStatus] = useState<Set<StatusConvite>>(new Set())
+  const [fStatus, setFStatus] = useState<Set<StatusExib>>(new Set())
   const [fEmpresa, setFEmpresa] = useState<Set<string>>(new Set())
   const [fSearch, setFSearch] = useState('')
   const [fQ, setFQ] = useState<Record<string, Set<string | number>>>({})
@@ -317,11 +357,13 @@ export default function QuestionariosClient() {
     Promise.all([
       fetch('/api/questionarios').then(async r => r.ok ? r.json() : Promise.reject((await r.json().catch(() => ({}))).error ?? 'Erro ao carregar')),
       fetch('/api/terceiras/contratantes').then(r => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([d, cts]: [{ questionarios: Questionario[]; convites: Convite[] }, { nome: string }[]]) => {
+      fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([d, cts, me]: [{ questionarios: Questionario[]; convites: Convite[] }, { nome: string }[], { papel?: string } | null]) => {
       if (cancelled) return
       setQns(d.questionarios)
       setConvites(d.convites)
       setContratantesBase((cts ?? []).map(c => c.nome))
+      setPodeGerir(me?.papel === 'gestor' || me?.papel === 'admin')
     }).catch(e => {
       if (!cancelled) setLoadErr(String(e))
     }).finally(() => { if (!cancelled) setLoading(false) })
@@ -361,7 +403,7 @@ export default function QuestionariosClient() {
   function selectQn(id: string) {
     setSelQnId(id)
     setFContratante('all'); setFStatus(new Set()); setFEmpresa(new Set()); setFSearch(''); setFQ({})
-    setAddOpen(false)
+    setAddOpen(false); setSelConv(new Set()); setFEnvio('todos')
   }
 
   function irPara(t: Tab, qnId?: string) {
@@ -475,7 +517,115 @@ export default function QuestionariosClient() {
     } finally { setBusy(false) }
   }
 
-  const linkDe = (token: string) => `${window.location.origin}/questionario/${token}`
+  // Sempre o endereço de produção (NEXT_PUBLIC_SITE_URL), nunca o do navegador — o link exportado
+  // para a mala direta não pode sair com localhost.
+  const linkDe = linkConvite
+
+  /** Troca os convites deste questionário pela lista que a API devolveu. */
+  function aplicarConvites(qnId: string, lista: Convite[]) {
+    setConvites(prev => [...prev.filter(c => c.questionario_id !== qnId), ...lista])
+  }
+
+  async function registrarEnvio(acao: 'marcar' | 'desfazer' | 'lembrete', ids: string[]): Promise<boolean> {
+    if (!selQn || !ids.length) return false
+    const res = await fetch(`/api/questionarios/${selQn.id}/envio`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao, ids }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) { setToast(d.error ?? 'Erro ao registrar'); return false }
+    aplicarConvites(selQn.id, d.convites ?? [])
+    setSelConv(new Set())
+    const verbo = acao === 'marcar' ? 'marcado(s) como enviado(s)' : acao === 'desfazer' ? 'voltaram para Não enviado' : 'com lembrete registrado'
+    setToast(`${d.alterados} ${verbo}${d.ignorados ? ` · ${d.ignorados} ignorado(s)` : ''}`)
+    return true
+  }
+
+  /** Planilha da mala direta: aba 1 com Nome | PrimeiroNome | Empresa | Email | Link (exatamente
+   *  esses cabeçalhos — são os campos de mesclagem do Word) e aba "Sem e-mail" para corrigir o cadastro. */
+  async function baixarPlanilha(nomeArquivo: string, linhas: { nome: string; empresa: string; email: string; token: string }[], semEmail: { nome: string; empresa: string }[]) {
+    const { Workbook } = await import('exceljs')
+    const wb = new Workbook()
+    const ws = wb.addWorksheet('Mala direta')
+    ws.columns = [
+      { header: 'Nome', key: 'nome', width: 30 },
+      { header: 'PrimeiroNome', key: 'primeiro', width: 16 },
+      { header: 'Empresa', key: 'empresa', width: 34 },
+      { header: 'Email', key: 'email', width: 36 },
+      { header: 'Link', key: 'link', width: 100 },
+    ]
+    linhas.forEach(l => ws.addRow({ nome: l.nome, primeiro: primeiroNome(l.nome), empresa: l.empresa, email: l.email, link: linkDe(l.token) }))
+    ws.getRow(1).font = { bold: true }
+    const ws2 = wb.addWorksheet('Sem e-mail')
+    ws2.columns = [{ header: 'Nome', key: 'nome', width: 30 }, { header: 'Empresa', key: 'empresa', width: 40 }]
+    semEmail.forEach(l => ws2.addRow(l))
+    ws2.getRow(1).font = { bold: true }
+    const buf = await wb.xlsx.writeBuffer()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    a.download = nomeArquivo
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+
+  async function exportarMalaDireta(tipo: 'convites' | 'lembretes') {
+    if (!selQn) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/questionarios/${selQn.id}/exportar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setToast(d.error ?? 'Erro ao exportar'); return }
+      aplicarConvites(selQn.id, d.convites ?? [])
+      const linhas = (d.linhas ?? []) as { id: string; nome: string; empresa: string; email: string; token: string }[]
+      const semEmail = (d.semEmail ?? []) as { nome: string; empresa: string }[]
+      if (!linhas.length && !semEmail.length) {
+        setToast(tipo === 'convites' ? 'Nenhum destinatário "Não enviado" para exportar' : 'Ninguém aguardando resposta para lembrar')
+        return
+      }
+      const slug = selQn.titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '')
+      const hoje = new Date().toISOString().slice(0, 10)
+      await baixarPlanilha(`${tipo === 'convites' ? 'Convites' : 'Lembretes'}_${slug}_${hoje}.xlsx`, linhas, semEmail)
+      if (!linhas.length) { setToast(`Só a aba "Sem e-mail" (${semEmail.length}) — ninguém com e-mail para enviar`); return }
+      const pergunta = tipo === 'convites'
+        ? `Marcar estes ${linhas.length} destinatários como enviados manualmente?`
+        : `Registrar lembrete enviado para estes ${linhas.length} destinatários?`
+      if (confirm(pergunta)) await registrarEnvio(tipo === 'convites' ? 'marcar' : 'lembrete', linhas.map(l => l.id))
+      else setToast('Arquivo baixado — nada foi marcado')
+    } finally { setBusy(false) }
+  }
+
+  async function abrirImportacao() {
+    if (!selQn) return
+    setImpOpen(true); setImpLoading(true); setImpErr(''); setImpBusca(''); setImpSel(new Set())
+    try {
+      const res = await fetch(`/api/questionarios/${selQn.id}/cadastro`)
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setImpErr(d.error ?? 'Erro ao ler o cadastro'); return }
+      const linhas = (d.linhas ?? []) as LinhaCadastro[]
+      setImpLinhas(linhas)
+      setImpSemEmail(d.semEmail ?? [])
+      setImpNomes(Object.fromEntries(linhas.map(l => [l.contratanteId + '|' + l.email, l.nome])))
+    } finally { setImpLoading(false) }
+  }
+
+  async function confirmarImportacao() {
+    if (!selQn || !impSel.size) return
+    setBusy(true)
+    try {
+      const itens = impLinhas
+        .filter(l => impSel.has(l.contratanteId + '|' + l.email))
+        .map(l => ({ empresa: l.empresa, email: l.email, nome: impNomes[l.contratanteId + '|' + l.email] ?? '' }))
+      const res = await fetch(`/api/questionarios/${selQn.id}/cadastro`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itens }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setImpErr(d.error ?? 'Erro ao incluir'); return }
+      aplicarConvites(selQn.id, d.convites ?? [])
+      setImpOpen(false)
+      setToast(`${d.incluidos} incluído(s)${d.duplicados ? ` · ${d.duplicados} já era(m) destinatário(s)` : ''}`)
+    } finally { setBusy(false) }
+  }
 
   async function copiarLink(c: Convite) {
     if (!c.token) return
@@ -794,40 +944,63 @@ export default function QuestionariosClient() {
 
   function renderConvites(qn: Questionario) {
     const rows = convitesDe(qn.id)
-    const c = { pendente: 0, enviado: 0, respondido: 0 }
-    rows.forEach(d => { c[d.status]++ })
+    const c: Record<StatusExib, number> = { nao_enviado: 0, enviado: 0, respondido: 0 }
+    rows.forEach(d => { c[statusExib(d)]++ })
+    const semLink = rows.filter(d => d.status === 'pendente').length
+    // % de resposta sobre quem recebeu: respondidos ÷ (enviados manualmente + respondidos)
+    const base = c.enviado + c.respondido
+    const pctResp = base ? Math.round(c.respondido / base * 100) : 0
+    const visiveis = fEnvio === 'todos' ? rows : rows.filter(d => statusExib(d) === fEnvio)
+    const selecionaveis = visiveis.filter(d => d.status !== 'respondido')
+    const todosSel = selecionaveis.length > 0 && selecionaveis.every(d => selConv.has(d.id))
+    const selIds = [...selConv].filter(id => rows.some(d => d.id === id))
+    const selNaoEnv = rows.filter(d => selConv.has(d.id) && statusExib(d) === 'nao_enviado').map(d => d.id)
+    const selEnv = rows.filter(d => selConv.has(d.id) && statusExib(d) === 'enviado').map(d => d.id)
     const hint = qn.status === 'rascunho'
-      ? 'Este questionário está em rascunho. Mude a situação para Ativo (no editor) para gerar os links.'
+      ? 'Este questionário está em rascunho. Mude a situação para Ativo (no editor) para exportar e gerar os links.'
       : qn.status === 'encerrado'
         ? 'Este questionário está encerrado e não aceita novas respostas.'
-        : 'Use "Abrir link" para ver exatamente o que o destinatário recebe. O resultado aparece no Painel de respostas.'
+        : 'O sistema não envia e-mails nem sabe se o e-mail chegou ou foi lido: "Enviado manualmente" é só o registro que você confirma depois da mala direta. "Respondido" vem do próprio link.'
+    const filtros: ['todos' | StatusExib, string, number][] = [
+      ['todos', 'Todos', rows.length], ['nao_enviado', 'Não enviado', c.nao_enviado], ['enviado', 'Enviado manualmente', c.enviado], ['respondido', 'Respondido', c.respondido],
+    ]
     return (
       <>
         {qnSelect('Questionário')}
         <div className="steps">
-          <div className="step"><div className="step-num">1</div><div><h3>Destinatários</h3><p>Responsáveis de cada contratante ou prestador. Por enquanto, adicionados manualmente.</p></div></div>
-          <div className="step"><div className="step-num">2</div><div><h3>Gerar links</h3><p>Cada destinatário recebe um link único. É ele que vincula a resposta ao cadastro.</p></div></div>
-          <div className="step"><div className="step-num">3</div><div><h3>Acompanhar</h3><p>O status muda para Respondido assim que o formulário é enviado.</p></div></div>
+          <div className="step"><div className="step-num">1</div><div><h3>Destinatários</h3><p>Inclua do Cadastro de Contratantes (um convite por e-mail) ou adicione um a um.</p></div></div>
+          <div className="step"><div className="step-num">2</div><div><h3>Mala direta</h3><p>Exporte a planilha, faça a mala direta no Word/Outlook e confirme a marcação de enviados.</p></div></div>
+          <div className="step"><div className="step-num">3</div><div><h3>Acompanhar</h3><p>O status vira Respondido assim que o formulário é enviado pelo link. Para quem não respondeu, exporte os lembretes.</p></div></div>
+        </div>
+        <div className="stats">
+          <div className="stat"><div className="n">{rows.length}</div><div className="l">Total de destinatários</div></div>
+          <div className="stat"><div className="n">{c.nao_enviado}</div><div className="l">Não enviados</div></div>
+          <div className="stat"><div className="n warning">{c.enviado}</div><div className="l">Enviados manualmente (aguardando resposta)</div></div>
+          <div className="stat"><div className="n good">{c.respondido}</div><div className="l">Respondidos</div></div>
+          <div className="stat"><div className="n good">{pctResp}%</div><div className="l">De resposta sobre os enviados</div></div>
         </div>
         <div className="card">
           <div className="card-head">
             <div>
               <h2>Destinatários do questionário</h2>
-              <p className="cap" style={{ margin: 0 }}>
-                {rows.length} destinatário{rows.length === 1 ? '' : 's'} · {c.respondido} respondido{c.respondido === 1 ? '' : 's'} · {c.enviado} aguardando resposta · {c.pendente} sem link
-              </p>
+              <p className="cap" style={{ margin: 0 }}>{rows.length} destinatário{rows.length === 1 ? '' : 's'}{semLink ? ` · ${semLink} ainda sem link` : ''}</p>
             </div>
             <div className="actions">
-              <button className="btn ghost" onClick={() => {
-                setAddOpen(o => !o); setNaErr('')
-                setNa({ nome: '', email: '', empresa: '', tipo: qn.publico, vinculo: contratantesList[0] ?? '' })
-              }}>+ Adicionar destinatário</button>
-              <button className="btn" disabled={busy || qn.status !== 'ativo' || !c.pendente} onClick={() => void gerarLinks()}>
-                {c.pendente ? `Gerar links (${c.pendente})` : 'Gerar links'}
+              {podeGerir && <button className="btn ghost" disabled={busy} onClick={() => void abrirImportacao()}>Incluir do Cadastro de Contratantes</button>}
+              {podeGerir && (
+                <button className="btn ghost" onClick={() => {
+                  setAddOpen(o => !o); setNaErr('')
+                  setNa({ nome: '', email: '', empresa: '', tipo: qn.publico, vinculo: contratantesList[0] ?? '' })
+                }}>+ Adicionar destinatário</button>
+              )}
+              <button className="btn ghost" disabled={busy || qn.status !== 'ativo' || !semLink} onClick={() => void gerarLinks()}>
+                {semLink ? `Gerar links (${semLink})` : 'Gerar links'}
               </button>
+              {podeGerir && <button className="btn" disabled={busy} onClick={() => void exportarMalaDireta('convites')}>Exportar convites (mala direta)</button>}
+              {podeGerir && <button className="btn" disabled={busy} onClick={() => void exportarMalaDireta('lembretes')}>Exportar lembretes (mala direta)</button>}
             </div>
           </div>
-          {addOpen && (
+          {addOpen && podeGerir && (
             <div className="add-row-form">
               <div className="row"><span className="field-label">Nome do responsável</span><input type="text" autoFocus value={na.nome} onChange={e => setNa({ ...na, nome: e.target.value })} placeholder="Ex: Mariana Alves" /></div>
               <div className="row"><span className="field-label">E-mail</span><input type="text" value={na.email} onChange={e => setNa({ ...na, email: e.target.value })} placeholder="nome@empresa.com.br" /></div>
@@ -851,35 +1024,156 @@ export default function QuestionariosClient() {
               </div>
             </div>
           )}
+          <div className="chipset" style={{ marginBottom: 10 }}>
+            {filtros.map(([k, l, n]) => (
+              <button key={k} className={`chip${fEnvio === k ? ' on' : ''}`} onClick={() => { setFEnvio(k); setSelConv(new Set()) }}>{l} ({n})</button>
+            ))}
+          </div>
+          {podeGerir && selIds.length > 0 && (
+            <div className="bulk-bar">
+              <span className="sp">{selIds.length} selecionado{selIds.length === 1 ? '' : 's'}</span>
+              <button className="btn small" disabled={busy || !selNaoEnv.length} onClick={() => void registrarEnvio('marcar', selNaoEnv)}>
+                Marcar como enviado manualmente{selNaoEnv.length ? ` (${selNaoEnv.length})` : ''}
+              </button>
+              <button className="btn ghost small" disabled={busy || !selEnv.length} onClick={() => {
+                if (confirm(`Desfazer a marcação de ${selEnv.length} destinatário(s)? Eles voltam para "Não enviado" e a contagem de lembretes zera.`)) void registrarEnvio('desfazer', selEnv)
+              }}>Desfazer marcação{selEnv.length ? ` (${selEnv.length})` : ''}</button>
+              <button className="btn ghost small" onClick={() => setSelConv(new Set())}>Limpar seleção</button>
+            </div>
+          )}
           <div className="tbl-wrap">
             <table>
-              <thead><tr><th>Responsável</th><th>Empresa</th><th>Contratante</th><th>Status</th><th>Link do convite</th><th /></tr></thead>
+              <thead><tr>
+                {podeGerir && (
+                  <th style={{ width: 28 }}>
+                    <input type="checkbox" className="chk" aria-label="Selecionar todos os visíveis" disabled={!selecionaveis.length} checked={todosSel}
+                      onChange={() => setSelConv(todosSel ? new Set() : new Set(selecionaveis.map(d => d.id)))} />
+                  </th>
+                )}
+                <th>Responsável</th><th>Empresa</th><th>Status</th><th>Link do convite</th><th />
+              </tr></thead>
               <tbody>
-                {!rows.length && <tr className="empty-row"><td colSpan={6}>Nenhum destinatário ainda. Use &quot;+ Adicionar destinatário&quot;.</td></tr>}
-                {rows.map(d => (
-                  <tr key={d.id}>
-                    <td className="name-cell">{d.nome}<span className="email-sub">{d.email}</span></td>
-                    <td>{d.empresa}</td>
-                    <td>{d.tipo === 'Contratante' ? d.empresa : (d.vinculo || '—')}</td>
-                    <td><span className={`badge ${d.status}`}>{STATUS_CONVITE_LABEL[d.status]}</span></td>
-                    <td>
-                      {d.token
-                        ? <button className="token-btn" title="Copiar link" onClick={() => void copiarLink(d)}>{copiedId === d.id ? 'Copiado ✓' : `/${d.token.slice(0, 10)}…`}</button>
-                        : <span className="dash">—</span>}
-                    </td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {d.token && <a className="btn ghost small" style={{ textDecoration: 'none', display: 'inline-block' }} href={linkDe(d.token)} target="_blank" rel="noreferrer">Abrir link</a>}
-                      <button className="icon-btn danger" style={{ marginLeft: 6 }} title="Remover destinatário" onClick={() => void removerDestinatario(d)}>✕</button>
-                    </td>
-                  </tr>
-                ))}
+                {!visiveis.length && <tr className="empty-row"><td colSpan={podeGerir ? 6 : 5}>{rows.length ? 'Nenhum destinatário com esse status.' : 'Nenhum destinatário ainda. Use "Incluir do Cadastro de Contratantes" ou "+ Adicionar destinatário".'}</td></tr>}
+                {visiveis.map(d => {
+                  const st = statusExib(d)
+                  return (
+                    <tr key={d.id}>
+                      {podeGerir && (
+                        <td>
+                          <input type="checkbox" className="chk" aria-label={`Selecionar ${d.nome || d.email}`} disabled={st === 'respondido'}
+                            title={st === 'respondido' ? 'Já respondeu — o envio não pode ser alterado' : undefined}
+                            checked={selConv.has(d.id)} onChange={() => setSelConv(s => toggle(s, d.id))} />
+                        </td>
+                      )}
+                      <td className="name-cell">
+                        {d.nome || <span className="dash">(sem nome)</span>}
+                        {d.email ? <span className="email-sub">{d.email}</span> : <span className="warn-sub">sem e-mail</span>}
+                      </td>
+                      <td>{d.empresa}{d.tipo === 'Prestador' && d.vinculo ? <span className="email-sub">Contratante: {d.vinculo}</span> : null}</td>
+                      <td>
+                        <span className={`badge ${st}`}>{STATUS_EXIB_LABEL[st]}</span>
+                        {st === 'enviado' && (
+                          <>
+                            <span className="envio-sub">em {fmtData(d.enviado_em)}</span>
+                            {d.lembretes_enviados > 0 && <span className="envio-sub">lembretes: {d.lembretes_enviados}</span>}
+                          </>
+                        )}
+                        {st === 'respondido' && d.respondido_em && <span className="envio-sub">em {fmtData(d.respondido_em)}</span>}
+                      </td>
+                      <td>
+                        {d.token
+                          ? <button className="token-btn" title="Copiar link" onClick={() => void copiarLink(d)}>{copiedId === d.id ? 'Copiado ✓' : `/${d.token.slice(0, 10)}…`}</button>
+                          : <span className="dash">—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {podeGerir && st === 'nao_enviado' && (
+                          <button className="btn ghost small" disabled={busy} onClick={() => void registrarEnvio('marcar', [d.id])}>Marcar enviado</button>
+                        )}
+                        {podeGerir && st === 'enviado' && (
+                          <button className="btn ghost small" disabled={busy} onClick={() => {
+                            if (confirm(`Desfazer a marcação de ${d.nome || d.email}? Volta para "Não enviado".`)) void registrarEnvio('desfazer', [d.id])
+                          }}>Desfazer marcação</button>
+                        )}
+                        {d.token && <a className="btn ghost small" style={{ textDecoration: 'none', display: 'inline-block', marginLeft: 6 }} href={linkDe(d.token)} target="_blank" rel="noreferrer">Abrir link</a>}
+                        <button className="icon-btn danger" style={{ marginLeft: 6 }} title="Remover destinatário" onClick={() => void removerDestinatario(d)}>✕</button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
           <p className="f-hint" style={{ marginTop: 10 }}>{hint}</p>
         </div>
-        <div className="info-note"><b>Importação da planilha do Portal GT3</b> fica para a etapa final. Quando entrar, ela substitui o cadastro manual acima: cada linha do Excel (nome, e-mail, empresa, CNPJ) vira um destinatário deste questionário.</div>
+        {impOpen && renderImportacao()}
       </>
+    )
+  }
+
+  function renderImportacao() {
+    const chave = (l: LinhaCadastro) => l.contratanteId + '|' + l.email
+    const q = impBusca.trim().toLowerCase()
+    const filtradas = impLinhas.filter(l => !q || `${l.empresa} ${l.email} ${l.origem} ${impNomes[chave(l)] ?? ''}`.toLowerCase().includes(q))
+    const livres = filtradas.filter(l => !l.jaIncluido)
+    const todasSel = livres.length > 0 && livres.every(l => impSel.has(chave(l)))
+    const empresas = [...new Set(filtradas.map(l => l.empresa))]
+    return (
+      <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Incluir do Cadastro de Contratantes" onClick={e => { if (e.target === e.currentTarget && !busy) setImpOpen(false) }}>
+        <div className="modal">
+          <div className="modal-head">
+            <h2>Incluir do Cadastro de Contratantes</h2>
+            <p className="cap" style={{ margin: 0 }}>
+              Cada e-mail encontrado no cadastro vira um convite. O cadastro não diz de quem é cada e-mail: confira o Nome (ele vira o PrimeiroNome da mala direta; vazio = saudação genérica). Só lê o cadastro, não altera nada nele.
+            </p>
+          </div>
+          <div className="modal-tools">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <input type="checkbox" className="chk" disabled={!livres.length} checked={todasSel}
+                onChange={() => setImpSel(s => {
+                  const n = new Set(s)
+                  livres.forEach(l => { if (todasSel) n.delete(chave(l)); else n.add(chave(l)) })
+                  return n
+                })} />
+              Selecionar todas{q ? ' (da busca)' : ''}
+            </label>
+            <input type="text" value={impBusca} onChange={e => setImpBusca(e.target.value)} placeholder="Buscar empresa, e-mail ou campo..." />
+          </div>
+          <div className="modal-body">
+            {impLoading && <p className="cap" style={{ marginTop: 14 }}>Lendo o cadastro…</p>}
+            {impErr && <p className="form-error" style={{ marginTop: 14 }}>{impErr}</p>}
+            {!impLoading && !impErr && !filtradas.length && <p className="cap" style={{ marginTop: 14 }}>Nenhum e-mail encontrado{q ? ' para essa busca' : ''}.</p>}
+            {empresas.map(emp => (
+              <div className="imp-emp" key={emp}>
+                <h3>{emp}</h3>
+                {filtradas.filter(l => l.empresa === emp).map(l => {
+                  const k = chave(l)
+                  return (
+                    <div className={`imp-row${l.jaIncluido ? ' off' : ''}`} key={k}>
+                      <input type="checkbox" className="chk" disabled={l.jaIncluido} checked={!l.jaIncluido && impSel.has(k)}
+                        aria-label={`Incluir ${l.email}`} onChange={() => setImpSel(s => toggle(s, k))} />
+                      <div className="imp-email">{l.email}{l.jaIncluido && <span className="email-sub">já é destinatário</span>}</div>
+                      <div className="imp-origem">campo: {l.origem}</div>
+                      <input type="text" value={impNomes[k] ?? ''} disabled={l.jaIncluido} placeholder="Nome (opcional)"
+                        aria-label={`Nome para ${l.email}`} onChange={e => setImpNomes(n => ({ ...n, [k]: e.target.value }))} />
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+            {!impLoading && impSemEmail.length > 0 && !q && (
+              <div className="imp-emp">
+                <h3 style={{ color: 'var(--danger)' }}>Sem e-mail no cadastro ({impSemEmail.length}) — não serão incluídas</h3>
+                <p className="cap" style={{ margin: 0 }}>{impSemEmail.map(s => s.empresa).join(' · ')}</p>
+              </div>
+            )}
+          </div>
+          <div className="modal-foot">
+            <span className="cap" style={{ margin: '0 auto 0 0' }}>{impSel.size} selecionado{impSel.size === 1 ? '' : 's'}</span>
+            <button className="btn ghost" disabled={busy} onClick={() => setImpOpen(false)}>Cancelar</button>
+            <button className="btn" disabled={busy || !impSel.size} onClick={() => void confirmarImportacao()}>Incluir {impSel.size || ''} selecionado{impSel.size === 1 ? '' : 's'}</button>
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -896,7 +1190,7 @@ export default function QuestionariosClient() {
         if (!m) return false
       }
       if (fEmpresa.size && !fEmpresa.has(d.empresa)) return false
-      if (fStatus.size && !fStatus.has(d.status)) return false
+      if (fStatus.size && !fStatus.has(statusExib(d))) return false
       if (search && !`${d.nome} ${d.empresa}`.toLowerCase().includes(search)) return false
       return true
     })
@@ -915,7 +1209,7 @@ export default function QuestionariosClient() {
     const pills: { label: string; rm: () => void }[] = []
     if (fContratante !== 'all') pills.push({ label: `Contratante: ${fContratante}`, rm: () => setFContratante('all') })
     fEmpresa.forEach(v => pills.push({ label: `Empresa: ${v}`, rm: () => setFEmpresa(s => toggle(s, v)) }))
-    fStatus.forEach(v => pills.push({ label: `Status: ${v}`, rm: () => setFStatus(s => toggle(s, v)) }))
+    fStatus.forEach(v => pills.push({ label: `Status: ${STATUS_EXIB_LABEL[v]}`, rm: () => setFStatus(s => toggle(s, v)) }))
     Object.keys(fQ).forEach(qid => {
       const q = qn.perguntas.find(x => x.id === qid)
       fQ[qid].forEach(v => pills.push({ label: `${q?.label ?? qid} → ${v}`, rm: () => setFQ(f => ({ ...f, [qid]: toggle(f[qid], v) })) }))
@@ -927,7 +1221,7 @@ export default function QuestionariosClient() {
     if (cfg.statTiles.total) stats.push({ n: full.length, l: 'Convites no recorte', c: '' })
     if (cfg.statTiles.taxa) stats.push({ n: `${full.length ? Math.round(resp / full.length * 100) : 0}%`, l: 'Taxa de resposta', c: 'good' })
     if (cfg.statTiles.respondido) stats.push({ n: resp, l: 'Respondido', c: 'good' })
-    if (cfg.statTiles.pendente) stats.push({ n: full.length - resp, l: 'Enviado + pendente', c: 'warning' })
+    if (cfg.statTiles.pendente) stats.push({ n: full.length - resp, l: 'Ainda sem resposta', c: 'warning' })
 
     const chart = (q: Pergunta) => {
       const domain: (string | number)[] = q.type === 'escala' ? [1, 2, 3, 4, 5] : (q.options ?? [])
@@ -982,8 +1276,8 @@ export default function QuestionariosClient() {
             {!emps.length && <p className="empty-note" style={{ textAlign: 'left', padding: '4px 0' }}>Nenhuma empresa no recorte atual.</p>}
             {emps.map(emp => {
               const rows = full.filter(d => d.empresa === emp)
-              const c = { respondido: 0, enviado: 0, pendente: 0 }
-              rows.forEach(d => { c[d.status]++ })
+              const c: Record<StatusExib, number> = { respondido: 0, enviado: 0, nao_enviado: 0 }
+              rows.forEach(d => { c[statusExib(d)]++ })
               return (
                 <div className="stackrow" key={emp}>
                   <div className="stackrow-head">
@@ -991,13 +1285,13 @@ export default function QuestionariosClient() {
                     <span className="tot">{c.respondido}/{rows.length} responderam</span>
                   </div>
                   <div className="stackbar">
-                    {(['respondido', 'enviado', 'pendente'] as StatusConvite[]).map(st => !c[st] ? null : (
+                    {(['respondido', 'enviado', 'nao_enviado'] as StatusExib[]).map(st => !c[st] ? null : (
                       <button
                         key={st}
                         className={`stackseg${fStatus.size && !fStatus.has(st) ? ' dim' : ''}`}
                         style={{ width: `${c[st] / rows.length * 100}%`, background: ST_COLOR[st] }}
-                        title={`${st}: ${c[st]}`}
-                        aria-label={`${emp}, ${st}: ${c[st]}`}
+                        title={`${STATUS_EXIB_LABEL[st]}: ${c[st]}`}
+                        aria-label={`${emp}, ${STATUS_EXIB_LABEL[st]}: ${c[st]}`}
                         onClick={() => setFStatus(s => toggle(s, st))}
                       />
                     ))}
@@ -1007,8 +1301,8 @@ export default function QuestionariosClient() {
             })}
           </div>
           <div className="legend">
-            {(['respondido', 'enviado', 'pendente'] as StatusConvite[]).map(st => (
-              <div className="legend-item" key={st}><span className="legend-swatch" style={{ background: ST_COLOR[st] }} />{st.charAt(0).toUpperCase() + st.slice(1)}</div>
+            {(['respondido', 'enviado', 'nao_enviado'] as StatusExib[]).map(st => (
+              <div className="legend-item" key={st}><span className="legend-swatch" style={{ background: ST_COLOR[st] }} />{STATUS_EXIB_LABEL[st]}</div>
             ))}
           </div>
         </div>
@@ -1033,7 +1327,7 @@ export default function QuestionariosClient() {
                     <td className="name-cell">{d.nome}</td>
                     <td>{d.empresa}</td>
                     <td>{d.tipo === 'Contratante' ? d.empresa : (d.vinculo || '—')}</td>
-                    <td><span className={`badge ${d.status}`}>{d.status.charAt(0).toUpperCase() + d.status.slice(1)}</span></td>
+                    <td><span className={`badge ${statusExib(d)}`}>{STATUS_EXIB_LABEL[statusExib(d)]}</span></td>
                     {closed.map(q => <td key={q.id}>{d.respostas[q.id] != null ? String(d.respostas[q.id]) : <span className="dash">—</span>}</td>)}
                     {open.map(q => <td key={q.id} className="comment-cell">{d.respostas[q.id] ? String(d.respostas[q.id]) : <span className="dash">—</span>}</td>)}
                   </tr>
@@ -1074,9 +1368,9 @@ export default function QuestionariosClient() {
           <div className="f-group">
             <span className="field-label">Status do convite</span>
             <div className="chipset">
-              {(['respondido', 'enviado', 'pendente'] as StatusConvite[]).map(st => (
+              {(['respondido', 'enviado', 'nao_enviado'] as StatusExib[]).map(st => (
                 <button key={st} className={`chip${fStatus.has(st) ? ' on' : ''}`} onClick={() => setFStatus(s => toggle(s, st))}>
-                  {st.charAt(0).toUpperCase() + st.slice(1)}
+                  {STATUS_EXIB_LABEL[st]}
                 </button>
               ))}
             </div>
@@ -1125,7 +1419,7 @@ export default function QuestionariosClient() {
 
   function renderConfig(qn: Questionario) {
     const cfg = cfgFor(qn)
-    const tiles: [keyof PainelConfig['statTiles'], string][] = [['total', 'Convites no recorte'], ['taxa', 'Taxa de resposta'], ['respondido', 'Respondido'], ['pendente', 'Enviado + pendente']]
+    const tiles: [keyof PainelConfig['statTiles'], string][] = [['total', 'Convites no recorte'], ['taxa', 'Taxa de resposta'], ['respondido', 'Respondido'], ['pendente', 'Ainda sem resposta']]
     return (
       <>
         {qnSelect('Personalizando o painel de')}
