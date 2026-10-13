@@ -50,3 +50,6 @@ next-env.d.ts
 
 # logs do servidor local (restart-server.ps1)
 /logs/
+
+# configuração local do Claude Code (permissões da máquina, não versionar)
+.claude/settings.local.json
