@@ -1171,7 +1171,9 @@ export default function WorkflowProgramasClient() {
             const status = a.respostas[i.id]?.status
             const t = status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
             const obs = a.respostas[i.id]?.obs
-            const tag = status === 'ok' ? ' — APROVADO' : ' — ORIENTATIVO'
+            // Item com título em forma de pergunta ("Possui treinamentos específicos?") não leva
+            // "— APROVADO" no fim: o texto de aprovado já responde a pergunta.
+            const tag = status === 'ok' ? (i.titulo.trim().endsWith('?') ? '' : ' — APROVADO') : ' — ORIENTATIVO'
             let bloco = `<div style="font-weight:700;margin-bottom:4px">${restricoesComTexto.length + n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
               (t ? aplicaVars(t.corpo, ctxParaItem(ctx, i, a)) : '')
             if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
@@ -1664,48 +1666,76 @@ export default function WorkflowProgramasClient() {
     return catalog.itens.filter(i => i.titulo.toLowerCase().includes('psico') && i.documento === 'PGR')
   }
 
-  /** Igual a `relatorioItens`, mas só para os itens de fatores de risco psicossociais do
-   *  PGR (base "NR-01" + variantes específicas por contratante, ex.: padrão SESMT Marcopolo,
-   *  Jungheinrich) — e agrupado por CONTRATANTE (Marcopolo Ana Rech, São Cristóvão, Volare...)
-   *  em vez de por empresa prestadora, que é o que o "Relatório por item" já faz.
+  /** Situação psicossocial de cada EMPRESA prestadora em cada CONTRATANTE — uma entrada por
+   *  par (empresa, contratante), sempre da análise mais recente que avaliou o psicossocial
+   *  daquela contratante. Base da aba "Psicossociais por contratante" e dos cartões do topo.
    *
-   *  Quando a análise tem mais de uma contratante selecionada junto (comum: a mesma
-   *  prestadora atende Marcopolo Ana Rech E São Cristóvão), o item psicossocial comum às
-   *  duas aparece só UMA vez em `itensDaAnalise` — mas cada uma delas "bateria" com ele.
-   *  Pra não contar a mesma resposta 2x (uma por contratante), cada resposta é atribuída a
-   *  só UM "dono": a primeira contratante, na ordem selecionada na análise, que realmente
-   *  tem esse item no próprio checklist. Assim a soma das colunas da tabela bate exatamente
-   *  com as ocorrências reais (soma de "Reprovação" = "Reprovações geradas" no topo; soma de
-   *  "Orientativo" = "Com orientativo" no topo — ver `psicoStats`). */
-  function relatorioPsicossocial(lista: AnaliseRow[]) {
+   *  - Mesma empresa em várias análises (reprovada e depois aprovada, p.ex.): vale só a
+   *    última — empresa identificada pelo CNPJ (ou pelo nome, sem CNPJ).
+   *  - Contratante com mais de um item psicossocial (Marcopolo Ana Rech / São Cristóvão /
+   *    Volare têm o "NR-01" geral E o "Psicossociais Marcopolo"): a empresa conta 1x. Quem
+   *    decide é o item ESPECÍFICO da contratante; o geral só entra se o específico não foi
+   *    avaliado (ou ficou N/A). Quando o geral diverge, isso aparece como nota ao lado do
+   *    nome da empresa na lista expandida — não muda a contagem.
+   *  - Análise que atende duas contratantes ao mesmo tempo conta 1x em CADA uma delas. */
+  type PsicoKind = 'ok' | 'restr' | 'orientativo' | 'nao' | 'na'
+  function psicoSituacoes(lista: AnaliseRow[]) {
     if (!catalog) return []
     const idsPsico = new Set(itensPsicossociaisPgr().map(i => i.id))
     if (!idsPsico.size) return []
+    const kindDe = (i: ChecklistItem, r: StatusResp): PsicoKind =>
+      r === 'ok' ? 'ok' : r === 'restricao' ? 'restr' : r === 'nao' ? (i.critico ? 'nao' : 'orientativo') : 'na'
+    const KIND_LABEL: Record<PsicoKind, string> = { ok: 'conforme', restr: 'restrição', orientativo: 'orientativo', nao: 'reprovação', na: 'N/A' }
 
+    type Sit = { empKey: string; empresa: string; cid: string; kind: PsicoKind; nota: string; data: string; upd: string }
+    const ultima = new Map<string, Sit>()
+    lista.forEach(a => {
+      const itensA = itensDaAnalise(a.dados).filter(i => idsPsico.has(i.id))
+      if (!itensA.length) return
+      const empKey = (a.cnpj || '').replace(/\D/g, '') || (a.empresa || '').trim().toUpperCase()
+      const data = a.data_final || a.dados.data || ''
+      a.dados.contratanteIds.forEach(cid => {
+        // Com uma contratante filtrada, só ela entra — filtrar Jungheinrich não pode trazer a
+        // linha de Marcopolo só porque a mesma análise atende as duas.
+        if (bancoContratante && cid !== bancoContratante) return
+        const c = getC(cid)
+        if (!c) return
+        const avaliados = itensA
+          .filter(i => c.itens.some(l => l.itemId === i.id) && a.dados.respostas[i.id]?.status)
+          .map(i => ({ i, kind: kindDe(i, a.dados.respostas[i.id]!.status as StatusResp) }))
+        if (!avaliados.length) return
+        const validos = avaliados.filter(x => x.kind !== 'na')
+        const decisor = validos.find(x => x.i.escopo === 'especifico') ?? validos[0]
+        const kind: PsicoKind = decisor?.kind ?? 'na'
+        const nota = decisor
+          ? validos.filter(x => x !== decisor && x.kind !== kind).map(x => `${x.i.escopo === 'especifico' ? x.i.titulo : 'NR-01 geral'}: ${KIND_LABEL[x.kind]}`).join('; ')
+          : ''
+        const k = empKey + '|' + cid
+        const atual = ultima.get(k)
+        if (atual && (atual.data > data || (atual.data === data && atual.upd >= a.updated_at))) return
+        ultima.set(k, { empKey, empresa: a.empresa, cid, kind, nota, data, upd: a.updated_at })
+      })
+    })
+    return Array.from(ultima.values())
+  }
+
+  /** Tabela por contratante da aba Psicossociais — cada empresa conta 1x por contratante,
+   *  pelo último status (ver `psicoSituacoes`). */
+  function relatorioPsicossocial(lista: AnaliseRow[]) {
+    if (!catalog) return []
     type Bucket = { ok: number; nao: number; orientativo: number; na: number; restr: number; empresasNao: string[]; empresasOrientativo: string[]; empresasOk: string[]; empresasRestr: string[] }
     const novoBucket = (): Bucket => ({ ok: 0, nao: 0, orientativo: 0, na: 0, restr: 0, empresasNao: [], empresasOrientativo: [], empresasOk: [], empresasRestr: [] })
     const porContratante = new Map<string, Bucket>()
-
-    lista.forEach(a => {
-      itensDaAnalise(a.dados).filter(i => idsPsico.has(i.id)).forEach(i => {
-        const r = a.dados.respostas[i.id]?.status
-        if (!r) return
-        // Com uma contratante filtrada, só ela é dona — filtrar Jungheinrich não pode trazer a
-        // linha de Marcopolo só porque a mesma análise atende as duas.
-        const donoId = a.dados.contratanteIds.find(cid => (!bancoContratante || cid === bancoContratante) && catalog!.contratantes.find(c => c.id === cid)?.itens.some(l => l.itemId === i.id))
-        if (!donoId) return
-        const b = porContratante.get(donoId) ?? novoBucket()
-        if (r === 'ok') { b.ok++; b.empresasOk.push(a.empresa) }
-        // "nao" só vira Reprovação se o item for crítico — item não crítico marcado "não" é
-        // Orientativo, mesmo critério que `psicoStats` usa pros cartões do topo.
-        else if (r === 'nao' && i.critico) { b.nao++; b.empresasNao.push(a.empresa) }
-        else if (r === 'nao') { b.orientativo++; b.empresasOrientativo.push(a.empresa) }
-        else if (r === 'restricao') { b.restr++; b.empresasRestr.push(a.empresa) }
-        else b.na++
-        porContratante.set(donoId, b)
-      })
+    psicoSituacoes(lista).forEach(s => {
+      const b = porContratante.get(s.cid) ?? novoBucket()
+      const nome = (s.empresa || '(sem nome)') + (s.nota ? ` (${s.nota})` : '')
+      if (s.kind === 'ok') { b.ok++; b.empresasOk.push(nome) }
+      else if (s.kind === 'nao') { b.nao++; b.empresasNao.push(nome) }
+      else if (s.kind === 'orientativo') { b.orientativo++; b.empresasOrientativo.push(nome) }
+      else if (s.kind === 'restr') { b.restr++; b.empresasRestr.push(nome) }
+      else b.na++
+      porContratante.set(s.cid, b)
     })
-
     return catalog.contratantes.flatMap(c => {
       const b = porContratante.get(c.id)
       if (!b) return []
@@ -1715,20 +1745,24 @@ export default function WorkflowProgramasClient() {
     }).sort((a, b) => b.nao - a.nao)
   }
 
-  /** Os 6 cartões de resumo do Banco de dados, recalculados só com os itens psicossociais
-   *  do PGR — em vez do status geral da análise (que soma todos os itens do checklist).
-   *  Somado diretamente das linhas de `relatorioPsicossocial` (a mesma tabela "por
-   *  contratante"), pra garantir por construção que os cartões do topo batem com a soma
-   *  das colunas da tabela — sem duas lógicas de contagem correndo em paralelo. O 6º
-   *  cartão vira "Não aplicável" nesta aba (a contagem de itens marcados N/A). */
+  /** Os 6 cartões de resumo da aba Psicossociais — por EMPRESA, não por contratante: cada
+   *  empresa conta 1x, pelo status da análise mais recente dela. Se essa análise atende
+   *  mais de uma contratante com resultados diferentes, vale o pior (reprovação > restrição >
+   *  orientativo > conforme). Por isso o topo pode ser menor que a soma da tabela: a mesma
+   *  empresa aparece em cada contratante que atende. O 6º cartão vira "Não aplicável". */
   function psicoStats(lista: AnaliseRow[]) {
-    const linhas = relatorioPsicossocial(lista)
-    const apr = linhas.reduce((s, l) => s + l.ok, 0)
-    const comRestricao = linhas.reduce((s, l) => s + l.restr, 0)
-    const comOrientativo = linhas.reduce((s, l) => s + l.orientativo, 0)
-    const reprovadas = linhas.reduce((s, l) => s + l.nao, 0)
-    const naoAplicavel = linhas.reduce((s, l) => s + l.na, 0)
-    return { tot: apr + comRestricao + comOrientativo + reprovadas, apr, comRestricao, comOrientativo, reprovadas, naoAplicavel }
+    const peso: Record<PsicoKind, number> = { na: 0, ok: 1, orientativo: 2, restr: 3, nao: 4 }
+    const porEmpresa = new Map<string, { data: string; upd: string; kind: PsicoKind }>()
+    psicoSituacoes(lista).forEach(s => {
+      const atual = porEmpresa.get(s.empKey)
+      const maisNova = !atual || s.data > atual.data || (s.data === atual.data && s.upd > atual.upd)
+      const mesma = atual && s.data === atual.data && s.upd === atual.upd
+      if (maisNova) porEmpresa.set(s.empKey, { data: s.data, upd: s.upd, kind: s.kind })
+      else if (mesma && peso[s.kind] > peso[atual.kind]) atual.kind = s.kind
+    })
+    const conta = (k: PsicoKind) => Array.from(porEmpresa.values()).filter(e => e.kind === k).length
+    const apr = conta('ok'), comRestricao = conta('restr'), comOrientativo = conta('orientativo'), reprovadas = conta('nao')
+    return { tot: apr + comRestricao + comOrientativo + reprovadas, apr, comRestricao, comOrientativo, reprovadas, naoAplicavel: conta('na') }
   }
 
   function exportarCsv() {
@@ -3290,7 +3324,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
   // Na aba de Psicossociais os 6 cartões do topo passam a valer só pros itens
   // psicossociais do PGR, em vez do status geral da análise inteira — e o 6º cartão
   // (sextoLabel/sextoValor) muda de "Reprovações geradas" pra "Não aplicável", já que
-  // aqui "reprovadas" já é por ocorrência (bate com a soma da tabela por contratante).
+  // aqui cada empresa conta 1x pelo último status (ver psicoStats).
   const psico = aba === 'psico' ? psicoStats(lista) : null
   const { tot, apr, comRestricao, comOrientativo, reprovadas, sextoLabel, sextoValor } = psico
     ? { ...psico, sextoLabel: 'Não aplicável', sextoValor: psico.naoAplicavel }
@@ -3344,7 +3378,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {[
-          { l: aba === 'psico' ? 'Itens psicossociais avaliados' : 'Análises finalizadas', v: tot, c: TX },
+          { l: aba === 'psico' ? 'Empresas avaliadas' : 'Análises finalizadas', v: tot, c: TX },
           { l: 'Aprovadas sem apontamento', v: apr, c: OK },
           { l: 'Aprovadas com restrição', v: comRestricao, c: AC },
           { l: 'Com orientativo', v: comOrientativo, c: P },
@@ -3433,7 +3467,7 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
                             <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}><Tag tone="na">{l.na}</Tag></td>
                             <td style={{ padding: 10, borderBottom: '1px solid var(--border-soft)' }}>
                               <div style={{ height: 6, background: NOS, borderRadius: 99, minWidth: 90, overflow: 'hidden' }}><div style={{ height: '100%', width: p + '%', background: OK }} /></div>
-                              <span style={{ color: MU, fontSize: 11.5 }}>{p}% de {l.tot} avaliações</span>
+                              <span style={{ color: MU, fontSize: 11.5 }}>{p}% de {l.tot} empresas</span>
                             </td>
                           </tr>
                           {open && (
