@@ -4,7 +4,7 @@ import { getCaller } from '../../../lib/api-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
-const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, retorno_tipo, retorno_obs, retorno_por, ligacao_em, ligacao_por, contatos_email, criado_por, created_at, updated_at'
+const SELECT = 'id, empresa, contratante, setores, documentos, situacao_id, responsaveis, motivo, data_verificacao, tratativa, ciencia_por, retorno_recebido, retorno_em, retorno_tipo, retorno_obs, retorno_por, ligacao_em, ligacao_por, contatos_email, finalizacao_obs, finalizacao_obs_em, finalizacao_obs_por, criado_por, created_at, updated_at'
 
 const TRAT_LABEL: Record<string, string> = {
   aguardando: 'Aguardando ciência',
@@ -84,6 +84,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     update = { tratativa: novo }
     acaoHistorico = `Tratativa → ${TRAT_LABEL[novo] ?? novo}`
+    // Resolvido / Doc(s) excluído: observação livre (como foi resolvido, obs da exclusão).
+    if (novo === 'resolvido' || novo === 'excluido') {
+      const obs = typeof body?.obs === 'string' ? body.obs.trim().slice(0, 2000) : ''
+      if (obs) {
+        update.finalizacao_obs = obs
+        update.finalizacao_obs_em = new Date().toISOString()
+        update.finalizacao_obs_por = caller.user.id
+        acaoHistorico += `: ${obs}`
+      }
+    }
+  } else if (action === 'finalizacao_obs') {
+    // Adiciona/edita a observação de um item já finalizado (inclusive os antigos, sem obs).
+    if (!['resolvido', 'excluido'].includes(atual.tratativa)) {
+      return Response.json({ error: 'Só itens resolvidos ou com doc(s) excluído têm essa observação' }, { status: 400 })
+    }
+    const obs = typeof body?.obs === 'string' ? body.obs.trim().slice(0, 2000) : ''
+    update = obs
+      ? { finalizacao_obs: obs, finalizacao_obs_em: new Date().toISOString(), finalizacao_obs_por: caller.user.id }
+      : { finalizacao_obs: null, finalizacao_obs_em: null, finalizacao_obs_por: null }
+    acaoHistorico = obs ? `Observação (${TRAT_LABEL[atual.tratativa] ?? atual.tratativa}): ${obs}` : 'Observação da finalização removida'
   } else if (action === 'retorno') {
     // Marcador independente da tratativa — a empresa respondeu ao e-mail, mesmo que o
     // caso ainda não esteja resolvido. Alterna (permite desmarcar se foi engano).

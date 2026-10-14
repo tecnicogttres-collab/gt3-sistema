@@ -52,6 +52,10 @@ type Designacao = {
   ligacao_por: string | null
   /** Cada geração de e-mail (.eml / Outlook) — "Empresa contatada sobre a reprovação". */
   contatos_email: { em: string; por: string }[] | null
+  /** Observação livre ao finalizar — como foi resolvido / obs do doc(s) excluído. */
+  finalizacao_obs: string | null
+  finalizacao_obs_em: string | null
+  finalizacao_obs_por: string | null
   criado_por: string
   created_at: string
   updated_at: string
@@ -457,6 +461,8 @@ export default function DesignacaoReprovadosClient() {
   const zoomCardRef = useRef<HTMLDivElement>(null)
   /** Formulário "Marcar retorno da empresa" aberto em um item: como retornou + texto livre. */
   const [retornoForm, setRetornoForm] = useState<{ id: string; tipo: RetornoTipo | null; obs: string } | null>(null)
+  /** Modal de observação da finalização: ao marcar Resolvido/Doc(s) excluído, ou editando depois. */
+  const [finalForm, setFinalForm] = useState<{ id: string; tratativa: 'resolvido' | 'excluido'; obs: string; editando: boolean } | null>(null)
   function abrirZoom(userId: string, el: HTMLElement) {
     window.clearTimeout(zoomTimer.current)
     zoomTimer.current = window.setTimeout(() => {
@@ -941,14 +947,30 @@ export default function DesignacaoReprovadosClient() {
       showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
     }
   }
-  async function mudarTratativa(id: string, novo: 'andamento' | 'resolvido' | 'excluido') {
+  async function mudarTratativa(id: string, novo: 'andamento' | 'resolvido' | 'excluido', obs?: string) {
     const res = await fetch(`/api/designacao-reprovados/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'tratativa', tratativa: novo }),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'tratativa', tratativa: novo, obs }),
     })
     if (res.ok) {
       const updated: Designacao = await res.json()
       setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
+      setFinalForm(null)
       showToast('Atualizado para ' + TRAT_LABEL[novo] + '.')
+    } else {
+      const e = await res.json().catch(() => ({}))
+      showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
+    }
+  }
+  /** Adiciona/edita a observação de um item já finalizado (vazio remove). */
+  async function salvarObsFinalizacao(id: string, obs: string) {
+    const res = await fetch(`/api/designacao-reprovados/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'finalizacao_obs', obs }),
+    })
+    if (res.ok) {
+      const updated: Designacao = await res.json()
+      setDesignacoes(prev => prev.map(d => d.id === id ? updated : d))
+      setFinalForm(null)
+      showToast(obs.trim() ? 'Observação salva.' : 'Observação removida.')
     } else {
       const e = await res.json().catch(() => ({}))
       showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
@@ -1371,15 +1393,23 @@ export default function DesignacaoReprovadosClient() {
             {liberaTratativa && !finalizada(d.tratativa) && (
               <>
                 <button onClick={() => mudarTratativa(d.id, 'andamento')} style={sm(btnGhost)}>▶ Em andamento</button>
-                <button onClick={() => mudarTratativa(d.id, 'resolvido')} style={sm(btnAccent)}>✔ Resolvido</button>
+                <button onClick={() => setFinalForm({ id: d.id, tratativa: 'resolvido', obs: '', editando: false })} style={sm(btnAccent)}>✔ Resolvido</button>
                 <button
-                  onClick={() => { if (confirm('Marcar como "Doc(s) excluído"? Isso finaliza o item.')) void mudarTratativa(d.id, 'excluido') }}
+                  onClick={() => setFinalForm({ id: d.id, tratativa: 'excluido', obs: '', editando: false })}
                   title="O(s) documento(s) foram excluídos — finaliza o item"
                   style={sm(btnDanger)}
                 >
                   🗑 Doc(s) excluído
                 </button>
               </>
+            )}
+            {finalizada(d.tratativa) && (
+              <button
+                onClick={() => setFinalForm({ id: d.id, tratativa: d.tratativa as 'resolvido' | 'excluido', obs: d.finalizacao_obs ?? '', editando: true })}
+                style={sm(btnGhost)}
+              >
+                📝 {d.finalizacao_obs ? 'Editar observação' : 'Adicionar observação'}
+              </button>
             )}
             {d.retorno_recebido ? (
               <button onClick={() => { if (confirm('Desmarcar o retorno da empresa? O texto registrado será apagado.')) void marcarRetorno(d.id, false) }} style={sm(btnGhost)}>
@@ -1403,6 +1433,21 @@ export default function DesignacaoReprovadosClient() {
             {d.retorno_em && (
               <div style={{ fontSize: 11.5, color: '#3F6B5E', marginTop: 4 }}>
                 {fmtDataHoraLig(d.retorno_em)}{d.retorno_por ? ` · ${getUsuarioNome(d.retorno_por)}` : ''}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Observação da finalização: como foi resolvido / obs do doc(s) excluído. */}
+        {finalizada(d.tratativa) && d.finalizacao_obs && (
+          <div style={{ marginTop: 12, background: `${TRAT_COLORS[d.tratativa]}0F`, border: `1px solid ${TRAT_COLORS[d.tratativa]}40`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`, borderRadius: 8, padding: '9px 12px', color: TEXT }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 4, color: TRAT_COLORS[d.tratativa] }}>
+              {d.tratativa === 'resolvido' ? '✔ Como foi resolvido' : '🗑 Obs. doc(s) excluído'}
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{d.finalizacao_obs}</div>
+            {d.finalizacao_obs_em && (
+              <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>
+                {fmtDataHoraLig(d.finalizacao_obs_em)}{d.finalizacao_obs_por ? ` · ${getUsuarioNome(d.finalizacao_obs_por)}` : ''}
               </div>
             )}
           </div>
@@ -2465,6 +2510,48 @@ export default function DesignacaoReprovadosClient() {
                   onClick={() => { if (retornoForm.tipo) void marcarRetorno(d.id, true, retornoForm.tipo, retornoForm.obs) }}
                   style={{ ...btnPrimary, opacity: retornoForm.tipo ? 1 : .5, cursor: retornoForm.tipo ? 'pointer' : 'not-allowed' }}>
                   Salvar retorno
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Resolvido / Doc(s) excluído: observação livre antes de finalizar, ou editando depois. */}
+      {finalForm && (() => {
+        const d = designacoes.find(x => x.id === finalForm.id)
+        if (!d) return null
+        const resolvido = finalForm.tratativa === 'resolvido'
+        const cor = TRAT_COLORS[finalForm.tratativa]
+        return (
+          <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,.2)', padding: 24 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 4 }}>
+                {resolvido ? '✔ Resolvido' : '🗑 Doc(s) excluído'}
+              </div>
+              <div style={{ fontSize: 13, color: MUTED, marginBottom: 14 }}>
+                {d.empresa} · {finalForm.editando
+                  ? 'observação do item finalizado'
+                  : resolvido ? 'como foi resolvido?' : 'alguma observação sobre a exclusão? Isso finaliza o item.'}
+              </div>
+              <textarea
+                autoFocus
+                value={finalForm.obs}
+                onChange={e => setFinalForm({ ...finalForm, obs: e.target.value })}
+                placeholder={resolvido ? 'Descreva como foi resolvido (opcional)' : 'Observação adicional (opcional)'}
+                rows={4}
+                maxLength={2000}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }}
+              />
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+                <button onClick={() => setFinalForm(null)} style={btnGhost}>Cancelar</button>
+                <button
+                  onClick={() => {
+                    if (finalForm.editando) void salvarObsFinalizacao(d.id, finalForm.obs)
+                    else void mudarTratativa(d.id, finalForm.tratativa, finalForm.obs)
+                  }}
+                  style={{ ...btnPrimary, background: cor }}>
+                  {finalForm.editando ? 'Salvar observação' : resolvido ? 'Marcar como resolvido' : 'Marcar doc(s) excluído'}
                 </button>
               </div>
             </div>
