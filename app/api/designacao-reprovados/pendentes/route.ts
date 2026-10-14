@@ -18,7 +18,7 @@ export async function GET() {
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
   const jaCiente = (d: { ciencia_por: unknown }) => ((d.ciencia_por as string[] | null) ?? []).includes(caller.user.id)
-  const pendentes = (data ?? []).filter(d => !jaCiente(d) && !['resolvido', 'excluido'].includes(d.tratativa as string))
+  const pendentes = (data ?? []).filter(d => !jaCiente(d) && !['resolvido', 'excluido', 'sem_definicao'].includes(d.tratativa as string))
 
   const setorIds = [...new Set(pendentes.flatMap(d => (d.setores as string[] | null) ?? []))]
   const docIds = [...new Set(pendentes.flatMap(d => (d.documentos as string[] | null) ?? []))]

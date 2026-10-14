@@ -12,7 +12,11 @@ const TRAT_LABEL: Record<string, string> = {
   andamento: 'Em andamento',
   resolvido: 'Resolvido',
   excluido: 'Doc(s) excluído',
+  sem_definicao: 'Sem definição',
 }
+
+/** Status que finalizam o item (saem de Ativas e vão pro Histórico). */
+const FINALIZADAS = ['resolvido', 'excluido', 'sem_definicao']
 
 const RETORNO_TIPO_LABEL: Record<string, string> = {
   ligacao: 'ligação ou WhatsApp',
@@ -71,21 +75,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     acaoHistorico = 'Ciente e e-mail enviado — em andamento'
   } else if (action === 'tratativa') {
     const novo = body?.tratativa as string
-    if (!['andamento', 'resolvido', 'excluido'].includes(novo)) {
+    if (!['andamento', ...FINALIZADAS].includes(novo)) {
       return Response.json({ error: 'Tratativa inválida' }, { status: 400 })
     }
     const cienciaPor: string[] = atual.ciencia_por ?? []
     // Quem designou não precisa dar ciência (a designação foi dele) para tratar o item.
-    if (!souCriador && !cienciaPor.includes(caller.user.id)) {
+    // O designado também pode finalizar direto (Resolvido / Doc(s) excluído / Sem definição)
+    // sem dar ciência — mesmo efeito de quem designou. Só "Em andamento" exige a ciência.
+    if (!souCriador && !cienciaPor.includes(caller.user.id) && !FINALIZADAS.includes(novo)) {
       return Response.json({ error: 'É preciso dar ciência antes de avançar a tratativa' }, { status: 403 })
     }
-    if (['resolvido', 'excluido'].includes(atual.tratativa)) {
+    if (FINALIZADAS.includes(atual.tratativa)) {
       return Response.json({ error: 'Designação já finalizada' }, { status: 400 })
     }
     update = { tratativa: novo }
     acaoHistorico = `Tratativa → ${TRAT_LABEL[novo] ?? novo}`
-    // Resolvido / Doc(s) excluído: observação livre (como foi resolvido, obs da exclusão).
-    if (novo === 'resolvido' || novo === 'excluido') {
+    // Resolvido / Doc(s) excluído / Sem definição: observação livre (como foi resolvido, obs da exclusão...).
+    if (FINALIZADAS.includes(novo)) {
       const obs = typeof body?.obs === 'string' ? body.obs.trim().slice(0, 2000) : ''
       if (obs) {
         update.finalizacao_obs = obs
@@ -96,8 +102,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
   } else if (action === 'finalizacao_obs') {
     // Adiciona/edita a observação de um item já finalizado (inclusive os antigos, sem obs).
-    if (!['resolvido', 'excluido'].includes(atual.tratativa)) {
-      return Response.json({ error: 'Só itens resolvidos ou com doc(s) excluído têm essa observação' }, { status: 400 })
+    if (!FINALIZADAS.includes(atual.tratativa)) {
+      return Response.json({ error: 'Só itens finalizados têm essa observação' }, { status: 400 })
     }
     const obs = typeof body?.obs === 'string' ? body.obs.trim().slice(0, 2000) : ''
     update = obs

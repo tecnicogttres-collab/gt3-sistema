@@ -24,10 +24,11 @@ import { urgenciaDesig } from '../lib/desig-urgencia'
 import { baixarEml as emlBaixar, abrirNoOutlook } from '../lib/email-envio'
 import { GRADIENTE_AZUL, SOMBRA_AZUL_SUAVE } from '../lib/ui-destaque'
 
-type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido' | 'excluido'
+type Tratativa = 'aguardando' | 'ciente' | 'andamento' | 'resolvido' | 'excluido' | 'sem_definicao'
+type TratativaFinal = 'resolvido' | 'excluido' | 'sem_definicao'
 
-/** Itens finalizados (resolvido ou doc(s) excluído) saem de Ativas e vão pro Histórico */
-const FINALIZADAS: Tratativa[] = ['resolvido', 'excluido']
+/** Itens finalizados (resolvido, doc(s) excluído ou sem definição) saem de Ativas e vão pro Histórico */
+const FINALIZADAS: Tratativa[] = ['resolvido', 'excluido', 'sem_definicao']
 const finalizada = (t: Tratativa) => FINALIZADAS.includes(t)
 
 type Designacao = {
@@ -80,6 +81,7 @@ const TRAT_COLORS: Record<Tratativa, string> = {
   andamento:  '#B45309',
   resolvido:  '#16A34A',
   excluido:   '#DC2626',
+  sem_definicao: '#64748B',
 }
 const TRAT_LABEL: Record<Tratativa, string> = {
   aguardando: 'Aguardando ciência',
@@ -87,6 +89,7 @@ const TRAT_LABEL: Record<Tratativa, string> = {
   andamento:  'Em andamento',
   resolvido:  'Resolvido',
   excluido:   'Doc(s) excluído',
+  sem_definicao: 'Sem definição',
 }
 const TRAT_OPTIONS: { id: Tratativa; label: string }[] = [
   { id: 'aguardando', label: 'Aguardando ciência' },
@@ -94,6 +97,7 @@ const TRAT_OPTIONS: { id: Tratativa; label: string }[] = [
   { id: 'andamento',  label: 'Em andamento' },
   { id: 'resolvido',  label: 'Resolvido' },
   { id: 'excluido',   label: 'Doc(s) excluído' },
+  { id: 'sem_definicao', label: 'Sem definição' },
 ]
 
 type RetornoTipo = 'ligacao' | 'email' | 'outro'
@@ -390,7 +394,7 @@ function TratativaBadge({ t }: { t: Tratativa }) {
 }
 
 const KPI_ICON: Record<string, string> = {
-  aguardando: '⏳', ciente: '👁', andamento: '▶', resolvido: '✔', excluido: '🗑', total: '📊',
+  aguardando: '⏳', ciente: '👁', andamento: '▶', resolvido: '✔', excluido: '🗑', sem_definicao: '❔', total: '📊',
 }
 
 function Kpi({ label, value, color, icon }: { label: string; value: number; color: string; icon?: string }) {
@@ -462,7 +466,7 @@ export default function DesignacaoReprovadosClient() {
   /** Formulário "Marcar retorno da empresa" aberto em um item: como retornou + texto livre. */
   const [retornoForm, setRetornoForm] = useState<{ id: string; tipo: RetornoTipo | null; obs: string } | null>(null)
   /** Modal de observação da finalização: ao marcar Resolvido/Doc(s) excluído, ou editando depois. */
-  const [finalForm, setFinalForm] = useState<{ id: string; tratativa: 'resolvido' | 'excluido'; obs: string; editando: boolean } | null>(null)
+  const [finalForm, setFinalForm] = useState<{ id: string; tratativa: TratativaFinal; obs: string; editando: boolean } | null>(null)
   function abrirZoom(userId: string, el: HTMLElement) {
     window.clearTimeout(zoomTimer.current)
     zoomTimer.current = window.setTimeout(() => {
@@ -751,6 +755,7 @@ export default function DesignacaoReprovadosClient() {
     andamento:  itensGeralAtual.filter(d => d.tratativa === 'andamento' || d.tratativa === 'ciente').length,
     resolvido:  itensGeralAtual.filter(d => d.tratativa === 'resolvido').length,
     excluido:   itensGeralAtual.filter(d => d.tratativa === 'excluido').length,
+    sem_definicao: itensGeralAtual.filter(d => d.tratativa === 'sem_definicao').length,
     total: itensGeralAtual.length,
   }), [itensGeralAtual])
 
@@ -768,17 +773,18 @@ export default function DesignacaoReprovadosClient() {
       andamento: itens.filter(d => d.tratativa === 'andamento').length,
       resolvido: itens.filter(d => d.tratativa === 'resolvido').length,
       excluido: itens.filter(d => d.tratativa === 'excluido').length,
+      sem_definicao: itens.filter(d => d.tratativa === 'sem_definicao').length,
       retornou: itens.filter(d => d.retorno_recebido).length,
     }
   }
 
   // ── Visão geral: BI por colaborador (grade de cards; clicar no nome abre o detalhe) ──
   const statsColaboradores = useMemo(() => {
-    const map = new Map<string, { userId: string; total: number; aguardando: number; ciente: number; andamento: number; resolvido: number; excluido: number; retornou: number }>()
+    const map = new Map<string, { userId: string; total: number; aguardando: number; ciente: number; andamento: number; resolvido: number; excluido: number; sem_definicao: number; retornou: number }>()
     for (const d of itensGeralAtual) {
       for (const uid of d.responsaveis) {
         let s = map.get(uid)
-        if (!s) { s = { userId: uid, total: 0, aguardando: 0, ciente: 0, andamento: 0, resolvido: 0, excluido: 0, retornou: 0 }; map.set(uid, s) }
+        if (!s) { s = { userId: uid, total: 0, aguardando: 0, ciente: 0, andamento: 0, resolvido: 0, excluido: 0, sem_definicao: 0, retornou: 0 }; map.set(uid, s) }
         s.total++
         s[d.tratativa]++
         if (d.retorno_recebido) s.retornou++
@@ -947,7 +953,7 @@ export default function DesignacaoReprovadosClient() {
       showToast((e as { error?: string }).error ?? 'Erro ao atualizar.')
     }
   }
-  async function mudarTratativa(id: string, novo: 'andamento' | 'resolvido' | 'excluido', obs?: string) {
+  async function mudarTratativa(id: string, novo: 'andamento' | TratativaFinal, obs?: string) {
     const res = await fetch(`/api/designacao-reprovados/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'tratativa', tratativa: novo, obs }),
     })
@@ -1401,11 +1407,35 @@ export default function DesignacaoReprovadosClient() {
                 >
                   🗑 Doc(s) excluído
                 </button>
+                <button
+                  onClick={() => setFinalForm({ id: d.id, tratativa: 'sem_definicao', obs: '', editando: false })}
+                  title="Sem definição — finaliza o item"
+                  style={sm({ ...btnGhost, color: TRAT_COLORS.sem_definicao, fontWeight: 700 })}
+                >
+                  ❔ Sem definição
+                </button>
               </>
+            )}
+            {/* Designado antes da ciência: o caminho normal é "Ciente e e-mail enviado", mas ele
+                pode finalizar direto (mesmo efeito de quem designou). Fica discreto, secundário. */}
+            {!liberaTratativa && !finalizada(d.tratativa) && (
+              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginLeft: 4 }}>
+                <span style={{ fontSize: 11, color: MUTED }}>ou finalizar direto:</span>
+                {(['resolvido', 'excluido', 'sem_definicao'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setFinalForm({ id: d.id, tratativa: t, obs: '', editando: false })}
+                    title={`${TRAT_LABEL[t]} — finaliza o item sem passar pelo andamento`}
+                    style={{ ...sm(btnGhost), fontSize: 11, padding: '3px 9px', color: TRAT_COLORS[t] }}
+                  >
+                    {KPI_ICON[t]} {TRAT_LABEL[t]}
+                  </button>
+                ))}
+              </span>
             )}
             {finalizada(d.tratativa) && (
               <button
-                onClick={() => setFinalForm({ id: d.id, tratativa: d.tratativa as 'resolvido' | 'excluido', obs: d.finalizacao_obs ?? '', editando: true })}
+                onClick={() => setFinalForm({ id: d.id, tratativa: d.tratativa as TratativaFinal, obs: d.finalizacao_obs ?? '', editando: true })}
                 style={sm(btnGhost)}
               >
                 📝 {d.finalizacao_obs ? 'Editar observação' : 'Adicionar observação'}
@@ -1442,7 +1472,7 @@ export default function DesignacaoReprovadosClient() {
         {finalizada(d.tratativa) && d.finalizacao_obs && (
           <div style={{ marginTop: 12, background: `${TRAT_COLORS[d.tratativa]}0F`, border: `1px solid ${TRAT_COLORS[d.tratativa]}40`, borderLeft: `4px solid ${TRAT_COLORS[d.tratativa]}`, borderRadius: 8, padding: '9px 12px', color: TEXT }}>
             <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 4, color: TRAT_COLORS[d.tratativa] }}>
-              {d.tratativa === 'resolvido' ? '✔ Como foi resolvido' : '🗑 Obs. doc(s) excluído'}
+              {d.tratativa === 'resolvido' ? '✔ Como foi resolvido' : d.tratativa === 'excluido' ? '🗑 Obs. doc(s) excluído' : '❔ Obs. sem definição'}
             </div>
             <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{d.finalizacao_obs}</div>
             {d.finalizacao_obs_em && (
@@ -1523,6 +1553,7 @@ export default function DesignacaoReprovadosClient() {
             {cont('andamento') + cont('ciente') > 0 && chip(TRAT_COLORS.andamento, `▶ ${cont('andamento') + cont('ciente')} em andamento`)}
             {resolvidos > 0 && chip(TRAT_COLORS.resolvido, `✔ ${resolvidos} resolvido`)}
             {cont('excluido') > 0 && chip(TRAT_COLORS.excluido, `🗑 ${cont('excluido')} doc(s) excluído`)}
+            {cont('sem_definicao') > 0 && chip(TRAT_COLORS.sem_definicao, `❔ ${cont('sem_definicao')} sem definição`)}
             {chip(comLigacao ? '#16A34A' : '#94A3B8', `📞 ${comLigacao}/${grupos.length} com ligação ou WhatsApp`)}
           </div>
 
@@ -1621,6 +1652,7 @@ export default function DesignacaoReprovadosClient() {
             {r.retornou > 0 && <span style={{ color: '#0A7A5E' }}>🔁 {r.retornou} retornou</span>}
             {r.resolvido > 0 && <span style={{ color: TRAT_COLORS.resolvido }}>✔ {r.resolvido} resolvido</span>}
             {r.excluido > 0 && <span style={{ color: TRAT_COLORS.excluido }}>🗑 {r.excluido} doc(s) excluído</span>}
+            {r.sem_definicao > 0 && <span style={{ color: TRAT_COLORS.sem_definicao }}>❔ {r.sem_definicao} sem definição</span>}
           </div>
         </div>
         {isOpen && (
@@ -1940,7 +1972,7 @@ export default function DesignacaoReprovadosClient() {
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                 <p style={{ fontWeight: 600, margin: 0 }}>
                   {caixaSub === 'historico'
-                    ? 'Nada no histórico (itens resolvidos ou com doc(s) excluído).'
+                    ? 'Nada no histórico (itens resolvidos, com doc(s) excluído ou sem definição).'
                     : caixaOrigem === 'recebidas' ? 'Nenhum item ativo designado para você.' : 'Nenhum item ativo designado por você.'}
                 </p>
               </div>
@@ -2044,6 +2076,7 @@ export default function DesignacaoReprovadosClient() {
               <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} icon={KPI_ICON.andamento} />
               <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} icon={KPI_ICON.resolvido} />
               <Kpi label="Doc(s) excluído" value={kpis.excluido} color={TRAT_COLORS.excluido} icon={KPI_ICON.excluido} />
+              <Kpi label="Sem definição" value={kpis.sem_definicao} color={TRAT_COLORS.sem_definicao} icon={KPI_ICON.sem_definicao} />
               <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} icon={KPI_ICON.total} />
             </div>
 
@@ -2052,7 +2085,7 @@ export default function DesignacaoReprovadosClient() {
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                   <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
                   <p style={{ fontWeight: 600, margin: 0 }}>
-                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : 'Nada no histórico (itens resolvidos ou com doc(s) excluído).'}
+                    {geralSub === 'ativas' ? 'Nenhuma designação ativa.' : 'Nada no histórico (itens resolvidos, com doc(s) excluído ou sem definição).'}
                   </p>
                 </div>
               ) : (
@@ -2517,22 +2550,23 @@ export default function DesignacaoReprovadosClient() {
         )
       })()}
 
-      {/* Resolvido / Doc(s) excluído: observação livre antes de finalizar, ou editando depois. */}
+      {/* Resolvido / Doc(s) excluído / Sem definição: observação livre antes de finalizar, ou editando depois. */}
       {finalForm && (() => {
         const d = designacoes.find(x => x.id === finalForm.id)
         if (!d) return null
         const resolvido = finalForm.tratativa === 'resolvido'
+        const semDef = finalForm.tratativa === 'sem_definicao'
         const cor = TRAT_COLORS[finalForm.tratativa]
         return (
           <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,.2)', padding: 24 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 4 }}>
-                {resolvido ? '✔ Resolvido' : '🗑 Doc(s) excluído'}
+                {resolvido ? '✔ Resolvido' : semDef ? '❔ Sem definição' : '🗑 Doc(s) excluído'}
               </div>
               <div style={{ fontSize: 13, color: MUTED, marginBottom: 14 }}>
                 {d.empresa} · {finalForm.editando
                   ? 'observação do item finalizado'
-                  : resolvido ? 'como foi resolvido?' : 'alguma observação sobre a exclusão? Isso finaliza o item.'}
+                  : resolvido ? 'como foi resolvido?' : semDef ? 'alguma observação? Isso finaliza o item.' : 'alguma observação sobre a exclusão? Isso finaliza o item.'}
               </div>
               <textarea
                 autoFocus
@@ -2551,7 +2585,7 @@ export default function DesignacaoReprovadosClient() {
                     else void mudarTratativa(d.id, finalForm.tratativa, finalForm.obs)
                   }}
                   style={{ ...btnPrimary, background: cor }}>
-                  {finalForm.editando ? 'Salvar observação' : resolvido ? 'Marcar como resolvido' : 'Marcar doc(s) excluído'}
+                  {finalForm.editando ? 'Salvar observação' : resolvido ? 'Marcar como resolvido' : semDef ? 'Marcar sem definição' : 'Marcar doc(s) excluído'}
                 </button>
               </div>
             </div>
