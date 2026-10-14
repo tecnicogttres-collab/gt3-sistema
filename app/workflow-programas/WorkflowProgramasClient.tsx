@@ -20,6 +20,9 @@ type ChecklistOpcao = { id: string; label: string; corpo: string; pedirTexto: bo
 type ChecklistItem = {
   id: string; titulo: string; documento: DocKey; descricao: string
   escopo: Escopo; textoId: string; critico: boolean; textoReprovacaoId: string
+  /** Texto de reprovação extra impresso logo abaixo do principal, na mesma linha do item
+   *  (ex.: "Modelo aditivo" sob "Frente de serviço") — opcional. */
+  textoReprovacaoComplementoId?: string
   /** Quais "bolinhas" de status este item aceita — padrão: ok/nao/na (só vale para tipo "status") */
   statusOptions: StatusResp[]
   /** Texto de e-mail usado quando marcado "Aprovado com restrição" */
@@ -70,6 +73,8 @@ type CatalogConfig = {
   ordemBlocos: BlocoParecer[]
   /** true depois que os corpos de texto (plain-text com \n) foram migrados uma única vez para HTML — ver upgradeCatalog. */
   textosHtmlMigrados: boolean
+  /** true depois que o texto "Modelo aditivo" foi criado e ligado ao item de frente de trabalho — ver upgradeCatalog. */
+  modeloAditivoMigrado?: boolean
   /** Setores de atuação disponíveis em "Setor(es) de atuação" (Nova análise) e no vínculo de
    *  textos de categoria "segmento" — editável em Textos → Segmento → "+ Novo segmento", em vez
    *  de fixo no código (ver SETORES_ATUACAO, usado só como valor inicial/seed). */
@@ -362,6 +367,7 @@ function seedCatalog(): Catalog {
     R('r_pgr_pagina', 'Página específica', 'PGR', 'base', 'Favor coletar assinatura do responsável da empresa (XX) na página XX, onde é solicitado, ou na capa. Pode ser assinado digitalmente. Anexar ao portal o PGR completo + a página assinada, unidos, em um único arquivo.\n\nCaso tenha dúvidas em como unir ou separar arquivos, sugerimos o uso do https://www.ilovepdf.com/pt'),
     R('r_pgr_capa', 'Capa', 'PGR', 'base', 'Favor coletar assinatura do responsável da empresa (XX)  na capa ou em local de preferência.  Pode ser assinado digitalmente. Anexar ao portal o PGR completo + a página assinada, unidos, em um único arquivo. \nCaso tenha dúvidas em como unir ou separar arquivos, sugerimos o uso do https://www.ilovepdf.com/pt'),
     R('r_pgr_frente', 'Frente de serviço', 'PGR', 'base', "Favor rever: não Identificado frente de serviço Marcopolo Ana Rech / São Cristóvão / Volare, conforme solicitado por e-mail no (s) dia (s) 21/03/24, 05/08/24  e 13/09/2024 a: 'XXXXX@XXXXX"),
+    R('r_pgr_modelo_aditivo', 'Modelo aditivo', 'PGR', 'especifico', 'Caso queiras, podes utilizar o modelo de frente de trabalho fornecido pela {{contratante}}. Conseguirás encontrar na pasta de Contratantes > Download documentos > {{contratante}}.\nUnifique o mesmo com seu PGR e envie à GT3 em um único arquivo, em PDF.'),
     R('r_pgr_divporta', 'Diverge Portal', 'PGR', 'base', 'Favor rever: a (s) função (ões) XXXXXX não estão contempladas no PGR, conforme cadastro de colaborador no Portal. Necessário indicar função no PGR para que seja possível aprovar o mesmo'),
     R('r_pgr_divpcmso', 'Diverge PCMSO', 'PGR', 'base', 'Favor rever: a (s) função (ões) XXXXXX diferem em relação ao PCMSO. Funções devem estar consistentes entre ambos documentos'),
     R('r_pgr_plano', 'Plano de ação', 'PGR', 'base', 'Favor rever: não identificado plano de ação. Necessário enviar junto com o PGR (no mesmo arquivo).\nCaso tenha dúvidas em como unir ou separar arquivos, sugerimos o uso do https://www.ilovepdf.com/pt'),
@@ -414,6 +420,7 @@ function seedCatalog(): Catalog {
       camposObrigatorios: [],
       ordemBlocos: [...ORDEM_BLOCOS_PADRAO],
       textosHtmlMigrados: true,
+      modeloAditivoMigrado: true,
       segmentos: [...SETORES_ATUACAO],
     },
   }
@@ -437,6 +444,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || raw.itens.some(i => (i.opcoes ?? []).some(o => ['op_2sg6d08', 'op_uuofk76', 'op_6rqa6iy'].includes(o.id) && !o.corpo?.trim()))
     || !raw.itens.some(i => i.id === 'i_ger_cadastro')
     || raw.itens.some(i => typeof i.formatoLista !== 'string')
+    || !raw.config.modeloAditivoMigrado
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
@@ -603,7 +611,19 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
       return { ...c, itens: [...c.itens, ...extras.filter(e => !c.itens.some(l => l.itemId === e.itemId))] }
     })
   }
-  return { catalog: { ...raw, itens: itensComCadastro, contratantes: contratantesComCadastro, textos, textosReprovacao, config }, changed: true }
+  // "Modelo aditivo" — orientação para usar o modelo de frente de trabalho da contratante (Grupo
+  // Marcopolo), impressa logo abaixo da reprovação do item "Aditivo de indicação de frente de
+  // trabalho" quando ele é marcado X. Migração única: depois fica editável/removível normalmente.
+  let textosReprovacaoFinal = textosReprovacao
+  if (!config.modeloAditivoMigrado) {
+    config.modeloAditivoMigrado = true
+    const modelo = seed.textosReprovacao.find(t => t.id === 'r_pgr_modelo_aditivo')!
+    if (!textosReprovacaoFinal.some(t => t.id === modelo.id)) textosReprovacaoFinal = [...textosReprovacaoFinal, modelo]
+    itensComCadastro = itensComCadastro.map(i => (
+      i.id === 'i_8b8o2wy' && !i.textoReprovacaoComplementoId ? { ...i, textoReprovacaoComplementoId: modelo.id } : i
+    ))
+  }
+  return { catalog: { ...raw, itens: itensComCadastro, contratantes: contratantesComCadastro, textos, textosReprovacao: textosReprovacaoFinal, config }, changed: true }
 }
 
 // ─── Small UI atoms ─────────────────────────────────────────────────────────────
@@ -1245,8 +1265,9 @@ export default function WorkflowProgramasClient() {
       })
       const linhas = entradas.map(({ item, contratanteIds }, n) => {
         const t = getR(item.textoReprovacaoId)
+        const comp = getR(item.textoReprovacaoComplementoId)
         const ctxItem = { ...ctxParaItem(ctx, item, a), contratante: contratanteIds.map(cid => nomeC(getC(cid))).filter(Boolean).join(', ') || ctx.contratante }
-        return `<div>${entradas.length > 1 ? `${n + 1} - ` : ''}${aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxItem)}</div>`
+        return `<div>${entradas.length > 1 ? `${n + 1} - ` : ''}${aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxItem)}${comp ? `<br>${aplicaVars(comp.corpo, ctxItem)}` : ''}</div>`
       }).join('')
       const observacao = `<div>Favor rever ${entradas.length > 1 ? 'os seguintes itens' : 'o seguinte item'}:</div>${linhas}`
       return { doc, html: aplicarTemplateObs(obsTemplate, observacao, obsAssinatura) }
@@ -2602,7 +2623,7 @@ export default function WorkflowProgramasClient() {
         <div>
           <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
           <div style={{ marginTop: 10 }}>
-            <VReprovacao catalog={catalog} onNovo={novoReprovacaoModal} onEditar={editarReprovacaoModal} onDel={delReprovacao} />
+            <VReprovacao catalog={catalog} onNovo={() => novoReprovacaoModal()} onEditar={editarReprovacaoModal} onDel={delReprovacao} />
           </div>
         </div>
       )}
@@ -4080,6 +4101,16 @@ function ItemModal({ draft, catalog, novo, onChange, onSave, onClose }: {
                   ))}
                 </select>
               </Field>
+              <div style={{ marginTop: 12 }}>
+                <Field label="Complemento da reprovação (opcional — sai logo abaixo do texto acima, quando o item for reprovado)">
+                  <select style={inputStyle} value={draft.textoReprovacaoComplementoId ?? ''} onChange={e => set('textoReprovacaoComplementoId', e.target.value)}>
+                    <option value="">— nenhum —</option>
+                    {catalog.textosReprovacao.filter(r => (r.documento === draft.documento || draft.documento === 'GERAL') && r.id !== draft.textoReprovacaoId).map(r => (
+                      <option key={r.id} value={r.id}>{r.titulo}{r.escopo === 'especifico' ? ' (específico)' : ''}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
             </div>
           )}
 
