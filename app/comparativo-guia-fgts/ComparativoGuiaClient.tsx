@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser, displayName } from '../components/UserContext'
+import {
+  type Guia, type Situacao, type Resultado, type DiagPagina, type OcrConfig,
+  OCR_CFG, pontuarTexto, emParalelo, textoUtil, palavrasLegiveis, diagnosticarPagina,
+  normNome, fmtCpf, fmtCpfMasc, dataBr, pontuar, lerRelatorio, lerGuia, comparar,
+} from './lib'
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 
@@ -21,20 +26,47 @@ const NEUTRO_BG    = '#FBF3E2'
 
 const PDF_LIB_URL    = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
 const PDF_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+const TESSERACT_LIB_URL   = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js'
+/** Cópia local (public/tesseract.min.js, mesma versão 6.0.1) — usada se o CDN for bloqueado. */
+const TESSERACT_LOCAL_URL = '/tesseract.min.js'
 
-// ─── pdf.js (carregado via CDN em runtime — ver useEffect mais abaixo) ─────
+// ─── pdf.js / tesseract.js (carregados via CDN em runtime — ver useEffect mais abaixo) ─
 
 type PdfTextItem = { str: string; transform: number[] }
 type PdfTextContent = { items: PdfTextItem[] }
-type PdfPageProxy = { getTextContent: () => Promise<PdfTextContent> }
+type PdfViewport = { width: number; height: number }
+type PdfRenderTask = { promise: Promise<void> }
+type PdfPageProxy = {
+  rotate?: number
+  getTextContent: () => Promise<PdfTextContent>
+  getViewport: (opts: { scale: number; rotation?: number }) => PdfViewport
+  render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }) => PdfRenderTask
+}
 type PdfDocumentProxy = { numPages: number; getPage: (n: number) => Promise<PdfPageProxy> }
 type PdfJsLib = {
   getDocument: (opts: { data: ArrayBuffer }) => { promise: Promise<PdfDocumentProxy> }
   GlobalWorkerOptions: { workerSrc: string }
 }
 
-declare global {
-  interface Window { pdfjsLib?: PdfJsLib }
+type TesseractRecognizeResult = { data: { text: string } }
+type TesseractWorker = Record<string, unknown>
+type TesseractScheduler = {
+  addWorker: (w: TesseractWorker) => void
+  addJob: (action: string, image: unknown) => Promise<TesseractRecognizeResult>
+  terminate?: () => Promise<void>
+}
+type TesseractLib = {
+  createScheduler: () => TesseractScheduler
+  createWorker: (lang?: string, oem?: number, options?: Record<string, unknown>) => Promise<TesseractWorker>
+}
+
+// Sem `declare global`: o comparador de comprovantes usa outro formato para as mesmas
+// globais — lê-se `window` via cast local, igual a ele.
+function getPdfJsLib(): PdfJsLib | undefined {
+  return (window as unknown as { pdfjsLib?: PdfJsLib }).pdfjsLib
+}
+function getTesseract(): TesseractLib | undefined {
+  return (window as unknown as { Tesseract?: TesseractLib }).Tesseract
 }
 
 function novoId(): string {
@@ -50,46 +82,21 @@ type DocEntry = {
   id: string
   arquivo: string
   lendo: boolean
+  /** Progresso da leitura ("OCR 5 de 18 páginas · ~1 min restantes…") */
+  status: string
+  /** Texto de cada página — apagado (sobrescrito com '') ao remover o documento. */
+  paginas: string[]
   texto: string
+  totalPaginas: number
+  /** Páginas que não puderam ser lidas (nem por OCR) */
   vazias: number[]
-  paginas: number
+  /** Páginas lidas por OCR */
+  ocr: number[]
+  diag: DiagPagina[]
+  erroOcr: string
   tipo: TipoDoc
   manual: boolean
-  pontos: { guia: number; relatorio: number }
-}
-
-type PessoaRelatorio = {
-  pessoa: string
-  cpf: string
-  atividade: string
-  vinculo: string
-  cadastro: string
-  admissao: string
-  dataCad: Date | null
-  dataAdmissao: Date | null
-  repeticoes: number
-}
-
-type PessoaGuia = { cpf: string; nome: string; estab: string; tomador: string }
-
-type Guia = {
-  pessoas: Record<string, PessoaGuia>
-  competencia: string
-  razao: string
-  cnpj: string
-}
-
-type Situacao = 'falta' | 'ok' | 'fora'
-
-type Resultado = {
-  dados: PessoaRelatorio
-  situacao: Situacao
-  motivo: string
-  campo: string
-  achado: PessoaGuia | null
-  nota: string
-  divergente: boolean
-  admissaoPosterior: boolean
+  pontos: { guia: number; relatorio: number } | null
 }
 
 type Analise = {
@@ -97,339 +104,278 @@ type Analise = {
   competencia: string
   cnpjs: string[]
   paginasVazias: DocEntry[]
+  paginasOcr: DocEntry[]
   resultado: Resultado[]
 }
 
-type Filtro = 'falta' | 'ok' | 'fora' | 'todos'
+type Filtro = 'falta' | 'ok' | 'aprox' | 'fora' | 'todos'
 
-// ─── Utilidades de texto ────────────────────────────────────────────────────
+// ─── OCR (igual ao comparador de comprovantes) ─────────────────────────────
 
-function semAcento(s: string): string {
-  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+type OcrState = { scheduler: TesseractScheduler | null; nucleos: number }
+
+/** Vários workers em paralelo: cada um ocupa um núcleo do processador. */
+async function obterScheduler(ocrState: OcrState, cfg: OcrConfig, aviso?: (msg: string) => void): Promise<TesseractScheduler> {
+  if (ocrState.scheduler) return ocrState.scheduler
+  const Tesseract = getTesseract()
+  if (!Tesseract) throw new Error('biblioteca de OCR não carregou')
+  let quantos = Math.min(4, Math.max(1, (navigator.hardwareConcurrency || 2) - 1))
+  if (cfg.nucleos) quantos = Math.min(8, Math.max(1, cfg.nucleos))
+  if (aviso) aviso('preparando OCR (' + quantos + (quantos > 1 ? ' núcleos' : ' núcleo') + ')…')
+
+  const opcoes: Record<string, unknown> = {}
+  if (cfg.workerPath) opcoes.workerPath = cfg.workerPath
+  if (cfg.corePath) opcoes.corePath = cfg.corePath
+  if (cfg.langPath) opcoes.langPath = cfg.langPath
+
+  const sch = Tesseract.createScheduler()
+  const workers = await Promise.all(
+    Array.from({ length: quantos }, () => Tesseract.createWorker(cfg.idioma || 'por', 1, opcoes)),
+  )
+  workers.forEach(w => sch.addWorker(w))
+  ocrState.scheduler = sch
+  ocrState.nucleos = workers.length
+  return sch
 }
-function normNome(s: string): string {
-  return semAcento(s).toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim()
+
+async function renderizarPagina(pdf: PdfDocumentProxy, n: number, escala: number, giro: number): Promise<HTMLCanvasElement> {
+  const page = await pdf.getPage(n)
+  const vp = page.getViewport({ scale: escala, rotation: ((page.rotate || 0) + (giro || 0)) % 360 })
+  const c = document.createElement('canvas')
+  c.width = Math.floor(vp.width)
+  c.height = Math.floor(vp.height)
+  const ctx = c.getContext('2d')
+  if (!ctx) throw new Error('canvas 2D indisponível neste navegador')
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, c.width, c.height)
+  await page.render({ canvasContext: ctx, viewport: vp }).promise
+  return c
 }
-const PALAVRAS_IGNORADAS = ['DA', 'DE', 'DO', 'DAS', 'DOS', 'E']
-function chaveNome(s: string): string {
-  return normNome(s).split(' ').filter(p => PALAVRAS_IGNORADAS.indexOf(p) < 0).join(' ')
-}
-function soDigitos(s: string): string {
-  return (s || '').replace(/\D/g, '')
-}
-function normCpf(s: string): string {
-  let d = soDigitos(s)
-  if (!d) return ''
-  if (d.length > 11) d = d.slice(-11)
-  return d.padStart(11, '0')
-}
-function fmtCpf(c: string): string {
-  return c && c.length === 11 ? `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}` : (c || '')
-}
-function fmtCpfMasc(c: string): string {
-  return c && c.length === 11 ? `***.${c.slice(3, 6)}.${c.slice(6, 9)}-**` : (c ? fmtCpf(c) : '')
-}
-function similar(a: string, b: string): number {
-  a = chaveNome(a); b = chaveNome(b)
-  if (!a || !b) return 0
-  if (a === b) return 1
-  const m = a.length, n = b.length
-  let prev: number[] = []
-  const cur: number[] = []
-  for (let j = 0; j <= n; j++) prev[j] = j
-  for (let i = 1; i <= m; i++) {
-    cur[0] = i
-    for (let j = 1; j <= n; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
-    }
-    prev = cur.slice()
+
+type ResultadoOcr = { pontos: number; texto: string; angulo: number }
+
+/** Lê uma página num giro e pontua o resultado. O canvas é descartado logo depois —
+ *  com centenas de páginas, a memória pesa. */
+async function reconhecer(pdf: PdfDocumentProxy, n: number, cfg: OcrConfig, giro: number, ocrState: OcrState): Promise<ResultadoOcr> {
+  const canvas = await renderizarPagina(pdf, n, cfg.escala, giro)
+  try {
+    // Lido na hora: se "Remover todos" encerrou o OCR no meio, a página falha em vez de
+    // usar um scheduler já terminado.
+    const sch = ocrState.scheduler
+    if (!sch) throw new Error('OCR encerrado')
+    const r = await sch.addJob('recognize', canvas)
+    const t = (r && r.data && r.data.text) ? r.data.text : ''
+    return { pontos: pontuarTexto(t), texto: t, angulo: giro }
+  } finally {
+    canvas.width = 0; canvas.height = 0
   }
-  return 1 - prev[n] / Math.max(m, n)
+}
+
+/** Compara o giro com o seu oposto; a orientação certa costuma pontuar o dobro. */
+async function melhorGiro(pdf: PdfDocumentProxy, n: number, cfg: OcrConfig, ordem: number[], ocrState: OcrState): Promise<ResultadoOcr> {
+  let resultados: ResultadoOcr[] = []
+  async function par(a: number, b: number): Promise<ResultadoOcr | null> {
+    const rs = await Promise.all([reconhecer(pdf, n, cfg, a, ocrState), reconhecer(pdf, n, cfg, b, ocrState)])
+    resultados = resultados.concat(rs)
+    const alto = rs[0].pontos >= rs[1].pontos ? rs[0] : rs[1]
+    const baixo = rs[0].pontos >= rs[1].pontos ? rs[1] : rs[0]
+    return (alto.pontos >= 40 && alto.pontos >= baixo.pontos * 2) ? alto : null
+  }
+  const r = await par(ordem[0], ordem[1])
+  if (r) return r
+  await par(ordem[2], ordem[3])
+  return resultados.sort((x, y) => y.pontos - x.pontos)[0]
+}
+
+/** Lê por OCR as páginas sem texto aproveitável.
+ *  1) descobre o giro numa amostra;  2) processa tudo em paralelo nesse giro;
+ *  3) refaz, com comparação completa, as páginas que saíram fracas. */
+async function ocrPaginas(
+  pdf: PdfDocumentProxy, vazias: number[], paginas: string[], cfg: OcrConfig,
+  aviso: ((msg: string) => void) | undefined, diag: DiagPagina[], ocrState: OcrState,
+): Promise<{ recuperadas: number[]; restantes: number[]; erro: string }> {
+  const recuperadas: number[] = [], restantes: number[] = []
+  let erro = '', inicio = 0, anguloDoc = 0
+  const porNumero = (a: number, b: number) => a - b
+  const anota = (n: number, dados: Partial<DiagPagina>) => {
+    const d = diag && diag[n - 1]
+    if (d) Object.assign(d, dados)
+  }
+  const guardar = (n: number, res: ResultadoOcr): boolean => {
+    const txt = (res.texto || '').replace(/[ \t]+/g, ' ').trim()
+    if (textoUtil(txt) >= 20) {
+      paginas[n - 1] = txt
+      if (recuperadas.indexOf(n) < 0) recuperadas.push(n)
+      anota(n, { origem: 'ocr', angulo: res.angulo, pontos: res.pontos, chars: textoUtil(txt), palavras: palavrasLegiveis(txt) })
+      return true
+    }
+    anota(n, { origem: 'ocr-vazio', angulo: res.angulo, pontos: res.pontos, chars: textoUtil(res.texto || ''), palavras: palavrasLegiveis(res.texto || '') })
+    return false
+  }
+  const progresso = (feitos: number, total: number) => {
+    if (!aviso) return
+    let msg = 'OCR ' + feitos + ' de ' + total + ' páginas'
+    if (feitos >= 2 && inicio) {
+      const faltam = Math.round((Date.now() - inicio) / feitos * (total - feitos) / 60000)
+      msg += faltam >= 1 ? ' · ~' + faltam + ' min restantes' : ' · quase lá'
+    }
+    aviso(msg + '…')
+  }
+  const msgErro = (e: unknown) => (e instanceof Error && e.message ? e.message : 'falha no OCR')
+
+  try {
+    await obterScheduler(ocrState, cfg, aviso)
+    inicio = Date.now()
+    if (aviso) aviso('descobrindo a orientação das páginas…')
+    const amostra = vazias.slice(0, Math.min(3, vazias.length))
+    const angulos = await Promise.all(amostra.map(n =>
+      melhorGiro(pdf, n, cfg, [0, 180, 90, 270], ocrState).then(r => { guardar(n, r); return r.angulo }).catch(() => null),
+    ))
+    const conta: Record<number, number> = {}
+    angulos.forEach(a => { if (a !== null) conta[a] = (conta[a] || 0) + 1 })
+    Object.keys(conta).forEach(k => {
+      const a = parseInt(k, 10)
+      if (!conta[anguloDoc] || conta[a] > conta[anguloDoc]) anguloDoc = a
+    })
+    const pendentes = vazias.filter(n => amostra.indexOf(n) < 0)
+
+    const fracas: number[] = [], total = pendentes.length
+    inicio = Date.now()
+    await emParalelo(pendentes, ocrState.nucleos, n =>
+      reconhecer(pdf, n, cfg, anguloDoc, ocrState).then(res => {
+        if (res.pontos >= 40) guardar(n, res)
+        else fracas.push(n)
+      }).catch(e => {
+        erro = erro || msgErro(e)
+        anota(n, { origem: 'ocr-erro', detalhe: erro })
+        restantes.push(n)
+      }),
+    feitos => progresso(feitos, total))
+
+    if (fracas.length) {
+      if (aviso) aviso('revendo ' + fracas.length + ' página(s) em outras orientações…')
+      const ordem = [anguloDoc, (anguloDoc + 180) % 360, (anguloDoc + 90) % 360, (anguloDoc + 270) % 360]
+      await emParalelo(fracas, Math.max(1, Math.floor(ocrState.nucleos / 2)), n =>
+        melhorGiro(pdf, n, cfg, ordem, ocrState).then(res => {
+          if (!guardar(n, res)) restantes.push(n)
+        }).catch(e => {
+          erro = erro || msgErro(e)
+          anota(n, { origem: 'ocr-erro', detalhe: erro })
+          restantes.push(n)
+        }))
+    }
+    /* o paralelismo termina cada página numa ordem diferente da numérica;
+       ordena antes de exibir, senão o diagnóstico parece aleatório */
+    return { recuperadas: recuperadas.sort(porNumero), restantes: restantes.sort(porNumero), erro }
+  } catch (e) {
+    return {
+      recuperadas: recuperadas.sort(porNumero),
+      restantes: vazias.filter(n => recuperadas.indexOf(n) < 0).sort(porNumero),
+      erro: e instanceof Error && e.message ? e.message : 'falha ao iniciar o OCR',
+    }
+  }
 }
 
 // ─── Leitura de PDF ──────────────────────────────────────────────────────────
 
-function lerPdf(file: File): Promise<{ texto: string; arquivo: string; paginas: number; vazias: number[] }> {
-  const pdfjsLib = window.pdfjsLib as PdfJsLib
-  return file.arrayBuffer().then(buf => pdfjsLib.getDocument({ data: buf }).promise).then((pdf: PdfDocumentProxy) => {
-    const linhas: string[] = [], seq: string[] = [], vazias: number[] = []
-    function passo(n: number): Promise<void> {
-      if (n > pdf.numPages) return Promise.resolve()
-      return pdf.getPage(n).then((page: PdfPageProxy) => page.getTextContent()).then((tc: PdfTextContent) => {
-        if (!tc.items.length) vazias.push(n)
-        const mapa: Record<number, { x: number; s: string }[]> = {}
-        tc.items.forEach((it: PdfTextItem) => {
-          const y = Math.round(it.transform[5])
-          if (!mapa[y]) mapa[y] = []
-          mapa[y].push({ x: it.transform[4], s: it.str })
-          seq.push(it.str)
-        })
-        Object.keys(mapa).map(Number).sort((a, b) => b - a).forEach(y => {
-          const t = mapa[y].sort((a, b) => a.x - b.x).map(o => o.s).join(' ').replace(/\s+/g, ' ').trim()
-          if (t) linhas.push(t)
-        })
-        return passo(n + 1)
-      })
-    }
-    return passo(1).then(() => ({
-      texto: linhas.join('\n') + '\n' + seq.join(' ').replace(/\s+/g, ' '),
-      arquivo: file.name, paginas: pdf.numPages, vazias,
-    }))
-  })
+type LeituraPdf = {
+  paginas: string[]; texto: string; totalPaginas: number
+  vazias: number[]; ocr: number[]; erroOcr: string; diag: DiagPagina[]
 }
 
-/** Identifica, pelo conteúdo, se o PDF é a guia do FGTS ou o relatório do Portal. */
-function pontuar(t: string): { guia: number; relatorio: number } {
-  let g = 0, r = 0
-  if (/Detalhe da Guia/i.test(t)) g += 4
-  if (/Rela[çc][aã]o de Trabalhadores/i.test(t)) g += 3
-  if (/Nome Trabalhador/i.test(t)) g += 3
-  if (/Comp\.?\s*Apura[çc][aã]o/i.test(t)) g += 2
-  if (/Total do Tomador|Total FGTS|Total do Estabelecimento/i.test(t)) g += 2
-  if ((t.match(/\d{14,22}\s+\d{3}\.\d{3}\.\d{3}-\d{2}/g) || []).length > 3) g += 4
+/** Lê o texto digital de cada página; a página só vai para OCR se tiver menos de
+ *  OCR_CFG.minChars caracteres úteis ou menos de 5 palavras legíveis. */
+async function lerPdf(file: File, aviso: (msg: string) => void, usarOcr: boolean, ocrState: OcrState): Promise<LeituraPdf> {
+  const pdfjsLib = getPdfJsLib() as PdfJsLib
+  const buf = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+  const paginas: string[] = [], vazias: number[] = [], diag: DiagPagina[] = []
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n)
+    const tc = await page.getTextContent()
+    const mapa: Record<number, { x: number; s: string }[]> = {}
+    const seq: string[] = []
+    tc.items.forEach(it => {
+      const y = Math.round(it.transform[5])
+      if (!mapa[y]) mapa[y] = []
+      mapa[y].push({ x: it.transform[4], s: it.str })
+      seq.push(it.str)
+    })
+    const linhas: string[] = []
+    Object.keys(mapa).map(Number).sort((a, b) => b - a).forEach(y => {
+      const t = mapa[y].sort((a, b) => a.x - b.x).map(o => o.s).join(' ').replace(/\s+/g, ' ').trim()
+      if (t) linhas.push(t)
+    })
+    const tx = linhas.join('\n') + '\n' + seq.join(' ').replace(/\s+/g, ' ')
+    paginas.push(tx)
+    const dg = diagnosticarPagina(tx, OCR_CFG.minChars)
+    diag.push({ n, chars: dg.chars, palavras: dg.palavras, itens: tc.items.length, origem: 'pdf', motivo: dg.motivo })
+    if (dg.motivo) vazias.push(n)
+  }
 
-  if (/CONFER[EÊ]NCIA GUIA/i.test(t)) r += 4
-  if (/GT1000|INSOFT/i.test(t)) r += 3
-  if (/Empresa\s+Pessoa/i.test(t)) r += 4
-  if (/Admiss[aã]o/i.test(t)) r += 3
-  if (/V[ií]nculo/i.test(t)) r += 2
-  if (/\bEFETIVO\b/.test(t)) r += 2
-  return { guia: g, relatorio: r }
+  let res: { recuperadas: number[]; restantes: number[]; erro: string }
+  if (!vazias.length) res = { recuperadas: [], restantes: [], erro: '' }
+  else if (!usarOcr || !getTesseract()) {
+    res = { recuperadas: [], restantes: vazias.slice(), erro: getTesseract() ? 'OCR desmarcado na tela' : 'biblioteca de OCR não carregou' }
+  } else {
+    res = await ocrPaginas(pdf, vazias, paginas, OCR_CFG, aviso, diag, ocrState)
+  }
+  return {
+    paginas, texto: paginas.join('\n'), totalPaginas: pdf.numPages,
+    vazias: res.restantes, ocr: res.recuperadas, erroOcr: res.erro || '', diag,
+  }
 }
+
+/** "18 pág. · 18 por OCR" */
+function resumoLeitura(d: DocEntry): string {
+  if (!d.diag || !d.diag.length) return ''
+  const porOcr = d.diag.filter(p => p.origem === 'ocr').length
+  const semLeitura = (d.vazias || []).length
+  const partes = [d.totalPaginas + ' pág.']
+  if (porOcr) partes.push(porOcr + ' por OCR')
+  if (semLeitura) partes.push(semLeitura + ' sem leitura')
+  return partes.join(' · ')
+}
+/** Diagnóstico por página (tooltip do resumo): origem, caracteres, palavras e giro. */
+function diagTexto(d: DocEntry): string {
+  return d.diag.map(p => {
+    const origem = p.origem === 'pdf' ? (p.motivo ? 'texto digital (' + p.motivo + ')' : 'texto digital')
+      : p.origem === 'ocr' ? 'OCR' + (p.angulo ? ' · girada ' + p.angulo + '°' : '')
+      : p.origem === 'ocr-vazio' ? 'OCR sem texto aproveitável' : 'erro no OCR' + (p.detalhe ? ': ' + p.detalhe : '')
+    return 'pág. ' + p.n + ' — ' + origem + ' · ' + p.chars + ' caract. · ' + p.palavras + ' palavras'
+  }).join('\n') + (d.erroOcr ? '\n' + d.erroOcr : '')
+}
+
+/** Apaga da memória o texto do PDF: sobrescreve cada página e zera o que veio dele. */
+function apagarDoc(d: DocEntry | undefined) {
+  if (!d) return
+  if (d.paginas) for (let i = 0; i < d.paginas.length; i++) d.paginas[i] = ''
+  d.paginas = []; d.texto = ''; d.diag = []; d.vazias = []; d.ocr = []; d.status = ''; d.pontos = null
+}
+
 function classificarDoc(doc: DocEntry): DocEntry {
   const pontos = pontuar(doc.texto)
   return { ...doc, pontos, tipo: pontos.guia >= pontos.relatorio ? 'guia' : 'relatorio' }
 }
-/** Se todos os documentos caírem no mesmo lado, o de menor margem migra para o outro. */
+/** Se todos os documentos caírem no mesmo lado, o de menor margem migra para o outro.
+ *  Só entram na conta os arquivos já lidos — com OCR a leitura demora, e um PDF ainda
+ *  sendo lido não pode ser "puxado" para o outro lado. */
 function equilibrarDocs(docs: DocEntry[]): DocEntry[] {
-  if (docs.length < 2 || docs.some(d => d.manual)) return docs
-  const rel = docs.filter(d => d.tipo === 'relatorio')
-  const gui = docs.filter(d => d.tipo === 'guia')
-  const margem = (d: DocEntry) => d.pontos.guia - d.pontos.relatorio
+  const prontos = docs.filter(d => d.pontos && !d.lendo && !d.manual)
+  if (prontos.length < 2 || docs.some(d => d.manual)) return docs
+  const rel = prontos.filter(d => d.tipo === 'relatorio')
+  const gui = prontos.filter(d => d.tipo === 'guia')
+  const margem = (d: DocEntry) => d.pontos!.guia - d.pontos!.relatorio
   let flipId: string | null = null, novoTipo: TipoDoc | null = null
-  if (!rel.length && gui.length) {
+  if (!rel.length && gui.length > 1) {
     const alvo = [...gui].sort((a, b) => margem(a) - margem(b))[0]
     flipId = alvo.id; novoTipo = 'relatorio'
-  } else if (!gui.length && rel.length) {
+  } else if (!gui.length && rel.length > 1) {
     const alvo = [...rel].sort((a, b) => margem(b) - margem(a))[0]
     flipId = alvo.id; novoTipo = 'guia'
   }
   if (!flipId) return docs
   return docs.map(d => d.id === flipId ? { ...d, tipo: novoTipo! } : d)
-}
-
-// ─── Relatório do Portal GT3 (documento A) ─────────────────────────────────
-
-const VINCULOS = ['EFETIVO', 'TEMPORARIO', 'ASSOCIADO', 'PJ', 'AUTONOMO', 'APRENDIZ', 'ESTAGIARIO', 'SOCIO', 'DIRETOR', 'COOPERADO']
-
-function paraData(s: string, fmt: 'mdy' | 'dmy'): Date | null {
-  if (!s) return null
-  const p = s.split('/').map(x => parseInt(x, 10))
-  if (p.length < 3 || isNaN(p[0]) || isNaN(p[1]) || isNaN(p[2])) return null
-  let dia: number, mes: number
-  if (fmt === 'dmy') { dia = p[0]; mes = p[1] } else { mes = p[0]; dia = p[1] }
-  if (mes > 12) { const t = mes; mes = dia; dia = t }
-  const ano = p[2] < 100 ? 2000 + p[2] : p[2]
-  return new Date(ano, mes - 1, dia)
-}
-function dataBr(d: Date | null): string {
-  if (!d) return ''
-  const z = (n: number) => String(n).padStart(2, '0')
-  return `${z(d.getDate())}/${z(d.getMonth() + 1)}/${d.getFullYear()}`
-}
-
-function lerRelatorio(texto: string, formato: 'auto' | 'mdy' | 'dmy'): PessoaRelatorio[] {
-  const linhas = texto.replace(/\t/g, ' ').split(/\n+/)
-  const brutos: { antes: string; cpf: string; meio: string; cadastro: string; admissao: string }[] = []
-  const re = /^(.*?)\s(\d{8,11})\s+(.*?)\s*(\d{1,2}\/\d{1,2}\/\d{2,4})(?:\s+(\d{1,2}\/\d{1,2}\/\d{2,4}))?\s*$/
-
-  linhas.forEach(l0 => {
-    const l = l0.replace(/\s+/g, ' ').trim()
-    if (!l || /Empresa\s+Pessoa/i.test(l)) return
-    const m = re.exec(l)
-    if (!m) return
-    const antes = m[1].trim()
-    if (!/[A-Za-zÀ-ÿ]{3}/.test(antes)) return
-    brutos.push({ antes, cpf: normCpf(m[2]), meio: (m[3] || '').trim(), cadastro: m[4], admissao: m[5] || '' })
-  })
-
-  let prefixo = ''
-  if (brutos.length > 1) {
-    prefixo = brutos[0].antes
-    brutos.forEach(b => {
-      let i = 0
-      while (i < prefixo.length && i < b.antes.length && prefixo[i] === b.antes[i]) i++
-      prefixo = prefixo.slice(0, i)
-    })
-    prefixo = prefixo.replace(/\S*$/, '').trim()
-  }
-
-  let fmt = formato
-  if (fmt === 'auto') {
-    fmt = 'mdy'
-    brutos.forEach(b => { if (parseInt(b.cadastro.split('/')[0], 10) > 12) fmt = 'dmy' })
-  }
-
-  const pessoas: PessoaRelatorio[] = brutos.map(b => {
-    const pessoa = prefixo && b.antes.indexOf(prefixo) === 0 ? b.antes.slice(prefixo.length).trim() : b.antes
-    let vinculo = '', atividade = b.meio
-    const tokens = b.meio.split(' ')
-    const ultimo = semAcento(tokens[tokens.length - 1] || '').toUpperCase()
-    if (VINCULOS.indexOf(ultimo) >= 0) {
-      vinculo = tokens.pop() as string
-      atividade = tokens.join(' ').trim()
-    }
-    return {
-      pessoa, cpf: b.cpf, atividade, vinculo, cadastro: b.cadastro, admissao: b.admissao,
-      dataCad: paraData(b.cadastro, fmt as 'mdy' | 'dmy'),
-      dataAdmissao: paraData(b.admissao, fmt as 'mdy' | 'dmy'),
-      repeticoes: 1,
-    }
-  })
-
-  /* o relatório repete a mesma pessoa em várias linhas: conta uma vez só */
-  const vistos: Record<string, PessoaRelatorio> = {}
-  const unicos: PessoaRelatorio[] = []
-  pessoas.forEach(p => {
-    const chave = p.cpf || chaveNome(p.pessoa)
-    const j = vistos[chave]
-    if (j) {
-      j.repeticoes++
-      if (!j.atividade && p.atividade) j.atividade = p.atividade
-      if (!j.vinculo && p.vinculo) j.vinculo = p.vinculo
-      if (p.dataCad && (!j.dataCad || p.dataCad < j.dataCad)) { j.dataCad = p.dataCad; j.cadastro = p.cadastro }
-      if (!j.dataAdmissao && p.dataAdmissao) { j.dataAdmissao = p.dataAdmissao; j.admissao = p.admissao }
-      return
-    }
-    vistos[chave] = p
-    unicos.push(p)
-  })
-  return unicos
-}
-
-// ─── Detalhe da guia FGTS (documento B) ────────────────────────────────────
-
-const RE_GUIA = /Estabelecimento:\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})|Tomador:\s*(\d[\d.\/-]{9,}|Sem Tomador)|([A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ'’.\- ]{2,70}?)\s+(\d{14,22})\s+(\d{3}\.\d{3}\.\d{3}-\d{2})/g
-
-function lerGuia(texto: string): Guia {
-  const pessoas: Record<string, PessoaGuia> = {}
-  let estab = '', tomador = ''
-  RE_GUIA.lastIndex = 0
-  let m: RegExpExecArray | null
-  while ((m = RE_GUIA.exec(texto)) !== null) {
-    if (m[1]) { estab = m[1]; continue }
-    if (m[2]) { tomador = m[2]; continue }
-    const cpf = normCpf(m[5])
-    const nome = (m[3] || '').replace(/\s+/g, ' ').trim()
-    if (!pessoas[cpf]) pessoas[cpf] = { cpf, nome, estab, tomador }
-  }
-  const reCpf = /\d{3}\.\d{3}\.\d{3}-\d{2}/g
-  let c: RegExpExecArray | null
-  while ((c = reCpf.exec(texto)) !== null) {
-    const k = normCpf(c[0])
-    if (!pessoas[k]) pessoas[k] = { cpf: k, nome: '', estab, tomador: '' }
-  }
-
-  let comp = ''
-  const contagem: Record<string, number> = {}
-  const reComp = /(?:^|[^\d\/])(\d{2})\/(\d{4})(?![\d\/])/g
-  let x: RegExpExecArray | null
-  while ((x = reComp.exec(texto)) !== null) {
-    const ch = x[1] + '/' + x[2]
-    contagem[ch] = (contagem[ch] || 0) + 1
-  }
-  Object.keys(contagem).forEach(k => { if (!comp || contagem[k] > contagem[comp]) comp = k })
-
-  const cnpjM = /Estabelecimento:\s*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(texto)
-  return { pessoas, competencia: comp, razao: acharRazao(texto), cnpj: cnpjM ? cnpjM[1] : '' }
-}
-
-/** O rótulo nem sempre fica junto do valor no texto extraído: valida e, se não
-    servir, procura o nome empresarial que mais se repete no documento. */
-function acharRazao(texto: string): string {
-  const valido = (v: string) => /^[A-ZÀ-Ú0-9][A-ZÀ-Ú0-9 .,'\-&\/]{3,}$/.test(v) && /[A-ZÀ-Ú]{3}/.test(v)
-  const m = /Nome Empregador:\s*([^\n]{4,80}?)(?=\s{2,}|\s+(?:Qtd|Total|Origem|Vencimento|Data|Emitida)\b|\n|$)/i.exec(texto)
-  if (m && valido(m[1].replace(/\s+/g, ' ').trim())) return m[1].replace(/\s+/g, ' ').trim()
-
-  const re = /(?:^|[^A-ZÀ-Úa-zà-ÿ])([A-ZÀ-Ú][A-ZÀ-Ú0-9 .,'\-&\/]{3,60}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|ME|EPP|MEI|SA))(?![A-ZÀ-Úa-zà-ÿ])/g
-  const cont: Record<string, number> = {}
-  let x: RegExpExecArray | null, melhor = ''
-  while ((x = re.exec(texto)) !== null) {
-    const k = x[1].replace(/\s+/g, ' ').trim()
-    cont[k] = (cont[k] || 0) + 1
-  }
-  Object.keys(cont).forEach(k => { if (!melhor || cont[k] > cont[melhor]) melhor = k })
-  return melhor
-}
-
-// ─── Comparação ─────────────────────────────────────────────────────────────
-
-const EXC_VINCULO = ['TEMPORARIO', 'ASSOCIADO', 'PJ']
-const EXC_CARGO = ['ESTAGIARIO', 'SOCIO', 'DIRETOR']
-
-function ultimoDia(comp: string): Date | null {
-  const p = (comp || '').split('/')
-  if (p.length !== 2) return null
-  return new Date(parseInt(p[1], 10), parseInt(p[0], 10), 0, 23, 59, 59)
-}
-
-function comparar(
-  listaA: PessoaRelatorio[], guia: Guia,
-  opcoes: { competencia: string; data: boolean; vinculo: boolean; cargo: boolean },
-): Resultado[] {
-  const porCpf = guia.pessoas
-  const porNome: Record<string, PessoaGuia> = {}
-  Object.keys(porCpf).forEach(k => { if (porCpf[k].nome) porNome[chaveNome(porCpf[k].nome)] = porCpf[k] })
-
-  const limite = opcoes.data ? ultimoDia(opcoes.competencia) : null
-  const estabs: Record<string, number> = {}
-  let estabPrincipal = ''
-  Object.keys(porCpf).forEach(k => { const e = porCpf[k].estab; if (e) estabs[e] = (estabs[e] || 0) + 1 })
-  Object.keys(estabs).forEach(e => { if (!estabPrincipal || estabs[e] > estabs[estabPrincipal]) estabPrincipal = e })
-
-  return listaA.map(p => {
-    const admissaoPosterior = !!(p.dataAdmissao && p.dataCad && p.dataAdmissao.getTime() > p.dataCad.getTime())
-    const r: Resultado = { dados: p, situacao: 'ok', motivo: '', campo: '', achado: null, nota: '', divergente: false, admissaoPosterior }
-    const vin = semAcento(p.vinculo).toUpperCase()
-    const car = semAcento(p.atividade).toUpperCase()
-
-    let foraSituacao = false
-    if (opcoes.vinculo && EXC_VINCULO.some(v => vin.indexOf(v) >= 0)) {
-      foraSituacao = true; r.campo = 'vinculo'
-      r.motivo = 'vínculo ' + (p.vinculo || '').toLowerCase()
-    } else if (opcoes.cargo && EXC_CARGO.some(cg => car.indexOf(cg) >= 0)) {
-      foraSituacao = true; r.campo = 'atividade'
-      r.motivo = 'cargo ' + (p.atividade || '').toLowerCase()
-    } else if (limite && p.dataCad && p.dataCad > limite) {
-      foraSituacao = true; r.campo = 'cadastro'
-      r.motivo = 'cadastro em ' + dataBr(p.dataCad) + ', posterior à competência ' + opcoes.competencia
-    }
-
-    let achado = (p.cpf && porCpf[p.cpf]) || porNome[chaveNome(p.pessoa)] || null
-
-    if (!achado && p.pessoa) {
-      let melhor: PessoaGuia | null = null, score = 0
-      Object.keys(porCpf).forEach(k => {
-        if (!porCpf[k].nome) return
-        const s = similar(p.pessoa, porCpf[k].nome)
-        if (s > score) { score = s; melhor = porCpf[k] }
-      })
-      if (melhor && score >= 0.86) {
-        achado = melhor
-        r.nota = 'correspondência aproximada com "' + (melhor as PessoaGuia).nome + '" (CPF diferente — conferir)'
-      }
-    } else if (achado && achado.nome && chaveNome(achado.nome) !== chaveNome(p.pessoa)) {
-      r.nota = 'mesmo CPF, grafia diferente na guia: "' + achado.nome + '"'
-    }
-
-    r.achado = achado
-    r.situacao = foraSituacao ? 'fora' : (achado ? 'ok' : 'falta')
-    if (achado && achado.estab && estabPrincipal && achado.estab !== estabPrincipal) {
-      r.nota = (r.nota ? r.nota + ' · ' : '') + 'CNPJ divergente: ' + achado.estab
-      r.divergente = true
-    }
-    return r
-  })
 }
 
 // ─── Modelo da observação ───────────────────────────────────────────────────
@@ -540,8 +486,18 @@ export default function ComparativoGuiaClient() {
 
   const [pdfReady, setPdfReady] = useState(false)
   const [pdfError, setPdfError] = useState(false)
+  const [ocrReady, setOcrReady] = useState(false)
+  const [ocrError, setOcrError] = useState(false)
+  const [usarOcr, setUsarOcr] = useState(true)
+  const ocrStateRef = useRef<OcrState>({ scheduler: null, nucleos: 1 })
 
   const [docs, setDocs] = useState<DocEntry[]>([])
+  // Espelho de `docs` para apagar o texto no beforeunload/desmontagem.
+  const docsRef = useRef<DocEntry[]>([])
+  useEffect(() => { docsRef.current = docs }, [docs])
+  // Ids ainda na lista — a leitura com OCR pode levar minutos; se o PDF for removido nesse
+  // meio-tempo, o texto que chegar depois é descartado.
+  const vivosRef = useRef<Set<string>>(new Set())
   const [dropAtivo, setDropAtivo] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -568,11 +524,11 @@ export default function ComparativoGuiaClient() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     function marcarPronto() {
-      const lib = window.pdfjsLib
+      const lib = getPdfJsLib()
       if (lib) { lib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL; setPdfReady(true) }
       else setPdfError(true)
     }
-    if (window.pdfjsLib) {
+    if (getPdfJsLib()) {
       queueMicrotask(marcarPronto)
       return
     }
@@ -593,9 +549,71 @@ export default function ComparativoGuiaClient() {
     }
   }, [])
 
+  // Carrega o OCR (tesseract.js 6.0.1 via jsdelivr, versão fixa). Se o CDN for bloqueado,
+  // tenta a cópia local; se nenhuma carregar, avisa e desabilita o checkbox.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (getTesseract()) { queueMicrotask(() => setOcrReady(true)); return }
+    function novoScript(id: string, src: string): HTMLScriptElement {
+      const s = document.createElement('script')
+      s.id = id
+      s.src = src
+      s.async = true
+      s.crossOrigin = 'anonymous'
+      s.referrerPolicy = 'no-referrer'
+      document.body.appendChild(s)
+      return s
+    }
+    let vivo = true
+    const marcarPronto = () => { if (vivo) { if (getTesseract()) setOcrReady(true); else setOcrError(true) } }
+    const tentarLocal = () => {
+      if (!vivo) return
+      if (getTesseract()) { setOcrReady(true); return }
+      const local = (document.getElementById('gt3-tesseract-local') as HTMLScriptElement | null)
+        ?? novoScript('gt3-tesseract-local', TESSERACT_LOCAL_URL)
+      local.addEventListener('load', marcarPronto)
+      local.addEventListener('error', () => { if (vivo) setOcrError(true) })
+    }
+    // Mesmo id do comparador de comprovantes: se ele já carregou a biblioteca, reaproveita.
+    const script = (document.getElementById('gt3-tesseract-lib') as HTMLScriptElement | null)
+      ?? novoScript('gt3-tesseract-lib', TESSERACT_LIB_URL)
+    script.addEventListener('load', marcarPronto)
+    script.addEventListener('error', tentarLocal)
+    return () => {
+      vivo = false
+      script.removeEventListener('load', marcarPronto)
+      script.removeEventListener('error', tentarLocal)
+    }
+  }, [])
+
+  const usarOcrEfetivo = usarOcr && !ocrError
+
+  /** Termina o scheduler e os workers do Tesseract — nada fica rodando em memória. */
+  const encerrarOcr = useCallback(() => {
+    const st = ocrStateRef.current
+    const sch = st.scheduler
+    if (sch && sch.terminate) { try { void sch.terminate() } catch { /* ignora */ } }
+    st.scheduler = null
+    st.nucleos = 1
+  }, [])
+
+  // Ao fechar/recarregar a aba ou sair do módulo: apaga o texto lido e encerra o OCR.
+  useEffect(() => {
+    const limpar = () => { docsRef.current.forEach(apagarDoc); encerrarOcr() }
+    window.addEventListener('beforeunload', limpar)
+    return () => { window.removeEventListener('beforeunload', limpar); limpar() }
+  }, [encerrarOcr])
+
   // ── Documentos ────────────────────────────────────────────────────────
 
-  const receber = useCallback((lista: File[]) => {
+  /** Qualquer mudança nos arquivos invalida a análise: os nomes saem da tela e da memória. */
+  function limparResultado() {
+    setAnalise(null)
+    setFiltro('falta')
+  }
+
+  function receber(lista: File[]) {
+    if (analise) limparResultado()
     const pdfs = lista.filter(f => /\.pdf$/i.test(f.name))
     pdfs.forEach(f => {
       if (!pdfReady) {
@@ -604,35 +622,48 @@ export default function ComparativoGuiaClient() {
       }
       const id = novoId()
       const novo: DocEntry = {
-        id, arquivo: f.name, lendo: true, texto: '', vazias: [], paginas: 0,
-        tipo: 'guia', manual: false, pontos: { guia: 0, relatorio: 0 },
+        id, arquivo: f.name, lendo: true, status: 'lendo…', paginas: [], texto: '', totalPaginas: 0,
+        vazias: [], ocr: [], diag: [], erroOcr: '', tipo: 'guia', manual: false, pontos: null,
       }
+      vivosRef.current.add(id)
       setDocs(prev => [...prev, novo])
-      lerPdf(f).then(r => {
-        setDocs(prev => {
-          const next = prev.map(d => d.id === id
-            ? classificarDoc({ ...d, texto: r.texto, vazias: r.vazias, paginas: r.paginas, lendo: false })
-            : d)
-          return equilibrarDocs(next)
-        })
+      const aviso = (msg: string) => setDocs(prev => prev.map(d => d.id === id ? { ...d, status: msg } : d))
+      lerPdf(f, aviso, usarOcrEfetivo, ocrStateRef.current).then(r => {
+        // Removido enquanto era lido: descarta o texto em vez de guardá-lo.
+        if (!vivosRef.current.has(id)) {
+          for (let i = 0; i < r.paginas.length; i++) r.paginas[i] = ''
+          r.texto = ''
+          return
+        }
+        setDocs(prev => equilibrarDocs(prev.map(d => d.id === id
+          ? classificarDoc({
+            ...d, paginas: r.paginas, texto: r.texto, totalPaginas: r.totalPaginas, vazias: r.vazias,
+            ocr: r.ocr, diag: r.diag, erroOcr: r.erroOcr, lendo: false, status: '',
+          })
+          : d)))
       }).catch(err => {
-        setDocs(prev => prev.map(d => d.id === id ? { ...d, lendo: false, tipo: 'guia' } : d))
+        setDocs(prev => prev.map(d => d.id === id ? { ...d, lendo: false, status: '', tipo: 'guia' } : d))
         alert('Não consegui ler ' + f.name + ': ' + (err?.message || err))
       })
     })
-  }, [pdfReady])
+  }
 
   function alterarTipo(id: string, tipo: TipoDoc) {
     setDocs(prev => prev.map(d => d.id === id ? { ...d, tipo, manual: true } : d))
   }
   function removerDoc(id: string) {
+    vivosRef.current.delete(id)
+    apagarDoc(docs.find(d => d.id === id))
     setDocs(prev => prev.filter(d => d.id !== id))
+    limparResultado()
   }
 
   function novaAnalise() {
+    docs.forEach(apagarDoc)
+    vivosRef.current.clear()
     setDocs([])
-    setAnalise(null)
-    setFiltro('falta')
+    encerrarOcr()
+    limparResultado()
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -644,11 +675,24 @@ export default function ComparativoGuiaClient() {
       return
     }
     let textoRel = '', textoGuia = ''
-    const paginasVazias: DocEntry[] = []
+    const paginasVazias: DocEntry[] = [], paginasOcr: DocEntry[] = []
     docs.forEach(d => {
       if (d.tipo === 'relatorio') textoRel += '\n' + d.texto; else textoGuia += '\n' + d.texto
       if (d.vazias && d.vazias.length) paginasVazias.push(d)
+      if (d.ocr && d.ocr.length) paginasOcr.push(d)
     })
+
+    // PDF sem nenhum texto (nem por OCR) — vem antes de "Faltou um dos documentos", que
+    // nesse caso confundiria: o arquivo está lá, só não foi lido.
+    const semTexto = docs.filter(d => !(d.texto || '').replace(/\s/g, ''))
+    if (semTexto.length) {
+      alert('Não consegui extrair texto de ' + semTexto.map(d => d.arquivo).join(', ') + '. ' +
+        'Esse PDF não tem texto digital (é digitalizado ou foi gerado por “Imprimir em PDF”). ' +
+        (getTesseract() && usarOcrEfetivo
+          ? 'O OCR também não conseguiu ler as páginas — confira a qualidade do arquivo.'
+          : 'Marque a opção “Ler com OCR…” e anexe o arquivo de novo.'))
+      return
+    }
 
     if (!textoRel.trim() || !textoGuia.trim()) {
       alert('Faltou um dos documentos: preciso do relatório do Portal e do detalhe da guia.\n\n' +
@@ -670,7 +714,7 @@ export default function ComparativoGuiaClient() {
       return
     }
 
-    let resultado = comparar(lista, guia, { competencia, data: rData, vinculo: rVinculo, cargo: rCargo })
+    let resultado = comparar(lista, guia, { competencia, textoNorm: normNome(textoGuia), data: rData, vinculo: rVinculo, cargo: rCargo })
     const ordem: Record<Situacao, number> = { falta: 0, ok: 1, fora: 2 }
     resultado = [...resultado].sort((a, b) =>
       // admissão posterior ao cadastro sempre no topo, independente da situação
@@ -683,7 +727,7 @@ export default function ComparativoGuiaClient() {
       if (e && cnpjs.indexOf(e) < 0) cnpjs.push(e)
     })
 
-    setAnalise({ guia, competencia, cnpjs, paginasVazias, resultado })
+    setAnalise({ guia, competencia, cnpjs, paginasVazias, paginasOcr, resultado })
     setFiltro('falta')
   }
 
@@ -693,6 +737,9 @@ export default function ComparativoGuiaClient() {
   const ok = useMemo(() => analise?.resultado.filter(r => r.situacao === 'ok') ?? [], [analise])
   const fora = useMemo(() => analise?.resultado.filter(r => r.situacao === 'fora') ?? [], [analise])
   const div = useMemo(() => analise?.resultado.filter(r => r.divergente) ?? [], [analise])
+  const aprox = useMemo(() => analise?.resultado.filter(r => r.aprox) ?? [], [analise])
+  const lidosGuia = analise ? Object.keys(analise.guia.pessoas).length : 0
+  const faltaramNaGuia = analise && analise.guia.qtd > lidosGuia ? analise.guia.qtd - lidosGuia : 0
   const varios = (analise?.cnpjs.length ?? 0) > 1
   // Só vale gerar observação para copiar quando há algo a reportar — se está tudo ok
   // (ninguém faltando, sem CNPJ divergente e sem página ilegível), não há o que enviar.
@@ -700,7 +747,7 @@ export default function ComparativoGuiaClient() {
 
   const listaFiltrada = useMemo(() => {
     if (!analise) return []
-    return analise.resultado.filter(r => filtro === 'todos' || r.situacao === filtro)
+    return analise.resultado.filter(r => filtro === 'todos' || (filtro === 'aprox' ? r.aprox : r.situacao === filtro))
   }, [analise, filtro])
 
   const observacao = useMemo(() => {
@@ -816,6 +863,7 @@ export default function ComparativoGuiaClient() {
   const filtros: { key: Filtro; label: string }[] = [
     { key: 'falta', label: 'Não constam' },
     { key: 'ok', label: 'Constam' },
+    { key: 'aprox', label: 'Leitura aproximada' },
     { key: 'fora', label: 'Desconsiderados' },
     { key: 'todos', label: 'Todos' },
   ]
@@ -848,6 +896,13 @@ export default function ComparativoGuiaClient() {
               : 'Carregando o leitor de PDF.'}
           </div>
         )}
+        {pdfReady && ocrError && (
+          <div style={{ background: '#fff8e6', border: `1px solid ${ACCENT}`, borderRadius: 8, padding: '12px 14px', fontSize: 13.5, marginBottom: 18 }}>
+            <strong>O OCR não está disponível nesta máquina.</strong> A biblioteca de reconhecimento óptico
+            não carregou — normalmente é bloqueio de rede ou de segurança (CSP). PDFs sem camada de texto
+            (digitalizados ou gerados por “Imprimir em PDF”) não poderão ser lidos; os demais funcionam normalmente.
+          </div>
+        )}
 
         <section style={painelStyle}>
           <h2 style={h2Style}><span style={numBadge}>1</span>Documentos</h2>
@@ -871,6 +926,17 @@ export default function ComparativoGuiaClient() {
             />
           </div>
 
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 14, fontSize: 13.5, cursor: ocrError ? 'not-allowed' : 'pointer', color: ocrError ? MUTED : TEXT }}>
+            <input
+              id="usarOcr" type="checkbox" checked={usarOcrEfetivo} disabled={ocrError}
+              onChange={e => setUsarOcr(e.target.checked)} style={{ marginTop: 2 }}
+            />
+            <span>
+              Ler com OCR as páginas sem texto (PDF digitalizado ou gerado por “Imprimir em PDF”)
+              {!ocrReady && !ocrError && <span style={{ color: MUTED }}> (carregando o leitor de OCR…)</span>}
+            </span>
+          </label>
+
           {docs.length > 0 && (
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: 12 }}>
@@ -887,7 +953,8 @@ export default function ComparativoGuiaClient() {
                   borderRadius: 8, padding: '9px 12px', fontSize: 13.5, background: '#fff',
                 }}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📄 {d.arquivo}</span>
-                  {d.lendo ? <small style={{ color: MUTED }}>lendo…</small> : (
+                  {d.lendo ? <small style={{ fontSize: 12.5, color: NEUTRO, whiteSpace: 'nowrap' }}>{d.status || 'lendo…'}</small> : (<>
+                    <small title={diagTexto(d)} style={{ color: MUTED, whiteSpace: 'nowrap', cursor: 'help' }}>{resumoLeitura(d)}</small>
                     <select
                       value={d.tipo}
                       onChange={e => alterarTipo(d.id, e.target.value as TipoDoc)}
@@ -896,7 +963,7 @@ export default function ComparativoGuiaClient() {
                       <option value="guia">detalhe da guia</option>
                       <option value="relatorio">relatório do Portal</option>
                     </select>
-                  )}
+                  </>)}
                   <button
                     onClick={() => removerDoc(d.id)}
                     title="remover"
@@ -1017,18 +1084,42 @@ export default function ComparativoGuiaClient() {
             <div style={{ borderLeft: `4px solid ${ACCENT}`, padding: '10px 0 10px 14px', marginBottom: 16 }}>
               <strong style={{ fontSize: 17, display: 'block' }}>{analise.guia.razao || 'Empresa não identificada no PDF'}</strong>
               <span style={{ color: MUTED, fontSize: 13.5 }}>
-                CNPJ {analise.guia.cnpj || '—'} · competência {analise.competencia || '—'} · {Object.keys(analise.guia.pessoas).length} trabalhadores na guia
+                CNPJ {analise.guia.cnpj || '—'} · competência {analise.competencia || '—'} · {lidosGuia} trabalhadores lidos na guia
+                {analise.guia.qtd ? ` (a guia informa ${analise.guia.qtd})` : ''}
               </span>
             </div>
 
-            {analise.paginasVazias.length > 0 && (
+            {(analise.paginasOcr.length > 0 || analise.paginasVazias.length > 0 || faltaramNaGuia > 0) && (
               <div style={{ background: '#fff8e6', border: `1px solid ${ACCENT}`, borderRadius: 8, padding: '12px 14px', fontSize: 13.5, marginBottom: 18 }}>
-                <strong>Atenção: há páginas sem texto nos PDFs enviados.</strong><br />
-                {analise.paginasVazias.map(d => (
-                  <span key={d.id}>{d.arquivo} — página(s) {d.vazias.join(', ')} de {d.paginas}<br /></span>
+                {[
+                  analise.paginasOcr.length > 0 && (
+                    <div key="ocr">
+                      <strong>Páginas lidas por OCR.</strong><br />
+                      {analise.paginasOcr.map(d => (
+                        <span key={d.id}>{d.arquivo} — página(s) {d.ocr.join(', ')}<br /></span>
+                      ))}
+                      O reconhecimento pode trocar caracteres: quem aparecer em “Leitura aproximada” ou em “Não constam”
+                      merece uma conferência na guia antes de enviar a observação.
+                    </div>
+                  ),
+                  analise.paginasVazias.length > 0 && (
+                    <div key="vazias">
+                      <strong>Páginas que não puderam ser lidas.</strong><br />
+                      {analise.paginasVazias.map(d => (
+                        <span key={d.id}>{d.arquivo} — página(s) {d.vazias.join(', ')} de {d.totalPaginas}<br /></span>
+                      ))}
+                      Quem aparecer só nelas será marcado como “não consta”. Confira à mão.
+                    </div>
+                  ),
+                  faltaramNaGuia > 0 && (
+                    <div key="qtd">
+                      <strong>Contagem da guia.</strong> A guia informa {analise.guia.qtd} trabalhadores e foram lidos {lidosGuia}.
+                      {' '}Faltaram {faltaramNaGuia} — se o PDF veio por OCR, parte das linhas pode ter ficado ilegível.
+                    </div>
+                  ),
+                ].filter(Boolean).map((bloco, i) => (
+                  <div key={i} style={i ? { borderTop: `1px solid ${ACCENT}`, marginTop: 10, paddingTop: 10 } : undefined}>{bloco}</div>
                 ))}
-                São páginas em imagem (digitalizadas) e não puderam ser lidas. Quem aparecer só nelas
-                será marcado como &quot;não consta&quot;. Confira à mão ou cole o texto dessas páginas.
               </div>
             )}
 
@@ -1037,6 +1128,7 @@ export default function ComparativoGuiaClient() {
               <Cartao n={ok.length} rotulo="constam na guia" cor={OK} />
               <Cartao n={analise.resultado.length} rotulo="pessoas no Portal" />
               <Cartao n={fora.length} rotulo="desconsideradas" />
+              <Cartao n={aprox.length} rotulo="leitura aproximada" cor={aprox.length ? NEUTRO : undefined} destaque={aprox.length > 0} />
               <Cartao
                 n={div.length}
                 rotulo={varios ? `${analise.cnpjs.length} CNPJs na guia — verificar` : 'em CNPJ divergente'}
@@ -1104,6 +1196,7 @@ export default function ComparativoGuiaClient() {
                             {r.situacao === 'falta' && <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 11, fontSize: 11.5, fontWeight: 600, background: FALTA_BG, color: FALTA }}>não consta</span>}
                             {r.situacao === 'fora' && <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 11, fontSize: 11.5, fontWeight: 600, background: '#eceff4', color: MUTED }}>desconsiderado</span>}
                             {r.divergente && <span style={{ marginLeft: 4, display: 'inline-block', padding: '2px 8px', borderRadius: 11, fontSize: 11.5, fontWeight: 600, background: NEUTRO_BG, color: NEUTRO }}>CNPJ divergente</span>}
+                            {r.aprox && <span style={{ marginLeft: 4, display: 'inline-block', padding: '2px 8px', borderRadius: 11, fontSize: 11.5, fontWeight: 600, background: NEUTRO_BG, color: NEUTRO }}>leitura aproximada</span>}
                             {r.motivo && <span style={{ fontSize: 12, color: NEUTRO, display: 'block', marginTop: 3 }}>{r.motivo}</span>}
                           </td>
                           <td style={tdBase}>
