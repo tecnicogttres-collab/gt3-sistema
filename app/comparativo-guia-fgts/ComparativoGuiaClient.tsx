@@ -5,8 +5,12 @@ import { useUser, displayName } from '../components/UserContext'
 import {
   type Guia, type Situacao, type Resultado, type DiagPagina, type OcrConfig,
   OCR_CFG, pontuarTexto, emParalelo, textoUtil, palavrasLegiveis, diagnosticarPagina,
-  normNome, fmtCpf, fmtCpfMasc, dataBr, pontuar, lerRelatorio, lerGuia, comparar,
+  normNome, fmtCpf, fmtCpfMasc, dataBr, pontuar, lerRelatorio, lerGuia, comparar, chaveNome, soDigitos,
 } from './lib'
+import { normBusca, acharPorTokens } from '../comparador-comprovantes/lib'
+
+type AchadoBusca = { arquivo: string; pagina: number; via: string; origem: string; tipo: string; trecho: string }
+const JANELA_TOKENS_BUSCA = 180
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 
@@ -384,9 +388,6 @@ const MODELO_PADRAO = [
   '{#alerta}[CONFERIR ANTES DE ENVIAR — {alerta}. Apague esta linha depois da conferência.]',
   '{/alerta}{data} {hora} - {#faltantes}Por favor, verificar que o(s) seguinte(s) colaborador(es) cadastrado(s) no Portal não consta(m) no detalhe da guia emitida:',
   '{faltantes}{/faltantes}{#sem_faltantes}todos os colaboradores cadastrados no Portal constam no detalhe da guia emitida da competência {competencia}.{/sem_faltantes}',
-  '{#divergentes}',
-  'O(s) seguinte(s) colaborador(es) consta(m) em CNPJ diferente dos demais:',
-  '{divergentes}{/divergentes}',
   '',
   '{usuario}',
 ].join('\n')
@@ -403,12 +404,13 @@ function nomeParaAssinatura(nomeCompleto: string, todosNomes: string[]): string 
 
 const ITEM_FALTA_PADRAO = '{nome}'
 const ITEM_DESC_PADRAO = '   - {nome} — {motivo}'
-const ITEM_DIV_PADRAO = '{nome} — {cnpj_pessoa}{tomador}'
 
 const LS_MODELO = 'gt3_comparativo_guia_modelo'
 const LS_IT_FALTA = 'gt3_comparativo_guia_it_falta'
 const LS_IT_DESC = 'gt3_comparativo_guia_it_desc'
-const LS_IT_DIV = 'gt3_comparativo_guia_it_div'
+
+/** "Sem Tomador" na guia: a pessoa consta, só não está vinculada a um tomador. */
+const semTomador = (r: Resultado) => !!r.achado && /sem tomador/i.test(r.achado.tomador || '')
 
 function guardar(chave: string, valor: string): boolean {
   try { localStorage.setItem(chave, valor); return true } catch { return false }
@@ -510,12 +512,16 @@ export default function ComparativoGuiaClient() {
   const [modelo, setModelo] = useState(() => recuperar(LS_MODELO) || MODELO_PADRAO)
   const [itFalta, setItFalta] = useState(() => recuperar(LS_IT_FALTA) || ITEM_FALTA_PADRAO)
   const [itDesc, setItDesc] = useState(() => recuperar(LS_IT_DESC) || ITEM_DESC_PADRAO)
-  const [itDiv, setItDiv] = useState(() => recuperar(LS_IT_DIV) || ITEM_DIV_PADRAO)
   const [statusCfg, setStatusCfg] = useState('')
 
   const [analise, setAnalise] = useState<Analise | null>(null)
   const [filtro, setFiltro] = useState<Filtro>('falta')
   const [copiado, setCopiado] = useState(false)
+  const [buscaTermo, setBuscaTermo] = useState('')
+  const [buscaResultado, setBuscaResultado] = useState<AchadoBusca[] | null>(null)
+  const [verDocId, setVerDocId] = useState('')
+  const [verNumero, setVerNumero] = useState('')
+  const [verSaida, setVerSaida] = useState('')
   // Oculta parte do CPF por padrão — na tela, na observação e no CSV.
   const [ocultarCpf, setOcultarCpf] = useState(true)
   const cpfExibir = useCallback((c: string) => (ocultarCpf ? fmtCpfMasc(c) : fmtCpf(c)), [ocultarCpf])
@@ -656,6 +662,7 @@ export default function ComparativoGuiaClient() {
     apagarDoc(docs.find(d => d.id === id))
     setDocs(prev => prev.filter(d => d.id !== id))
     limparResultado()
+    limparBusca()
   }
 
   function novaAnalise() {
@@ -664,7 +671,77 @@ export default function ComparativoGuiaClient() {
     setDocs([])
     encerrarOcr()
     limparResultado()
+    limparBusca()
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // ── Busca no texto lido (igual ao comparador de comprovantes) ──────────
+  // Mostra em que arquivo/página — e se pelo texto do PDF ou pelo OCR — aparece um nome ou
+  // CPF, com o trecho em volta. Os trechos saem da memória junto com os PDFs.
+
+  function limparBusca() {
+    setBuscaTermo(''); setBuscaResultado(null)
+    setVerDocId(''); setVerNumero(''); setVerSaida('')
+  }
+
+  function buscarNoTexto() {
+    const termo = buscaTermo.trim()
+    if (!termo) { setBuscaResultado(null); return }
+    const digitos = soDigitos(termo)
+    const tokens = chaveNome(termo).split(' ').filter(Boolean)
+    const termoNorm = normBusca(termo).replace(/\s+/g, ' ').trim()
+    const achados: AchadoBusca[] = []
+
+    docs.forEach(d => {
+      d.paginas.forEach((tx, i) => {
+        if (achados.length >= 12) return
+        const norm = normBusca(tx)
+        let pos = -1, via = ''
+        const direto = norm.replace(/\s+/g, ' ').indexOf(termoNorm)
+        if (direto >= 0) { pos = norm.indexOf(termoNorm.split(' ')[0]); via = 'texto exato' }
+        if (pos < 0 && digitos.length >= 6) {
+          // CPF do OCR pode vir com separador trocado: compara só os dígitos
+          const apenas = norm.replace(/\D/g, '')
+          const k = apenas.indexOf(digitos)
+          if (k >= 0) {
+            pos = 0; via = 'dígitos do CPF'
+            // posiciona o trecho no CPF: anda no texto até o k-ésimo dígito
+            for (let j = 0, cont = 0; j < norm.length; j++) {
+              if (norm[j] >= '0' && norm[j] <= '9') { if (cont === k) { pos = j; break } cont++ }
+            }
+          }
+        }
+        if (pos < 0 && tokens.length) {
+          const pt = acharPorTokens(norm, tokens, JANELA_TOKENS_BUSCA, 0.5)
+          if (pt !== -1) { pos = pt.pos; via = pt.tolerante ? 'partes do nome, com tolerância' : 'partes do nome' }
+        }
+        if (pos >= 0) {
+          const ini = Math.max(0, pos - 90), fim = Math.min(norm.length, pos + 160)
+          achados.push({
+            arquivo: d.arquivo, pagina: i + 1, via,
+            origem: d.ocr.indexOf(i + 1) >= 0 ? 'OCR' : 'texto do PDF',
+            tipo: d.tipo === 'guia' ? 'detalhe da guia' : 'relatório do Portal',
+            trecho: tx.slice(ini, fim).replace(/\s+/g, ' '),
+          })
+        }
+      })
+    })
+    setBuscaResultado(achados)
+  }
+
+  function verPagina() {
+    const d = docs.find(x => x.id === verDocId)
+    const n = parseInt(verNumero, 10)
+    if (!d || !n || n < 1 || n > d.paginas.length) {
+      setVerSaida('Escolha um arquivo e uma página válida.')
+      return
+    }
+    const tx = (d.paginas[n - 1] || '').trim()
+    const info = d.diag[n - 1]
+    const cabec = `Página ${n} de ${d.totalPaginas}` +
+      (info ? ` · origem: ${info.origem} · ${info.chars || 0} caracteres` + (info.angulo !== undefined ? ` · giro ${info.angulo}°` : '') : '') +
+      '\n────────────────────────────────────────\n'
+    setVerSaida(cabec + (tx ? tx.slice(0, 4000) : '(nenhum texto foi extraído desta página)'))
   }
 
   // ── Processamento ─────────────────────────────────────────────────────
@@ -738,12 +815,17 @@ export default function ComparativoGuiaClient() {
   const fora = useMemo(() => analise?.resultado.filter(r => r.situacao === 'fora') ?? [], [analise])
   const div = useMemo(() => analise?.resultado.filter(r => r.divergente) ?? [], [analise])
   const aprox = useMemo(() => analise?.resultado.filter(r => r.aprox) ?? [], [analise])
+  // Constam na guia, mas sem tomador ou em outro CNPJ: vão para uma caixa à parte e NÃO
+  // entram na reprovação (que cita só quem deveria estar na guia e não está).
+  const semTom = useMemo(() => analise?.resultado.filter(r => r.situacao !== 'fora' && semTomador(r)) ?? [], [analise])
+  const divAtivos = useMemo(() => div.filter(r => r.situacao !== 'fora'), [div])
   const lidosGuia = analise ? Object.keys(analise.guia.pessoas).length : 0
   const faltaramNaGuia = analise && analise.guia.qtd > lidosGuia ? analise.guia.qtd - lidosGuia : 0
   const varios = (analise?.cnpjs.length ?? 0) > 1
   // Só vale gerar observação para copiar quando há algo a reportar — se está tudo ok
-  // (ninguém faltando, sem CNPJ divergente e sem página ilegível), não há o que enviar.
-  const precisaObservacao = falta.length > 0 || div.length > 0 || (analise?.paginasVazias.length ?? 0) > 0
+  // (ninguém faltando e sem página ilegível), não há o que enviar. Sem tomador / CNPJ
+  // divergente não geram reprovação.
+  const precisaObservacao = falta.length > 0 || (analise?.paginasVazias.length ?? 0) > 0
 
   const listaFiltrada = useMemo(() => {
     if (!analise) return []
@@ -785,22 +867,22 @@ export default function ComparativoGuiaClient() {
       alerta: analise.paginasVazias.map(d => 'páginas sem texto em ' + d.arquivo + ': ' + d.vazias.join(', ')).join(' | '),
       faltantes: falta.map(r => preencherItem(itFalta || ITEM_FALTA_PADRAO, camposDe(r))).join('\n'),
       desconsiderados: fora.map(r => preencherItem(itDesc || ITEM_DESC_PADRAO, camposDe(r))).join('\n'),
-      divergentes: div.map(r => preencherItem(itDiv || ITEM_DIV_PADRAO, camposDe(r))).join('\n'),
       cond_alerta: analise.paginasVazias.length > 0,
       cond_faltantes: falta.length > 0,
       cond_sem_faltantes: falta.length === 0,
       cond_desconsiderados: fora.length > 0,
-      cond_divergentes: div.length > 0,
+      // Mesmo um modelo salvo antigo com {#divergentes} não cita mais ninguém por CNPJ/tomador.
+      cond_divergentes: false,
       cond_varios_cnpj: analise.cnpjs.length > 1,
     }
     return preencherModelo(modelo || MODELO_PADRAO, dados)
-  }, [analise, falta, fora, div, modelo, itFalta, itDesc, itDiv, meuNomeAssinatura, cpfExibir])
+  }, [analise, falta, fora, modelo, itFalta, itDesc, meuNomeAssinatura, cpfExibir])
 
   // ── Config modal ──────────────────────────────────────────────────────
 
   function salvarModelo() {
     const ok2 = guardar(LS_MODELO, modelo) && guardar(LS_IT_FALTA, itFalta) &&
-      guardar(LS_IT_DESC, itDesc) && guardar(LS_IT_DIV, itDiv)
+      guardar(LS_IT_DESC, itDesc)
     setStatusCfg(ok2 ? 'Modelo salvo neste navegador.' : 'Não foi possível salvar aqui; o modelo vale só para esta sessão.')
     setTimeout(() => setStatusCfg(''), 4000)
   }
@@ -808,7 +890,6 @@ export default function ComparativoGuiaClient() {
     setModelo(MODELO_PADRAO)
     setItFalta(ITEM_FALTA_PADRAO)
     setItDesc(ITEM_DESC_PADRAO)
-    setItDiv(ITEM_DIV_PADRAO)
   }
 
   // ── Cópia e CSV ────────────────────────────────────────────────────────
@@ -985,6 +1066,53 @@ export default function ComparativoGuiaClient() {
               >Comparar</button>
             </div>
           )}
+
+          {!semDocs && (
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ fontSize: 13, color: PRIMARY, cursor: 'pointer' }}>Procurar um nome ou CPF no texto lido dos PDFs (inclusive o que veio do OCR)</summary>
+              <div style={{ display: 'flex', gap: 8, margin: '10px 0', flexWrap: 'wrap' }}>
+                <input
+                  value={buscaTermo} onChange={e => setBuscaTermo(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); buscarNoTexto() } }}
+                  placeholder="Ex.: Joseane Padilha  ou  123.456.789-00"
+                  style={{ flex: '1 1 280px', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 14 }}
+                />
+                <button onClick={buscarNoTexto} style={botaoSecStyle}>Procurar</button>
+              </div>
+              {buscaResultado && (
+                buscaResultado.length === 0 ? (
+                  <p style={{ fontSize: 13, color: FALTA, padding: '6px 0' }}>
+                    Não encontrei esse termo em nenhuma página lida.
+                    {docs.reduce((s, d) => s + d.vazias.length, 0) > 0
+                      ? ' Há página(s) que não puderam ser lidas — é bem provável que a pessoa esteja em uma delas.'
+                      : ' O texto foi lido, mas o termo não aparece exatamente assim nos PDFs.'}
+                  </p>
+                ) : buscaResultado.map((a, i) => (
+                  <div key={i} style={{ border: `1px solid ${BORDER}`, borderLeft: `3px solid ${OK}`, borderRadius: 6, padding: '8px 10px', marginBottom: 8, fontSize: 12.5 }}>
+                    <b style={{ color: PRIMARY }}>{a.arquivo} · pág. {a.pagina}</b> — {a.tipo}, lido por {a.origem}, achado por {a.via}
+                    <span style={{ display: 'block', marginTop: 4, fontFamily: 'Consolas,monospace', color: MUTED }}>{a.trecho}</span>
+                  </div>
+                ))
+              )}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+                <strong style={{ fontSize: 13 }}>Ver o texto que foi lido de uma página</strong>
+                <div style={{ display: 'flex', gap: 8, margin: '10px 0', flexWrap: 'wrap' }}>
+                  <select value={verDocId} onChange={e => setVerDocId(e.target.value)} style={{ padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13.5, flex: '1 1 220px' }}>
+                    <option value="">selecione o arquivo</option>
+                    {docs.map(d => <option key={d.id} value={d.id}>{d.arquivo}</option>)}
+                  </select>
+                  <input
+                    type="number" min={1} value={verNumero} onChange={e => setVerNumero(e.target.value)}
+                    placeholder="página" style={{ flex: '0 0 110px', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13.5 }}
+                  />
+                  <button onClick={verPagina} style={botaoSecStyle}>Ver texto</button>
+                </div>
+                {verSaida && (
+                  <pre style={{ background: '#f7f9fc', border: `1px solid ${BORDER}`, borderRadius: 6, padding: 12, fontSize: 12, maxHeight: 340, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{verSaida}</pre>
+                )}
+              </div>
+            </details>
+          )}
         </section>
 
         {modalCfgAberto && (
@@ -1039,7 +1167,6 @@ export default function ComparativoGuiaClient() {
                   {[
                     { label: 'Cada pessoa que não consta', value: itFalta, set: setItFalta },
                     { label: 'Cada pessoa desconsiderada', value: itDesc, set: setItDesc },
-                    { label: 'Cada pessoa em CNPJ divergente', value: itDiv, set: setItDiv },
                   ].map(({ label, value, set }) => (
                     <div key={label} style={{ display: 'grid', gridTemplateColumns: '230px 1fr', gap: 12, alignItems: 'center', marginBottom: 10 }}>
                       <label style={{ fontSize: 13, color: MUTED }}>{label}</label>
@@ -1065,14 +1192,14 @@ export default function ComparativoGuiaClient() {
                   ))}
                   {' '}— <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{usuario}'}</code> é o nome de quem gerou a observação (já incluído no fim do modelo padrão).
                   <br />
-                  Listas: {['{faltantes}', '{desconsiderados}', '{divergentes}'].map(t => (
+                  Listas: {['{faltantes}', '{desconsiderados}'].map(t => (
                     <code key={t} style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12, marginRight: 4 }}>{t}</code>
                   ))}
                   — cada item segue o formato definido acima, onde valem {['{nome}', '{cpf}', '{cadastro}', '{motivo}', '{atividade}', '{vinculo}', '{cnpj_pessoa}', '{tomador}'].map(t => (
                     <code key={t} style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12, marginRight: 4 }}>{t}</code>
                   ))}.<br />
                   Trechos condicionais: <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#faltantes}…{/faltantes}'}</code> só aparece se houver quem não conste.
-                  Também existem <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#sem_faltantes}'}</code>, <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#desconsiderados}'}</code>, <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#divergentes}'}</code>, <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#varios_cnpj}'}</code> e <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#alerta}'}</code>.
+                  Também existem <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#sem_faltantes}'}</code>, <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#desconsiderados}'}</code>, <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#varios_cnpj}'}</code> e <code style={{ background: '#eef1f7', color: PRIMARY, borderRadius: 4, padding: '1px 6px', fontFamily: 'Consolas,monospace', fontSize: 12 }}>{'{#alerta}'}</code>.
                 </div>
               </div>
             </div>
@@ -1136,6 +1263,35 @@ export default function ComparativoGuiaClient() {
                 destaque={varios}
               />
             </div>
+
+            {(semTom.length > 0 || divAtivos.length > 0) && (
+              <div style={{ background: '#EEF3FC', border: `1px solid #BFD0EE`, borderLeft: `4px solid ${PRIMARY}`, borderRadius: 8, padding: '12px 14px', fontSize: 13.5, marginBottom: 18 }}>
+                <strong style={{ color: PRIMARY }}>Constam na guia, mas sem tomador ou em outro CNPJ</strong>
+                <span style={{ display: 'block', fontSize: 12.5, color: MUTED, marginBottom: 8 }}>
+                  Só para conferência — não entram na observação de reprovação, que cita apenas quem deveria estar na guia e não está.
+                </span>
+                {semTom.length > 0 && (
+                  <div style={{ marginBottom: divAtivos.length ? 10 : 0 }}>
+                    <b>Sem tomador ({semTom.length})</b>
+                    {semTom.map((r, i) => (
+                      <div key={i} style={{ fontSize: 13 }}>
+                        {r.dados.pessoa} <span style={{ color: MUTED }}>· {cpfExibir(r.dados.cpf)}{r.achado?.estab ? ` · estab. ${r.achado.estab}` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {divAtivos.length > 0 && (
+                  <div>
+                    <b>Em CNPJ diferente dos demais ({divAtivos.length})</b>
+                    {divAtivos.map((r, i) => (
+                      <div key={i} style={{ fontSize: 13 }}>
+                        {r.dados.pessoa} <span style={{ color: MUTED }}>· {r.achado?.estab}{r.achado?.tomador ? ` · tomador ${r.achado.tomador}` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12, fontSize: 13, color: TEXT, cursor: 'pointer' }}>
               <input type="checkbox" checked={ocultarCpf} onChange={e => setOcultarCpf(e.target.checked)} />
