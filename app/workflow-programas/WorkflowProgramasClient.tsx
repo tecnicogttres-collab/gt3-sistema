@@ -75,6 +75,8 @@ type CatalogConfig = {
   textosHtmlMigrados: boolean
   /** true depois que o texto "Modelo aditivo" foi criado e ligado ao item de frente de trabalho — ver upgradeCatalog. */
   modeloAditivoMigrado?: boolean
+  /** true depois que o texto "Visão geral do cadastro — pendência" passou a usar {{pendenciacadastro}} — ver upgradeCatalog. */
+  cadastroPendenciaMigrado?: boolean
   /** Setores de atuação disponíveis em "Setor(es) de atuação" (Nova análise) e no vínculo de
    *  textos de categoria "segmento" — editável em Textos → Segmento → "+ Novo segmento", em vez
    *  de fixo no código (ver SETORES_ATUACAO, usado só como valor inicial/seed). */
@@ -181,6 +183,11 @@ const VALIDADE_TIPOS: { val: ValidadeTipo; label: string }[] = [
 ]
 
 const DEFAULT_STATUS_OPTIONS: StatusResp[] = ['ok', 'nao', 'na']
+
+/** Psicossocial NR-01 geral (não crítico) x "Psicossociais Marcopolo" — ver ajustarObsPsicoMarcopolo. */
+const PSICO_NAO_CRITICO_ID = 'i_pgr_psico'
+const PSICO_MARCOPOLO_ID = 'e_mpo_psico'
+const OBS_PSICO_SO_MARCOPOLO = 'Identificado que foi realizado o levantamento dos fatores de risco psicossociais para o Grupo Marcopolo. Contudo, seria interessante que esse levantamento também fosse realizado para a própria empresa, contemplando todas as suas atividades e funções, conforme a NR-01 — fica como orientação para as próximas revisões do PGR.'
 const STATUS_LABELS: Record<Exclude<StatusResp, ''>, string> = {
   ok: 'Conforme', nao: 'Reprovação', na: 'Não aplicável', restricao: 'Aprovado com restrição',
 }
@@ -421,6 +428,7 @@ function seedCatalog(): Catalog {
       ordemBlocos: [...ORDEM_BLOCOS_PADRAO],
       textosHtmlMigrados: true,
       modeloAditivoMigrado: true,
+      cadastroPendenciaMigrado: true,
       segmentos: [...SETORES_ATUACAO],
     },
   }
@@ -445,6 +453,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || !raw.itens.some(i => i.id === 'i_ger_cadastro')
     || raw.itens.some(i => typeof i.formatoLista !== 'string')
     || !raw.config.modeloAditivoMigrado
+    || !raw.config.cadastroPendenciaMigrado
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
@@ -584,7 +593,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     if (!textos.some(t => t.id === textoObsId)) {
       textos = [...textos, {
         id: textoObsId, titulo: 'Visão geral do cadastro — pendência', categoria: 'apontamento' as const,
-        corpo: textoParaHtml('Analisando o atual contexto geral do cadastro da empresa, foi identificado que há documento(s) de {{itemescolhido}} pendente(s) de envio.'),
+        corpo: textoParaHtml('Analisando o atual contexto geral do cadastro da empresa, foi identificado que há {{pendenciacadastro}}.'),
       }]
     }
     const itemStatus: ChecklistItem = {
@@ -622,6 +631,15 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     itensComCadastro = itensComCadastro.map(i => (
       i.id === 'i_8b8o2wy' && !i.textoReprovacaoComplementoId ? { ...i, textoReprovacaoComplementoId: modelo.id } : i
     ))
+  }
+  // "Visão geral do cadastro — pendência": "Cadastro de Pessoas" não é documento a enviar, é algo
+  // a cadastrar — o texto passa a usar {{pendenciacadastro}} (ver ctxDe), que monta a frase certa
+  // para cada escolha. Migração única: só troca o trecho se ele ainda estiver no formato antigo.
+  if (!config.cadastroPendenciaMigrado) {
+    config.cadastroPendenciaMigrado = true
+    textos = textos.map(t => t.id === 't_ger_cadastro_pendente'
+      ? { ...t, corpo: t.corpo.replace('documento(s) de {{itemescolhido}} pendente(s) de envio', '{{pendenciacadastro}}') }
+      : t)
   }
   return { catalog: { ...raw, itens: itensComCadastro, contratantes: contratantesComCadastro, textos, textosReprovacao: textosReprovacaoFinal, config }, changed: true }
 }
@@ -1073,6 +1091,17 @@ export default function WorkflowProgramasClient() {
         : i.formatoLista === 'linha'
           ? joinDocs(partesOpcoes)
           : '<ul>' + partesOpcoes.map(p => `<li>${p}</li>`).join('') + '</ul>'
+      // Frentes do cadastro: Pessoas/Empresas são documentos pendentes de ENVIO; opções
+      // "Cadastro de …" são algo a CADASTRAR — cada grupo ganha a sua frase em {{pendenciacadastro}}.
+      if (i.id === 'i_ger_cadastro_opcoes') {
+        const ehCadastro = (o: ChecklistOpcao) => o.id === 'op_cad_pessoascad' || /^cadastro/i.test(o.label.trim())
+        const envio = opcoesEfetivas.filter(o => !ehCadastro(o)).map(o => o.corpo).filter(Boolean)
+        const cadastro = opcoesEfetivas.filter(ehCadastro).map(o => o.corpo).filter(Boolean)
+        const frases: string[] = []
+        if (envio.length) frases.push(`documento(s) de ${joinDocs(envio)} pendente(s) de envio`)
+        if (cadastro.length) frases.push(`${joinDocs(cadastro)} ${cadastro.length > 1 ? 'pendentes' : 'pendente'} de realização`)
+        vars.pendenciacadastro = frases.join(' e ')
+      }
     })
     return {
       empresa: a.empresa || '[EMPRESA]', cnpj: a.cnpj || '[CNPJ]',
@@ -1221,14 +1250,20 @@ export default function WorkflowProgramasClient() {
         if (restantesComTexto.length) {
           partes.push(htmlJoinBlocos(restantesComTexto.map((i, n) => {
             const status = a.respostas[i.id]?.status
-            const t = status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
             const obs = a.respostas[i.id]?.obs
+            // Psicossocial NR-01 X com o "Psicossociais Marcopolo" OK: o levantamento existe (só
+            // para o Grupo Marcopolo), então o texto padrão ("não contempla… favor complementar")
+            // contradiria a observação — sai só a observação, como orientação.
+            const soMarcopolo = i.id === PSICO_NAO_CRITICO_ID && status === 'nao'
+              && a.respostas[PSICO_MARCOPOLO_ID]?.status === 'ok' && !!obs?.trim()
+            const t = soMarcopolo ? undefined : status === 'ok' ? getT(i.textoAprovadoId) : getT(i.textoLink)
             // Item com título em forma de pergunta ("Possui treinamentos específicos?") não leva
             // "— APROVADO" no fim: o texto de aprovado já responde a pergunta.
             const tag = status === 'ok' ? (i.titulo.trim().endsWith('?') ? '' : ' — APROVADO') : ' — ORIENTATIVO'
             let bloco = `<div style="font-weight:700;margin-bottom:4px">${restricoesComTexto.length + n + 1}) ${i.documento} — ${i.titulo.toUpperCase()}${tag}</div>` +
               (t ? aplicaVars(t.corpo, ctxParaItem(ctx, i, a)) : '')
-            if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
+            if (soMarcopolo) bloco += obs
+            else if (obs) bloco += `<div style="margin-top:4px">Observação: ${obs}</div>`
             return bloco
           })))
         }
@@ -1517,10 +1552,24 @@ export default function WorkflowProgramasClient() {
       if (!prev) return prev
       const cur = prev.respostas[itemId]?.status
       const status: StatusResp = cur === val ? '' : val
-      const respostas = limparRespostasOrfas({ ...prev.respostas, [itemId]: { ...prev.respostas[itemId], status, obs: prev.respostas[itemId]?.obs || '' } })
+      const respostas = ajustarObsPsicoMarcopolo(limparRespostasOrfas({ ...prev.respostas, [itemId]: { ...prev.respostas[itemId], status, obs: prev.respostas[itemId]?.obs || '' } }))
       return { ...prev, respostas }
     })
     setEmailEditado(false)
+  }
+
+  /** Psicossocial NR-01 (não crítico) marcado X, mas o "Psicossociais Marcopolo" marcado OK: a
+   *  empresa fez o levantamento só para o Grupo Marcopolo — a observação do não crítico já vem
+   *  preenchida explicando isso (vai como orientativo). Só preenche se estiver vazia, e só
+   *  apaga se ainda for exatamente o texto automático (não mexe no que o analista digitou). */
+  function ajustarObsPsicoMarcopolo(respostas: Record<string, Resposta>): Record<string, Resposta> {
+    const nc = respostas[PSICO_NAO_CRITICO_ID]
+    if (!nc) return respostas
+    const obsAtual = (nc.obs || '').trim()
+    const aplica = nc.status === 'nao' && respostas[PSICO_MARCOPOLO_ID]?.status === 'ok'
+    if (aplica && !obsAtual) return { ...respostas, [PSICO_NAO_CRITICO_ID]: { ...nc, obs: OBS_PSICO_SO_MARCOPOLO } }
+    if (!aplica && obsAtual === OBS_PSICO_SO_MARCOPOLO) return { ...respostas, [PSICO_NAO_CRITICO_ID]: { ...nc, obs: '' } }
+    return respostas
   }
 
   function setObs(itemId: string, obs: string) {
