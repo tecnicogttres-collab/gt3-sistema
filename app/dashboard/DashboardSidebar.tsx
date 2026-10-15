@@ -332,13 +332,23 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   // Reforço além do realtime: se a aba ficou em segundo plano (o navegador suspende o
   // websocket nesse caso) e volta ao foco, refaz a busca — sem isso um lembrete confirmado
   // ou excluído em outra aba pode continuar aparecendo aqui até a próxima rolagem de 5min.
+  // Um handler só para os dois eventos: ao voltar, visibilitychange e focus chegam juntos
+  // (antes recarregava 2x, e mais 1x ao sair da aba). focus continua para cobrir a volta de
+  // outro programa com o navegador já visível.
   useEffect(() => {
-    function onFocus() { loadData() }
-    document.addEventListener('visibilitychange', onFocus)
-    window.addEventListener('focus', onFocus)
+    let ultimoReload = 0
+    function aoVoltar() {
+      if (document.visibilityState !== 'visible') return
+      const agora = Date.now()
+      if (agora - ultimoReload < 2000) return
+      ultimoReload = agora
+      loadData()
+    }
+    document.addEventListener('visibilitychange', aoVoltar)
+    window.addEventListener('focus', aoVoltar)
     return () => {
-      document.removeEventListener('visibilitychange', onFocus)
-      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', aoVoltar)
+      window.removeEventListener('focus', aoVoltar)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
