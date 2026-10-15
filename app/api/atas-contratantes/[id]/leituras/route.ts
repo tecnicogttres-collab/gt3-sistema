@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../lib/api-helpers'
+import { getUsuariosDesativados } from '../../../../lib/usuarios-desativados'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -17,21 +18,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }
 
-  const [{ data: leituras }, { data: todos }, { data: { users: authUsers } }] = await Promise.all([
+  const [{ data: leituras }, { data: todos }, bannedSet] = await Promise.all([
     admin.from('atas_contratantes_leituras')
       .select('user_id, lido_em, leitor:profiles!user_id(nome)')
       .eq('ata_id', ata_id),
     admin.from('profiles').select('id, nome').in('papel', ['colaborador', 'trainee']),
-    admin.auth.admin.listUsers({ perPage: 1000 }),
+    getUsuariosDesativados(admin),
   ])
 
   // Conta desativada (ex.: colaborador que saiu) não entra em "pendente de leitura" —
   // o histórico de quem já leu antes de sair permanece intacto, só some da cobrança.
-  const bannedSet = new Set(
-    authUsers
-      .filter(u => { const b = (u as unknown as { banned_until?: string }).banned_until; return b ? new Date(b) > new Date() : false })
-      .map(u => u.id)
-  )
 
   const lidoSet = new Set((leituras ?? []).map((l: { user_id: string }) => l.user_id))
   const leram = (leituras ?? []).map((l: { user_id: string; lido_em: string; leitor: unknown }) => ({

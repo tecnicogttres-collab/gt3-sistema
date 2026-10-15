@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
-import { getAuthUser, getActiveProfileIds } from '../../lib/api-helpers'
+import { getAuthUser } from '../../lib/api-helpers'
+import { getUsuariosDesativados } from '../../lib/usuarios-desativados'
 
 const DIAS_NO_MES = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -14,20 +15,20 @@ export async function GET() {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const [{ data: vinculados, error: e1 }, { data: livres, error: e2 }, { data: todosUsuarios, error: e3 }, ativos] = await Promise.all([
+  const [{ data: vinculados, error: e1 }, { data: livres, error: e2 }, { data: todosUsuarios, error: e3 }, desativados] = await Promise.all([
     admin.from('profiles').select('id, nome, aniversario_dia, aniversario_mes').not('aniversario_dia', 'is', null).not('aniversario_mes', 'is', null),
     admin.from('aniversarios').select('id, nome, dia, mes'),
     admin.from('profiles').select('id, nome, usuario, aniversario_dia, aniversario_mes').order('nome', { ascending: true }),
-    getActiveProfileIds(admin),
+    getUsuariosDesativados(admin),
   ])
   if (e1) return Response.json({ error: e1.message }, { status: 500 })
   if (e2) return Response.json({ error: e2.message }, { status: 500 })
   if (e3) return Response.json({ error: e3.message }, { status: 500 })
 
   return Response.json({
-    vinculados: (vinculados ?? []).filter(p => ativos.has(p.id)).map(p => ({ usuario_id: p.id, nome: p.nome, dia: p.aniversario_dia, mes: p.aniversario_mes })),
+    vinculados: (vinculados ?? []).filter(p => !desativados.has(p.id)).map(p => ({ usuario_id: p.id, nome: p.nome, dia: p.aniversario_dia, mes: p.aniversario_mes })),
     livres: livres ?? [],
-    usuarios: (todosUsuarios ?? []).filter(p => ativos.has(p.id)).map(p => ({
+    usuarios: (todosUsuarios ?? []).filter(p => !desativados.has(p.id)).map(p => ({
       id: p.id, nome: p.nome, usuario: p.usuario,
       vinculado: p.aniversario_dia != null && p.aniversario_mes != null,
     })),

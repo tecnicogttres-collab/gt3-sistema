@@ -1,4 +1,5 @@
-import { getAuthUser, getActiveProfileIds } from '../../../lib/api-helpers'
+import { getAuthUser } from '../../../lib/api-helpers'
+import { getUsuariosDesativados } from '../../../lib/usuarios-desativados'
 import { createAdminClient } from '../../../lib/supabase-admin'
 import { pickNextFeriasColor } from '../../../lib/feriasColors'
 
@@ -7,15 +8,15 @@ export async function GET() {
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
   const admin = createAdminClient()
-  const [{ data, error }, ativos, { data: coresData }] = await Promise.all([
+  const [{ data, error }, desativados, { data: coresData }] = await Promise.all([
     admin.from('profiles').select('id, nome').order('nome', { ascending: true }),
-    getActiveProfileIds(admin),
+    getUsuariosDesativados(admin),
     admin.from('ferias_cores_usuarios').select('usuario_id, cor'),
   ])
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  const ativosList = (data ?? []).filter(p => ativos.has(p.id) && p.nome?.trim())
+  const ativosList = (data ?? []).filter(p => !desativados.has(p.id) && p.nome?.trim())
 
   const coresMap = new Map<string, string>((coresData ?? []).map(c => [c.usuario_id as string, c.cor as string]))
   const usedColors = new Set(coresMap.values())
