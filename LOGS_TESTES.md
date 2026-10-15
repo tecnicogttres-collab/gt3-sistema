@@ -119,3 +119,59 @@ Rodada 2 inteira:
 ```
 git revert 7e20a53 a3ec05d 577dbc1 a662374 fef906d
 ```
+
+---
+
+# Rodada 3 — menos idas ao Auth e ao banco
+
+Investigação e decisões em `OTIMIZACAO_RODADA3.md`. Ponto de retorno (checkpoint): commit **`3d97ac2`**. **Sem push** até os testes abaixo passarem.
+
+## O que mudou
+| Commit | Mudança |
+|--------|---------|
+| `779effa` | **A** — `/api/me`: `getUser()` → `getClaims()` (via `getAuthUser`); a data de criação da conta passa a vir de `profiles.created_at` |
+| `ea42f49` | **B** — Dashboard: um recarregamento só ao voltar para a aba (antes 2× ao voltar + 1× ao sair) |
+| `762a99e` | **C** — `listUsers` por chamada → cache de 2 min dos logins **desativados** (`app/lib/usuarios-desativados.ts`) em 11 rotas |
+
+**Conferido antes do A:** `profiles.created_at` é igual à data do login em 16 de 17 usuários. O único divergente (perfil criado 3 h 38 min depois) não tem nenhuma ata, legislação ou campanha nessa janela. Logo, nenhum aviso muda para ninguém.
+
+**Ficaram de fora de propósito:** `api-helpers.ts` (o `getActiveProfileIds` antigo continua lá), `proxy.ts`, `app/api/admin/users` (precisa ver o estado real para desativar/reativar) e `app/lib/campanhas-destinatarios.ts` (também usa o helper antigo, sem cache; achado durante a execução, fora do escopo aprovado).
+
+**Diferença de comportamento conhecida (C):** ao desativar ou reativar alguém em Usuários, as listas de seleção levam **até 2 min** para refletir. Login **novo** aparece na hora. Se o Auth do Supabase falhar, as listas mostram todo mundo, em vez de ficarem vazias como antes.
+
+## Testes (com login — colaborador e gestor)
+**A — `/api/me`**
+- [ ] Abrir o sistema e dar F5 → nome na saudação, papel e módulos corretos.
+- [ ] Colaborador com ata, legislação ou campanha pendente continua vendo o aviso.
+- [ ] DevTools → Network, filtrar `auth/v1/user`: não aparece mais na abertura.
+
+**B — Dashboard**
+- [ ] No dashboard, trocar de aba e voltar → Network, filtrar `/api/lembretes`: **1** chamada por volta (antes, 2–3).
+- [ ] Sair da aba → nenhuma chamada nova enquanto ela está escondida.
+- [ ] Alt-tab de outro programa (ex.: Outlook) com o navegador visível → também atualiza.
+- [ ] Lembrete confirmado em outra aba some do dashboard ao voltar.
+
+**C — listas de usuários**
+- [ ] Listas de seleção continuam com as mesmas pessoas, sem desativados: Lembretes, Observações, Férias, Campanhas, Legislações, Designação de Reprovados, PDI (colaboradores), Aniversários e o "quem não leu" de Atas e Atas de contratantes.
+- [ ] Criar um login novo → aparece nas listas na hora.
+- [ ] Desativar alguém em Usuários → some das listas em até 2 min; reativar → volta em até 2 min.
+
+`npm run build` ok após cada um dos três commits.
+
+## Depois do deploy
+- No dia seguinte: logs de Auth do Supabase. `GET /user` deve cair de novo (aberturas do sistema) e `GET /admin/users` deve cair bastante.
+
+## Como desfazer
+Produção, na hora: Vercel → **Deployments** → deployment anterior → **Instant Rollback**.
+
+Um item só:
+```
+git revert 762a99e   # C — cache de desativados
+git revert ea42f49   # B — dashboard
+git revert 779effa   # A — /api/me
+```
+
+Rodada 3 inteira:
+```
+git revert 762a99e ea42f49 779effa
+```
