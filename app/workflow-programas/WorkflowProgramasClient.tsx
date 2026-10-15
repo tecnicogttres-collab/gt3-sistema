@@ -865,10 +865,20 @@ function htmlJoinBlocos(partes: string[]): string {
 /** Converte HTML (de um corpo formatado) para texto puro — usado nos canais que não
  *  suportam formatação (mailto, CSV/relatórios) e como fallback text/plain ao copiar. */
 function htmlToPlainText(html: string): string {
-  if (typeof document === 'undefined') return html.replace(/<[^>]+>/g, '')
-  const div = document.createElement('div')
-  div.innerHTML = html
-  return (div.innerText ?? div.textContent ?? '').trim()
+  // innerText num elemento fora da página não gera quebra por <div>/<p> (vira texto corrido:
+  // "Favor rever:1 - ...2 - ..."), então as quebras são marcadas antes de tirar as tags.
+  const marcado = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(div|p|li|h[1-6]|tr)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+  let texto: string
+  if (typeof document === 'undefined') texto = marcado.replace(/<[^>]+>/g, '')
+  else {
+    const div = document.createElement('div')
+    div.innerHTML = marcado
+    texto = div.textContent ?? ''
+  }
+  return texto.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -1302,9 +1312,11 @@ export default function WorkflowProgramasClient() {
         const t = getR(item.textoReprovacaoId)
         const comp = getR(item.textoReprovacaoComplementoId)
         const ctxItem = { ...ctxParaItem(ctx, item, a), contratante: contratanteIds.map(cid => nomeC(getC(cid))).filter(Boolean).join(', ') || ctx.contratante }
-        return `<div>${entradas.length > 1 ? `${n + 1} - ` : ''}${aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxItem)}${comp ? `<br>${aplicaVars(comp.corpo, ctxItem)}` : ''}</div>`
-      }).join('')
-      const observacao = `<div>Favor rever ${entradas.length > 1 ? 'os seguintes itens' : 'o seguinte item'}:</div>${linhas}`
+        return `${entradas.length > 1 ? `${n + 1} - ` : ''}${aplicaVars(t ? t.corpo : '(sem texto de reprovação vinculado — cadastre em Textos de reprovação)', ctxItem)}${comp ? `<br>${aplicaVars(comp.corpo, ctxItem)}` : ''}`
+      }).join('<br>')
+      // Cada item em linha própria com <br> (não <div>): ao colar no Portal (texto puro) a lista
+      // continua em tópicos, e o " - {{nome}}" do modelo fica no fim da última linha.
+      const observacao = `Favor rever ${entradas.length > 1 ? 'os seguintes itens' : 'o seguinte item'}:<br>${linhas}`
       return { doc, html: aplicarTemplateObs(obsTemplate, observacao, obsAssinatura) }
     })
     const corpo = htmlJoinBlocos(quadros.map(q => `<div style="border:1px solid #C9D3E3;border-radius:6px;padding:8px 10px"><div style="font-weight:700;margin-bottom:4px">${q.doc}</div>${q.html}</div>`))
@@ -1354,8 +1366,39 @@ export default function WorkflowProgramasClient() {
     setEmailEditado(false)
   }
 
+  /** Guarda a análise aberta em "Em andamento" (rascunho, sem trocar de tela) — usado ao
+   *  clicar em "Nova análise" com uma análise já preenchida aberta. */
+  async function arquivarRascunho(d: AnaliseDados, id: string | null) {
+    const body = { empresa: d.empresa, cnpj: d.cnpj, finalizada: false, dados: d }
+    try {
+      if (id) {
+        const res = await fetch(`/api/workflow-programas/${id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        })
+        if (!res.ok) throw new Error()
+        const updated: AnaliseRow = await res.json()
+        setAnalises(prev => prev.map(a => (a.id === id ? updated : a)))
+      } else {
+        const res = await fetch('/api/workflow-programas', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        })
+        if (!res.ok) throw new Error()
+        const created: AnaliseRow = await res.json()
+        setAnalises(prev => [created, ...prev])
+      }
+      showToast(`Análise de ${d.empresa} guardada em "Em andamento"`)
+    } catch {
+      showToast('Não foi possível guardar o rascunho anterior')
+    }
+  }
+
   function go(v: View) {
-    if (v === 'nova' && !draft) novaAnalise()
+    // "Nova análise" sempre começa do zero: se havia uma análise preenchida aberta, ela vai
+    // para "Em andamento" (rascunho) em vez de continuar ocupando a tela.
+    if (v === 'nova') {
+      if (draft?.empresa.trim()) { arquivarRascunho(draft, draftId); novaAnalise() }
+      else if (!draft) novaAnalise()
+    }
     if (v === 'textos') setTextosSub('hub')
     setView(v)
   }
@@ -1377,7 +1420,9 @@ export default function WorkflowProgramasClient() {
   function verificarEmpresaDuplicada(nome: string) {
     if (draftId || !nome.trim()) return
     const alvo = normalizaEmpresa(nome)
-    const achado = analises.find(a => normalizaEmpresa(a.empresa) === alvo)
+    // Rascunho (em andamento, de qualquer usuário) tem prioridade sobre o registro finalizado.
+    const mesmas = analises.filter(a => normalizaEmpresa(a.empresa) === alvo)
+    const achado = mesmas.find(a => !a.finalizada) ?? mesmas[0]
     if (achado) setDupEmpresa(achado)
   }
 
@@ -1962,7 +2007,8 @@ export default function WorkflowProgramasClient() {
     setModalRelatorio(true)
   }
 
-  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>) {
+  /** `titulo` vira o título da impressão — é o nome sugerido ao salvar o PDF. */
+  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>, titulo = 'Relatório GT3 · Workflow Programas') {
     const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
     if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
     const totalLinhas = grupos.reduce((n, g) => n + g.linhas.length, 0)
@@ -1982,7 +2028,7 @@ export default function WorkflowProgramasClient() {
         <table>${colgroupHtml}<thead><tr>${g.colunas.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhasHtml}</tbody></table>
       </div>`
     }).join('')
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório GT3 · Workflow Programas</title><style>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title><style>
       @page { size: landscape; margin: 14mm; }
       body{ font-family: Arial, Helvetica, sans-serif; color: #1B2432; }
       h1{ font-size: 15px; margin: 0 0 2px; }
@@ -2012,7 +2058,11 @@ export default function WorkflowProgramasClient() {
     const trigger = () => {
       const win = iframe.contentWindow
       if (!win) return
+      // Alguns navegadores sugerem o nome do PDF pelo título da página principal, não do iframe.
+      const tituloOriginal = document.title
+      document.title = titulo
       win.focus(); win.print()
+      document.title = tituloOriginal
       setTimeout(() => { if (iframe.parentNode) document.body.removeChild(iframe) }, 1500)
     }
     if (doc.readyState === 'complete') setTimeout(trigger, 150)
@@ -2702,16 +2752,19 @@ export default function WorkflowProgramasClient() {
       {/* ── Modal: Empresa já cadastrada no banco (aprovada = verde, reprovada = vermelho) ── */}
       {dupEmpresa && (() => {
         const st = statusAnalise(dupEmpresa)
-        const tipo: 'reprovado' | 'aprovado' | 'andamento' = st.k === 'reprovada' ? 'reprovado' : st.k === 'analise' ? 'andamento' : 'aprovado'
+        const tipo: 'reprovado' | 'aprovado' | 'andamento' = !dupEmpresa.finalizada ? 'andamento' : st.k === 'reprovada' ? 'reprovado' : 'aprovado'
         const cor = tipo === 'reprovado' ? NO : tipo === 'aprovado' ? OK : P
         const corSuave = tipo === 'reprovado' ? NOS : tipo === 'aprovado' ? OKS : '#EAF0FB'
-        const rotulo = tipo === 'reprovado' ? 'WORKFLOW REPROVADO' : tipo === 'aprovado' ? 'WORKFLOW APROVADO' : 'WORKFLOW EM ANDAMENTO'
+        const rotulo = tipo === 'reprovado' ? 'WORKFLOW REPROVADO' : tipo === 'aprovado' ? 'WORKFLOW APROVADO' : 'RASCUNHO EM ANDAMENTO'
         const icone = tipo === 'reprovado' ? '✖' : tipo === 'aprovado' ? '✔' : '⏳'
         const idsItens = () => new Set(itensDaAnalise(dupEmpresa.dados).map(i => i.id))
-        const continuarExistente = () => { abrirAnalise(dupEmpresa); setDupEmpresa(null); showToast('Partindo da análise existente de ' + dupEmpresa.empresa) }
+        const continuarExistente = () => {
+          abrirAnalise(dupEmpresa); setDupEmpresa(null)
+          showToast((tipo === 'andamento' ? 'Continuando o rascunho de ' : 'Partindo da análise existente de ') + dupEmpresa.empresa)
+        }
         const novaSobrescrevendo = () => { substituirEmpresaDuplicada() }
         const pdfEAntiga = () => {
-          exportarRelatorioPdf([dupEmpresa], idsItens(), 'empresa', new Set(TODOS_TONES))
+          exportarRelatorioPdf([dupEmpresa], idsItens(), 'empresa', new Set(TODOS_TONES), `Análise ${dupEmpresa.empresa}`)
           substituirEmpresaDuplicada()
         }
         return (
@@ -2727,10 +2780,14 @@ export default function WorkflowProgramasClient() {
                 <span style={{ marginLeft: 'auto', fontSize: 11.5, opacity: .9 }}>{st.t}</span>
               </div>
               <div style={{ padding: 22 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: TX, marginBottom: 4 }}>Já há um workflow cadastrado para esta empresa</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: TX, marginBottom: 4 }}>
+                  {tipo === 'andamento' ? 'Já há um rascunho salvo para esta empresa' : 'Já há um workflow cadastrado para esta empresa'}
+                </div>
                 <div style={{ fontSize: 12.5, color: MU, marginBottom: 14 }}>
                   <b style={{ color: TX }}>{dupEmpresa.empresa}</b> · criado em {new Date(dupEmpresa.created_at).toLocaleDateString('pt-BR')}
-                  {dupEmpresa.finalizada ? ` · finalizado em ${new Date((dupEmpresa.data_final || dupEmpresa.updated_at) + (dupEmpresa.data_final ? 'T12:00:00' : '')).toLocaleDateString('pt-BR')}` : ' · em andamento'}
+                  {dupEmpresa.finalizada
+                    ? ` · finalizado em ${new Date((dupEmpresa.data_final || dupEmpresa.updated_at) + (dupEmpresa.data_final ? 'T12:00:00' : '')).toLocaleDateString('pt-BR')}`
+                    : ` · salvo em ${new Date(dupEmpresa.updated_at).toLocaleDateString('pt-BR')}${dupEmpresa.criado_por_nome ? ' por ' + dupEmpresa.criado_por_nome : ''}`}
                 </div>
                 <div style={{ background: corSuave, border: `1px solid ${cor}55`, borderLeft: `5px solid ${cor}`, borderRadius: 8, padding: '12px 14px', fontSize: 13, color: TX, lineHeight: 1.6, marginBottom: 18 }}>
                   {tipo === 'reprovado' && (<>
@@ -2741,7 +2798,7 @@ export default function WorkflowProgramasClient() {
                     Se precisar do registro antigo, escolha <i>“OK e gerar PDF da avaliação antiga”</i>.
                   </>)}
                   {tipo === 'andamento' && (<>
-                    Há uma análise <b>em andamento</b>. Partiremos <b>de uma análise existente</b>, retomando o preenchimento anterior.
+                    Há um <b>rascunho em andamento</b> desta empresa. <b>Continuar a partir desse?</b> O preenchimento salvo será aberto para você seguir de onde parou.
                   </>)}
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
