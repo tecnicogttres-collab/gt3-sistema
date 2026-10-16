@@ -242,8 +242,14 @@ function DbPdiCard({ pdi, initialScores, isGestorAdmin, onEdit, onArchive, onDel
   // Só refaz fetch quando a janela volta ao foco (para reflectir edições recentes)
   useEffect(() => {
     let cancelled = false
+    // Trava de 2 s (como o aoVoltar do Dashboard): focus repetido não refaz as 2 consultas por card.
+    let ultimoFetch = 0
 
     function doFetch() {
+      if (document.visibilityState !== 'visible') return
+      const agora = Date.now()
+      if (agora - ultimoFetch < 2000) return
+      ultimoFetch = agora
       Promise.all([
         fetch(`/api/pdi/${pdi.id}/ciclos`).then(r => r.ok ? r.json() : []),
         fetch(`/api/pdi/${pdi.id}`).then(r => r.ok ? r.json() : null),
