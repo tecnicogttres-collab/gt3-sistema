@@ -92,6 +92,13 @@ type DesigPendente = {
   ligacao_por_nome?: string | null
 }
 
+/** Handler de realtime que só recarrega com a aba visível. Com a aba escondida o evento é
+ *  ignorado: a volta para a aba já recarrega tudo uma vez (aoVoltar / onVis), então nada se perde
+ *  e uma rajada de eventos em segundo plano não vira uma rajada de consultas. */
+function seVisivel(fn: () => void) {
+  return () => { if (document.visibilityState === 'visible') fn() }
+}
+
 function fmtDateShort(iso: string) {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -362,9 +369,9 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     const supabase = createClient()
     const ch = supabase
       .channel(`dashboard-sheets-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'controle_revisao_sheets' }, () => loadData())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lembretes_historico' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes' }, () => loadData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'controle_revisao_sheets' }, seVisivel(loadData))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lembretes_historico' }, seVisivel(loadData))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes' }, seVisivel(loadData))
       .subscribe()
     return () => { void supabase.removeChannel(ch) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -547,7 +554,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     const supabase = createClient()
     const ch = supabase
       .channel(`dashboard-obs-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'observacoes' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'observacoes' }, seVisivel(load))
       .subscribe()
     // Rede de segurança caso o realtime da tabela não esteja ligado: reconfere a cada 5 min
     // (só com a aba visível) e assim que a pessoa volta para a aba.
@@ -577,7 +584,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     const supabase = createClient()
     const ch = supabase
       .channel(`dashboard-desig-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'designacoes' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'designacoes' }, seVisivel(load))
       .subscribe()
     // Rede de segurança caso o realtime falhe: revalida ao voltar para a aba e a cada 3 min.
     const onVis = () => { if (document.visibilityState === 'visible') load() }

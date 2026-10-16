@@ -213,10 +213,12 @@ export default function LembretesClient() {
 
   useEffect(() => {
     const supabase = createClient()
+    // Evento com a aba escondida é ignorado: o onFocus abaixo recarrega uma vez ao voltar.
+    const seVisivel = () => { if (document.visibilityState === 'visible') void load() }
     const ch = supabase
       .channel(`lembretes-rt-${Math.random().toString(36).slice(2)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes_historico' }, () => { void load() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes' }, () => { void load() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes_historico' }, seVisivel)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lembretes' }, seVisivel)
       .subscribe()
     const onFocus = () => { if (document.visibilityState === 'visible') void load() }
     document.addEventListener('visibilitychange', onFocus)
