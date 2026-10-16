@@ -132,3 +132,84 @@ Hoje não existe perfil sem login (a exclusão apaga os dois juntos, e os 17 per
 1. **A:** seguir com `profiles.created_at` (com ou sem rodar antes a consulta SQL acima)?
 2. **B:** handler único com os dois eventos (recomendado) ou só `visibilitychange`?
 3. **C:** arquivo novo em vez de mexer em `api-helpers.ts`? Cache de **desativados** (recomendado)? Lista completa em caso de falha do Auth (recomendado)? Limpar o cache na rota de admin (12º arquivo) ou não?
+
+---
+
+# Item D — consultas com a aba em segundo plano (investigação, aguardando aprovação)
+
+Escopo: o que continua indo ao banco/API quando `document.visibilityState === "hidden"`. Nada foi implementado.
+
+## O que já está certo (não mexer)
+- **AppShell** (`app/components/AppShell.tsx:577-594`): o intervalo de 2 min de PDI já para com a aba escondida e, ao voltar, roda as 2 checagens uma vez.
+- **Dashboard → Observações pendentes** (`DashboardSidebar.tsx:550`, 5 min) e **Designações pendentes** (`:581`, 3 min): o intervalo já pula quando a aba está escondida.
+- **Tick de 1 min do `app/page.tsx:35`**: só redesenha a saudação/data, sem consulta. Custo desprezível.
+- **Renovação do token do Supabase Auth**: o próprio supabase-js já pausa com a aba escondida.
+
+## O que ainda consulta com a aba escondida
+
+### D1. Intervalo de 5 min do Dashboard (`DashboardSidebar.tsx:323-330`)
+Roda `loadPrioridades()` + `loadData()` sem olhar a visibilidade: são **5 consultas** a cada 5 min (`prioridades`, `controle_revisao_sheets`, `aniversarios`, `/api/pdi/proxima-conversa`, `/api/lembretes`).
+Agrava: o Dashboard (`/`) está no `componentMap`, então fica **vivo escondido** no `TabContentCache` mesmo quando a pessoa está em outro módulo. Ou seja, roda o dia inteiro em toda aba aberta do sistema.
+O Chrome reduz timers de abas escondidas para no máximo 1/min, então um intervalo de 5 min **não** é contido pelo navegador.
+
+- **Proposta:** pular o ciclo quando `document.visibilityState !== 'visible'` (mesmo padrão das linhas 550/581) e incluir `loadPrioridades()` no handler único `aoVoltar` (hoje ele só chama `loadData()`), para que as prioridades atualizem ao voltar.
+- **Risco:** baixo. Com a aba escondida ninguém vê o painel; ao voltar, atualiza na hora. Efeito colateral: +1 consulta (`prioridades`) em cada volta para a aba, ainda com a trava de 2 s da Rodada 3.
+- **Arquivos:** só `DashboardSidebar.tsx`.
+
+### D2. Canais realtime que disparam recarga (o maior multiplicador)
+O websocket do Supabase **continua recebendo eventos com a aba escondida**. O comentário em `DashboardSidebar.tsx:331` diz que o navegador o suspende, mas isso não é garantido: na prática chega quase tudo. Cada evento gerado por **qualquer usuário** faz **cada aba aberta de cada usuário** reconsultar, inclusive módulos escondidos no cache de abas.
+
+Handlers que fazem consulta a cada evento:
+
+| Onde | Tabelas ouvidas | O que reconsulta por evento |
+|---|---|---|
+| `DashboardSidebar.tsx:360` | `controle_revisao_sheets` (UPDATE), `lembretes_historico` (INSERT), `lembretes` (*) | `loadData()` = 4 consultas |
+| `DashboardSidebar.tsx:545` | `observacoes` (*) | `/api/observacoes/pendentes` |
+| `DashboardSidebar.tsx:575` | `designacoes` (*) | `/api/designacao-reprovados/pendentes` |
+| `DashboardSidebar.tsx:491` | `pdi_ciclos` do próprio usuário | `/api/pdi/proxima-conversa` |
+| `LembretesClient.tsx:217` | `lembretes`, `lembretes_historico` (*) | `load()` |
+| `DesignacaoReprovadosClient.tsx:609` | `designacoes` (*) | `recarregar()` |
+| `CadastroTerceirasClient.tsx:452`, `EmailsClient.tsx:153` | `terceiras_contratantes` (*) | lista de contratantes |
+| `ManuaisClient.tsx:194` | `manuais_documentos` (*) | lista |
+| `RetornoNRClient.tsx:460` | `rnr_treinamentos`, `rnr_combos`, `rnr_config` (*) | `carregarEstado()` |
+| `RevisoesTraineeClient.tsx:314` | `revisoes_trainee` (INSERT) | `fetchData()` |
+| `PdiAgendaDrawer.tsx:85` | `pdi_ciclos` (*) | `load()` |
+
+Exemplo: um lembrete confirmado gera INSERT em `lembretes_historico` + UPDATE em `lembretes`. São 2 eventos × 4 consultas no Dashboard + 2 recargas em Lembretes (se visitado), **em cada aba aberta do sistema**, visível ou não.
+
+Os canais que **só atualizam estado com o payload**, sem consultar, ficam como estão: avisos globais do AppShell (pop-ups de prioridade/ata/enquete/sugestão), `ObservacoesClient`, `RevisaoNRClient`, `CampanhasClient`, `LegislacoesClient`, `AtasClient`, `AtasContratantesClient`, `AnotacoesCICClient` e `ModulesContext`. Os pop-ups do AppShell **não** devem ser adiados.
+
+- **Proposta (recomendada): "marcar como sujo e recarregar ao voltar".** Um helper novo, `app/lib/recarga-visivel.ts`, embrulha a função de recarga:
+  - evento chegou com a aba visível → recarrega como hoje;
+  - evento chegou com a aba escondida → só marca "sujo";
+  - ao voltar (`visibilitychange` → visible) → se estiver sujo, recarrega **uma vez**, não importa quantos eventos chegaram.
+
+  O canal continua inscrito: sem reconexão nem o problema de sessão/RLS descrito em `ModulesContext.tsx:52-55`.
+- **Risco:** baixo a médio.
+  - Dados de módulos escondidos ficam defasados até a volta, mas ninguém os está vendo.
+  - Ao voltar, há um pico de várias recargas ao mesmo tempo (uma por handler sujo), em vez de várias espalhadas.
+  - Risco principal: errar e embrulhar um handler que **precisa** agir escondido. Por isso a lista acima exclui os pop-ups.
+  - É preciso testar módulo por módulo.
+- **Alternativa (não recomendada): cancelar a inscrição dos canais com a aba escondida e reinscrever ao voltar.** Corta também o tráfego do websocket, mas tem custo de reconexão a cada alt-tab e risco real de canal "SUBSCRIBED" sem eventos (o caso já visto no `ModulesContext`). Os pop-ups globais deixariam de chegar com a aba escondida.
+- **Arquivos (recomendada):** helper novo + `DashboardSidebar.tsx` (4 handlers) + os 8 módulos da tabela = cerca de 10 arquivos. Dá para fazer só o Dashboard e o Lembretes primeiro (os mais acionados) e o resto numa rodada seguinte.
+
+### D3. Módulos vivos escondidos dentro de uma aba **visível** (opcional, fase 2)
+Com o navegador visível, módulos já visitados ficam montados com `display:none` (`TabContentCache.tsx`) e seus handlers da tabela D2 continuam recarregando. Estender o "sujo" para "módulo não está na tela" exigiria que cada módulo soubesse se é o ativo (um contexto novo vindo do `TabContentCache`).
+- **Risco:** médio. Mexe no cache de abas, que é a base da navegação, e em todos os módulos.
+- **Sugestão:** não fazer agora; reavaliar depois de medir o ganho do D2.
+
+### D4. `PdiListClient.tsx:259` — recarga a cada `focus` sem trava
+Cada `focus` da janela refaz 2 consultas por card de PDI na lista, sem trava de tempo e mesmo com o módulo escondido no cache.
+- **Proposta:** a mesma trava de 2 s do Dashboard (Rodada 3, item B) + checar `visibilityState`.
+- **Risco:** baixo.
+- **Arquivos:** só `PdiListClient.tsx`.
+
+## Ordem sugerida
+D1 → D4 → D2 (Dashboard + Lembretes) → D2 (demais módulos). D3 fica fora.
+Um commit por item e `npm run build` após cada um. Sem push, nada no Supabase, sem mudança visual, sem tocar em `proxy.ts`/`api-helpers.ts`.
+
+## Preciso da sua aprovação em
+1. **D1** (pular o intervalo de 5 min escondido + prioridades no `aoVoltar`)?
+2. **D2** com "marcar sujo e recarregar ao voltar" (recomendado)? Em uma etapa (cerca de 10 arquivos) ou em duas (Dashboard + Lembretes primeiro)?
+3. **D4**?
+4. **D3** fica fora desta rodada?

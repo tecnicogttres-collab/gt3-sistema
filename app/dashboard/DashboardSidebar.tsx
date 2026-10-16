@@ -320,8 +320,11 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     }
   }
 
+  // Com a aba escondida o ciclo é pulado (ninguém está vendo o painel) — ao voltar, o
+  // aoVoltar abaixo recarrega tudo de uma vez.
   useEffect(() => {
     const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       void loadPrioridades()
       loadData()
     }, 300_000)
@@ -342,6 +345,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       const agora = Date.now()
       if (agora - ultimoReload < 2000) return
       ultimoReload = agora
+      void loadPrioridades()
       loadData()
     }
     document.addEventListener('visibilitychange', aoVoltar)
