@@ -175,3 +175,41 @@ Rodada 3 inteira:
 ```
 git revert 762a99e ea42f49 779effa
 ```
+
+---
+
+# Rodada 3 – item D — menos consultas com a aba em segundo plano
+
+## O que mudou
+- **D1 (`e2a5e14`)** — `app/dashboard/DashboardSidebar.tsx`: o intervalo de 5 min (prioridades + revisão/aniversários/PDI/lembretes) pula o ciclo com a aba escondida. O `aoVoltar` (trava de 2 s do item B) agora recarrega também as prioridades. O commit inclui o `OTIMIZACAO_RODADA3.md` com a investigação.
+- **D2 etapa 1 (`88f91ca`)** — `DashboardSidebar.tsx` e `app/lembretes/LembretesClient.tsx`: os canais realtime que reconsultavam (revisão/lembretes, observações pendentes, designações pendentes, Lembretes) ignoram eventos com a aba escondida.
+  - Não foi preciso flag de "sujo": os dois já recarregam sempre ao voltar para a aba.
+  - No Dashboard, a única recarga de `loadData` ao voltar é a do `aoVoltar`, com a trava de 2 s. A volta gera **uma** recarga só, mesmo com eventos acumulados.
+  - Os pop-ups globais do AppShell (prioridades, atas, enquetes, sugestões) **não foram alterados**.
+  - Fica para a etapa 2: os demais módulos da tabela D2.
+- **D4 (`f597a4a`)** — `app/pdi/PdiListClient.tsx`: a recarga por `focus` dos cards de PDI ganhou trava de 2 s e só roda com a aba visível.
+
+## Testes (com login — colaborador e gestor)
+- [ ] **Aba escondida e volta:** abrir o Dashboard, DevTools → Network com "Preserve log". Trocar para outra aba do navegador por 6+ min (passa um ciclo do intervalo de 5 min). Durante esse tempo, **nenhuma** chamada a `/api/lembretes` ou `prioridades`. Ao voltar: `/api/lembretes`, `prioridades` etc. aparecem **1 vez**.
+- [ ] **Eventos realtime com a aba escondida → 1 recarga só:** com o Dashboard numa aba escondida, outra pessoa (ou outro navegador) cria/confirma/exclui 2–3 lembretes. Com a aba escondida, nenhuma chamada nova. Ao voltar, `/api/lembretes` aparece **1 vez** no Network.
+- [ ] **Lembrete confirmado por outra pessoa aparece ao voltar:** no cenário acima, ao voltar, o lembrete confirmado some/atualiza no Dashboard e na tela de Lembretes, sem F5.
+- [ ] **Pop-up de prioridade com a aba escondida:** com o sistema numa aba escondida, outra pessoa cria um aviso de prioridade. Ao voltar, o pop-up já está na tela (chegou pelo realtime do AppShell, sem esperar a volta).
+- [ ] **Com a aba visível nada muda:** lembrete confirmado por outra pessoa com o Dashboard na tela atualiza na hora, como antes.
+- [ ] **PDI:** na lista de PDI, alt-tab várias vezes seguidas → cada card refaz `/api/pdi/<id>/ciclos` no máximo 1 vez a cada 2 s.
+
+`npm run build` ok após cada um dos três commits.
+
+## Como desfazer
+Produção, na hora: Vercel → **Deployments** → deployment anterior → **Instant Rollback**.
+
+Um item só:
+```
+git revert f597a4a   # D4 — PDI
+git revert 88f91ca   # D2 etapa 1 — realtime Dashboard/Lembretes
+git revert e2a5e14   # D1 — intervalo do Dashboard (também desfaz o OTIMIZACAO_RODADA3.md)
+```
+
+Item D inteiro:
+```
+git revert f597a4a 88f91ca e2a5e14
+```
