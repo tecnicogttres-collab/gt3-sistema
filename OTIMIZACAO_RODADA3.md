@@ -124,7 +124,7 @@ Hoje não existe perfil sem login (a exclusão apaga os dois juntos, e os 17 per
 6. **Sem push.** Paro e informo os hashes.
 
 ## Testes que vão para o LOGS_TESTES.md
-- **A:** abrir o sistema e dar F5 → nome, módulos e papel corretos. Colaborador com ata, legislação ou campanha pendente continua vendo o aviso. No Network, `auth/v1/user` não aparece mais na abertura.
+- **A:** abrir o sistema e dar F5 → nome, módulos e papel corretos. Colaborador com ata, legislação ou campanha pendente continua vendo o aviso. No Network, `auth/v1/user` aparece 1 vez na abertura (a do `UserContext`, no navegador; a removida rodava no servidor e não aparece ali).
 - **B:** no dashboard, trocar de aba e voltar → no Network, `/api/lembretes` aparece **1 vez** (antes, 2–3). Alt-tab de outro programa também atualiza.
 - **C:** abrir as listas de seleção (Lembretes, Observações, Férias, Campanhas, Legislações, Designação, PDI, Aniversários, "quem não leu" das atas) → mesmas pessoas de antes, sem desativados. Criar um login novo → aparece na hora. Desativar alguém → some em até 2 min.
 

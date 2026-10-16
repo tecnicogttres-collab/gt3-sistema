@@ -143,7 +143,7 @@ Investigação e decisões em `OTIMIZACAO_RODADA3.md`. Ponto de retorno (checkpo
 **A — `/api/me`**
 - [ ] Abrir o sistema e dar F5 → nome na saudação, papel e módulos corretos.
 - [ ] Colaborador com ata, legislação ou campanha pendente continua vendo o aviso.
-- [ ] DevTools → Network, filtrar `auth/v1/user`: não aparece mais na abertura.
+- [ ] DevTools → Network, filtrar `auth/v1/user`: **1** chamada na abertura (a do `UserContext`, que já existia) e `/api/me` com 200. O `getUser` removido rodava no servidor, então não aparece no Network do navegador; a queda se confere nos logs de Auth do Supabase (ver "Depois do deploy").
 
 **B — Dashboard**
 - [ ] No dashboard, trocar de aba e voltar → Network, filtrar `/api/lembretes`: **1** chamada por volta (antes, 2–3).
