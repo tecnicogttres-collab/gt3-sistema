@@ -2131,6 +2131,85 @@ export default function WorkflowProgramasClient() {
     showToast('Excel exportado')
   }
 
+  /** Excel com o checklist que cada contratante vê em "Nova análise" — uma aba por contratante.
+   *  Sem `ids`, exporta todas as cadastradas. */
+  async function exportarChecklistContratantes(ids?: string[]) {
+    if (!catalog) return
+    const lista = ids ? catalog.contratantes.filter(c => ids.includes(c.id)) : catalog.contratantes
+    if (!lista.length) { showToast('Nenhuma contratante cadastrada'); return }
+    const { Workbook } = await import('exceljs')
+    const wb = new Workbook()
+    wb.creator = 'GT3 Sistema'
+    wb.created = new Date()
+    const bordaFina = { style: 'thin' as const, color: { argb: 'FFB9C2D0' } }
+    const colunas = ['Documento', 'Item', 'Descrição', 'Crítico', 'Escopo', 'Aparece quando', 'Respostas possíveis', 'Texto não conforme', 'Texto de reprovação']
+    const larguras = [12, 40, 44, 9, 12, 34, 36, 32, 32]
+    const ordemCatalogo = new Map(catalog.itens.map((i, idx) => [i.id, idx]))
+    const rotuloValor = (pai: ChecklistItem, valor: string) =>
+      pai.tipo === 'opcoes' ? (pai.opcoes.find(o => o.id === valor)?.label || valor) : (STATUS_LABELS[valor as Exclude<StatusResp, ''>] || valor)
+    const nomesAbas = new Set<string>()
+    lista.forEach(c => {
+      // Nome de aba: até 31 caracteres, sem []:*?/\ e único no arquivo.
+      const base = nomeC(c).replace(/[[\]:*?/\\]/g, '-').slice(0, 31) || 'Contratante'
+      let nomeAba = base
+      for (let n = 2; nomesAbas.has(nomeAba.toLowerCase()); n++) nomeAba = `${base.slice(0, 27)} (${n})`
+      nomesAbas.add(nomeAba.toLowerCase())
+      const ws = wb.addWorksheet(nomeAba)
+      larguras.forEach((w, idx) => { ws.getColumn(idx + 1).width = w })
+
+      const titulo = ws.getCell(1, 1)
+      titulo.value = `Checklist — ${nomeC(c)}`
+      ws.mergeCells(1, 1, 1, colunas.length)
+      titulo.font = { bold: true, size: 12, color: { argb: 'FF1E3A70' } }
+      titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
+      const meta = ws.getCell(2, 1)
+      meta.value = `${c.itens.length} item(ns) vinculado(s)${c.obs ? '   ·   ' + c.obs : ''}   ·   gerado em ${new Date().toLocaleString('pt-BR')}`
+      ws.mergeCells(2, 1, 2, colunas.length)
+      meta.font = { italic: true, size: 9, color: { argb: 'FF6B7A90' } }
+      colunas.forEach((h, idx) => {
+        const cell = ws.getCell(3, idx + 1)
+        cell.value = h
+        cell.font = { bold: true, color: { argb: 'FF1E3A70' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
+        cell.border = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
+      })
+
+      const itens = c.itens
+        .map(l => ({ item: getI(l.itemId), textoLink: l.textoId }))
+        .filter((x): x is { item: ChecklistItem; textoLink: string | null } => !!x.item)
+        .sort((x, y) => DOC_ORDER.indexOf(x.item.documento) - DOC_ORDER.indexOf(y.item.documento)
+          || (ordemCatalogo.get(x.item.id) ?? 0) - (ordemCatalogo.get(y.item.id) ?? 0))
+      itens.forEach(({ item: i, textoLink }, n) => {
+        const pai = i.condicaoItemId && i.condicaoValor ? getI(i.condicaoItemId) : undefined
+        const respostas = i.tipo === 'opcoes'
+          ? i.opcoes.map(o => o.label + (o.padrao ? ' (padrão)' : '')).join(', ') + (i.multiplaEscolha ? ' — múltipla escolha' : '')
+          : (i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS).map(s => STATUS_LABELS[s as Exclude<StatusResp, ''>]).filter(Boolean).join(', ')
+        const valores = [
+          i.documento, i.titulo, i.descricao,
+          i.critico ? 'Sim' : 'Não', i.escopo === 'especifico' ? 'Específico' : 'Base',
+          pai ? `"${pai.titulo}" = ${rotuloValor(pai, i.condicaoValor)}` : 'Sempre',
+          respostas,
+          getT(textoLink || i.textoId)?.titulo || '',
+          getR(i.textoReprovacaoId)?.titulo || '',
+        ]
+        valores.forEach((v, idx) => {
+          const cell = ws.getCell(4 + n, idx + 1)
+          cell.value = v
+          cell.alignment = { vertical: 'top', wrapText: true }
+          cell.border = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
+          if (idx === 3 && i.critico) cell.font = { bold: true, color: { argb: 'FFD64545' } }
+        })
+      })
+      ws.views = [{ state: 'frozen', ySplit: 3 }]
+    })
+    const buf = await wb.xlsx.writeBuffer()
+    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const el = document.createElement('a')
+    const nomeArquivo = lista.length === 1 ? `Checklist ${nomeC(lista[0]).replace(/[\\/:*?"<>|]/g, '-')}` : 'Checklist contratantes'
+    el.href = url; el.download = `${nomeArquivo}.xlsx`; el.click(); URL.revokeObjectURL(url)
+    showToast('Checklist exportado')
+  }
+
   function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>) {
     const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
     if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
@@ -2680,7 +2759,7 @@ export default function WorkflowProgramasClient() {
       )}
 
       {view === 'contratantes' && (
-        <VContratantes catalog={catalog} getI={getI} onNovo={novaContratanteModal} onEditar={editarContratanteModal} onDel={delContratante} />
+        <VContratantes catalog={catalog} getI={getI} onNovo={novaContratanteModal} onEditar={editarContratanteModal} onDel={delContratante} onExportar={exportarChecklistContratantes} />
       )}
 
       {view === 'itens' && (
@@ -3209,7 +3288,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                     const corTxtSel = seguindoRestricao ? '#3A2E14' : '#fff'
                     const bgDerivado = seguindoRestricao ? ASO : seguindoReprovacao ? NOS : undefined
                     return (
-                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, background: bgDerivado }}>
+                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, background: bgDerivado, boxShadow: bgDerivado ? `inset 4px 0 0 ${corSel}` : undefined }}>
                         <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           {i.titulo}
                           {seguindoRestricao && <Tag tone="acc">◐ segue aprovado com restrição</Tag>}
@@ -3247,11 +3326,17 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                   const t = getT(i.textoLink)
                   const tRestr = getT(i.textoRestricaoId)
                   const tAprov = getT(i.textoAprovadoId)
-                  const bg = r.status === 'nao' ? '#FEF8F8' : r.status === 'ok' ? '#F8FDFA' : r.status === 'restricao' ? ASO : undefined
+                  // O "✕"/"◐" deste item abriu um campo adicional (ex.: Assinatura → página/capa):
+                  // os dois ficam com o mesmo destaque, em vez de só o adicional.
+                  const abriuAdicional = (r.status === 'nao' || r.status === 'restricao')
+                    && itens.some(x => x.tipo === 'opcoes' && x.condicaoItemId === i.id && x.condicaoValor === r.status)
+                  const corVinculo = abriuAdicional ? (r.status === 'restricao' ? AC : NO) : undefined
+                  const bg = abriuAdicional ? (r.status === 'restricao' ? ASO : NOS)
+                    : r.status === 'nao' ? '#FEF8F8' : r.status === 'ok' ? '#F8FDFA' : r.status === 'restricao' ? ASO : undefined
                   const opcoesStatus = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
                   const dots = ALL_DOTS.filter(dd => opcoesStatus.includes(dd.val))
                   return (
-                    <div key={i.id} style={{ display: 'flex', gap: 14, padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, alignItems: 'flex-start', background: bg }}>
+                    <div key={i.id} style={{ display: 'flex', gap: 14, padding: '12px 14px', borderBottom: idx < arr.length - 1 && !abriuAdicional ? '1px solid #F0F3F8' : undefined, alignItems: 'flex-start', background: bg, boxShadow: corVinculo ? `inset 4px 0 0 ${corVinculo}` : undefined }}>
                       <div style={{ display: 'flex', gap: 6, paddingTop: 2 }}>
                         {dots.map(dd => {
                           const on = r.status === dd.val
@@ -3728,15 +3813,21 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
 
 // ─── View: Contratantes ──────────────────────────────────────────────────────
 
-function VContratantes({ catalog, getI, onNovo, onEditar, onDel }: {
+function VContratantes({ catalog, getI, onNovo, onEditar, onDel, onExportar }: {
   catalog: Catalog; getI: (id?: string) => ChecklistItem | undefined
   onNovo: () => void; onEditar: (c: Contratante) => void; onDel: (id: string) => void
+  onExportar: (ids?: string[]) => void
 }) {
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 10, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, color: MU }}>Cada contratante define os itens extras do checklist e os textos vinculados.</div>
-        <Btn variant="pri" onClick={onNovo}>✚ Nova contratante</Btn>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {catalog.contratantes.length > 0 && (
+            <Btn onClick={() => onExportar()} title="Excel com uma aba por contratante, listando os itens que aparecem no checklist dela">⬇ Exportar checklists</Btn>
+          )}
+          <Btn variant="pri" onClick={onNovo}>✚ Nova contratante</Btn>
+        </div>
       </div>
       {!catalog.contratantes.length ? (
         <Empty title="Nenhuma contratante cadastrada" sub="Cadastre a primeira para liberar o checklist." />
@@ -3759,6 +3850,7 @@ function VContratantes({ catalog, getI, onNovo, onEditar, onDel }: {
                         {esp.length ? esp.map(i => <span key={i.id} style={{ marginRight: 4 }}><Tag tone="acc">{i.titulo}</Tag></span>) : <span style={{ color: MU }}>—</span>}
                       </td>
                       <td style={{ padding: 10, borderBottom: `1px solid ${LINE}`, textAlign: 'right' }}>
+                        <Btn small variant="gho" onClick={() => onExportar([c.id])} title="Exportar o checklist desta contratante (Excel)">⬇ Checklist</Btn>{' '}
                         <Btn small onClick={() => onEditar(c)}>Editar</Btn>{' '}
                         <Btn small variant="gho" onClick={() => onDel(c.id)}>Excluir</Btn>
                       </td>
