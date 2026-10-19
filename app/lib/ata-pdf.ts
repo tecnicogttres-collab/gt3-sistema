@@ -163,7 +163,37 @@ const STATUS_COLORS: Record<string, string> = {
   'Acompanhamento': '#0F766E', 'Concluído': '#065F46', 'Cancelado': '#6B7280',
 }
 
-function topicoCard(t: Topico, numero: number, dateDisplay: string): PdfNode {
+/** Mistura a cor com branco (fração 0–1 de branco) — fundo claro na cor do tópico. */
+function clarear(hex: string, branco: number) {
+  const m = hex.replace('#', '').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  if (!m) return '#F1F5F9'
+  return '#' + m.slice(1).map(h => Math.round(parseInt(h, 16) + (255 - parseInt(h, 16)) * branco).toString(16).padStart(2, '0')).join('')
+}
+
+/** Bloco "definiu-se" destacado: faixa sólida na cor do tópico + texto em negrito numa caixa clara. */
+function blocoDefiniuSe(t: Topico, cor: string, dateDisplay: string, dataAta: string): PdfNode {
+  const titulo = t.descricaoData && t.descricaoData !== dataAta
+    ? `EM ${new Date(t.descricaoData + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase()}, DEFINIU-SE:`
+    : `NA DATA DESTA REUNIÃO (${dateDisplay.toUpperCase()}), DEFINIU-SE:`
+  return {
+    table: {
+      widths: ['*'],
+      body: [
+        [{ text: titulo, bold: true, fontSize: 10, color: '#FFFFFF', fillColor: cor, characterSpacing: 0.4 }],
+        [{ stack: richHtmlToContent(t.descricao).map(c => ({ ...c, bold: true, fontSize: 10.5, color: '#1E293B' })), fillColor: clarear(cor, 0.9) }],
+      ],
+    },
+    layout: {
+      hLineWidth: (i: number, node: { table: { body: unknown[] } }) => (i === 0 || i === node.table.body.length ? 1.2 : 0),
+      vLineWidth: () => 1.2,
+      hLineColor: () => cor, vLineColor: () => cor,
+      paddingLeft: () => 9, paddingRight: () => 9, paddingTop: () => 5, paddingBottom: () => 5,
+    },
+    margin: [0, 4, 0, 4],
+  }
+}
+
+function topicoCard(t: Topico, numero: number, dateDisplay: string, dataAta: string): PdfNode {
   const cor = t.cor ?? '#2A4F96'
   const hist: TopicoHistorico[] = t.historico ?? []
   const stack: PdfNode[] = [
@@ -174,8 +204,7 @@ function topicoCard(t: Topico, numero: number, dateDisplay: string): PdfNode {
     stack.push(...richHtmlToContent(t.andamentoGeral))
   }
   if (t.descricao) {
-    stack.push({ text: `NA DATA DESTA REUNIÃO (${dateDisplay.toUpperCase()}), DEFINIU-SE`, bold: true, fontSize: 8, color: cor, margin: [0, 4, 0, 3] })
-    stack.push(...richHtmlToContent(t.descricao))
+    stack.push(blocoDefiniuSe(t, cor, dateDisplay, dataAta))
   }
   const metaParts: string[] = []
   if (t.contratante) metaParts.push(`Contratante: ${t.contratante}`)
@@ -258,14 +287,14 @@ export async function gerarAtaPdfBuffer(ata: AtaHtmlData, topicos: Topico[], par
 
   content.push({ text: 'PONTOS DISCUTIDOS', bold: true, fontSize: 9, color: '#2A4F96', margin: [0, 0, 0, 10] })
   if (ativos.length > 0) {
-    ativos.forEach((t, idx) => content.push(topicoCard(t, idx + 1, dateDisplay)))
+    ativos.forEach((t, idx) => content.push(topicoCard(t, idx + 1, dateDisplay, ata.data)))
   } else {
     content.push({ text: 'Nenhum tópico ativo.', color: '#94A3B8', italics: true, margin: [0, 0, 0, 10] })
   }
 
   if (finalizados.length > 0) {
     content.push({ text: '✓ TÓPICOS FINALIZADOS NESTA REUNIÃO', bold: true, fontSize: 9, color: '#10B981', margin: [0, 14, 0, 10] })
-    finalizados.forEach((t, idx) => content.push(topicoCard(t, idx + 1, dateDisplay)))
+    finalizados.forEach((t, idx) => content.push(topicoCard(t, idx + 1, dateDisplay, ata.data)))
   }
 
   ensureFonts()
