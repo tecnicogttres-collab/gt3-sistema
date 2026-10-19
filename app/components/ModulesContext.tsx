@@ -37,17 +37,29 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
     let mounted = true
     let cleanup = () => {}
 
+    // O RLS só deixa "authenticated" ler modulos_config: consultado sem sessão, o Supabase
+    // devolve lista VAZIA sem erro e a tela ficava com os nomes de raiz do código até o F5
+    // (aparecia em localhost, com sessão expirada/renovando na hora da consulta).
+    // Por isso só lê com sessão confirmada e relê quando a sessão chega ou é renovada.
     async function load() {
       try {
         const { data } = await supabase.from('modulos_config').select('id, label, color')
-        if (!mounted || !data) { setLoading(false); return }
+        if (!mounted || !data) return
         const map: OverrideMap = {}
         for (const row of data) map[row.id as string] = { label: row.label, color: row.color }
         setOverrides(map)
       } catch { /* tabela pode não existir ainda */ }
       finally { if (mounted) setLoading(false) }
     }
-    load()
+
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
+      if (!session) { if (event === 'INITIAL_SESSION') setLoading(false); return }
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // onAuthStateChange não pode aguardar chamadas ao Supabase dentro do callback (trava o lock de auth)
+        setTimeout(() => { void load() }, 0)
+      }
+    })
 
     // O RLS de modulos_config só libera pra role "authenticated" — assinar o canal antes da
     // sessão estar anexada ao socket deixa ele "SUBSCRIBED" mas nunca entrega evento nenhum
@@ -83,6 +95,7 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false
+      authSub.unsubscribe()
       cleanup()
     }
   }, [supabase])
