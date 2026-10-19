@@ -7,7 +7,10 @@ import { GRADIENTE_AZUL, SOMBRA_AZUL_SUAVE } from '../lib/ui-destaque'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type DocSection = { label: string; items: string[] }
+/** tipo ausente = critérios conferíveis (checklist). Os demais (usados no BSA) são só leitura:
+ *  requisito = pedido da contratante em destaque · meta = etiquetas "Rótulo: valor" no cabeçalho ·
+ *  info = lista de consulta · historico = fica atrás do botão "Histórico". */
+type DocSection = { label: string; items: string[]; tipo?: 'requisito' | 'meta' | 'info' | 'historico' }
 type Doc = { id: string; nome: string; periodicidade: string; sections: DocSection[] }
 type NRRow = { origem: string; treinamento: string; ch: string; periodicidade: string; reciclagem: string; instrutor: string; resp: string }
 type NRObs = { tag: string; texto: string }
@@ -60,7 +63,14 @@ const EMPTY_DATA: ManuaisData = {
 
 function deepCopy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) }
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-const totalItens = (d: Doc) => d.sections.reduce((n, s) => n + s.items.length, 0)
+const conferivel = (s: DocSection) => !s.tipo
+const totalItens = (d: Doc) => d.sections.filter(conferivel).reduce((n, s) => n + s.items.length, 0)
+/** Valor de uma etiqueta da seção meta (ex.: "Tipo doc: Empresa" → metaDe(d, 'Tipo doc') = "Empresa"). */
+function metaDe(d: Doc, rotulo: string): string {
+  const it = d.sections.find(s => s.tipo === 'meta')?.items.find(i => i.toLowerCase().startsWith(rotulo.toLowerCase() + ':'))
+  return it ? it.slice(rotulo.length + 1).trim() : ''
+}
+const pendente = (d: Doc) => /^pendente/i.test(metaDe(d, 'Status'))
 
 // ── Pequenos componentes ────────────────────────────────────────────────────
 
@@ -451,18 +461,36 @@ export default function ManuaisClient() {
                   {canEdit && perFilter === 'todas' && <div style={{ marginTop: 12 }}><button onClick={() => { setNewName(''); setAddOpen(true) }} style={btnPrimary}>＋ Criar o primeiro</button></div>}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
-                  {docsFiltrados.map(doc => (
-                    <button key={doc.id} className="mn-card" onClick={() => setOpenRef({ tab: cat as DocTab, id: doc.id })}>
-                      <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, flex: 1 }}>{doc.nome}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Pill p={doc.periodicidade} />
-                        <span style={{ fontSize: 11.5, color: MUTED }}>{totalItens(doc)} critério(s)</span>
-                        <span style={{ marginLeft: 'auto', color: '#A0AEC0', fontSize: 16 }}>›</span>
+                // Documentos com etiqueta "Tipo doc" (ex.: BSA) aparecem agrupados — Empresa / Pessoas / Geral.
+                (() => {
+                  const grupos = new Map<string, Doc[]>()
+                  for (const d of docsFiltrados) { const g = metaDe(d, 'Tipo doc'); grupos.set(g, [...(grupos.get(g) ?? []), d]) }
+                  const ordem = ['Empresa', 'Pessoas', 'Geral', '']
+                  const chaves = [...grupos.keys()].sort((a, b) => (ordem.indexOf(a) + 1 || 9) - (ordem.indexOf(b) + 1 || 9))
+                  const icone: Record<string, string> = { Empresa: '🏢', Pessoas: '👤', Geral: '📌' }
+                  return chaves.map(g => (
+                    <div key={g || '_'} style={{ marginBottom: 20 }}>
+                      {g && (
+                        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.7px', textTransform: 'uppercase', color: PRIMARY, margin: '0 0 10px 2px' }}>
+                          {icone[g] ?? '•'} {g} <span style={{ color: MUTED, fontWeight: 600 }}>· {grupos.get(g)!.length}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
+                        {grupos.get(g)!.map(doc => (
+                          <button key={doc.id} className="mn-card" onClick={() => setOpenRef({ tab: cat as DocTab, id: doc.id })}>
+                            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, flex: 1 }}>{doc.nome}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <Pill p={doc.periodicidade} />
+                              {pendente(doc) && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>Pendente</span>}
+                              <span style={{ fontSize: 11.5, color: MUTED }}>{totalItens(doc)} critério(s)</span>
+                              <span style={{ marginLeft: 'auto', color: '#A0AEC0', fontSize: 16 }}>›</span>
+                            </div>
+                          </button>
+                        ))}
                       </div>
-                    </button>
-                  ))}
-                </div>
+                    </div>
+                  ))
+                })()
               )}
             </div>
           )}
@@ -546,8 +574,11 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
   const dirty = editing && JSON.stringify(draft) !== JSON.stringify(doc)
   const src = editing ? draft : doc
   const ckey = (s: DocSection, item: string) => `${s.label}|${item}`
-  const total = doc.sections.reduce((n, s) => n + s.items.length, 0)
-  const feitos = doc.sections.reduce((n, s) => n + s.items.filter(i => checks[ckey(s, i)]).length, 0)
+  const total = totalItens(doc)
+  const feitos = doc.sections.filter(conferivel).reduce((n, s) => n + s.items.filter(i => checks[ckey(s, i)]).length, 0)
+  const [verHistorico, setVerHistorico] = useState(false)
+  const historicos = doc.sections.filter(s => s.tipo === 'historico')
+  const metas = doc.sections.find(s => s.tipo === 'meta')?.items ?? []
 
   function persistChecks(next: Record<string, boolean>) {
     setChecks(next)
@@ -564,7 +595,7 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
     const limpo: Doc = {
       ...draft, nome: draft.nome.trim() || doc.nome,
       sections: draft.sections
-        .map(s => ({ label: s.label.trim() || 'Seção', items: s.items.map(i => i.trim()).filter(Boolean) }))
+        .map(s => ({ ...s, label: s.label.trim() || 'Seção', items: s.items.map(i => i.trim()).filter(Boolean) }))
         .filter(s => s.items.length > 0 || s.label),
     }
     setSaving(true)
@@ -591,7 +622,7 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
 
   async function copiar() {
     const txt = [doc.nome + (doc.periodicidade ? ` (${doc.periodicidade})` : ''), '',
-      ...doc.sections.flatMap(s => [s.label.toUpperCase(), ...s.items.map(i => '• ' + i), ''])].join('\n').trim()
+      ...doc.sections.filter(s => s.tipo !== 'historico' && s.tipo !== 'meta').flatMap(s => [s.label.toUpperCase(), ...s.items.map(i => '• ' + i), ''])].join('\n').trim()
     try { await navigator.clipboard.writeText(txt); onToast('Critérios copiados ✓') } catch { onToast('Não foi possível copiar.', true) }
   }
 
@@ -624,8 +655,21 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
               <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>{doc.nome}</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
                 <Pill p={doc.periodicidade} />
-                <span style={{ fontSize: 12.5, color: MUTED }}>{doc.sections.length} seção(ões) · {total} critério(s)</span>
+                {pendente(doc) && <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999, background: '#FEF3C7', color: '#92400E' }}>Pendente</span>}
+                <span style={{ fontSize: 12.5, color: MUTED }}>{total} critério(s)</span>
               </div>
+              {metas.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {metas.filter(m => !/^status:/i.test(m)).map(m => {
+                    const i = m.indexOf(':')
+                    return (
+                      <span key={m} style={{ fontSize: 11.5, padding: '3px 9px', borderRadius: 8, background: '#F1F5FB', border: `1px solid ${BORDER}`, color: TEXT }}>
+                        {i > 0 ? <><span style={{ color: MUTED }}>{m.slice(0, i)}:</span> <b>{m.slice(i + 1).trim()}</b></> : m}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
               {total > 0 && !matriz && modoCheck && !finalizado && (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: MUTED, marginBottom: 5 }}>
@@ -655,8 +699,13 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
             <Resultado doc={doc} checks={checks} ckey={ckey} avaliador={displayName(profile)}
               onNova={() => { persistChecks({}); setFinalizado(false) }} onVoltar={() => setFinalizado(false)} onToast={onToast} />
           ) : (<>
-          {src.sections.map((s, si) => (
-            <section key={si} style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+          {src.sections.map((s, si) => (!editing && (s.tipo === 'meta' || s.tipo === 'historico')) ? null : (!editing && s.tipo === 'requisito') ? (
+            <section key={si} style={{ background: 'linear-gradient(135deg,#FFFBEB,#FEF3C7)', border: '1.5px solid #F6D58E', borderLeft: '5px solid #D1AE6E', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.7px', color: '#92400E' }}>📌 {s.label}</h4>
+              {s.items.map((item, ii) => <div key={ii} style={{ fontSize: 15, fontWeight: 700, color: TEXT, lineHeight: 1.5 }}>{item}</div>)}
+            </section>
+          ) : (
+            <section key={si} style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px', marginBottom: 14, opacity: !editing && s.tipo === 'info' ? 0.92 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                 {editing && canStruct ? (
                   <>
@@ -668,7 +717,7 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
                       onClick={() => { if (confirm('Remover esta seção e todos os seus itens?')) upd(d => { d.sections.splice(si, 1) }) }}>🗑</button>
                   </>
                 ) : (
-                  <h4 style={{ margin: 0, fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.7px', color: PRIMARY }}>{s.label}</h4>
+                  <h4 style={{ margin: 0, fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.7px', color: s.tipo === 'info' ? MUTED : PRIMARY }}>{s.label}</h4>
                 )}
               </div>
 
@@ -684,8 +733,8 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
                     <button title="Remover" style={{ ...iconBtn, color: '#DC2626' }} onClick={() => upd(d => { d.sections[si].items.splice(ii, 1) })}>✕</button>
                   </span>
                 </div>
-              ) : !modoCheck ? (
-                <div key={ii} style={{ display: 'flex', gap: 10, padding: '7px 4px', borderTop: ii ? '1px solid #F1F5F9' : 'none', fontSize: 14, lineHeight: 1.55 }}>
+              ) : (!modoCheck || !conferivel(s)) ? (
+                <div key={ii} style={{ display: 'flex', gap: 10, padding: '7px 4px', borderTop: ii ? '1px solid #F1F5F9' : 'none', fontSize: s.tipo === 'info' ? 13.5 : 14, lineHeight: 1.55, color: s.tipo === 'info' ? '#4A5568' : undefined }}>
                   <span style={{ color: '#A0AEC0', flexShrink: 0 }}>•</span><span>{item}</span>
                 </div>
               ) : (
@@ -703,6 +752,32 @@ function DocPanel({ doc, catLabel, canEdit, canStruct, matriz, modoCheck, onEdit
               )}
             </section>
           ))}
+
+          {!editing && historicos.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <button onClick={() => setVerHistorico(v => !v)} style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+                border: `1.5px solid ${verHistorico ? '#B8C6E0' : BORDER}`, background: verHistorico ? '#EEF2FB' : '#fff', color: PRIMARY, fontWeight: 700, fontSize: 13.5,
+              }}>
+                📜 Histórico e planilha original
+                <span style={{ fontSize: 12, color: MUTED, fontWeight: 500 }}>· {historicos.reduce((n, s) => n + s.items.length, 0)} registro(s)</span>
+                <span style={{ marginLeft: 'auto' }}>{verHistorico ? '▲' : '▼'}</span>
+              </button>
+              {verHistorico && historicos.map((s, hi) => (
+                <section key={hi} className="gt3-fade-up" style={{ background: '#FAFBFD', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 16px', marginTop: 10 }}>
+                  <h4 style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.7px', color: MUTED }}>{s.label}</h4>
+                  {s.items.map((item, ii) => {
+                    const data = item.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4}|[A-Za-zç]+\/\d{2})\b/)?.[1]
+                    return (
+                      <div key={ii} style={{ display: 'flex', gap: 10, padding: '6px 2px', borderTop: ii ? '1px solid #EEF1F6' : 'none', fontSize: 13, lineHeight: 1.55, color: '#4A5568' }}>
+                        <span style={{ color: data ? PRIMARY : '#A0AEC0', flexShrink: 0 }}>{data ? '◆' : '•'}</span><span>{item}</span>
+                      </div>
+                    )
+                  })}
+                </section>
+              ))}
+            </div>
+          )}
 
           {editing && canStruct && (
             <button onClick={() => upd(d => { d.sections.push({ label: 'Nova seção', items: [''] }) })}
@@ -752,7 +827,7 @@ function Resultado({ doc, checks, ckey, avaliador, onNova, onVoltar, onToast }: 
   onToast: (m: string, err?: boolean) => void
 }) {
   const quando = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-  const linhas = doc.sections.map(s => ({ label: s.label, itens: s.items.map(i => ({ i, ok: !!checks[ckey(s, i)] })) }))
+  const linhas = doc.sections.filter(conferivel).map(s => ({ label: s.label, itens: s.items.map(i => ({ i, ok: !!checks[ckey(s, i)] })) }))
   const todos = linhas.flatMap(l => l.itens)
   const ok = todos.filter(x => x.ok).length
   const pend = todos.length - ok
@@ -975,7 +1050,14 @@ function htmlDoc(d: Doc, tab: DocTab, caixas: boolean, quebra: boolean): string 
     const notas = colunas.flatMap(c => c.s.items.filter(isNota).map(n => `<li><b>${esc(c.s.label)}:</b> ${esc(n)}</li>`)).join('')
     corpo = `${comunsHtml}<table class="mx">${head}${rows}</table>${notas ? `<ul class="obs">${notas}</ul>` : ''}`
   } else {
-    corpo = d.sections.map(s => `<h4>${esc(s.label)}</h4><ul class="${caixas ? 'box' : ''}">${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')
+    // Histórico não vai para o PDF; etiquetas viram uma linha; requisito da contratante em destaque.
+    const meta = d.sections.find(s => s.tipo === 'meta')?.items.filter(i => !/^status:/i.test(i)) ?? []
+    corpo = (meta.length ? `<p class="comum">${meta.map(esc).join(' · ')}</p>` : '') + d.sections
+      .filter(s => s.tipo !== 'historico' && s.tipo !== 'meta')
+      .map(s => s.tipo === 'requisito'
+        ? `<h4>${esc(s.label)}</h4><p style="font-weight:700;background:#FEF3C7;padding:6px 10px;border-left:4px solid #D1AE6E">${s.items.map(esc).join('<br>')}</p>`
+        : `<h4>${esc(s.label)}</h4><ul class="${caixas && conferivel(s) ? 'box' : ''}">${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`)
+      .join('')
   }
   return `<section class="doc${quebra ? ' pb' : ''}">${cab}${corpo}</section>`
 }
