@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Company } from '../types'
 import { SEGMENT_COLORS } from '../types'
 import {
@@ -9,7 +9,7 @@ import {
   calcularPlano, docKey, exigeNa, notaNa, importarTabela, nomeVariacao, novoId, perfilVazio,
   precisaVariacao, tabelasDaFicha,
 } from './model'
-import { carregarTudo, emModoLocal, excluirAssociacao, nomeUsuarioAtual, salvarAssociacao, salvarPerfil } from './store'
+import { carregarPerfis, emModoLocal, salvarPerfil } from './store'
 
 export type PedidoAssoc =
   | { tipo: 'hub' }
@@ -45,12 +45,6 @@ function bordas(larguras: string, cor: string, lado: { top?: string; left?: stri
   }
 }
 
-function dataHoraBR(iso: string) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
-
 // ── Camada principal ───────────────────────────────────────────────────────
 
 export default function AssociacoesLayer({
@@ -62,17 +56,15 @@ export default function AssociacoesLayer({
 }) {
   const [carregado, setCarregado] = useState(false)
   const [perfis, setPerfis] = useState<Record<string, PerfilAssoc>>({})
-  const [associacoes, setAssociacoes] = useState<Associacao[]>([])
   const [wizard, setWizard] = useState<Associacao | null>(null)
-  const [usuario, setUsuario] = useState('')
 
   useEffect(() => {
     if (!pedido || carregado) return
     let cancel = false
     void (async () => {
-      const [d, u] = await Promise.all([carregarTudo(), nomeUsuarioAtual().catch(() => '')])
+      const p = await carregarPerfis()
       if (cancel) return
-      setPerfis(d.perfis); setAssociacoes(d.associacoes); setUsuario(u); setCarregado(true)
+      setPerfis(p); setCarregado(true)
     })()
     return () => { cancel = true }
   }, [pedido, carregado])
@@ -102,10 +94,6 @@ export default function AssociacoesLayer({
     return true
   }
 
-  function aoGravarAssociacao(a: Associacao) {
-    setAssociacoes(prev => [a, ...prev.filter(x => x.id !== a.id)])
-  }
-
   if (!pedido) return null
 
   if (!carregado) {
@@ -127,14 +115,7 @@ export default function AssociacoesLayer({
         <Hub
           companies={companies}
           perfis={perfis}
-          associacoes={associacoes}
-          nome={nome}
-          onNova={() => setWizard(novaAssociacao(usuario, [], []))}
-          onAbrir={a => setWizard(a)}
-          onExcluir={async a => {
-            if (!confirm(`Excluir o acompanhamento da associação${a.empresa ? ` "${a.empresa}"` : ''}?`)) return
-            if (await excluirAssociacao(a.id)) setAssociacoes(prev => prev.filter(x => x.id !== a.id))
-          }}
+          onNova={() => setWizard(novaAssociacao([], []))}
           onSalvarPerfil={gravarPerfil}
           onVincularPadrao={gravarVinculosPadrao}
           onFechar={onFechar}
@@ -159,12 +140,10 @@ export default function AssociacoesLayer({
       {wizardAtual && (
         <Wizard
           key={wizardAtual.id}
-          inicial={{ ...wizardAtual, criadoPor: wizardAtual.criadoPor || usuario }}
-          jaGravada={associacoes.some(x => x.id === wizardAtual.id)}
+          inicial={wizardAtual}
           companies={companies}
           perfis={perfis}
           nome={nome}
-          onGravado={aoGravarAssociacao}
           onFinalizar={fecharWizard}
         />
       )}
@@ -172,13 +151,8 @@ export default function AssociacoesLayer({
   )
 }
 
-export function novaAssociacao(usuario: string, origem: Selecao[], destino: Selecao[]): Associacao {
-  const agora = new Date().toISOString()
-  return {
-    id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : novoId(),
-    empresa: '', cnpj: '', origem, destino, feitos: [], obs: '',
-    status: 'em_andamento', totalPassos: 0, criadoPor: usuario, criadoEm: agora, atualizadoEm: agora, finalizadaEm: null,
-  }
+export function novaAssociacao(origem: Selecao[], destino: Selecao[]): Associacao {
+  return { id: novoId(), origem, destino, feitos: [] }
 }
 
 // ── Estrutura visual ───────────────────────────────────────────────────────
@@ -291,10 +265,6 @@ const inputSt: React.CSSProperties = {
   border: `1px solid #CBD5E0`, fontSize: 13, outline: 'none', background: '#fff', color: C.text,
 }
 
-function Vazio({ children }: { children: React.ReactNode }) {
-  return <div style={{ border: `1px dashed #CBD5E0`, borderRadius: 12, padding: 22, textAlign: 'center', color: C.faint, fontSize: 13 }}>{children}</div>
-}
-
 function AvisoModoLocal() {
   if (!emModoLocal()) return null
   return (
@@ -307,33 +277,17 @@ function AvisoModoLocal() {
 // ── Hub (botão geral) ──────────────────────────────────────────────────────
 
 function Hub({
-  companies, perfis, associacoes, nome, onNova, onAbrir, onExcluir, onSalvarPerfil, onVincularPadrao, onFechar,
+  companies, perfis, onNova, onSalvarPerfil, onVincularPadrao, onFechar,
 }: {
   companies: Company[]
   perfis: Record<string, PerfilAssoc>
-  associacoes: Associacao[]
-  nome: (id: string) => string
   onNova: () => void
-  onAbrir: (a: Associacao) => void
-  onExcluir: (a: Associacao) => void
   onSalvarPerfil: (p: PerfilAssoc) => Promise<boolean>
   onVincularPadrao: (ids: string[], segue: boolean) => Promise<boolean>
   onFechar: () => void
 }) {
-  const [aba, setAba] = useState<'acomp' | 'config'>('acomp')
-  const [filtro, setFiltro] = useState<'em_andamento' | 'concluida' | 'todas'>('em_andamento')
-  const [busca, setBusca] = useState('')
   const [selConfig, setSelConfig] = useState<string>(PADRAO_ID)
   const [buscaConfig, setBuscaConfig] = useState('')
-
-  const emAndamento = associacoes.filter(a => a.status === 'em_andamento').length
-  const lista = associacoes
-    .filter(a => filtro === 'todas' || a.status === filtro)
-    .filter(a => {
-      const t = busca.trim().toLowerCase()
-      if (!t) return true
-      return [a.empresa, a.cnpj, ...a.origem.map(s => nome(s.contratanteId)), ...a.destino.map(s => nome(s.contratanteId))].join(' ').toLowerCase().includes(t)
-    })
 
   const ordenadas = [...companies].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
     .filter(c => c.name.toLowerCase().includes(buscaConfig.trim().toLowerCase()))
@@ -343,42 +297,12 @@ function Hub({
       <Janela>
         <Cabecalho
           titulo={<>🔗 Associações</>}
-          sub="Acompanhe o que isentar, ignorar, desisentar ou adicionar no GTSoft quando uma empresa passa a atender mais de uma contratante."
+          sub="Configure as contratantes e veja o que isentar, ignorar, desisentar ou adicionar no GTSoft quando uma empresa passa a atender mais de uma."
           direita={<div style={{ display: 'flex', gap: 8 }}><Btn tipo="ouro" onClick={onNova}>＋ Nova associação</Btn><BotaoFechar onClick={onFechar} /></div>}
-        >
-          <div style={{ display: 'flex', gap: 4, marginTop: 14 }}>
-            {([['acomp', `Acompanhamento${emAndamento ? ` · ${emAndamento}` : ''}`], ['config', 'Configurações']] as const).map(([k, l]) => (
-              <button key={k} onClick={() => setAba(k)} style={{
-                padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                background: aba === k ? '#fff' : 'rgba(255,255,255,0.12)', color: aba === k ? C.primary : '#fff',
-              }}>{l}</button>
-            ))}
-          </div>
-        </Cabecalho>
+        />
         <AvisoModoLocal />
 
-        {aba === 'acomp' ? (
-          <div style={{ flex: 1, overflowY: 'auto', background: C.soft, padding: 24 }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-              <Segmentado
-                valor={filtro} onChange={setFiltro}
-                opcoes={[{ v: 'em_andamento', label: 'Em andamento' }, { v: 'concluida', label: 'Concluídas' }, { v: 'todas', label: 'Todas' }]}
-              />
-              <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar empresa ou contratante…" style={{ ...inputSt, maxWidth: 320 }} />
-            </div>
-            {lista.length === 0 ? (
-              <Vazio>
-                Nenhuma associação {filtro === 'em_andamento' ? 'em andamento' : filtro === 'concluida' ? 'concluída' : ''}.<br />
-                <span style={{ fontSize: 12 }}>Use “＋ Nova associação” para indicar quais contratantes uma empresa vai atender.</span>
-              </Vazio>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 14 }}>
-                {lista.map(a => <CartaoAssociacao key={a.id} a={a} perfis={perfis} nome={nome} onAbrir={() => onAbrir(a)} onExcluir={() => onExcluir(a)} />)}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
             <div style={{ width: 280, borderRight: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', background: '#fff' }}>
               <div style={{ padding: 12 }}>
                 <input type="search" value={buscaConfig} onChange={e => setBuscaConfig(e.target.value)} placeholder="Buscar contratante…" style={inputSt} />
@@ -414,7 +338,6 @@ function Hub({
               />
             </div>
           </div>
-        )}
       </Janela>
     </Overlay>
   )
@@ -432,68 +355,6 @@ function ItemConfig({ ativo, onClick, titulo, sub, cor, destaque }: { ativo: boo
         {destaque && '◎ '}{titulo}
       </div>
       <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1 }}>{sub}</div>
-    </div>
-  )
-}
-
-function ChipContratante({ s, perfis, nome }: { s: Selecao; perfis: Record<string, PerfilAssoc>; nome: (id: string) => string }) {
-  const v = nomeVariacao(perfis[s.contratanteId], s.variacaoId)
-  const padrao = s.contratanteId === PADRAO_ID
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 20, fontSize: 12, fontWeight: 650,
-      background: padrao ? '#FFFAF0' : '#EEF2FF', color: padrao ? '#8A6420' : C.primary, border: `1px solid ${padrao ? '#F6E0B5' : '#D6E0FF'}`,
-    }}>
-      {nome(s.contratanteId)}
-      {v && <span style={{ fontSize: 10.5, padding: '0 6px', borderRadius: 10, background: corNivel(v), color: '#fff' }}>{v}</span>}
-    </span>
-  )
-}
-
-function CartaoAssociacao({ a, perfis, nome, onAbrir, onExcluir }: {
-  a: Associacao; perfis: Record<string, PerfilAssoc>; nome: (id: string) => string; onAbrir: () => void; onExcluir: () => void
-}) {
-  const feitos = a.feitos.length
-  const total = a.totalPassos
-  const pct = total ? Math.round((Math.min(feitos, total) / total) * 100) : 100
-  const concl = a.status === 'concluida'
-  return (
-    <div onClick={onAbrir} className="gt3-card-hover" style={{
-      background: '#fff', ...bordas('3px 1px 1px 1px', C.line, { top: concl ? C.ok : C.primary }), borderRadius: 14, padding: 16, cursor: 'pointer',
-      boxShadow: '0 1px 3px rgba(26,36,54,0.05)',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 750, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {a.empresa || <span style={{ color: C.faint, fontWeight: 600 }}>Empresa não informada</span>}
-          </div>
-          {a.cnpj && <div style={{ fontSize: 11.5, color: C.mute, fontFamily: 'monospace' }}>{a.cnpj}</div>}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20,
-            background: concl ? C.okBg : '#EBF8FF', color: concl ? C.ok : '#2B6CB0', border: `1px solid ${concl ? C.okLine : '#BEE3F8'}`,
-          }}>{concl ? '✓ Concluída' : 'Em andamento'}</span>
-          <button onClick={e => { e.stopPropagation(); onExcluir() }} title="Excluir" style={{ border: 'none', background: 'none', color: C.faint, cursor: 'pointer', fontSize: 14 }}>🗑</button>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginTop: 12 }}>
-        {a.origem.length === 0 ? <span style={{ fontSize: 12, color: C.faint }}>Empresa nova</span> : a.origem.map(s => <ChipContratante key={s.contratanteId} s={s} perfis={perfis} nome={nome} />)}
-        <span style={{ color: C.faint, fontWeight: 800, margin: '0 2px' }}>→</span>
-        {a.destino.map(s => <ChipContratante key={s.contratanteId} s={s} perfis={perfis} nome={nome} />)}
-      </div>
-      <div style={{ marginTop: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: C.mute, marginBottom: 5 }}>
-          <span>{total ? `${Math.min(feitos, total)} de ${total} etapas` : 'Nada a alterar no GTSoft'}</span>
-          <span>{pct}%</span>
-        </div>
-        <div style={{ height: 6, borderRadius: 6, background: '#EDF2F7', overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: concl ? C.ok : `linear-gradient(90deg, ${C.primary}, #4C7BD9)`, transition: 'width .3s' }} />
-        </div>
-      </div>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 10 }}>
-        {a.criadoPor ? `por ${a.criadoPor} · ` : ''}atualizada em {dataHoraBR(a.atualizadoEm)}
-      </div>
     </div>
   )
 }
@@ -890,23 +751,20 @@ function Interruptor({ ligado, onChange }: { ligado: boolean; onChange: (v: bool
 }
 
 // ── Tela de associação (só fecha em "Finalizar") ────────────────────────────
+// As marcações de "feito" são só um guia enquanto a tela está aberta — nada é gravado.
 
 function Wizard({
-  inicial, jaGravada, companies, perfis, nome, onGravado, onFinalizar,
+  inicial, companies, perfis, nome, onFinalizar,
 }: {
   inicial: Associacao
-  jaGravada: boolean
   companies: Company[]
   perfis: Record<string, PerfilAssoc>
   nome: (id: string) => string
-  onGravado: (a: Associacao) => void
   onFinalizar: () => void
 }) {
   const [a, setA] = useState<Associacao>(inicial)
   const [filtroEscopo, setFiltroEscopo] = useState<'todos' | Escopo>('todos')
   const [ocultarFeitos, setOcultarFeitos] = useState(false)
-  const [gravado, setGravado] = useState(jaGravada)
-  const [salvando, setSalvando] = useState(false)
 
   const faltaVariacao = [...a.origem, ...a.destino].filter(s => precisaVariacao(perfis[s.contratanteId]) && !s.variacaoId)
   const pronto = a.destino.length > 0 && faltaVariacao.length === 0
@@ -915,39 +773,11 @@ function Wizard({
   const feitosValidos = useMemo(() => a.feitos.filter(k => passos.some(p => p.key === k)), [a.feitos, passos])
   const total = passos.length
 
-  // Autosave (acompanhamento): grava assim que há alguma contratante escolhida.
-  const tem = a.origem.length + a.destino.length > 0
-  const ultimo = useRef('')
-  useEffect(() => {
-    if (!tem) return
-    const snapshot = JSON.stringify({ ...a, totalPassos: total, feitos: feitosValidos })
-    if (snapshot === ultimo.current) return
-    const t = setTimeout(async () => {
-      const reg: Associacao = { ...a, feitos: feitosValidos, totalPassos: total, atualizadoEm: new Date().toISOString() }
-      setSalvando(true)
-      const ok = await salvarAssociacao(reg)
-      setSalvando(false)
-      if (ok) { ultimo.current = snapshot; setGravado(true); onGravado(reg) }
-    }, 700)
-    return () => clearTimeout(t)
-  }, [a, tem, total, feitosValidos, onGravado])
-
-  async function finalizar() {
-    if (!tem) { onFinalizar(); return }
+  function finalizar() {
     const pend = total - feitosValidos.length
-    if (!pronto) {
-      if (!confirm(faltaVariacao.length ? 'Ainda falta escolher a variação (nível) de alguma contratante. Finalizar assim mesmo? A associação fica em andamento.' : 'Nenhuma contratante foi indicada em “Associar a”. Finalizar assim mesmo?')) return
-    } else if (pend > 0) {
-      if (!confirm(`Ainda há ${pend} etapa${pend !== 1 ? 's' : ''} pendente${pend !== 1 ? 's' : ''}. A associação continua em “Acompanhamento” como em andamento. Finalizar?`)) return
-    }
-    const concl = pronto && pend === 0
-    const agora = new Date().toISOString()
-    const reg: Associacao = { ...a, feitos: feitosValidos, totalPassos: total, status: concl ? 'concluida' : 'em_andamento', finalizadaEm: concl ? agora : null, atualizadoEm: agora }
-    setSalvando(true)
-    const ok = await salvarAssociacao(reg)
-    setSalvando(false)
-    if (!ok) { alert('Não foi possível salvar a associação. Confirme que o SQL sql/contratantes-associacoes.sql foi executado.'); return }
-    onGravado(reg)
+    // Só pergunta se a pessoa começou a marcar e parou no meio — as marcações não ficam guardadas.
+    if (feitosValidos.length > 0 && pend > 0
+      && !confirm(`Ainda há ${pend} etapa${pend !== 1 ? 's' : ''} sem marcar. Fechar mesmo assim? (as marcações não ficam salvas)`)) return
     onFinalizar()
   }
 
@@ -962,19 +792,9 @@ function Wizard({
     <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 9995, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', padding: 16 }}>
       <div className="gt3-drop-in" style={{ flex: 1, background: '#fff', borderRadius: 18, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(15,23,42,0.4)' }}>
         <Cabecalho
-          titulo={<>🔗 {gravado ? 'Associação' : 'Nova associação'}
-            <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.16)' }}>
-              {a.status === 'concluida' ? '✓ Concluída' : 'Em andamento'}
-            </span></>}
-          sub={<>{a.criadoPor ? `Aberta por ${a.criadoPor} em ${dataHoraBR(a.criadoEm)}` : `Aberta em ${dataHoraBR(a.criadoEm)}`}{salvando ? ' · salvando…' : gravado ? ' · salva automaticamente' : ''}</>}
-        >
-          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            <input value={a.empresa} onChange={e => setA(x => ({ ...x, empresa: e.target.value }))} placeholder="Empresa prestadora (opcional)"
-              style={{ ...inputSt, maxWidth: 360, background: 'rgba(255,255,255,0.95)', border: 'none' }} />
-            <input value={a.cnpj} onChange={e => setA(x => ({ ...x, cnpj: e.target.value }))} placeholder="CNPJ (opcional)"
-              style={{ ...inputSt, maxWidth: 200, background: 'rgba(255,255,255,0.95)', border: 'none', fontFamily: 'monospace' }} />
-          </div>
-        </Cabecalho>
+          titulo={<>🔗 Associação</>}
+          sub="Escolha as contratantes, siga as etapas no GTSoft e vá marcando o que já fez. Nada fica salvo ao finalizar."
+        />
         <AvisoModoLocal />
 
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -1000,7 +820,7 @@ function Wizard({
             <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.6, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: 12 }}>
               <b style={{ color: C.text }}>Como o sistema decide</b><br />
               • Só uma contratante e ela tira o doc → <b style={{ color: C.bad }}>isentar</b>.<br />
-              • Mais de uma e só parte tira → <b style={{ color: '#2B6CB0' }}>ignorar no GT0120</b> para quem tira.<br />
+              • Mais de uma → nunca isenta: <b style={{ color: '#2B6CB0' }}>ignorar no GT0120</b> para quem tira.<br />
               • Estava isento e agora precisa aparecer → <b style={{ color: '#B7791F' }}>desisentar primeiro</b>.
             </div>
           </div>
@@ -1108,8 +928,8 @@ function Wizard({
               <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? C.ok : `linear-gradient(90deg, ${C.primary}, #4C7BD9)`, transition: 'width .3s' }} />
             </div>
           </div>
-          <input value={a.obs} onChange={e => setA(x => ({ ...x, obs: e.target.value }))} placeholder="Observação (opcional)…" style={{ ...inputSt, flex: 1 }} />
-          <Btn tipo="pri" onClick={() => void finalizar()} disabled={salvando}>
+          <div style={{ flex: 1 }} />
+          <Btn tipo="pri" onClick={finalizar}>
             {pronto && total > 0 && feitosValidos.length === total ? '✓ Finalizar' : 'Finalizar'}
           </Btn>
         </div>

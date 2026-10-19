@@ -2,11 +2,12 @@
 //
 // Regras (GTSoft):
 //  • Empresa ligada a UMA contratante que dispensa um documento → ISENTAR (sai da visão de todos).
-//  • Empresa ligada a MAIS de uma e só parte delas dispensa → IGNORAR (GT0120) para quem dispensa;
-//    segue obrigatório para as outras, então a empresa continua enxergando e enviando.
+//  • Empresa ligada a MAIS de uma → nunca isenta: IGNORAR (GT0120) para cada contratante que dispensa,
+//    mesmo que nenhuma outra exija o documento (ex.: Salton — "isentar quando for prestador apenas da
+//    Salton; quando prestar serviço em mais de uma contratante, deverão ser ignorados").
 //  • Doc que estava ISENTO e agora precisa ser ignorado/exigido → primeiro DESISENTAR, depois ignorar.
 //
-// "Padrão" é o modelo neutro: lista de documentos exigidos que vale para quem não tem configuração própria.
+// "Padrão": lista de documentos padrão, exigida pelas contratantes marcadas como padrão.
 
 import type { Company, Field } from '../types'
 
@@ -39,23 +40,15 @@ export type PerfilAssoc = {
 
 export type Selecao = { contratanteId: string; variacaoId: string | null }
 
+/** Uma associação aberta na tela — fica só na memória, nada é gravado. */
 export type Associacao = {
   id: string
-  empresa: string
-  cnpj: string
   /** Contratantes em que a empresa já presta serviço. */
   origem: Selecao[]
   /** Contratantes às quais a empresa está sendo associada. */
   destino: Selecao[]
-  /** Chaves dos passos já feitos no GTSoft. */
+  /** Chaves dos passos marcados como feitos (só guia visual). */
   feitos: string[]
-  obs: string
-  status: 'em_andamento' | 'concluida'
-  totalPassos: number
-  criadoPor: string
-  criadoEm: string
-  atualizadoEm: string
-  finalizadaEm: string | null
 }
 
 export type TipoPasso = 'desisentar' | 'remover_ignorado' | 'ignorar' | 'isentar' | 'adicionar'
@@ -78,7 +71,7 @@ export const FASES: { tipo: TipoPasso; titulo: string; dica: string; cor: string
   { tipo: 'desisentar', titulo: 'Desisentar', dica: 'Primeiro: tirar a isenção desses documentos no GTSoft.', cor: '#B7791F', bg: '#FFFAF0' },
   { tipo: 'remover_ignorado', titulo: 'Remover "ignorado"', dica: 'GT0120: deixar de ignorar para a contratante, porque ela agora exige o documento.', cor: '#6B46C1', bg: '#FAF5FF' },
   { tipo: 'ignorar', titulo: 'Ignorar no GT0120', dica: 'Segue obrigatório para quem exige; a contratante indicada não contabiliza.', cor: '#2B6CB0', bg: '#EBF8FF' },
-  { tipo: 'isentar', titulo: 'Isentar', dica: 'Nenhuma contratante da empresa exige: sai da visão de todos.', cor: '#C53030', bg: '#FFF5F5' },
+  { tipo: 'isentar', titulo: 'Isentar', dica: 'A empresa atende só esta contratante e ela tira o documento: sai da visão.', cor: '#C53030', bg: '#FFF5F5' },
   { tipo: 'adicionar', titulo: 'Adicionar / passa a exigir', dica: 'Documento novo para a empresa por causa da nova contratante.', cor: '#2F855A', bg: '#F0FFF4' },
 ]
 
@@ -174,7 +167,8 @@ function situacoes(perfis: Record<string, PerfilAssoc>, sel: Selecao[]) {
   for (const k of info.keys()) {
     const R = exigem.get(k) ?? []
     const N = dispensam.get(k) ?? []
-    if (R.length && N.length) sit.set(k, { tipo: 'ignorado', por: R, para: N })
+    // Isentar só quando a empresa atende uma contratante só; com mais de uma, quem dispensa ignora.
+    if (N.length && (R.length || sel.length > 1)) sit.set(k, { tipo: 'ignorado', por: R, para: N })
     else if (R.length) sit.set(k, { tipo: 'obrigatorio', por: R })
     else if (N.length) sit.set(k, { tipo: 'isento', dispensam: N })
   }
@@ -233,21 +227,22 @@ export function calcularPlano(
     const X = depois.sit.get(k) ?? { tipo: 'ausente' as const }
 
     if (X.tipo === 'isento') {
-      if (P.tipo !== 'isento') add('isentar', k, inf, null, X.dispensam.length > 1 ? `Nenhuma contratante exige (${lista(X.dispensam)} dispensam)` : `Única contratante (${lista(X.dispensam)}) dispensa`)
+      if (P.tipo !== 'isento') add('isentar', k, inf, null, `Única contratante (${lista(X.dispensam)}) dispensa`)
       continue
     }
     if (X.tipo === 'ausente') continue
 
+    const multiplas = 'Empresa passa a atender mais de uma contratante'
     if (P.tipo === 'isento') {
-      add('desisentar', k, inf, null, `Estava isento por ${lista(P.dispensam)}; agora ${lista(X.por)} exige`)
-    } else if (P.tipo === 'ausente' && temOrigem) {
+      add('desisentar', k, inf, null, `Estava isento por ${lista(P.dispensam)}; agora ${X.por.length ? `${lista(X.por)} exige` : 'a empresa atende mais de uma contratante (não pode ficar isento)'}`)
+    } else if (P.tipo === 'ausente' && temOrigem && X.por.length) {
       add('adicionar', k, inf, null, `Passa a ser exigido por ${lista(X.por)}`)
     }
 
     const paraAntes = P.tipo === 'ignorado' ? P.para : []
     const paraDepois = X.tipo === 'ignorado' ? X.para : []
     for (const c of paraDepois) {
-      if (!paraAntes.includes(c)) add('ignorar', k, inf, c, `${lista(X.por)} exige; ${nome(c)} dispensa`)
+      if (!paraAntes.includes(c)) add('ignorar', k, inf, c, X.por.length ? `${lista(X.por)} exige; ${nome(c)} dispensa` : `${multiplas}: ${nome(c)} dispensa → ignorar, não isentar`)
     }
     const finais = new Set(final.map(s => s.contratanteId))
     for (const c of paraAntes) {
