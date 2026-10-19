@@ -9,6 +9,17 @@ export type EmailConfigDados = {
   assunto: string
   corpo: string
   ccGt3: string
+  /** Modelo do nome da ata por contratante (chave = cliente da ata). Ver app/atas-contratantes/ata-nome.ts */
+  titulos: Record<string, string>
+}
+
+function lerTitulos(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {}
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .map(([k, v]) => [k.trim(), String(v ?? '').trim()])
+      .filter(([k, v]) => k && v),
+  )
 }
 
 export const ASSUNTO_PADRAO = '{{nome_arquivo}}'
@@ -47,6 +58,7 @@ export async function GET() {
     assunto: dados.assunto?.trim() || ASSUNTO_PADRAO,
     corpo: dados.corpo?.trim() || CORPO_PADRAO,
     ccGt3: dados.ccGt3?.trim() || CC_GT3_PADRAO,
+    titulos: lerTitulos(dados.titulos),
   }
   return Response.json(out)
 }
@@ -56,6 +68,28 @@ export async function PUT(req: NextRequest) {
   if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const body = await req.json()
+  const admin = createAdminClient()
+
+  // Só os campos enviados mudam: a tela do "Gerar e-mail" não manda `titulos`, e a do
+  // "Nome da ata" manda só `titulos` — um não pode apagar o outro.
+  const { data: atual } = await admin
+    .from('atas_contratantes_email_config').select('dados').eq('id', CONFIG_ID).maybeSingle()
+  const antes = (atual?.dados ?? {}) as Partial<EmailConfigDados>
+  if (!('diretorio' in body)) {
+    const dados: EmailConfigDados = {
+      diretorio: antes.diretorio ?? [],
+      assunto: antes.assunto?.trim() || ASSUNTO_PADRAO,
+      corpo: antes.corpo?.trim() || CORPO_PADRAO,
+      ccGt3: antes.ccGt3?.trim() || CC_GT3_PADRAO,
+      titulos: 'titulos' in body ? lerTitulos(body.titulos) : lerTitulos(antes.titulos),
+    }
+    const { error } = await admin
+      .from('atas_contratantes_email_config')
+      .upsert({ id: CONFIG_ID, dados, updated_at: new Date().toISOString() })
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    return Response.json(dados)
+  }
+
   const diretorio = Array.isArray(body.diretorio)
     ? body.diretorio
       .map((p: { nome?: string; empresa?: string; email?: string }) => ({
@@ -68,9 +102,9 @@ export async function PUT(req: NextRequest) {
     assunto: String(body.assunto ?? '').trim() || ASSUNTO_PADRAO,
     corpo: String(body.corpo ?? '').trim() || CORPO_PADRAO,
     ccGt3: String(body.ccGt3 ?? '').trim() || CC_GT3_PADRAO,
+    titulos: 'titulos' in body ? lerTitulos(body.titulos) : lerTitulos(antes.titulos),
   }
 
-  const admin = createAdminClient()
   const { error } = await admin
     .from('atas_contratantes_email_config')
     .upsert({ id: CONFIG_ID, dados, updated_at: new Date().toISOString() })

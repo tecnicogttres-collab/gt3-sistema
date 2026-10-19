@@ -6,6 +6,7 @@ import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import AtasEditor, { StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico, type ContatoDiretorio } from '../atas/AtasEditor'
 import { renderAtaHtml, nomeArquivoAta } from '../lib/ata-html'
+import { nomeAutomatico, modeloTituloDo, aplicarModeloTitulo, proximoNumeroAta, MODELO_TITULO_PADRAO, VARIAVEIS_TITULO } from './ata-nome'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,10 @@ export default function AtasContratantesClient() {
   const [arquivados, setArquivados] = useState<Set<string>>(new Set())
   const [showArquivados, setShowArquivados] = useState(false)
   const [clienteMenuOpen, setClienteMenuOpen] = useState<string | null>(null)
+  // Modelo do nome da ata por contratante (guardado junto da config do "Gerar e-mail")
+  const [modelosTitulo, setModelosTitulo] = useState<Record<string, string>>({})
+  const [nomeAtaModal, setNomeAtaModal] = useState<{ cliente: string; modelo: string } | null>(null)
+  const [nomeAtaSaving, setNomeAtaSaving] = useState(false)
 
   // ── Gerar e-mail (destinatários + PDF anexado) ──
   const [emailConfigOpen, setEmailConfigOpen] = useState(false)
@@ -247,9 +252,35 @@ export default function AtasContratantesClient() {
   useEffect(() => {
     fetch('/api/atas-contratantes/email-config')
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.diretorio) setDiretorioContatos(d.diretorio) })
+      .then(d => {
+        if (d?.diretorio) setDiretorioContatos(d.diretorio)
+        if (d?.titulos) setModelosTitulo(d.titulos)
+      })
       .catch(() => {})
   }, [])
+
+  const autoNome = useCallback(
+    (cliente: string, data: string) => nomeAutomatico(atas, modelosTitulo, cliente, data),
+    [atas, modelosTitulo],
+  )
+
+  async function salvarModeloTitulo(cliente: string, modelo: string) {
+    setNomeAtaSaving(true)
+    try {
+      const titulos = { ...modelosTitulo }
+      if (modelo.trim()) titulos[cliente] = modelo.trim(); else delete titulos[cliente]
+      const res = await fetch('/api/atas-contratantes/email-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ titulos }),
+      })
+      if (!res.ok) { alert('Erro ao salvar o modelo do nome da ata'); return }
+      setModelosTitulo(titulos)
+      setNomeAtaModal(null)
+    } finally {
+      setNomeAtaSaving(false)
+    }
+  }
 
   // ── Search ──────────────────────────────────────────────────────────────────
 
@@ -634,11 +665,12 @@ export default function AtasContratantesClient() {
           </div>
         )}
         {t.descricao && (
-          <div style={{ marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: cor, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 3 }}>
-              Na data desta reunião{selected?.data ? ` (${new Date(selected.data + 'T12:00').toLocaleDateString('pt-BR')})` : ''}, definiu-se:
+          <div style={{ marginBottom: (t.contratante || t.prazo || t.responsavel || hist.length > 0) ? 10 : 0, padding: '10px 14px', background: `${cor}12`, borderLeft: `4px solid ${cor}`, borderRadius: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: cor, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 4 }}>
+              🗓️ {t.descricaoData && t.descricaoData !== selected?.data ? 'Em' : 'Na data desta reunião'}
+              {(t.descricaoData || selected?.data) ? ` (${new Date((t.descricaoData || selected!.data) + 'T12:00').toLocaleDateString('pt-BR')})` : ''}, definiu-se:
             </div>
-            <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.65 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
+            <div style={{ fontSize: 14, color: '#1E293B', fontWeight: 600, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: t.descricao }} />
           </div>
         )}
         {(t.contratante || t.prazo || t.responsavel || t.status) && (
@@ -835,6 +867,12 @@ export default function AtasContratantesClient() {
                           <>
                             <div onClick={() => setClienteMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
                             <div style={{ position: 'absolute', right: 8, top: '100%', zIndex: 31, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 8px 20px rgba(15,23,42,0.14)', minWidth: 190, overflow: 'hidden' }}>
+                              <button
+                                onClick={() => { setClienteMenuOpen(null); setNomeAtaModal({ cliente, modelo: modeloTituloDo(cliente, modelosTitulo, atas) }) }}
+                                style={{ width: '100%', textAlign: 'left', padding: '9px 14px', border: 'none', borderBottom: '1px solid #F0F4FA', background: '#fff', cursor: 'pointer', fontSize: 12.5, color: '#334155' }}
+                              >
+                                ✏ Nome da ata
+                              </button>
                               <button
                                 onClick={() => toggleArquivarCliente(cliente, !isArquivada)}
                                 style={{ width: '100%', textAlign: 'left', padding: '9px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 12.5, color: '#334155' }}
@@ -1094,6 +1132,7 @@ export default function AtasContratantesClient() {
           enableNotifModal
           availableUsers={allUsers}
           diretorioContatos={diretorioContatos}
+          autoNome={autoNome}
         />
       )}
       {editingAta && (
@@ -1118,25 +1157,34 @@ export default function AtasContratantesClient() {
       {copyingAta && (
         <AtasEditor
           initial={{
-            titulo: copyingAta.titulo ? `${copyingAta.titulo} (cópia)` : '',
-            data: new Date().toISOString().slice(0, 10),
+            ...(() => {
+              const data = new Date().toISOString().slice(0, 10)
+              const n = autoNome(copyingAta.cliente ?? '', data)
+              return { data, titulo: n.titulo, numeroAta: n.numero }
+            })(),
             status: 'Rascunho',
-            conteudo: JSON.stringify(parseTopicos(copyingAta.conteudo ?? '').filter(t => !t.finalizado)),
+            // O texto de "definiu-se" vem junto, marcado com a data da ata de origem —
+            // é essa data que vai para o histórico, não a da ata nova.
+            conteudo: JSON.stringify(parseTopicos(copyingAta.conteudo ?? '').filter(t => !t.finalizado)
+              .map(t => t.descricao?.trim() ? { ...t, descricaoData: t.descricaoData || copyingAta.data } : t)),
             cliente: copyingAta.cliente ?? '',
             localReuniao: copyingAta.local_reuniao ?? '',
-            numeroAta: '',
             participantes: copyingAta.participantes ?? '',
           }}
           onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
           onClose={() => setCopyingAta(null)}
           diretorioContatos={diretorioContatos}
+          autoNome={autoNome}
         />
       )}
       {novaReuniaoAta && (
         <AtasEditor
           initial={{
-            titulo: novaReuniaoAta.titulo ?? '',
-            data: new Date().toISOString().slice(0, 10),
+            ...(() => {
+              const data = new Date().toISOString().slice(0, 10)
+              const n = autoNome(novaReuniaoAta.cliente ?? '', data)
+              return { data, titulo: n.titulo, numeroAta: n.numero }
+            })(),
             status: 'Rascunho',
             conteudo: JSON.stringify(
               parseTopicos(novaReuniaoAta.conteudo ?? '')
@@ -1144,14 +1192,14 @@ export default function AtasContratantesClient() {
                 .map(t => ({
                   ...t,
                   historico: t.descricao?.trim()
-                    ? [{ data: novaReuniaoAta.data, texto: t.descricao }, ...(t.historico ?? [])]
+                    ? [{ data: t.descricaoData || novaReuniaoAta.data, texto: t.descricao }, ...(t.historico ?? [])]
                     : (t.historico ?? []),
                   descricao: '',
+                  descricaoData: undefined,
                 }))
             ),
             cliente: novaReuniaoAta.cliente ?? '',
             localReuniao: novaReuniaoAta.local_reuniao ?? '',
-            numeroAta: '',
             participantes: novaReuniaoAta.participantes ?? '',
           }}
           onSave={async (form) => { await handleCreate(form); setNovaReuniaoAta(null) }}
@@ -1159,8 +1207,61 @@ export default function AtasContratantesClient() {
           enableNotifModal
           availableUsers={allUsers}
           diretorioContatos={diretorioContatos}
+          autoNome={autoNome}
         />
       )}
+
+      {/* ── Modal: modelo do nome da ata (por contratante) ── */}
+      {nomeAtaModal && (() => {
+        const hoje = new Date().toISOString().slice(0, 10)
+        const numero = proximoNumeroAta(atas, nomeAtaModal.cliente, hoje)
+        const exemplo = aplicarModeloTitulo(nomeAtaModal.modelo || MODELO_TITULO_PADRAO, { data: hoje, numero, contratante: nomeAtaModal.cliente })
+        const inserir = (v: string) => setNomeAtaModal(m => m ? { ...m, modelo: m.modelo + v } : m)
+        return (
+          <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, padding: '26px 30px', width: 560, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1f2e', marginBottom: 4 }}>✏ Nome da ata</div>
+              <div style={{ fontSize: 13, color: '#5a6178', marginBottom: 16 }}>
+                <strong>{nomeAtaModal.cliente}</strong> — o nome das próximas atas é montado com este modelo e a data da reunião. O número é automático: o próximo do ano (renova todo ano).
+              </div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#1a1f2e', display: 'block', marginBottom: 6 }}>Modelo</label>
+              <input
+                autoFocus
+                value={nomeAtaModal.modelo}
+                onChange={e => setNomeAtaModal(m => m ? { ...m, modelo: e.target.value } : m)}
+                placeholder={MODELO_TITULO_PADRAO}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8, border: '1px solid #CBD5E0', fontSize: 14, outline: 'none' }}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0 16px' }}>
+                {VARIAVEIS_TITULO.map(x => (
+                  <button key={x.v} onClick={() => inserir(x.v)} title={x.desc}
+                    style={{ padding: '3px 9px', borderRadius: 20, border: '1px solid #D6E0FF', background: '#EEF2FB', color: '#2A4F96', fontSize: 12, fontFamily: 'monospace', cursor: 'pointer' }}>
+                    {x.v}
+                  </button>
+                ))}
+              </div>
+              <div style={{ background: '#F8FAFC', border: '1px solid rgba(42,79,150,0.12)', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Próxima ata, se a reunião fosse hoje</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#2A4F96' }}>{exemplo}</div>
+                <div style={{ fontSize: 12, color: '#5a6178', marginTop: 2 }}>Nº {numero}</div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <button onClick={() => setNomeAtaModal(m => m ? { ...m, modelo: MODELO_TITULO_PADRAO } : m)}
+                  style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'none', color: '#2A4F96', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+                  Usar o padrão (“Ata de {'{{data}}'}”)
+                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setNomeAtaModal(null)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                  <button onClick={() => void salvarModeloTitulo(nomeAtaModal.cliente, nomeAtaModal.modelo)} disabled={nomeAtaSaving}
+                    style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: nomeAtaSaving ? 0.7 : 1 }}>
+                    {nomeAtaSaving ? 'Salvando…' : 'Salvar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Modal: notificação ao validar (via dropdown de status) ── */}
       {statusNotifModal && (

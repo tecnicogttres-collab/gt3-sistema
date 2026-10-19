@@ -114,6 +114,8 @@ export type Topico = {
   andamentoGeral?: string   // andamento persistente do tópico (não vira histórico)
   descricao: string         // preenchimento do dia ("ATÉ AQUI:") — vira histórico na nova reunião
   descricaoSalva?: boolean  // true = campo travado (exibição + Editar/Atualizar); false/ausente = campo aberto pra digitar
+  descricaoData?: string    // AAAA-MM-DD — data da reunião em que "descricao" foi escrita; é a data que vai pro histórico
+                            // (ausente = a data da própria ata). Sem isso, um texto de 10/09 trazido para a ata de hoje ia pro histórico como de hoje.
   contratante: string
   prazo: string
   responsavel: string
@@ -231,7 +233,7 @@ const sectionTitle = (extra?: React.CSSProperties): React.CSSProperties => ({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AtasEditor({ initial, onSave, onClose, enableNotifModal, availableUsers, diretorioContatos }: {
+export default function AtasEditor({ initial, onSave, onClose, enableNotifModal, availableUsers, diretorioContatos, autoNome }: {
   initial?: Partial<AtaEditorData>
   onSave: (data: AtaEditorData) => Promise<void>
   onClose: () => void
@@ -240,6 +242,9 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   /** Diretório de contatos das contratantes (nome/empresa/e-mail) — alimenta a sugestão
    *  ao digitar um nome em "Participantes" (ver caixaComSugestao mais abaixo). */
   diretorioContatos?: ContatoDiretorio[]
+  /** Nome e número automáticos (Atas Contratantes, só em atas novas): recalculados ao mudar
+   *  contratante ou data, até a pessoa digitar no campo por conta própria. */
+  autoNome?: (cliente: string, data: string) => { titulo: string; numero: string }
 }) {
   // Meta fields
   const [titulo,   setTitulo]   = useState(initial?.titulo          ?? '')
@@ -248,6 +253,15 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   const [local,    setLocal]    = useState(initial?.localReuniao    ?? '')
   const [numAta,   setNumAta]   = useState(initial?.numeroAta       ?? '')
   const [status,   setStatus]   = useState(initial?.status         ?? 'Rascunho')
+  const [tituloManual, setTituloManual] = useState(false)
+  const [numManual,    setNumManual]    = useState(false)
+
+  function recalcularNome(cls: string[], data: string, forcar?: 'titulo' | 'numero') {
+    if (!autoNome) return
+    const r = autoNome(cls.join(' / '), data)
+    if (!tituloManual || forcar === 'titulo') setTitulo(r.titulo)
+    if (!numManual || forcar === 'numero') setNumAta(r.numero)
+  }
 
   // Participantes
   const [participantes, setParticipantes] = useState<Participante[]>(
@@ -283,10 +297,13 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
     if (!v || clientes.includes(v)) return
     setClientes(prev => [...prev, v])
     setAddClienteInput('')
+    recalcularNome([...clientes, v], dataVal)
   }
 
   function removeCliente(idx: number) {
-    setClientes(prev => prev.filter((_, i) => i !== idx))
+    const resto = clientes.filter((_, i) => i !== idx)
+    setClientes(resto)
+    recalcularNome(resto, dataVal)
   }
 
   function addPartToCompany(empresa: string) {
@@ -338,6 +355,15 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
     setTopicos(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t))
   }
 
+  /** Texto novo (campo estava vazio) leva a data desta reunião; texto que já existia mantém a data em que foi escrito. */
+  function updateDescricao(id: string, html: string) {
+    setTopicos(prev => prev.map(t => t.id !== id ? t : {
+      ...t,
+      descricao: html,
+      descricaoData: !html.trim() ? undefined : t.descricao.trim() ? (t.descricaoData ?? dataVal) : dataVal,
+    }))
+  }
+
   function removeTopico(id: string) {
     setTopicos(prev => prev.filter(t => t.id !== id))
   }
@@ -357,9 +383,9 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   function arquivarDescricao(topicId: string) {
     const topico = topicos.find(t => t.id === topicId)
     if (!topico?.descricao.trim()) return
-    const entry: TopicoHistorico = { data: dataVal || new Date().toISOString().slice(0, 10), texto: topico.descricao }
+    const entry: TopicoHistorico = { data: topico.descricaoData || dataVal || new Date().toISOString().slice(0, 10), texto: topico.descricao }
     setTopicos(prev => prev.map(t => t.id === topicId
-      ? { ...t, descricao: '', descricaoSalva: false, historico: [entry, ...(t.historico ?? [])] }
+      ? { ...t, descricao: '', descricaoSalva: false, descricaoData: undefined, historico: [entry, ...(t.historico ?? [])].sort((a, b) => b.data.localeCompare(a.data)) }
       : t
     ))
     setHistoryOpenId(topicId)
@@ -564,11 +590,19 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
               <div style={{ flex: 1 }}>
                 <input
                   value={titulo}
-                  onChange={e => setTitulo(e.target.value)}
+                  onChange={e => { setTitulo(e.target.value); if (autoNome) setTituloManual(true) }}
                   placeholder="Título da ata (opcional)…"
                   style={{ fontSize: 20, fontWeight: 700, color: '#2A4F96', border: 'none', outline: 'none', width: '100%', background: 'transparent', fontFamily: 'inherit', padding: 0, marginBottom: 4 }}
                 />
-                <div style={{ fontSize: 13, color: '#6B7A99' }}>{dateDisplay}</div>
+                <div style={{ fontSize: 13, color: '#6B7A99' }}>
+                  {dateDisplay}
+                  {autoNome && (tituloManual ? (
+                    <button onClick={() => { setTituloManual(false); recalcularNome(clientes, dataVal, 'titulo') }} title="Volta a montar o nome pelo modelo da contratante"
+                      style={{ marginLeft: 10, border: 'none', background: 'none', color: '#2A4F96', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>↺ nome automático</button>
+                  ) : clientes.length > 0 && (
+                    <span style={{ marginLeft: 10, fontSize: 11, color: '#10B981', fontWeight: 600 }}>✓ nome automático</span>
+                  ))}
+                </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ display: 'inline-block', padding: '3px 12px', background: '#D1AE6E', color: '#fff', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
@@ -601,15 +635,28 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
               </div>
               <div>
                 <span style={lbl}>Data da reunião</span>
-                <input type="date" value={dataVal} onChange={e => setDataVal(e.target.value)} style={inp()} />
+                <input type="date" value={dataVal} onChange={e => {
+                  const nova = e.target.value
+                  // Texto escrito nesta ata acompanha a mudança de data da reunião (o trazido de outra ata, não).
+                  setTopicos(prev => prev.map(t => t.descricaoData === dataVal ? { ...t, descricaoData: nova } : t))
+                  setDataVal(nova); recalcularNome(clientes, nova)
+                }} style={inp()} />
               </div>
               <div>
                 <span style={lbl}>Local</span>
                 <input value={local} onChange={e => setLocal(e.target.value)} placeholder="Ex.: Online / Caxias do Sul — RS" style={inp()} />
               </div>
               <div>
-                <span style={lbl}>Número da ata</span>
-                <input value={numAta} onChange={e => setNumAta(e.target.value)} placeholder="Ex.: Nº 04/26" style={inp()} />
+                <span style={lbl}>
+                  Número da ata
+                  {autoNome && (numManual ? (
+                    <button onClick={() => { setNumManual(false); recalcularNome(clientes, dataVal, 'numero') }} title="Volta ao próximo número da contratante no ano"
+                      style={{ marginLeft: 8, border: 'none', background: 'none', color: '#2A4F96', fontSize: 11, cursor: 'pointer', padding: 0, textTransform: 'none', letterSpacing: 0, textDecoration: 'underline' }}>↺ automático</button>
+                  ) : clientes.length > 0 && (
+                    <span style={{ marginLeft: 8, color: '#10B981', textTransform: 'none', letterSpacing: 0 }}>· automático</span>
+                  ))}
+                </span>
+                <input value={numAta} onChange={e => { setNumAta(e.target.value); if (autoNome) setNumManual(true) }} placeholder="Ex.: Nº 04/26" style={inp()} />
               </div>
             </div>
 
@@ -763,7 +810,12 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                       <div style={{ marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                           <span style={{ fontSize: 10, fontWeight: 700, color: '#2A4F96', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Na data desta reunião, definiu-se:</span>
-                          {dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
+                          {t.descricao.trim() && t.descricaoData && t.descricaoData !== dataVal ? (
+                            <span title="Este texto veio de outra reunião — ao ir para o histórico, vai com a data em que foi preenchido"
+                              style={{ fontSize: 11, fontWeight: 700, color: '#B45309', background: '#FEF3C7', border: '1px solid #FCD34D', padding: '1px 8px', borderRadius: 10 }}>
+                              preenchido em {new Date(t.descricaoData + 'T12:00').toLocaleDateString('pt-BR')}
+                            </span>
+                          ) : dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
                         </div>
                         {t.descricaoSalva && t.descricao.trim() ? (
                           <div>
@@ -791,7 +843,7 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           <div>
                             <RichTextEditor
                               value={t.descricao}
-                              onChange={html => updateTopico(t.id, 'descricao', html)}
+                              onChange={html => updateDescricao(t.id, html)}
                               placeholder="O que foi discutido / decidido nesta reunião…"
                               minRows={3}
                               resizable

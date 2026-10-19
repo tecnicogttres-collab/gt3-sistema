@@ -54,7 +54,7 @@ export function nomeArquivoAta(ata: AtaHtmlData): string {
   return [cabecalho, dataFmt ? `${meio} ${dataFmt}` : meio].join(' - ')
 }
 
-function renderTopicoCard(t: Topico, numero: number, dateDisplay: string): string {
+function renderTopicoCard(t: Topico, numero: number, dateDisplay: string, dataAta: string): string {
   const cor = t.cor ?? '#2A4F96'
   const hist: TopicoHistorico[] = t.historico ?? []
   const statusColors: Record<string, string> = {
@@ -91,7 +91,7 @@ function renderTopicoCard(t: Topico, numero: number, dateDisplay: string): strin
   return `<div class="topico" style="margin-bottom:18px;padding:14px 16px;border:1px solid #e0e5ef;border-left:3px solid ${cor};border-radius:6px">
     <div style="font-weight:700;font-size:14px;color:${cor};margin-bottom:8px">${numero}. ${escapeHtml(t.titulo || '(Sem título)')}</div>
     ${t.andamentoGeral ? `<div style="margin-bottom:10px;padding:10px 12px;background:#F8FAFC;border-left:3px solid #94A3B8;border-radius:6px"><div style="font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">📌 Até aqui</div><div style="font-size:14px;line-height:1.75;color:#1E293B;font-weight:500">${t.andamentoGeral}</div></div>` : ''}
-    ${t.descricao ? `<div style="margin-bottom:10px;padding:12px 14px;background:${cor}12;border-left:4px solid ${cor};border-radius:6px"><div style="font-size:11px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">🗓️ Na data desta reunião (${dateDisplay}), definiu-se</div><div style="font-size:14px;line-height:1.75;color:#1E293B;font-weight:600">${t.descricao}</div></div>` : ''}
+    ${t.descricao ? `<div style="margin-bottom:10px;padding:12px 14px;background:${cor}12;border-left:4px solid ${cor};border-radius:6px"><div style="font-size:11px;font-weight:800;color:${cor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">🗓️ ${t.descricaoData && t.descricaoData !== dataAta ? `Em ${new Date(t.descricaoData + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}` : `Na data desta reunião (${dateDisplay})`}, definiu-se</div><div style="font-size:14px;line-height:1.75;color:#1E293B;font-weight:600">${t.descricao}</div></div>` : ''}
     ${metaHtml}${histHtml}</div>`
 }
 
@@ -116,11 +116,11 @@ export function renderAtaHtml(
 
   const ativos = topicos.filter(t => !t.finalizado)
   const finalizados = topicos.filter(t => t.finalizado)
-  const topicosHtml = ativos.map((t, idx) => renderTopicoCard(t, idx + 1, dateDisplay)).join('')
+  const topicosHtml = ativos.map((t, idx) => renderTopicoCard(t, idx + 1, dateDisplay, ata.data)).join('')
   const finalizadosHtml = finalizados.length > 0
     ? `<div style="margin-top:28px">
         <div style="font-size:11px;font-weight:700;color:#10B981;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">✓ Tópicos finalizados nesta reunião</div>
-        ${finalizados.map((t, idx) => renderTopicoCard(t, idx + 1, dateDisplay)).join('')}
+        ${finalizados.map((t, idx) => renderTopicoCard(t, idx + 1, dateDisplay, ata.data)).join('')}
       </div>` : ''
 
   return `<!DOCTYPE html>
