@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Company, Field, FeriasColetivas, SEGMENT_COLORS } from './types'
 import { createClient } from '../lib/supabase'
+import AssociacoesLayer, { novaAssociacao, type PedidoAssoc } from './associacoes/AssociacoesLayer'
 
 function rowToCompany(row: {
   id: string
@@ -115,6 +116,7 @@ export default function CadastroClient() {
   const [editTextModal, setEditTextModal] = useState<EditTextModal>({ open: false })
   const [newCompanyModal, setNewCompanyModal] = useState<NewCompanyModal>({ open: false })
   const [feriasModal, setFeriasModal] = useState(false)
+  const [assocPedido, setAssocPedido] = useState<PedidoAssoc | null>(null)
   const [newCompanyName, setNewCompanyName] = useState('')
   const [newCompanySeg, setNewCompanySeg] = useState<string>('Bertolini')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -444,8 +446,22 @@ export default function CadastroClient() {
         borderRight: '1px solid #E2E8F0', background: '#fff', borderRadius: '12px 0 0 12px',
         overflow: 'hidden',
       }}>
+        {/* Associações (botão geral) */}
+        <div style={{ padding: '14px 14px 0' }}>
+          <button
+            onClick={() => setAssocPedido({ tipo: 'hub' })}
+            title="Associações: configurar qualquer contratante ou associar a várias"
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '9px 12px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: 'linear-gradient(120deg, #1E3A6E, #2A4F96 60%, #3D6ABF)', color: '#fff',
+              fontSize: 13, fontWeight: 700, boxShadow: '0 3px 10px rgba(42,79,150,0.3)',
+            }}
+          >🔗 Associações</button>
+        </div>
+
         {/* Search */}
-        <div style={{ padding: '14px 14px 8px' }}>
+        <div style={{ padding: '10px 14px 8px' }}>
           <input
             type="search"
             placeholder="Buscar contratante ou campo…"
@@ -568,6 +584,8 @@ export default function CadastroClient() {
             onChangeSegment={openSegmentModal}
             onDelete={() => void deleteCompany()}
             onFerias={() => setFeriasModal(true)}
+            onAssociar={() => setAssocPedido({ tipo: 'associar', nova: novaAssociacao('', [], [{ contratanteId: currentCompany.id, variacaoId: null }]) })}
+            onConfigAssoc={() => setAssocPedido({ tipo: 'config', contratanteId: currentCompany.id })}
           />
         )}
       </div>
@@ -581,6 +599,8 @@ export default function CadastroClient() {
           onClose={() => setFeriasModal(false)}
         />
       )}
+
+      <AssociacoesLayer companies={companies} pedido={assocPedido} onFechar={() => setAssocPedido(null)} />
 
       {/* ── Toast ──────────────────────────────────────────────────────── */}
       {toast && (
@@ -1032,13 +1052,15 @@ type DetailPanelProps = {
   onChangeSegment: () => void
   onDelete: () => void
   onFerias: () => void
+  onAssociar: () => void
+  onConfigAssoc: () => void
 }
 
 function DetailPanel({
   company: c,
   onCopy, onEditText, onUpdateLabel, onUpdateCell, onUpdateHeader,
   onMoveField, onReorderField, onRemoveField, onAddField, onAddTableRow, onAddTableCol, onRemoveTableRow,
-  onRename, onChangeSegment, onDelete, onFerias,
+  onRename, onChangeSegment, onDelete, onFerias, onAssociar, onConfigAssoc,
 }: DetailPanelProps) {
   const feriasSt = feriasStatus(c)
   const color = SEGMENT_COLORS[c.segment] ?? '#8C6EDC'
@@ -1116,6 +1138,10 @@ function DetailPanel({
           >
             🏖 Férias coletivas{feriasSt === 'ativa' ? ' · em andamento' : feriasSt === 'futura' ? ` · a partir de ${dataBR((c.feriasColetivas ?? []).filter(f => periodoStatus(f) === 'futura').map(f => f.inicio).sort()[0])}` : ''}
           </button>
+          <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #BFD0FF' }}>
+            <button onClick={onAssociar} style={assocBtn} title="Associar esta contratante com outra(s)">🔗 Associar</button>
+            <button onClick={onConfigAssoc} style={{ ...assocBtn, borderLeft: '1px solid #BFD0FF' }} title="Configurações de associação só desta contratante (variações e documentos)">⚙ Configurações</button>
+          </div>
           <LabelBtn onClick={onRename} icon={<IconPencil />}>Renomear</LabelBtn>
           <LabelBtn onClick={onChangeSegment} icon={<IconSwap />}>Segmento</LabelBtn>
           <LabelBtn onClick={onDelete} icon={<IconTrash />} danger>Excluir</LabelBtn>
@@ -1463,6 +1489,11 @@ function EditableCell({ value, onCopy: _onCopy, onSave }: { value: string; onCop
 const btnPrimary: React.CSSProperties = {
   padding: '8px 18px', borderRadius: 8, border: 'none',
   background: '#2A4F96', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+}
+
+const assocBtn: React.CSSProperties = {
+  padding: '7px 11px', border: 'none', background: '#EEF2FF', color: '#2A4F96',
+  fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
 }
 
 const btnSecondary: React.CSSProperties = {
