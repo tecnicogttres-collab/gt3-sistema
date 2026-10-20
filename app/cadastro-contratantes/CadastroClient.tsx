@@ -220,7 +220,7 @@ export default function CadastroClient() {
         return
       }
       const fresh = updater({ ...rowToCompany(data), updated: stamp })
-      const { error: upErr } = await supabase
+      const { data: salvos, error: upErr } = await supabase
         .from('contratantes')
         .update({
           name: fresh.name,
@@ -230,9 +230,17 @@ export default function CadastroClient() {
           fields: fresh.fields,
         })
         .eq('id', id)
+        .select('id')
       if (upErr) {
         console.error('Erro ao salvar contratante:', upErr)
         alert('Não foi possível salvar a alteração. Recarregue a página (F5) e tente de novo.')
+        return
+      }
+      // RLS barrando o UPDATE não dá erro, só grava 0 linhas — sem isso a tela mostrava
+      // a alteração e ela "voltava ao padrão" no F5.
+      if (!salvos?.length) {
+        alert('A alteração NÃO foi salva: seu usuário não tem permissão para editar contratantes. Avise um gestor/admin.')
+        setCompanies(prev => prev.map(c => c.id === id ? rowToCompany(data) : c))
         return
       }
       setCompanies(prev => prev.map(c => c.id === id ? fresh : c))
@@ -242,10 +250,12 @@ export default function CadastroClient() {
   const saveFerias = useCallback(async (id: string, ferias: FeriasColetivas[]) => {
     setCompanies(prev => prev.map(c => c.id === id ? { ...c, feriasColetivas: ferias } : c))
     const supabase = createClient()
-    const { error } = await supabase.from('contratantes').update({ ferias_coletivas: ferias.length ? ferias : null }).eq('id', id)
+    const { data, error } = await supabase.from('contratantes').update({ ferias_coletivas: ferias.length ? ferias : null }).eq('id', id).select('id')
     if (error) {
       console.error('Erro ao salvar férias coletivas:', error)
       alert('Não foi possível salvar as férias coletivas. Confirme que o SQL sql/contratantes-ferias-coletivas.sql foi executado.')
+    } else if (!data?.length) {
+      alert('As férias coletivas NÃO foram salvas: seu usuário não tem permissão para editar contratantes. Avise um gestor/admin.')
     }
   }, [])
 
