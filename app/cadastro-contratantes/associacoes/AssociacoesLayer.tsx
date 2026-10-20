@@ -765,6 +765,8 @@ function Wizard({
   const [a, setA] = useState<Associacao>(inicial)
   const [filtroEscopo, setFiltroEscopo] = useState<'todos' | Escopo>('todos')
   const [ocultarFeitos, setOcultarFeitos] = useState(false)
+  // false = tela inicial (só ① hoje › ② agora); vira true ao escolher a 1ª contratante nova
+  const [iniciado, setIniciado] = useState(inicial.destino.length > 0)
 
   const faltaVariacao = [...a.origem, ...a.destino].filter(s => precisaVariacao(perfis[s.contratanteId]) && !s.variacaoId)
   const pronto = a.destino.length > 0 && faltaVariacao.length === 0
@@ -797,42 +799,63 @@ function Wizard({
         />
         <AvisoModoLocal />
 
-        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          {/* Seleção */}
-          <div style={{ width: 400, flexShrink: 0, borderRight: `1px solid ${C.line}`, overflowY: 'auto', background: C.soft, padding: 18 }}>
+        {/* Começa "em branco": só ① hoje › ② agora, lado a lado. Ao escolher a contratante nova,
+            os dois viram as colunas laterais (animado) e o plano abre no meio. */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, background: C.soft, justifyContent: 'center' }}>
+          <div style={{ ...colunaSelecao(iniciado), borderRight: iniciado ? `1px solid ${C.line}` : '1px solid transparent' }}>
             <ListaSelecao
-              titulo="Já presta serviço para"
-              ajuda="Contratantes em que a empresa já está cadastrada. Deixe vazio se for uma empresa nova."
+              numero={1}
+              etiqueta="HOJE"
+              titulo="Onde a empresa presta serviço hoje"
+              ajuda="Contratantes em que a empresa já está cadastrada no GTSoft. Se for uma empresa nova, deixe vazio."
+              vazio="Nenhuma — empresa nova (ainda não atende nenhuma contratante)."
+              textoAdicionar="＋ Adicionar contratante que ela já atende"
               itens={a.origem}
               onChange={origem => setA(x => ({ ...x, origem }))}
               companies={companies} perfis={perfis} nome={nome} usados={usados}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 14px', color: C.primary, fontSize: 12, fontWeight: 800, letterSpacing: '0.05em' }}>
-              <div style={{ flex: 1, height: 1, background: '#BFD0FF' }} /> ↓ ASSOCIANDO A <div style={{ flex: 1, height: 1, background: '#BFD0FF' }} />
-            </div>
-            <ListaSelecao
-              titulo="Associar a"
-              ajuda="Uma ou várias contratantes. “Padrão” representa qualquer contratante padrão."
-              itens={a.destino}
-              onChange={destino => setA(x => ({ ...x, destino }))}
-              companies={companies} perfis={perfis} nome={nome} usados={usados} destaque
-            />
-            <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.6, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: 12 }}>
-              <b style={{ color: C.text }}>Como o sistema decide</b><br />
-              • Só uma contratante e ela tira o doc → <b style={{ color: C.bad }}>isentar</b>.<br />
-              • Mais de uma → nunca isenta: <b style={{ color: '#2B6CB0' }}>ignorar no GT0120</b> para quem tira.<br />
-              • Estava isento e agora precisa aparecer → <b style={{ color: '#B7791F' }}>desisentar primeiro</b>.
-            </div>
+            {iniciado && (
+              <div className="gt3-fade-up" style={{ fontSize: 12, color: C.mute, lineHeight: 1.6, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: 12 }}>
+                <b style={{ color: C.text }}>Como o sistema decide</b><br />
+                • Só uma contratante e ela tira o doc → <b style={{ color: C.bad }}>isentar</b>.<br />
+                • Mais de uma → nunca isenta: <b style={{ color: '#2B6CB0' }}>ignorar no GT0120</b> para quem tira.<br />
+                • Estava isento e agora precisa aparecer → <b style={{ color: '#B7791F' }}>desisentar primeiro</b>.
+              </div>
+            )}
           </div>
 
-          {/* Plano */}
-          <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 22 }}>
+          {/* Seta do início — some quando o plano abre no meio */}
+          <div aria-hidden style={{
+            width: iniciado ? 0 : 72, opacity: iniciado ? 0 : 1, overflow: 'hidden', flexShrink: 0,
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '14vh',
+            fontSize: 44, fontWeight: 300, color: C.primary, transition: `width ${TRANSICAO}, opacity ${TRANSICAO}`,
+          }}>›</div>
+
+          {/* Plano (meio) */}
+          <div style={{
+            flexGrow: iniciado ? 1 : 0, flexBasis: 0, minWidth: 0, overflowY: iniciado ? 'auto' : 'hidden',
+            opacity: iniciado ? 1 : 0, background: '#fff', padding: iniciado ? 22 : 0,
+            transition: `flex-grow ${TRANSICAO}, opacity ${TRANSICAO} .15s, padding ${TRANSICAO}`,
+          }}>
+            {iniciado && (
+            <>
+            {/* Resumo em frase: deixa explícito o "hoje" × "agora" */}
+            <div className="gt3-fade-up" style={{ fontSize: 13, color: C.text, lineHeight: 1.55, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 14px', marginBottom: 18 }}>
+              A empresa{' '}
+              {a.origem.length
+                ? <>hoje presta serviço para <b style={{ color: '#4A5568' }}>{a.origem.map(s => nome(s.contratanteId)).join(', ')}</b></>
+                : <b style={{ color: '#4A5568' }}>ainda não presta serviço para nenhuma contratante</b>}
+              {' '}e vai passar a prestar para{' '}
+              {a.destino.length
+                ? <b style={{ color: C.primary }}>{a.destino.map(s => nome(s.contratanteId)).join(', ')}</b>
+                : <span style={{ color: '#C05621', fontWeight: 700 }}>(escolha no quadro 2)</span>}.
+            </div>
             {!pronto ? (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ textAlign: 'center', color: C.faint, maxWidth: 420 }}>
                   <div style={{ fontSize: 44, opacity: 0.4 }}>🧭</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: C.mute, marginTop: 6 }}>
-                    {a.destino.length === 0 ? 'Indique a quais contratantes a empresa será associada' : 'Escolha a variação de cada contratante'}
+                    {a.destino.length === 0 ? 'No quadro 2, escolha para onde a empresa irá prestar agora' : 'Escolha a variação de cada contratante'}
                   </div>
                   <div style={{ fontSize: 13, marginTop: 6 }}>
                     {faltaVariacao.length > 0
@@ -915,12 +938,31 @@ function Wizard({
                 })}
               </>
             )}
+            </>
+            )}
+          </div>
+
+          <div style={{ ...colunaSelecao(iniciado), borderLeft: iniciado ? `1px solid ${C.line}` : '1px solid transparent' }}>
+            <ListaSelecao
+              numero={2}
+              etiqueta="NOVA"
+              titulo="Para onde irá prestar agora"
+              ajuda="A(s) contratante(s) nova(s) desta associação. “Padrão” representa qualquer contratante padrão."
+              vazio="Escolha pelo menos uma contratante nova."
+              textoAdicionar="＋ Adicionar contratante nova"
+              itens={a.destino}
+              onChange={destino => {
+                setA(x => ({ ...x, destino }))
+                if (destino.length) setIniciado(true)
+              }}
+              companies={companies} perfis={perfis} nome={nome} usados={usados} destaque
+            />
           </div>
         </div>
 
         {/* Rodapé */}
         <div style={{ padding: '12px 22px', borderTop: `1px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ width: 240, flexShrink: 0 }}>
+          <div style={{ width: 240, flexShrink: 0, visibility: iniciado ? 'visible' : 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.mute, marginBottom: 5, fontWeight: 600 }}>
               <span>{pronto ? (total ? `${feitosValidos.length} de ${total} etapas` : 'Sem etapas') : 'Aguardando seleção'}</span><span>{pct}%</span>
             </div>
@@ -936,6 +978,17 @@ function Wizard({
       </div>
     </div>
   )
+}
+
+const TRANSICAO = '.6s cubic-bezier(.16,1,.3,1)'
+
+/** Coluna de ① / ②: larga e mais abaixo na tela inicial; estreita, no topo, quando o plano abre no meio. */
+function colunaSelecao(iniciado: boolean): React.CSSProperties {
+  return {
+    flexBasis: iniciado ? 330 : 440, flexShrink: iniciado ? 0 : 1, minWidth: 0, overflowY: 'auto',
+    padding: iniciado ? 18 : '14vh 18px 18px',
+    transition: `flex-basis ${TRANSICAO}, padding ${TRANSICAO}, border-color ${TRANSICAO}`,
+  }
 }
 
 function Stat({ n, label, cor }: { n: number; label: string; cor: string }) {
@@ -982,10 +1035,15 @@ function LinhaPasso({ p, feito, nome, onToggle }: { p: Passo; feito: boolean; no
 // ── Lista de contratantes selecionadas + seletor ────────────────────────────
 
 function ListaSelecao({
-  titulo, ajuda, itens, onChange, companies, perfis, nome, usados, destaque,
+  numero, etiqueta, titulo, ajuda, vazio, textoAdicionar, itens, onChange, companies, perfis, nome, usados, destaque,
 }: {
+  numero: number
+  /** Selo em cada contratante da lista ("HOJE" / "NOVA") */
+  etiqueta: string
   titulo: string
   ajuda: string
+  vazio: string
+  textoAdicionar: string
   itens: Selecao[]
   onChange: (s: Selecao[]) => void
   companies: Company[]
@@ -997,11 +1055,20 @@ function ListaSelecao({
   const [aberto, setAberto] = useState(false)
   return (
     <div style={{
-      background: '#fff', border: `1px solid ${destaque ? '#BFD0FF' : C.line}`, borderRadius: 14, padding: 14, marginBottom: 14,
-      boxShadow: destaque ? '0 2px 10px rgba(42,79,150,0.08)' : 'none',
+      background: destaque ? '#F7FAFF' : '#fff', border: `${destaque ? 2 : 1}px solid ${destaque ? '#7F9CF5' : '#CBD5E0'}`, borderRadius: 14, padding: 14, marginBottom: 14,
+      boxShadow: destaque ? '0 2px 10px rgba(42,79,150,0.10)' : 'none',
     }}>
-      <div style={{ fontSize: 13.5, fontWeight: 800, color: destaque ? C.primary : C.ink }}>{titulo}</div>
-      <div style={{ fontSize: 11.5, color: C.mute, margin: '2px 0 10px' }}>{ajuda}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 12, fontWeight: 800, color: '#fff', background: destaque ? C.primary : '#718096',
+        }}>{numero}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: destaque ? C.primary : C.ink }}>{titulo}</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.mute, margin: '4px 0 10px 30px' }}>{ajuda}</div>
+      {itens.length === 0 && (
+        <div style={{ fontSize: 12, fontStyle: 'italic', color: destaque ? '#C05621' : C.faint, margin: '0 0 8px 2px' }}>{vazio}</div>
+      )}
       {itens.map(s => {
         const perfil = perfis[s.contratanteId]
         const comp = companies.find(c => c.id === s.contratanteId)
@@ -1019,6 +1086,10 @@ function ListaSelecao({
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {padrao ? '◎ Padrão (cliente padrão)' : nome(s.contratanteId)}
               </span>
+              <span title={destaque ? 'Contratante nova desta associação' : 'Contratante que a empresa já atende hoje'} style={{
+                fontSize: 9.5, fontWeight: 800, letterSpacing: '0.05em', padding: '1px 6px', borderRadius: 4,
+                background: destaque ? C.primary : '#E2E8F0', color: destaque ? '#fff' : '#4A5568',
+              }}>{etiqueta}</span>
               <span style={{ fontSize: 10.5, fontWeight: 700, padding: '1px 7px', borderRadius: 10, background: segue ? '#FFFAF0' : '#EEF2FF', color: segue ? '#8A6420' : C.primary }}>
                 {segue ? 'Padrão' : 'Configurada'}
               </span>
@@ -1051,7 +1122,7 @@ function ListaSelecao({
         <button onClick={() => setAberto(v => !v)} style={{
           width: '100%', padding: '8px 10px', borderRadius: 10, border: `1px dashed ${destaque ? C.primary : '#CBD5E0'}`,
           background: 'transparent', color: C.primary, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-        }}>＋ Adicionar contratante{itens.length ? '' : 's'}</button>
+        }}>{textoAdicionar}</button>
         {aberto && (
           <Seletor
             companies={companies} perfis={perfis} usados={usados}

@@ -243,7 +243,14 @@ function VoteView({ enqueteId, onBack, onVoted }: { enqueteId: string; onBack: (
       </button>
       <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${BORDER}`, padding: '24px 28px' }}>
         <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: INK }}>{enquete.titulo}</h2>
-        {enquete.descricao && <p style={{ margin: '0 0 16px', fontSize: 14, color: MUTED }}>{enquete.descricao}</p>}
+        {enquete.descricao?.trim() && (
+          <div style={{ background: PRIMARY_LIGHT, borderLeft: `4px solid ${PRIMARY}`, borderRadius: 8, padding: '12px 16px', margin: '10px 0 18px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: PRIMARY, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              📌 Leia antes de responder
+            </div>
+            <div style={{ fontSize: 14, color: INK, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{enquete.descricao.trim()}</div>
+          </div>
+        )}
         {enquete.anonima && (
           <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
             🔒 Suas respostas são anônimas.
@@ -532,7 +539,11 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: MUTED, display: 'block', marginBottom: 10 }}>PERGUNTAS</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: MUTED, display: 'block', marginBottom: 4 }}>PERGUNTAS</label>
+            <div style={{ fontSize: 12, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
+              💡 A partir da 2ª pergunta, marque <b>&quot;↳ Pergunta condicional&quot;</b> para ela só aparecer conforme a resposta de uma pergunta anterior.
+              Ex.: 1) &quot;Usa o refeitório?&quot; (Sim / Não) → 2) &quot;Como avalia a comida?&quot; aparece só para quem respondeu <b>Sim</b>.
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {perguntas.map((p, i) => (
                 <div key={i} style={{ background: BG_PAGE, borderRadius: 10, padding: '14px 16px', border: `1px solid ${BORDER}` }}>
@@ -575,32 +586,55 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                       </button>
                     </div>
                   )}
-                  {(() => {
-                    // Só perguntas anteriores com opções podem condicionar esta
+                  {i > 0 && (() => {
+                    // Só perguntas anteriores com opções preenchidas podem condicionar esta
                     const candidatas = perguntas
                       .map((q, qi) => ({ q, qi }))
                       .filter(({ q, qi }) => qi < i && q.tipo !== 'text' && q.opcoes.some(o => o.trim()))
-                    if (candidatas.length === 0) return null
-                    const pai = p.condicaoPergunta != null ? perguntas[p.condicaoPergunta] : null
+                    const ativa = p.condicaoPergunta != null
+                    const pai = ativa ? perguntas[p.condicaoPergunta!] : null
+                    const rotuloPergunta = (q: FormPergunta, qi: number) =>
+                      `Pergunta ${qi + 1}${q.texto.trim() ? `: "${q.texto.trim().slice(0, 50)}"` : ''}`
                     return (
-                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${BORDER}` }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 12, color: MUTED }}>Exibir esta pergunta</span>
-                          <select
-                            value={p.condicaoPergunta ?? ''}
+                      <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, border: `1px solid ${ativa ? '#C7D2FE' : BORDER}`, background: ativa ? '#EEF2FF' : '#fff' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: candidatas.length ? INK : MUTED, cursor: candidatas.length ? 'pointer' : 'not-allowed' }}>
+                          <input
+                            type="checkbox"
+                            checked={ativa}
+                            disabled={!candidatas.length && !ativa}
+                            // Ao ligar, já sugere a pergunta anterior mais próxima
                             onChange={e => setPerguntas(prev => prev.map((x, j) => j === i
-                              ? { ...x, condicaoPergunta: e.target.value === '' ? null : Number(e.target.value), condicaoOpcoes: [] }
+                              ? { ...x, condicaoPergunta: e.target.checked ? candidatas[candidatas.length - 1].qi : null, condicaoOpcoes: [] }
                               : x))}
-                            style={{ borderRadius: 6, border: `1px solid ${BORDER}`, padding: '5px 8px', fontSize: 12, color: INK, background: '#fff', cursor: 'pointer', maxWidth: '100%' }}
-                          >
-                            <option value="">sempre</option>
-                            {candidatas.map(({ q, qi }) => (
-                              <option key={qi} value={qi}>só se a pergunta {qi + 1}{q.texto.trim() ? ` ("${q.texto.trim().slice(0, 40)}")` : ''} for…</option>
-                            ))}
-                          </select>
-                        </div>
-                        {pai && pai.tipo !== 'text' && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                            style={{ accentColor: PRIMARY }}
+                          />
+                          ↳ Pergunta condicional: só aparece dependendo da resposta de outra
+                        </label>
+                        {!candidatas.length && !ativa && (
+                          <div style={{ fontSize: 11, color: MUTED, marginTop: 4, marginLeft: 22 }}>
+                            Para usar, uma pergunta anterior precisa ser de &quot;Múltipla escolha&quot; ou &quot;Caixas de seleção&quot;, com as opções preenchidas.
+                          </div>
+                        )}
+                        {ativa && (
+                          <div style={{ marginTop: 8, marginLeft: 22, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, color: INK }}>Depende da</span>
+                            <select
+                              value={p.condicaoPergunta ?? ''}
+                              onChange={e => setPerguntas(prev => prev.map((x, j) => j === i
+                                ? { ...x, condicaoPergunta: Number(e.target.value), condicaoOpcoes: [] }
+                                : x))}
+                              style={{ borderRadius: 6, border: `1px solid ${BORDER}`, padding: '5px 8px', fontSize: 12, color: INK, background: '#fff', cursor: 'pointer', maxWidth: '100%' }}
+                            >
+                              {candidatas.map(({ q, qi }) => (
+                                <option key={qi} value={qi}>{rotuloPergunta(q, qi)}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        {ativa && pai && pai.tipo !== 'text' && (
+                          <div style={{ marginTop: 8, marginLeft: 22 }}>
+                          <div style={{ fontSize: 12, color: INK, marginBottom: 6 }}>Mostrar esta pergunta quando a resposta for:</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                             {pai.opcoes.map((o, k) => o.trim() ? (
                               <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: INK, cursor: 'pointer', padding: '3px 8px', borderRadius: 6, border: `1px solid ${p.condicaoOpcoes.includes(k) ? PRIMARY : BORDER}`, background: p.condicaoOpcoes.includes(k) ? PRIMARY_LIGHT : '#fff' }}>
                                 <input
@@ -612,7 +646,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                                 {o}
                               </label>
                             ) : null)}
-                            {p.condicaoOpcoes.length === 0 && <span style={{ fontSize: 11, color: '#D97706' }}>Marque ao menos uma resposta (sem isso a pergunta aparece sempre).</span>}
+                          </div>
+                          {p.condicaoOpcoes.length === 0 && <div style={{ fontSize: 11, color: '#D97706', marginTop: 6 }}>Marque ao menos uma resposta (sem isso a pergunta aparece sempre).</div>}
                           </div>
                         )}
                       </div>

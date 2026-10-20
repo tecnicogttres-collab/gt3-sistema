@@ -594,7 +594,8 @@ export default function CadastroClient() {
             onChangeSegment={openSegmentModal}
             onDelete={() => void deleteCompany()}
             onFerias={() => setFeriasModal(true)}
-            onAssociar={() => setAssocPedido({ tipo: 'associar', nova: novaAssociacao([], [{ contratanteId: currentCompany.id, variacaoId: null }]) })}
+            // Começa em branco (só "hoje › agora") — a pessoa escolhe as duas pontas
+            onAssociar={() => setAssocPedido({ tipo: 'associar', nova: novaAssociacao([], []) })}
             onConfigAssoc={() => setAssocPedido({ tipo: 'config', contratanteId: currentCompany.id })}
           />
         )}

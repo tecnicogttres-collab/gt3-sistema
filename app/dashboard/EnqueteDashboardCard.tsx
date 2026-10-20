@@ -104,6 +104,29 @@ export default function EnqueteDashboardCard() {
     </div>
   )
 
+  const abrirNoModulo = () => detalhe && router.push(`/enquetes?enquete=${detalhe.id}`)
+
+  // Enquete com descrição: a pessoa precisa lê-la antes de responder, então só avisa e leva ao módulo
+  if (detalhe && pendentes.length && detalhe.descricao?.trim()) {
+    return (
+      <>
+      {avisoSalva}
+      <div style={{ background: '#fff', borderRadius: 8, borderLeft: `4px solid ${COR}`, padding: '12px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: COR, marginBottom: 6 }}>
+          🗳️ Enquete para responder{pendentes.length > 1 ? ` (1 de ${pendentes.length})` : ''}
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#1E253D', marginBottom: 6 }}>{detalhe.titulo}</div>
+        <div style={{ fontSize: 12, color: '#6B7A99', marginBottom: 10 }}>
+          Esta enquete tem instruções que precisam ser lidas antes de responder.
+        </div>
+        <button onClick={abrirNoModulo} style={{ width: '100%', padding: '7px 12px', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: COR, color: '#fff', cursor: 'pointer' }}>
+          Responder no módulo →
+        </button>
+      </div>
+      </>
+    )
+  }
+
   const visiveis = detalhe ? perguntasVisiveis(detalhe.perguntas, answers) : []
   const atual = visiveis[Math.min(passo, visiveis.length - 1)]
   if (!detalhe || !pendentes.length || !atual) return avisoSalva || null
@@ -125,7 +148,7 @@ export default function EnqueteDashboardCard() {
           🗳️ Enquete{pendentes.length > 1 ? ` (1 de ${pendentes.length})` : ''}
         </span>
         <button
-          onClick={() => router.push(`/enquetes?enquete=${detalhe.id}`)}
+          onClick={abrirNoModulo}
           title="Abrir esta enquete no módulo Enquetes"
           style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, color: COR, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
         >
