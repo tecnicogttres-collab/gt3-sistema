@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import AtasEditor, { StatusBadge, type AtaEditorData, type Participante, type Topico, type TopicoHistorico, type ContatoDiretorio } from '../atas/AtasEditor'
@@ -156,6 +156,8 @@ function buildTree(atas: Ata[]): Tree {
 export default function AtasContratantesClient() {
   const { profile } = useUser()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const leituraRegistrada = useRef<Set<string>>(new Set())
 
   const [atas, setAtas] = useState<Ata[]>([])
   const [loading, setLoading] = useState(true)
@@ -232,6 +234,13 @@ export default function AtasContratantesClient() {
   }, [])
 
   useEffect(() => { fetchAtas() }, [fetchAtas])
+
+  // Deep-link via ?ata= (ex.: "Ler agora" no aviso de ata validada)
+  useEffect(() => {
+    const ataId = searchParams.get('ata')
+    if (ataId) selectAta(ataId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   useEffect(() => {
     if (!isGestorOrAdmin) return
@@ -320,6 +329,11 @@ export default function AtasContratantesClient() {
       if (!res.ok) return
       const ata: Ata = await res.json()
       setSelected(ata)
+      // Abrir a ata validada conta como leitura (tira o aviso de quem foi notificado)
+      if (ata.status === 'Validada' && !leituraRegistrada.current.has(id)) {
+        leituraRegistrada.current.add(id)
+        fetch(`/api/atas-contratantes/${id}/leitura`, { method: 'POST' }).catch(() => {})
+      }
       const c = ata.cliente?.trim() || '(Sem cliente)'
       const [y, m] = ata.data.split('-').map(Number)
       setOpenClientes(prev => new Set([...prev, c]))

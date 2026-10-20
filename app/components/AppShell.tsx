@@ -246,6 +246,7 @@ function corTextoSobre(hex: string) {
 }
 
 type AtaNotif = { id: string; data: string; titulo: string | null; created_at: string }
+type AtaContratanteNotif = { id: string; data: string; titulo: string | null; cliente: string | null }
 
 /** Itens criados antes da conta do usuário existir não devem virar notificação/leitura pendente. */
 function criadoAposConta(createdAt: string | null | undefined, profileCreatedAt: string | null | undefined) {
@@ -347,6 +348,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const [prioQueue, setPrioQueue] = useState<PrioridadeNotif[]>([])
   const [ataQueue, setAtaQueue] = useState<AtaNotif[]>([])
+  const [ataContratanteQueue, setAtaContratanteQueue] = useState<AtaContratanteNotif[]>([])
   const [sugestaoQueue, setSugestaoQueue] = useState<Array<{ id: string }>>([])
   const [enqueteQueue, setEnqueteQueue] = useState<Array<{ id: string; titulo: string }>>([])
   const [lembreteCount, setLembreteCount] = useState(0)
@@ -468,6 +470,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       } catch { /* noop */ }
     }
 
+    // Atas Contratantes: só quem foi escolhido no "Notificar" ao validar (atas_contratantes_notificacoes)
+    async function checkAtasContratantes() {
+      try {
+        const res = await fetch('/api/atas-contratantes/notificacoes')
+        if (!mounted || !res.ok) return
+        setAtaContratanteQueue(await res.json())
+      } catch { /* noop */ }
+    }
+
     async function checkUnseenPdiConversa() {
       if (!isColabOrTrainee) return
       try {
@@ -514,9 +525,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/enquetes')
         if (!mounted || !res.ok) return
-        const data: Array<{ id: string; titulo: string; status: string; ja_votou: boolean }> = await res.json()
-        const pendentes = data.filter(e => e.status === 'active' && !e.ja_votou)
-        if (pendentes.length > 0) setEnqueteQueue(pendentes)
+        const data: Array<{ id: string; titulo: string; status: string; ja_votou: boolean; para_mim: boolean }> = await res.json()
+        // Só as enquetes enviadas para este usuário (público-alvo ou usuários escolhidos)
+        const pendentes = data.filter(e => e.status === 'active' && !e.ja_votou && e.para_mim)
+        setEnqueteQueue(pendentes)
       } catch { /* noop */ }
     }
 
@@ -561,6 +573,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     void Promise.all([
       checkUnseenPrio(),
       checkUnseenAtas(),
+      checkAtasContratantes(),
       checkUnseenPdiConversa(),
       checkPdiNotif(),
       checkUnseenSugestoes(),
@@ -581,6 +594,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       pollTimer = setInterval(() => {
         checkUnseenPdiConversa()
         checkPdiNotif()
+        checkAtasContratantes()
       }, 120_000)
     }
     function stopPoll() {
@@ -589,7 +603,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     startPoll()
     const onVisibilityChange = () => {
       if (document.hidden) stopPoll()
-      else { startPoll(); void Promise.all([checkUnseenPdiConversa(), checkPdiNotif()]) }
+      else { startPoll(); void Promise.all([checkUnseenPdiConversa(), checkPdiNotif(), checkAtasContratantes()]) }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
 
@@ -640,11 +654,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'enquetes', filter: 'status=eq.active' },
-        (payload) => {
-          const record = payload.new as { id: string; titulo: string; status: string }
-          if (!record?.id || record.status !== 'active') return
-          setEnqueteQueue(prev => prev.some(e => e.id === record.id) ? prev : [...prev, { id: record.id, titulo: record.titulo }])
-        }
+        // Recarrega pela API em vez de usar o registro: é ela que sabe se a enquete é para este usuário
+        () => { void checkUnseenEnquetes() }
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'enquetes', filter: 'status=eq.active' },
+        () => { void checkUnseenEnquetes() }
       )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'pdi_ciclos' },
@@ -682,7 +697,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (anterior === pathname || !profile) return
     if (anterior === '/atas' && isColabOrTrainee) loadUnreadAtas(profile.id, profile.created_at)
     if (anterior === '/legislacoes') loadLegislacoesPendentes(profile.created_at)
-  }, [pathname, profile, isColabOrTrainee, loadUnreadAtas, loadLegislacoesPendentes])
+    if (anterior === '/atas-contratantes') {
+      fetch('/api/atas-contratantes/notificacoes')
+        .then(r => r.ok ? r.json() : null)
+        .then((d: AtaContratanteNotif[] | null) => { if (d) setAtaContratanteQueue(d) })
+        .catch(() => {})
+    }
+  },[pathname, profile, isColabOrTrainee, loadUnreadAtas, loadLegislacoesPendentes])
 
   // Login e link público do questionário (respondente externo) aparecem sem o shell do sistema
   if (pathname === '/login' || pathname.startsWith('/questionario/')) return <>{children}</>
@@ -711,6 +732,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setAtaQueue(prev => prev.slice(1))
     setUnreadAtas(prev => prev.filter(a => a.id !== ataId))
     router.push(`/atas?ata=${ataId}`)
+  }
+
+  function dismissTopAtaContratante() {
+    // "Ver depois": volta a avisar na próxima carga até a ata ser aberta
+    setAtaContratanteQueue(prev => prev.slice(1))
+  }
+
+  function handleLerAtaContratante(ataId: string) {
+    setAtaContratanteQueue(prev => prev.filter(a => a.id !== ataId))
+    fetch(`/api/atas-contratantes/${ataId}/leitura`, { method: 'POST' }).catch(() => {})
+    router.push(`/atas-contratantes?ata=${ataId}`)
   }
 
   async function handleVerPdi() {
@@ -776,9 +808,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const showPrioNotif = prioQueue.length > 0
   const showAtaNotif = !showPrioNotif && ataQueue.length > 0
-  const showSugestaoNotif = !showPrioNotif && !showAtaNotif && sugestaoQueue.length > 0
-  const showEnqueteNotif = !showPrioNotif && !showAtaNotif && !showSugestaoNotif && enqueteQueue.length > 0
-  const showLembrete = !showPrioNotif && !showAtaNotif && !showSugestaoNotif && !showEnqueteNotif && showLembreteNotif
+  const showAtaContratanteNotif = !showPrioNotif && !showAtaNotif && ataContratanteQueue.length > 0 && !pathname.startsWith('/atas-contratantes')
+  const showSugestaoNotif = !showPrioNotif && !showAtaNotif && !showAtaContratanteNotif && sugestaoQueue.length > 0
+  const showEnqueteNotif = !showPrioNotif && !showAtaNotif && !showAtaContratanteNotif && !showSugestaoNotif && enqueteQueue.length > 0
+  const showLembrete = !showPrioNotif && !showAtaNotif && !showAtaContratanteNotif && !showSugestaoNotif && !showEnqueteNotif && showLembreteNotif
 
   const bannerAta = pathname !== '/atas' && isColabOrTrainee && unreadAtas.length > 0 ? unreadAtas[0] : null
   const bannerPdiConversa = isColabOrTrainee && pdiConversaBanner && !pathname.startsWith('/pdi') ? pdiConversaBanner : null
@@ -1078,6 +1111,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           titulo={ataQueue[0].titulo}
           onLerAgora={handleLerAgora}
           onVerDepois={dismissTopAta}
+        />
+      )}
+      {showAtaContratanteNotif && (
+        <AtaNotificacao
+          ataId={ataContratanteQueue[0].id}
+          data={ataContratanteQueue[0].data.split('-').reverse().join('/')}
+          titulo={ataContratanteQueue[0].titulo}
+          rotulo="Nova Ata de Contratante Validada"
+          detalhe={ataContratanteQueue[0].cliente}
+          onLerAgora={handleLerAtaContratante}
+          onVerDepois={dismissTopAtaContratante}
         />
       )}
       {showSugestaoNotif && (

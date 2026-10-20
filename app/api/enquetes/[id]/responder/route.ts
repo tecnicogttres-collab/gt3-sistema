@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../lib/api-helpers'
+import { enqueteParaMim } from '../../../../lib/enquetes-destinatarios'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,14 +12,19 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const admin = createAdminClient()
 
-  const { data: enquete } = await admin
-    .from('enquetes')
-    .select('status, permitir_alterar_voto, encerramento')
-    .eq('id', id)
-    .single()
+  const [{ data: enquete }, { data: profile }] = await Promise.all([
+    admin.from('enquetes')
+      .select('status, permitir_alterar_voto, encerramento, publico_alvo, destinatarios')
+      .eq('id', id)
+      .single(),
+    admin.from('profiles').select('papel').eq('id', user.id).single(),
+  ])
 
   if (!enquete || enquete.status !== 'active') return Response.json({ error: 'Enquete não disponível' }, { status: 400 })
   if (enquete.encerramento && new Date(enquete.encerramento) < new Date()) return Response.json({ error: 'Enquete encerrada' }, { status: 400 })
+  if (!enqueteParaMim(enquete, user.id, (profile?.papel as string) ?? 'colaborador')) {
+    return Response.json({ error: 'Esta enquete não foi enviada para você' }, { status: 403 })
+  }
 
   const { data: existing } = await admin
     .from('enquete_respostas')

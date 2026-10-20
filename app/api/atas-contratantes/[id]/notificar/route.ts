@@ -18,7 +18,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const body = await request.json() as { userIds?: string[] }
-  const userIds = Array.isArray(body.userIds) ? body.userIds.filter(Boolean) : []
+  // Quem validou não recebe aviso da própria ata
+  const userIds = Array.isArray(body.userIds) ? [...new Set(body.userIds.filter(id => id && id !== user.id))] : []
   if (!userIds.length) return Response.json({ ok: true, count: 0 })
 
   const rows = userIds.map(user_id => ({ ata_id, user_id }))
@@ -27,5 +28,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     .upsert(rows, { onConflict: 'ata_id,user_id', ignoreDuplicates: true })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
+
+  // Badge na sidebar (notificacoes_usuario); o pop-up vem de GET /api/atas-contratantes/notificacoes
+  await admin.from('notificacoes_usuario')
+    .insert(userIds.map(usuario_id => ({ usuario_id, modulo: 'atas-contratantes', visto: false })))
+
   return Response.json({ ok: true, count: userIds.length })
 }

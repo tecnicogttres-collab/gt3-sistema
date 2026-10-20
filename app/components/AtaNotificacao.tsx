@@ -6,9 +6,13 @@ type Props = {
   titulo: string | null
   onLerAgora: (ataId: string) => void
   onVerDepois: () => void
+  /** Ex.: "Nova Ata de Contratante" (padrão: "Nova Ata Disponível") */
+  rotulo?: string
+  /** Linha extra abaixo do título (ex.: nome da contratante) */
+  detalhe?: string | null
 }
 
-export default function AtaNotificacao({ ataId, data, titulo, onLerAgora, onVerDepois }: Props) {
+export default function AtaNotificacao({ ataId, data, titulo, onLerAgora, onVerDepois, rotulo = 'Nova Ata Disponível', detalhe }: Props) {
   const label = titulo?.trim() || `Ata de ${data}`
   return (
     <div className="gt3-overlay-fade" style={{
@@ -23,11 +27,12 @@ export default function AtaNotificacao({ ataId, data, titulo, onLerAgora, onVerD
       }}>
         <div style={{ fontSize: 42, marginBottom: 12 }}>📋</div>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: '#5B8DEF', marginBottom: 8, textTransform: 'uppercase' }}>
-          Nova Ata Disponível
+          {rotulo}
         </div>
         <div style={{ fontSize: 17, fontWeight: 600, color: '#1A2340', marginBottom: 6 }}>
           {label}
         </div>
+        {detalhe && <div style={{ fontSize: 13, color: '#334155', marginBottom: 4 }}>{detalhe}</div>}
         <div style={{ fontSize: 13, color: '#6B7A99', marginBottom: 28 }}>{data}</div>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
           <button

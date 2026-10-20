@@ -28,6 +28,10 @@ type EnqueteItem = {
   total_perguntas: number
   total_respostas: number
   ja_votou: boolean
+  /** Enquete enviada para este usuário responder */
+  para_mim: boolean
+  /** Usuários escolhidos (só vem para gestor/admin); null = vale o público-alvo */
+  destinatarios: string[] | null
 }
 
 type Opcao = { id: string; ordem: number; texto: string }
@@ -38,6 +42,23 @@ type Pergunta = {
   tipo: 'text' | 'radio' | 'checkbox'
   obrigatoria: boolean
   opcoes: Opcao[]
+  /** Só aparece se esta pergunta foi respondida com uma de condicao_opcao_ids */
+  condicao_pergunta_id: string | null
+  condicao_opcao_ids: string[] | null
+}
+
+/** Perguntas visíveis com as respostas atuais — a condicional some se a pergunta de que
+ *  depende está oculta ou não foi respondida com uma das opções escolhidas. */
+function perguntasVisiveis(perguntas: Pergunta[], answers: Record<string, string | string[]>): Pergunta[] {
+  const visiveis = new Set<string>()
+  for (const p of perguntas) {
+    if (!p.condicao_pergunta_id || !p.condicao_opcao_ids?.length) { visiveis.add(p.id); continue }
+    if (!visiveis.has(p.condicao_pergunta_id)) continue
+    const ans = answers[p.condicao_pergunta_id]
+    const marcadas = Array.isArray(ans) ? ans : ans ? [ans] : []
+    if (marcadas.some(o => p.condicao_opcao_ids!.includes(o))) visiveis.add(p.id)
+  }
+  return perguntas.filter(p => visiveis.has(p.id))
 }
 type EnqueteDetail = EnqueteItem & {
   perguntas: Pergunta[]
@@ -59,7 +80,15 @@ type FormPergunta = {
   tipo: 'text' | 'radio' | 'checkbox'
   obrigatoria: boolean
   opcoes: string[]
+  /** Índice da pergunta anterior da qual esta depende (null = sempre aparece) */
+  condicaoPergunta: number | null
+  /** Índices das opções daquela pergunta que fazem esta aparecer */
+  condicaoOpcoes: number[]
 }
+
+const NOVA_PERGUNTA: FormPergunta = { texto: '', tipo: 'radio', obrigatoria: false, opcoes: ['', ''], condicaoPergunta: null, condicaoOpcoes: [] }
+
+type UsuarioOpt = { id: string; nome: string | null; usuario: string | null; papel: string | null }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -185,8 +214,10 @@ function VoteView({ enqueteId, onBack, onVoted }: { enqueteId: string; onBack: (
   async function handleSubmit() {
     if (!enquete) return
     setError('')
+    // Perguntas ocultas pela condição não são cobradas nem enviadas
+    const visiveis = perguntasVisiveis(enquete.perguntas, answers)
 
-    for (const p of enquete.perguntas) {
+    for (const p of visiveis) {
       if (!p.obrigatoria) continue
       const ans = answers[p.id]
       const empty = !ans || (Array.isArray(ans) ? ans.length === 0 : !String(ans).trim())
@@ -196,7 +227,7 @@ function VoteView({ enqueteId, onBack, onVoted }: { enqueteId: string; onBack: (
     setSubmitting(true)
     const respostas: Array<{ pergunta_id: string; opcao_id?: string; texto_livre?: string }> = []
 
-    for (const p of enquete.perguntas) {
+    for (const p of visiveis) {
       const ans = answers[p.id]
       if (p.tipo === 'text') {
         if (typeof ans === 'string' && ans.trim()) respostas.push({ pergunta_id: p.id, texto_livre: ans.trim() })
@@ -263,7 +294,7 @@ function VoteView({ enqueteId, onBack, onVoted }: { enqueteId: string; onBack: (
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {enquete.perguntas.map((p, i) => (
+          {perguntasVisiveis(enquete.perguntas, answers).map((p, i) => (
             <div key={p.id}>
               <div style={{ fontSize: 14, fontWeight: 600, color: INK, marginBottom: 10 }}>
                 {i + 1}. {p.texto}
@@ -346,19 +377,61 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [anonima, setAnonima] = useState(true)
   const [permitirAlterar, setPermitirAlterar] = useState(true)
   const [mostrarParciais, setMostrarParciais] = useState(false)
-  const [perguntas, setPerguntas] = useState<FormPergunta[]>([{ texto: '', tipo: 'radio', obrigatoria: false, opcoes: ['', ''] }])
+  const [perguntas, setPerguntas] = useState<FormPergunta[]>([{ ...NOVA_PERGUNTA }])
+  const [usuarios, setUsuarios] = useState<UsuarioOpt[]>([])
+  const [pessoas, setPessoas] = useState<Set<string>>(new Set())
+  const [buscaPessoa, setBuscaPessoa] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (publicoAlvo !== 'usuarios' || usuarios.length) return
+    fetch('/api/campanhas/usuarios')
+      .then(r => r.ok ? r.json() : [])
+      .then(setUsuarios)
+      .catch(() => {})
+  }, [publicoAlvo, usuarios.length])
 
   function updatePerg(i: number, field: keyof FormPergunta, value: unknown) {
     setPerguntas(prev => prev.map((p, j) => j === i ? { ...p, [field]: value } : p))
   }
 
+  function removePerg(i: number) {
+    // Condições que apontavam para a removida caem; as que apontavam para depois dela andam uma casa
+    setPerguntas(prev => prev.filter((_, j) => j !== i).map(p =>
+      p.condicaoPergunta === i ? { ...p, condicaoPergunta: null, condicaoOpcoes: [] }
+        : p.condicaoPergunta != null && p.condicaoPergunta > i ? { ...p, condicaoPergunta: p.condicaoPergunta - 1 }
+        : p))
+  }
+
+  function removeOpcao(i: number, oi: number) {
+    setPerguntas(prev => prev.map((p, j) => {
+      if (j === i) return { ...p, opcoes: p.opcoes.filter((_, k) => k !== oi) }
+      if (p.condicaoPergunta !== i) return p
+      return { ...p, condicaoOpcoes: p.condicaoOpcoes.filter(k => k !== oi).map(k => k > oi ? k - 1 : k) }
+    }))
+  }
+
   async function handleSave() {
     if (!titulo.trim()) { setError('Título obrigatório'); return }
-    const validPergs = perguntas.filter(p => p.texto.trim())
-    if (validPergs.length === 0) { setError('Adicione pelo menos uma pergunta'); return }
+    const validIdx = perguntas.map((p, i) => p.texto.trim() ? i : -1).filter(i => i >= 0)
+    if (validIdx.length === 0) { setError('Adicione pelo menos uma pergunta'); return }
+    if (publicoAlvo === 'usuarios' && pessoas.size === 0) { setError('Escolha pelo menos um usuário'); return }
     setSaving(true); setError('')
+
+    // Perguntas sem texto são descartadas, então as condições são remapeadas para os novos índices
+    const novoIdx = new Map(validIdx.map((old, n) => [old, n]))
+    const validPergs = validIdx.map(i => {
+      const p = perguntas[i]
+      const pai = p.condicaoPergunta != null ? perguntas[p.condicaoPergunta] : null
+      const opcoesPai = pai && pai.tipo !== 'text' ? p.condicaoOpcoes.filter(k => pai.opcoes[k]?.trim()) : []
+      const temCondicao = p.condicaoPergunta != null && novoIdx.has(p.condicaoPergunta) && opcoesPai.length > 0
+      return {
+        ...p,
+        condicao_pergunta: temCondicao ? novoIdx.get(p.condicaoPergunta!)! : null,
+        condicao_opcoes: temCondicao ? opcoesPai : [],
+      }
+    })
 
     const res = await fetch('/api/enquetes', {
       method: 'POST',
@@ -368,6 +441,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         descricao: descricao.trim() || null,
         encerramento: encerramento || null,
         publico_alvo: publicoAlvo,
+        destinatarios: publicoAlvo === 'usuarios' ? [...pessoas] : null,
         status: statusVal,
         anonima,
         permitir_alterar_voto: permitirAlterar,
@@ -376,7 +450,10 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           texto: p.texto.trim(),
           tipo: p.tipo,
           obrigatoria: p.obrigatoria,
-          opcoes: p.tipo !== 'text' ? p.opcoes.filter(o => o.trim()) : [],
+          // Opções vazias seguem na posição (o servidor descarta) para os índices da condição baterem
+          opcoes: p.tipo !== 'text' ? p.opcoes : [],
+          condicao_pergunta: p.condicao_pergunta,
+          condicao_opcoes: p.condicao_opcoes,
         })),
       }),
     })
@@ -421,9 +498,52 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 <option value="colaboradores">Colaboradores</option>
                 <option value="trainees">Trainees</option>
                 <option value="gestores">Gestores</option>
+                <option value="usuarios">Usuários específicos</option>
               </select>
             </div>
           </div>
+
+          {publicoAlvo === 'usuarios' && (() => {
+            const termo = buscaPessoa.trim().toLowerCase()
+            const lista = usuarios.filter(u => !termo || (u.nome ?? u.usuario ?? '').toLowerCase().includes(termo))
+            const todosMarcados = lista.length > 0 && lista.every(u => pessoas.has(u.id))
+            return (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: MUTED, display: 'block', marginBottom: 6 }}>
+                  ENVIAR PARA ({pessoas.size} selecionado{pessoas.size !== 1 ? 's' : ''})
+                </label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <input value={buscaPessoa} onChange={e => setBuscaPessoa(e.target.value)} placeholder="Buscar usuário..." style={{ ...INPUT, flex: 1, padding: '6px 10px', fontSize: 13 }} />
+                  <button
+                    onClick={() => setPessoas(prev => {
+                      const s = new Set(prev)
+                      lista.forEach(u => todosMarcados ? s.delete(u.id) : s.add(u.id))
+                      return s
+                    })}
+                    style={{ padding: '0 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                  >
+                    {todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}
+                  </button>
+                </div>
+                <div style={{ maxHeight: 180, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '4px 0' }}>
+                  {lista.length === 0 && <div style={{ fontSize: 13, color: MUTED, padding: '8px 12px' }}>{usuarios.length ? 'Nenhum usuário encontrado.' : 'Carregando...'}</div>}
+                  {lista.map(u => (
+                    <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', fontSize: 13, color: INK, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={pessoas.has(u.id)}
+                        onChange={() => setPessoas(prev => { const s = new Set(prev); if (s.has(u.id)) s.delete(u.id); else s.add(u.id); return s })}
+                        style={{ accentColor: PRIMARY }}
+                      />
+                      {u.nome ?? u.usuario ?? '—'}
+                      {u.papel && <span style={{ fontSize: 11, color: MUTED }}>({u.papel})</span>}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>Gestores e admins sempre veem os resultados, mesmo sem estar na lista.</div>
+              </div>
+            )
+          })()}
 
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: MUTED, display: 'block', marginBottom: 6 }}>STATUS INICIAL</label>
@@ -458,7 +578,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                     <input value={p.texto} onChange={e => updatePerg(i, 'texto', e.target.value)} placeholder={`Pergunta ${i + 1}`} style={{ ...INPUT, flex: 1 }} onFocus={e => e.target.style.borderColor = PRIMARY} onBlur={e => e.target.style.borderColor = BORDER} />
                     {perguntas.length > 1 && (
-                      <button onClick={() => setPerguntas(prev => prev.filter((_, j) => j !== i))} style={{ padding: '0 10px', borderRadius: 8, border: `1px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 18, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>×</button>
+                      <button onClick={() => removePerg(i)} style={{ padding: '0 10px', borderRadius: 8, border: `1px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 18, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>×</button>
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -485,7 +605,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                             onBlur={e => e.target.style.borderColor = BORDER}
                           />
                           {p.opcoes.length > 2 && (
-                            <button onClick={() => updatePerg(i, 'opcoes', p.opcoes.filter((_, k) => k !== oi))} style={{ padding: '0 8px', borderRadius: 6, border: `1px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
+                            <button onClick={() => removeOpcao(i, oi)} style={{ padding: '0 8px', borderRadius: 6, border: `1px solid #FECACA`, background: '#FEF2F2', color: '#DC2626', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
                           )}
                         </div>
                       ))}
@@ -494,10 +614,53 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                       </button>
                     </div>
                   )}
+                  {(() => {
+                    // Só perguntas anteriores com opções podem condicionar esta
+                    const candidatas = perguntas
+                      .map((q, qi) => ({ q, qi }))
+                      .filter(({ q, qi }) => qi < i && q.tipo !== 'text' && q.opcoes.some(o => o.trim()))
+                    if (candidatas.length === 0) return null
+                    const pai = p.condicaoPergunta != null ? perguntas[p.condicaoPergunta] : null
+                    return (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${BORDER}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 12, color: MUTED }}>Exibir esta pergunta</span>
+                          <select
+                            value={p.condicaoPergunta ?? ''}
+                            onChange={e => setPerguntas(prev => prev.map((x, j) => j === i
+                              ? { ...x, condicaoPergunta: e.target.value === '' ? null : Number(e.target.value), condicaoOpcoes: [] }
+                              : x))}
+                            style={{ borderRadius: 6, border: `1px solid ${BORDER}`, padding: '5px 8px', fontSize: 12, color: INK, background: '#fff', cursor: 'pointer', maxWidth: '100%' }}
+                          >
+                            <option value="">sempre</option>
+                            {candidatas.map(({ q, qi }) => (
+                              <option key={qi} value={qi}>só se a pergunta {qi + 1}{q.texto.trim() ? ` ("${q.texto.trim().slice(0, 40)}")` : ''} for…</option>
+                            ))}
+                          </select>
+                        </div>
+                        {pai && pai.tipo !== 'text' && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                            {pai.opcoes.map((o, k) => o.trim() ? (
+                              <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: INK, cursor: 'pointer', padding: '3px 8px', borderRadius: 6, border: `1px solid ${p.condicaoOpcoes.includes(k) ? PRIMARY : BORDER}`, background: p.condicaoOpcoes.includes(k) ? PRIMARY_LIGHT : '#fff' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={p.condicaoOpcoes.includes(k)}
+                                  onChange={() => updatePerg(i, 'condicaoOpcoes', p.condicaoOpcoes.includes(k) ? p.condicaoOpcoes.filter(x => x !== k) : [...p.condicaoOpcoes, k])}
+                                  style={{ accentColor: PRIMARY }}
+                                />
+                                {o}
+                              </label>
+                            ) : null)}
+                            {p.condicaoOpcoes.length === 0 && <span style={{ fontSize: 11, color: '#D97706' }}>Marque ao menos uma resposta (sem isso a pergunta aparece sempre).</span>}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
-            <button onClick={() => setPerguntas(prev => [...prev, { texto: '', tipo: 'radio', obrigatoria: false, opcoes: ['', ''] }])} style={{ marginTop: 10, width: '100%', background: 'none', border: `1.5px dashed ${BORDER}`, borderRadius: 8, padding: '8px 0', fontSize: 13, color: MUTED, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={() => setPerguntas(prev => [...prev, { ...NOVA_PERGUNTA }])} style={{ marginTop: 10, width: '100%', background: 'none', border: `1.5px dashed ${BORDER}`, borderRadius: 8, padding: '8px 0', fontSize: 13, color: MUTED, cursor: 'pointer', fontFamily: 'inherit' }}>
               + Adicionar pergunta
             </button>
           </div>
@@ -614,7 +777,7 @@ export default function EnquetesClient() {
           {filtered.map(e => {
             const st = statusBadge(e.status)
             const expired = e.encerramento && new Date(e.encerramento) < new Date()
-            const canVote = !isGestorAdmin && e.status === 'active' && (!e.ja_votou || e.permitir_alterar_voto)
+            const canVote = e.para_mim && e.status === 'active' && (!e.ja_votou || e.permitir_alterar_voto)
             const canSeeResults = isGestorAdmin || (e.ja_votou && e.mostrar_resultados_parciais) || e.status === 'closed'
             return (
               <div key={e.id} style={{ background: '#fff', borderRadius: 12, border: `1px solid ${BORDER}`, padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -624,7 +787,7 @@ export default function EnquetesClient() {
                       <span style={{ fontSize: 15, fontWeight: 600, color: INK }}>{e.titulo}</span>
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: st.bg, color: st.color }}>{st.label}</span>
                       {e.ja_votou && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#F0FFF4', color: SUCCESS }}>✓ Respondida</span>}
-                      {!e.ja_votou && e.status === 'active' && !isGestorAdmin && (
+                      {!e.ja_votou && e.status === 'active' && e.para_mim && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#FFF7ED', color: '#D97706' }}>Pendente</span>
                       )}
                     </div>
@@ -632,6 +795,13 @@ export default function EnquetesClient() {
                     <div style={{ fontSize: 12, color: MUTED, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                       <span>{e.total_perguntas} pergunta{e.total_perguntas !== 1 ? 's' : ''}</span>
                       <span>{e.total_respostas} resposta{e.total_respostas !== 1 ? 's' : ''}</span>
+                      {isGestorAdmin && (
+                        <span>
+                          Para: {e.destinatarios?.length
+                            ? `${e.destinatarios.length} usuário${e.destinatarios.length !== 1 ? 's' : ''} escolhido${e.destinatarios.length !== 1 ? 's' : ''}`
+                            : ({ todos: 'Todos', colaboradores: 'Colaboradores', trainees: 'Trainees', gestores: 'Gestores' } as Record<string, string>)[e.publico_alvo] ?? e.publico_alvo}
+                        </span>
+                      )}
                       {e.encerramento && <span>Encerra: {formatDate(e.encerramento)}</span>}
                       {expired && e.status === 'active' && <span style={{ color: '#DC2626' }}>Prazo vencido</span>}
                     </div>
