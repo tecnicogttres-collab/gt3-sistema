@@ -242,18 +242,22 @@ function VoteView({ enqueteId, onBack, onVoted }: { enqueteId: string; onBack: (
         ← Voltar
       </button>
       <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${BORDER}`, padding: '24px 28px' }}>
-        <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: INK }}>{enquete.titulo}</h2>
+        <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: INK, overflowWrap: 'anywhere' }}>{enquete.titulo}</h2>
         {enquete.descricao?.trim() && (
           <div style={{ background: PRIMARY_LIGHT, borderLeft: `4px solid ${PRIMARY}`, borderRadius: 8, padding: '12px 16px', margin: '10px 0 18px' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: PRIMARY, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
               📌 Leia antes de responder
             </div>
-            <div style={{ fontSize: 14, color: INK, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{enquete.descricao.trim()}</div>
+            <div style={{ fontSize: 14, color: INK, lineHeight: 1.55, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{enquete.descricao.trim()}</div>
           </div>
         )}
-        {enquete.anonima && (
-          <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
-            🔒 Suas respostas são anônimas.
+        {enquete.anonima ? (
+          <div style={{ background: SUCCESS_LIGHT, border: '1px solid #BBF7D0', borderLeft: `4px solid ${SUCCESS}`, borderRadius: 8, padding: '10px 14px', margin: '10px 0 20px', fontSize: 13, color: INK, lineHeight: 1.5 }}>
+            <strong style={{ color: SUCCESS }}>🔒 Pesquisa anônima</strong> — ninguém vê quem respondeu o quê.
+          </div>
+        ) : (
+          <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderLeft: '4px solid #D97706', borderRadius: 8, padding: '10px 14px', margin: '10px 0 20px', fontSize: 13, color: INK, lineHeight: 1.5 }}>
+            <strong style={{ color: '#D97706' }}>👤 Respostas identificadas</strong> — esta pesquisa não é anônima.
           </div>
         )}
         {enquete.ja_votou && (
@@ -801,14 +805,15 @@ export default function EnquetesClient() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: INK }}>{e.titulo}</span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: INK, overflowWrap: 'anywhere' }}>{e.titulo}</span>
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: st.bg, color: st.color }}>{st.label}</span>
+                      {e.anonima && <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: PRIMARY_LIGHT, color: PRIMARY }}>🔒 Anônima</span>}
                       {e.ja_votou && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#F0FFF4', color: SUCCESS }}>✓ Respondida</span>}
                       {!e.ja_votou && e.status === 'active' && e.para_mim && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#FFF7ED', color: '#D97706' }}>Pendente</span>
                       )}
                     </div>
-                    {e.descricao && <p style={{ margin: '0 0 6px', fontSize: 13, color: MUTED }}>{e.descricao}</p>}
+                    {e.descricao && <p style={{ margin: '0 0 6px', fontSize: 13, color: MUTED, overflowWrap: 'anywhere' }}>{e.descricao}</p>}
                     <div style={{ fontSize: 12, color: MUTED, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                       <span>{e.total_perguntas} pergunta{e.total_perguntas !== 1 ? 's' : ''}</span>
                       <span>{e.total_respostas} resposta{e.total_respostas !== 1 ? 's' : ''}</span>
