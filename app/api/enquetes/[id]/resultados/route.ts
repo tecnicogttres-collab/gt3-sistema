@@ -17,19 +17,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const { data: enquete } = await admin
     .from('enquetes')
-    .select('status, mostrar_resultados_parciais, anonima')
+    .select('status, anonima')
     .eq('id', id)
     .single()
 
   if (!enquete) return Response.json({ error: 'Não encontrada' }, { status: 404 })
 
-  if (!isGestorAdmin) {
-    const { data: minhas } = await admin.from('enquete_respostas').select('id').eq('enquete_id', id).eq('usuario_id', user.id).limit(1)
-    const voted = (minhas ?? []).length > 0
-    if (!voted || (!enquete.mostrar_resultados_parciais && enquete.status !== 'closed')) {
-      return Response.json({ error: 'Resultados não disponíveis' }, { status: 403 })
-    }
-  }
+  // Por ora, resultados só para gestor/admin — colaborador/trainee não veem, nem após encerrar
+  if (!isGestorAdmin) return Response.json({ error: 'Resultados não disponíveis' }, { status: 403 })
 
   const { data: perguntas } = await admin
     .from('enquete_perguntas')

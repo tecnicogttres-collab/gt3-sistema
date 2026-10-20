@@ -586,6 +586,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // Campanha criada/excluída/editada (por aqui ou por outra pessoa): recarrega os avisos.
     const recarregarCampanhas = () => { void loadCampanhasPendentes(profile.created_at) }
     window.addEventListener('campanhas:atualizar', recarregarCampanhas)
+    // Enquete respondida no Dashboard ou no módulo: tira do pop-up de pendentes
+    const recarregarEnquetes = () => { void checkUnseenEnquetes() }
+    window.addEventListener('enquetes:atualizar', recarregarEnquetes)
 
     let pollTimer: ReturnType<typeof setInterval> | null = null
     function startPoll() {
@@ -683,6 +686,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       mounted = false
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('campanhas:atualizar', recarregarCampanhas)
+      window.removeEventListener('enquetes:atualizar', recarregarEnquetes)
       stopPoll()
       supabase.removeChannel(channel)
     }
@@ -802,8 +806,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   function handleResponderAgora() {
+    const top = enqueteQueue[0]
     setEnqueteQueue(prev => prev.slice(1))
-    router.push('/enquetes')
+    router.push(top ? `/enquetes?enquete=${top.id}` : '/enquetes')
   }
 
   const showPrioNotif = prioQueue.length > 0

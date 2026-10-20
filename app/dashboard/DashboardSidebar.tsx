@@ -7,6 +7,7 @@ import { createClient } from '../lib/supabase'
 import { nthWeekdayOfMonth } from '../lib/lembretes'
 import { urgenciaDesig } from '../lib/desig-urgencia'
 import { useUser } from '../components/UserContext'
+import EnqueteDashboardCard from './EnqueteDashboardCard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -702,6 +703,9 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           })()}
         </div>
         )}
+
+        {/* ── Enquete pendente — respondida aqui mesmo (some ao enviar) ── */}
+        <EnqueteDashboardCard />
 
         {/* ── Block 1b: Observações a validar (gestor/admin) ────────────── */}
         {role && ['gestor', 'admin'].includes(role) && obsPendentes.length > 0 && (

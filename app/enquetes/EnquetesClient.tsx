@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useUser } from '../components/UserContext'
+import { perguntasVisiveis, montarRespostas, respostaVazia, type Pergunta } from './condicional'
 
 const PRIMARY = '#2A4F96'
 const PRIMARY_LIGHT = '#EBF0FB'
@@ -34,32 +36,6 @@ type EnqueteItem = {
   destinatarios: string[] | null
 }
 
-type Opcao = { id: string; ordem: number; texto: string }
-type Pergunta = {
-  id: string
-  ordem: number
-  texto: string
-  tipo: 'text' | 'radio' | 'checkbox'
-  obrigatoria: boolean
-  opcoes: Opcao[]
-  /** Só aparece se esta pergunta foi respondida com uma de condicao_opcao_ids */
-  condicao_pergunta_id: string | null
-  condicao_opcao_ids: string[] | null
-}
-
-/** Perguntas visíveis com as respostas atuais — a condicional some se a pergunta de que
- *  depende está oculta ou não foi respondida com uma das opções escolhidas. */
-function perguntasVisiveis(perguntas: Pergunta[], answers: Record<string, string | string[]>): Pergunta[] {
-  const visiveis = new Set<string>()
-  for (const p of perguntas) {
-    if (!p.condicao_pergunta_id || !p.condicao_opcao_ids?.length) { visiveis.add(p.id); continue }
-    if (!visiveis.has(p.condicao_pergunta_id)) continue
-    const ans = answers[p.condicao_pergunta_id]
-    const marcadas = Array.isArray(ans) ? ans : ans ? [ans] : []
-    if (marcadas.some(o => p.condicao_opcao_ids!.includes(o))) visiveis.add(p.id)
-  }
-  return perguntas.filter(p => visiveis.has(p.id))
-}
 type EnqueteDetail = EnqueteItem & {
   perguntas: Pergunta[]
   minhas_respostas: Array<{ pergunta_id: string; opcao_id: string | null; texto_livre: string | null }>
@@ -218,25 +194,11 @@ function VoteView({ enqueteId, onBack, onVoted }: { enqueteId: string; onBack: (
     const visiveis = perguntasVisiveis(enquete.perguntas, answers)
 
     for (const p of visiveis) {
-      if (!p.obrigatoria) continue
-      const ans = answers[p.id]
-      const empty = !ans || (Array.isArray(ans) ? ans.length === 0 : !String(ans).trim())
-      if (empty) { setError(`Por favor, responda: "${p.texto}"`); return }
+      if (p.obrigatoria && respostaVazia(answers[p.id])) { setError(`Por favor, responda: "${p.texto}"`); return }
     }
 
     setSubmitting(true)
-    const respostas: Array<{ pergunta_id: string; opcao_id?: string; texto_livre?: string }> = []
-
-    for (const p of visiveis) {
-      const ans = answers[p.id]
-      if (p.tipo === 'text') {
-        if (typeof ans === 'string' && ans.trim()) respostas.push({ pergunta_id: p.id, texto_livre: ans.trim() })
-      } else if (p.tipo === 'radio') {
-        if (typeof ans === 'string' && ans) respostas.push({ pergunta_id: p.id, opcao_id: ans })
-      } else {
-        (Array.isArray(ans) ? ans : []).forEach(oid => respostas.push({ pergunta_id: p.id, opcao_id: oid }))
-      }
-    }
+    const respostas = montarRespostas(enquete.perguntas, answers)
 
     const res = await fetch(`/api/enquetes/${enqueteId}/responder`, {
       method: 'POST',
@@ -376,7 +338,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [statusVal, setStatusVal] = useState<'active' | 'draft'>('active')
   const [anonima, setAnonima] = useState(true)
   const [permitirAlterar, setPermitirAlterar] = useState(true)
-  const [mostrarParciais, setMostrarParciais] = useState(false)
   const [perguntas, setPerguntas] = useState<FormPergunta[]>([{ ...NOVA_PERGUNTA }])
   const [usuarios, setUsuarios] = useState<UsuarioOpt[]>([])
   const [pessoas, setPessoas] = useState<Set<string>>(new Set())
@@ -445,7 +406,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         status: statusVal,
         anonima,
         permitir_alterar_voto: permitirAlterar,
-        mostrar_resultados_parciais: mostrarParciais,
+        // Por ora, resultados só para gestor/admin — colaborador/trainee não os veem
+        mostrar_resultados_parciais: false,
         perguntas: validPergs.map(p => ({
           texto: p.texto.trim(),
           tipo: p.tipo,
@@ -561,7 +523,6 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             {([
               ['anonima', 'Respostas anônimas', anonima, setAnonima],
               ['alterar', 'Permitir alterar voto', permitirAlterar, setPermitirAlterar],
-              ['parciais', 'Mostrar resultados antes de encerrar', mostrarParciais, setMostrarParciais],
             ] as [string, string, boolean, (v: boolean) => void][]).map(([key, label, val, set]) => (
               <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: INK }}>
                 <input type="checkbox" checked={val} onChange={e => set(e.target.checked)} style={{ accentColor: PRIMARY, width: 14, height: 14 }} />
@@ -691,6 +652,8 @@ type View =
 export default function EnquetesClient() {
   const { profile } = useUser()
   const isGestorAdmin = profile?.papel === 'gestor' || profile?.papel === 'admin'
+  const searchParams = useSearchParams()
+  const router = useRouter()
 
   const [enquetes, setEnquetes] = useState<EnqueteItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -706,6 +669,24 @@ export default function EnquetesClient() {
   }, [])
 
   useEffect(() => { fetchList() }, [fetchList])
+
+  // Deep-link via ?enquete= (ex.: "Ir para o módulo" no Dashboard) — já abre a enquete para responder.
+  // Aplicado durante o render (não em efeito); depois a URL é limpa para o mesmo link funcionar de novo.
+  const enqueteParam = searchParams.get('enquete')
+  const [paramAplicado, setParamAplicado] = useState<string | null>(null)
+  if (enqueteParam !== paramAplicado) {
+    setParamAplicado(enqueteParam)
+    if (enqueteParam) setView({ mode: 'vote', id: enqueteParam })
+  }
+  useEffect(() => {
+    if (enqueteParam) router.replace('/enquetes')
+  }, [enqueteParam, router])
+
+  // Respondeu aqui: o pop-up do AppShell e o card do Dashboard recarregam as pendentes
+  const aposResponder = useCallback(() => {
+    fetchList()
+    window.dispatchEvent(new Event('enquetes:atualizar'))
+  }, [fetchList])
 
   async function handleActivate(id: string) {
     await fetch(`/api/enquetes/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) })
@@ -723,7 +704,7 @@ export default function EnquetesClient() {
     fetchList()
   }
 
-  if (view.mode === 'vote') return <VoteView enqueteId={view.id} onBack={() => { setView({ mode: 'list' }); fetchList() }} onVoted={fetchList} />
+  if (view.mode === 'vote') return <VoteView enqueteId={view.id} onBack={() => { setView({ mode: 'list' }); fetchList() }} onVoted={aposResponder} />
   if (view.mode === 'results') return <ResultadosView enqueteId={view.id} titulo={view.titulo} onBack={() => setView({ mode: 'list' })} />
 
   const filtered = isGestorAdmin && filterStatus !== 'all'
@@ -778,7 +759,8 @@ export default function EnquetesClient() {
             const st = statusBadge(e.status)
             const expired = e.encerramento && new Date(e.encerramento) < new Date()
             const canVote = e.para_mim && e.status === 'active' && (!e.ja_votou || e.permitir_alterar_voto)
-            const canSeeResults = isGestorAdmin || (e.ja_votou && e.mostrar_resultados_parciais) || e.status === 'closed'
+            // Por ora, resultados só para gestor/admin (colaborador/trainee não veem)
+            const canSeeResults = isGestorAdmin
             return (
               <div key={e.id} style={{ background: '#fff', borderRadius: 12, border: `1px solid ${BORDER}`, padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
