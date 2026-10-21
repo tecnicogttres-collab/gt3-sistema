@@ -11,8 +11,8 @@ npm run backup
 
 O script irá:
 1. Conectar ao Supabase usando o `service_role` (lê `.env.local`)
-2. Fazer `SELECT *` de todas as 32 tabelas do projeto
-3. Salvar cada tabela como `backups/YYYY-MM-DD/<tabela>.json`
+2. Descobrir automaticamente todas as tabelas do banco e fazer `SELECT *` de cada uma (em páginas, sem o limite de 1000 linhas)
+3. Salvar cada tabela como `backups/YYYY-MM-DD/<tabela>.json`, os usuários de login em `_auth_users.json` e os arquivos do Storage em `_storage/<bucket>/...`
 4. Compactar tudo em `backups/backup-YYYY-MM-DD.zip`
 5. Exibir um resumo no console
 
