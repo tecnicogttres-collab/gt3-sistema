@@ -239,7 +239,7 @@ export default function CadastroClient() {
       // RLS barrando o UPDATE não dá erro, só grava 0 linhas — sem isso a tela mostrava
       // a alteração e ela "voltava ao padrão" no F5.
       if (!salvos?.length) {
-        alert('A alteração NÃO foi salva: seu usuário não tem permissão para editar contratantes. Avise um gestor/admin.')
+        alert('A alteração NÃO foi salva: o banco recusou a gravação (permissão). Avise o suporte do sistema.')
         setCompanies(prev => prev.map(c => c.id === id ? rowToCompany(data) : c))
         return
       }
@@ -255,7 +255,7 @@ export default function CadastroClient() {
       console.error('Erro ao salvar férias coletivas:', error)
       alert('Não foi possível salvar as férias coletivas. Confirme que o SQL sql/contratantes-ferias-coletivas.sql foi executado.')
     } else if (!data?.length) {
-      alert('As férias coletivas NÃO foram salvas: seu usuário não tem permissão para editar contratantes. Avise um gestor/admin.')
+      alert('As férias coletivas NÃO foram salvas: o banco recusou a gravação (permissão). Avise o suporte do sistema.')
     }
   }, [])
 

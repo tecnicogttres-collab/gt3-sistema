@@ -43,6 +43,7 @@ ALTER TABLE public.contratantes_favs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "ct_select"        ON public.contratantes;
 DROP POLICY IF EXISTS "ct_insert_gestor" ON public.contratantes;
 DROP POLICY IF EXISTS "ct_update_gestor" ON public.contratantes;
+DROP POLICY IF EXISTS "ct_update_todos"  ON public.contratantes;
 DROP POLICY IF EXISTS "ct_delete_gestor" ON public.contratantes;
 
 CREATE POLICY "ct_select"
@@ -58,14 +59,10 @@ CREATE POLICY "ct_insert_gestor"
     )
   );
 
-CREATE POLICY "ct_update_gestor"
+-- Edição liberada para qualquer login (ver sql/contratantes-editar-todos.sql)
+CREATE POLICY "ct_update_todos"
   ON public.contratantes FOR UPDATE TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND papel IN ('gestor', 'admin')
-    )
-  );
+  USING (true) WITH CHECK (true);
 
 CREATE POLICY "ct_delete_gestor"
   ON public.contratantes FOR DELETE TO authenticated
