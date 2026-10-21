@@ -163,7 +163,43 @@ type AnaliseRow = {
   minha?: boolean
 }
 
+/** Prazo extra autorizado pela contratante para a empresa inserir os psicossociais no PGR/PCMSO
+ *  (tabela workflow_programas_concessoes_psico). Encerrada sozinha (motivo 'checklist_aprovado')
+ *  quando entra no banco uma análise nova da empresa com o psicossocial aprovado — ver
+ *  analiseQueEncerraConcessao. */
+type ConcessaoPsico = {
+  id: string; empresa: string; cnpj: string
+  contratante_id: string; contratante_nome: string; autorizado_por: string
+  data_autorizacao: string; prazo_original: string; prazo_concedido: string; obs: string
+  encerrada_em: string | null; encerrada_motivo: 'checklist_aprovado' | 'manual' | null; encerrada_analise_id: string | null
+  criado_por: string | null; criado_por_nome: string | null; created_at: string
+}
+type ConcessaoDraft = Pick<ConcessaoPsico, 'empresa' | 'cnpj' | 'contratante_id' | 'autorizado_por' | 'data_autorizacao' | 'prazo_original' | 'prazo_concedido' | 'obs'> & { id?: string }
+
+/** Prazo geral para inserir os psicossociais — 26/10 Grupo Marcopolo (inclui Volare), 29/10
+ *  Jungheinrich. Nessas contratantes o "prazo original" da concessão é sempre este (campo
+ *  travado no cadastro); nas demais ('' aqui) é digitado. */
+function prazoPsicoPadrao(c?: Contratante): string {
+  const nome = (c?.nome || '').toLowerCase()
+  if (nome.includes('jung')) return '2026-10-29'
+  if (nome.includes('marcopolo') || nome.includes('volare')) return '2026-10-26'
+  return ''
+}
+function difDias(de: string, ate: string): number {
+  return Math.round((Date.parse(ate) - Date.parse(de)) / 86400000)
+}
+function somaDias(data: string, n: number): string {
+  const d = new Date(data + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10)
+}
+/** Mesma empresa: CNPJ igual (quando os dois têm) ou mesmo nome (ver normalizaEmpresa). */
+function mesmaEmpresa(a: { empresa: string; cnpj: string }, b: { empresa: string; cnpj: string }): boolean {
+  const ca = (a.cnpj || '').replace(/\D/g, ''), cb = (b.cnpj || '').replace(/\D/g, '')
+  if (ca && cb) return ca === cb
+  return normalizaEmpresa(a.empresa || '') === normalizaEmpresa(b.empresa || '')
+}
+
 type View = 'analises' | 'nova' | 'banco' | 'contratantes' | 'itens' | 'textos' | 'config'
+type BancoAba = 'empresas' | 'relatorio' | 'psico' | 'concessoes'
 
 const DOC_TYPES: DocKey[] = ['PGR', 'PCMSO', 'LTCAT']
 const DOC_ORDER: DocKey[] = ['PGR', 'PCMSO', 'LTCAT', 'GERAL']
@@ -918,7 +954,7 @@ export default function WorkflowProgramasClient() {
   )
 
   // banco
-  const [bancoAba, setBancoAba] = useState<'empresas' | 'relatorio' | 'psico'>('empresas')
+  const [bancoAba, setBancoAba] = useState<BancoAba>('empresas')
   const [bancoQ, setBancoQ] = useState('')
   const [bancoContratante, setBancoContratante] = useState('')
   const [bancoStatus, setBancoStatus] = useState('')
@@ -926,6 +962,13 @@ export default function WorkflowProgramasClient() {
   const [bancoAte, setBancoAte] = useState('')
   const [bancoAberto, setBancoAberto] = useState<string | null>(null)
   const [bancoItem, setBancoItem] = useState<string | null>(null)
+
+  // concessões de prazo extra para os psicossociais (aba do Banco)
+  const [concessoes, setConcessoes] = useState<ConcessaoPsico[]>([])
+  const [modalConcessao, setModalConcessao] = useState<ConcessaoDraft | null>(null)
+  /** Avisos das concessões encerradas sozinhas nesta sessão — ficam no topo até fechar. */
+  const [avisosEncerradas, setAvisosEncerradas] = useState<{ id: string; texto: string }[]>([])
+  const encerrandoRef = useRef(new Set<string>())
 
   // modals
   const [dupEmpresa, setDupEmpresa] = useState<AnaliseRow | null>(null)
@@ -962,10 +1005,11 @@ export default function WorkflowProgramasClient() {
   useEffect(() => {
     let alive = true
     async function load() {
-      const [cfgRes, listRes, anexosRes] = await Promise.all([
+      const [cfgRes, listRes, anexosRes, concessoesRes] = await Promise.all([
         fetch('/api/workflow-programas/config').then(r => r.json()).catch(() => ({ dados: null })),
         fetch('/api/workflow-programas').then(r => r.json()).catch(() => []),
         fetch('/api/workflow-programas/anexos').then(r => r.json()).catch(() => []),
+        fetch('/api/workflow-programas/concessoes').then(r => r.json()).catch(() => []),
       ])
       if (!alive) return
       let cat: Catalog | null = cfgRes?.dados ?? null
@@ -989,6 +1033,7 @@ export default function WorkflowProgramasClient() {
       const listaAnalises: AnaliseRow[] = Array.isArray(listRes) ? listRes : []
       setAnalises(listaAnalises.map(a => ({ ...a, dados: normalizeAnaliseDados(a.dados) })))
       setAnexos(Array.isArray(anexosRes) ? anexosRes : [])
+      setConcessoes(Array.isArray(concessoesRes) ? concessoesRes : [])
       setLoading(false)
     }
     load()
@@ -1826,13 +1871,32 @@ export default function WorkflowProgramasClient() {
    *    nome da empresa na lista expandida — não muda a contagem.
    *  - Análise que atende duas contratantes ao mesmo tempo conta 1x em CADA uma delas. */
   type PsicoKind = 'ok' | 'restr' | 'orientativo' | 'nao' | 'na'
+
+  /** Resultado psicossocial de UMA análise para UMA contratante (null = não avaliado ali).
+   *  `itensPsicoA` = itens psicossociais da análise (itensDaAnalise ∩ itensPsicossociaisPgr). */
+  function psicoNaContratante(a: AnaliseRow, cid: string, itensPsicoA: ChecklistItem[]): { kind: PsicoKind; nota: string } | null {
+    const c = getC(cid)
+    if (!c) return null
+    const kindDe = (i: ChecklistItem, r: StatusResp): PsicoKind =>
+      r === 'ok' ? 'ok' : r === 'restricao' ? 'restr' : r === 'nao' ? (i.critico ? 'nao' : 'orientativo') : 'na'
+    const KIND_LABEL: Record<PsicoKind, string> = { ok: 'conforme', restr: 'restrição', orientativo: 'orientativo', nao: 'reprovação', na: 'N/A' }
+    const avaliados = itensPsicoA
+      .filter(i => c.itens.some(l => l.itemId === i.id) && a.dados.respostas[i.id]?.status)
+      .map(i => ({ i, kind: kindDe(i, a.dados.respostas[i.id]!.status as StatusResp) }))
+    if (!avaliados.length) return null
+    const validos = avaliados.filter(x => x.kind !== 'na')
+    const decisor = validos.find(x => x.i.escopo === 'especifico') ?? validos[0]
+    const kind: PsicoKind = decisor?.kind ?? 'na'
+    const nota = decisor
+      ? validos.filter(x => x !== decisor && x.kind !== kind).map(x => `${x.i.escopo === 'especifico' ? x.i.titulo : 'NR-01 geral'}: ${KIND_LABEL[x.kind]}`).join('; ')
+      : ''
+    return { kind, nota }
+  }
+
   function psicoSituacoes(lista: AnaliseRow[]) {
     if (!catalog) return []
     const idsPsico = new Set(itensPsicossociaisPgr().map(i => i.id))
     if (!idsPsico.size) return []
-    const kindDe = (i: ChecklistItem, r: StatusResp): PsicoKind =>
-      r === 'ok' ? 'ok' : r === 'restricao' ? 'restr' : r === 'nao' ? (i.critico ? 'nao' : 'orientativo') : 'na'
-    const KIND_LABEL: Record<PsicoKind, string> = { ok: 'conforme', restr: 'restrição', orientativo: 'orientativo', nao: 'reprovação', na: 'N/A' }
 
     type Sit = { empKey: string; empresa: string; cid: string; kind: PsicoKind; nota: string; data: string; upd: string }
     const ultima = new Map<string, Sit>()
@@ -1845,18 +1909,9 @@ export default function WorkflowProgramasClient() {
         // Com uma contratante filtrada, só ela entra — filtrar Jungheinrich não pode trazer a
         // linha de Marcopolo só porque a mesma análise atende as duas.
         if (bancoContratante && cid !== bancoContratante) return
-        const c = getC(cid)
-        if (!c) return
-        const avaliados = itensA
-          .filter(i => c.itens.some(l => l.itemId === i.id) && a.dados.respostas[i.id]?.status)
-          .map(i => ({ i, kind: kindDe(i, a.dados.respostas[i.id]!.status as StatusResp) }))
-        if (!avaliados.length) return
-        const validos = avaliados.filter(x => x.kind !== 'na')
-        const decisor = validos.find(x => x.i.escopo === 'especifico') ?? validos[0]
-        const kind: PsicoKind = decisor?.kind ?? 'na'
-        const nota = decisor
-          ? validos.filter(x => x !== decisor && x.kind !== kind).map(x => `${x.i.escopo === 'especifico' ? x.i.titulo : 'NR-01 geral'}: ${KIND_LABEL[x.kind]}`).join('; ')
-          : ''
+        const r = psicoNaContratante(a, cid, itensA)
+        if (!r) return
+        const { kind, nota } = r
         const k = empKey + '|' + cid
         const atual = ultima.get(k)
         if (atual && (atual.data > data || (atual.data === data && atual.upd >= a.updated_at))) return
@@ -1910,6 +1965,106 @@ export default function WorkflowProgramasClient() {
     const conta = (k: PsicoKind) => Array.from(porEmpresa.values()).filter(e => e.kind === k).length
     const apr = conta('ok'), comRestricao = conta('restr'), comOrientativo = conta('orientativo'), reprovadas = conta('nao')
     return { tot: apr + comRestricao + comOrientativo + reprovadas, apr, comRestricao, comOrientativo, reprovadas, naoAplicavel: conta('na') }
+  }
+
+  // ── Concessões de prazo extra (psicossociais) ──
+
+  const nomeContratanteConcessao = (c: ConcessaoPsico) => nomeC(getC(c.contratante_id)) || c.contratante_nome || '(contratante removida)'
+
+  /** Análise que tira a empresa da concessão: finalizada a partir do dia da autorização, da mesma
+   *  empresa e contratante, sem reprovação, e com o psicossocial daquela contratante conforme ou
+   *  aprovado com restrição (mesma regra da aba Psicossociais — ver psicoNaContratante). */
+  function analiseQueEncerraConcessao(c: ConcessaoPsico): AnaliseRow | undefined {
+    const idsPsico = new Set(itensPsicossociaisPgr().map(i => i.id))
+    return finalizadas
+      .filter(a => {
+        const data = a.data_final || a.dados.data || ''
+        if (data < c.data_autorizacao || !mesmaEmpresa(a, c) || !a.dados.contratanteIds.includes(c.contratante_id)) return false
+        if (statusAnalise(a).k === 'reprovada') return false
+        const p = psicoNaContratante(a, c.contratante_id, itensDaAnalise(a.dados).filter(i => idsPsico.has(i.id)))
+        return p?.kind === 'ok' || p?.kind === 'restr'
+      })
+      .sort((x, y) => (x.data_final || x.dados.data || '').localeCompare(y.data_final || y.dados.data || ''))[0]
+  }
+
+  // Encerramento automático — roda ao carregar e sempre que uma análise é finalizada (finalizadas
+  // muda). Grava no banco e deixa um aviso no topo do módulo explicando por que saiu da lista.
+  useEffect(() => {
+    if (!catalog) return
+    const aEncerrar = concessoes.flatMap(c => {
+      if (c.encerrada_em || encerrandoRef.current.has(c.id)) return []
+      const a = analiseQueEncerraConcessao(c)
+      return a ? [{ c, a }] : []
+    })
+    if (!aEncerrar.length) return
+    aEncerrar.forEach(({ c }) => encerrandoRef.current.add(c.id))
+    Promise.all(aEncerrar.map(({ c, a }) =>
+      fetch(`/api/workflow-programas/concessoes/${c.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encerrada_em: new Date().toISOString(), encerrada_motivo: 'checklist_aprovado', encerrada_analise_id: a.id }),
+      }).then(r => (r.ok ? r.json() as Promise<ConcessaoPsico> : null)).catch(() => null),
+    )).then(rows => {
+      const salvos = rows.filter((r): r is ConcessaoPsico => !!r)
+      if (!salvos.length) return
+      setConcessoes(prev => prev.map(c => salvos.find(r => r.id === c.id) ?? c))
+      setAvisosEncerradas(prev => [...prev, ...aEncerrar.filter(x => salvos.some(r => r.id === x.c.id)).map(({ c, a }) => ({
+        id: c.id,
+        texto: `${c.empresa} — ${nomeContratanteConcessao(c)}: saiu da concessão de prazo dos psicossociais (prazo concedido até ${fmtD(c.prazo_concedido)}) porque o novo checklist, finalizado em ${fmtD(a.data_final || a.dados.data)}, foi aprovado com o psicossocial em conformidade.`,
+      }))])
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [concessoes, finalizadas, catalog])
+
+  function novaConcessao() {
+    setModalConcessao({ empresa: '', cnpj: '', contratante_id: '', autorizado_por: '', data_autorizacao: hoje(), prazo_original: '', prazo_concedido: '', obs: '' })
+  }
+  function editarConcessao(c: ConcessaoPsico) {
+    const { id, empresa, cnpj, contratante_id, autorizado_por, data_autorizacao, prazo_original, prazo_concedido, obs } = c
+    setModalConcessao({ id, empresa, cnpj, contratante_id, autorizado_por, data_autorizacao, prazo_original: prazoPsicoPadrao(getC(contratante_id)) || prazo_original, prazo_concedido, obs })
+  }
+  async function salvarConcessao() {
+    if (!modalConcessao) return
+    const d = { ...modalConcessao, prazo_original: prazoPsicoPadrao(getC(modalConcessao.contratante_id)) || modalConcessao.prazo_original }
+    if (!d.empresa.trim()) { showToast('Informe a empresa terceira'); return }
+    if (!d.contratante_id) { showToast('Selecione a contratante que autorizou'); return }
+    if (!d.data_autorizacao) { showToast('Informe o dia da autorização'); return }
+    if (!d.prazo_original || !d.prazo_concedido) { showToast('Informe o prazo original e o prazo concedido'); return }
+    if (d.prazo_concedido <= d.prazo_original) { showToast('O prazo concedido precisa ser depois do prazo original'); return }
+    const body = JSON.stringify({ ...d, empresa: d.empresa.trim(), contratante_nome: nomeC(getC(d.contratante_id)) })
+    const res = d.id
+      ? await fetch(`/api/workflow-programas/concessoes/${d.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body })
+      : await fetch('/api/workflow-programas/concessoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      showToast(err?.error ? `Não foi possível salvar: ${err.error}` : 'Não foi possível salvar a concessão')
+      return
+    }
+    const row: ConcessaoPsico = await res.json()
+    setConcessoes(prev => (d.id ? prev.map(c => (c.id === row.id ? row : c)) : [row, ...prev]))
+    setModalConcessao(null)
+    showToast(d.id ? 'Concessão atualizada' : 'Concessão registrada')
+  }
+  async function alterarEncerramento(c: ConcessaoPsico, encerrar: boolean) {
+    if (encerrar && !confirm(`Encerrar manualmente a concessão de ${c.empresa}?`)) return
+    const res = await fetch(`/api/workflow-programas/concessoes/${c.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(encerrar
+        ? { encerrada_em: new Date().toISOString(), encerrada_motivo: 'manual', encerrada_analise_id: null }
+        : { encerrada_em: null, encerrada_motivo: null, encerrada_analise_id: null }),
+    })
+    if (!res.ok) { showToast('Não foi possível alterar a concessão'); return }
+    const row: ConcessaoPsico = await res.json()
+    // Reativada: deixa o encerramento automático avaliar de novo.
+    if (!encerrar) encerrandoRef.current.delete(c.id)
+    setConcessoes(prev => prev.map(x => (x.id === row.id ? row : x)))
+    showToast(encerrar ? 'Concessão encerrada' : 'Concessão reativada')
+  }
+  async function excluirConcessao(c: ConcessaoPsico) {
+    if (!confirm(`Excluir definitivamente a concessão de ${c.empresa}?`)) return
+    const res = await fetch(`/api/workflow-programas/concessoes/${c.id}`, { method: 'DELETE' })
+    if (!res.ok) { showToast('Sem permissão para excluir'); return }
+    setConcessoes(prev => prev.filter(x => x.id !== c.id))
+    showToast('Concessão excluída')
   }
 
   function exportarCsv() {
@@ -2725,6 +2880,17 @@ export default function WorkflowProgramasClient() {
       {/* Área de rolagem do módulo — tudo que segue rola aqui dentro; o cabeçalho acima fica parado. */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 28px 60px' }}>
+      {avisosEncerradas.map(av => (
+        <div key={av.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: OKS, border: `1px solid ${OK}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: TX }}>
+          <span style={{ fontSize: 15 }}>✅</span>
+          <div style={{ flex: 1 }}>
+            <b style={{ color: OK }}>Concessão de prazo encerrada automaticamente</b>
+            <div>{av.texto}</div>
+          </div>
+          <button onClick={() => setAvisosEncerradas(prev => prev.filter(x => x.id !== av.id))} title="Fechar aviso"
+            style={{ background: 'none', border: 0, fontSize: 18, cursor: 'pointer', color: MU, lineHeight: 1 }}>×</button>
+        </div>
+      ))}
       {view === 'analises' && (
         <VAnalises lista={emAndamento} nomesContratantes={nomesContratantes} statusAnalise={statusAnalise} onNova={() => go('nova')} onAbrir={abrirAnalise} onDel={delAnalise} />
       )}
@@ -2733,6 +2899,8 @@ export default function WorkflowProgramasClient() {
         <VAnalise
           draft={draft} draftId={draftId} catalog={catalog} emailCorpo={emailCorpo} emailBuilt={emailBuilt} modoReprovacao={modoReprovacao} modoRestricaoCritica={modoRestricaoCritica}
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos} empresasBanco={empresasBanco}
+          concessoesDaEmpresa={draft.empresa.trim() ? concessoes.filter(c => !c.encerrada_em && mesmaEmpresa(draft, c)) : []}
+          nomeContratanteConcessao={nomeContratanteConcessao}
           onField={setDraftField} onEmpresaBlur={verificarEmpresaDuplicada} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise} onDescartar={descartarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
@@ -2755,6 +2923,14 @@ export default function WorkflowProgramasClient() {
           statusAnalise={statusAnalise} relatorioItens={relatorioItens} relatorioPsico={relatorioPsicossocial} psicoStats={psicoStats}
           onLimparFiltros={() => { setBancoQ(''); setBancoContratante(''); setBancoStatus(''); setBancoDe(''); setBancoAte('') }}
           onDelFiltro={bDelFiltro} onExportCsv={exportarCsv} onGerarRelatorio={abrirRelatorioModal} onDel={bDel} onReabrir={bReabrir}
+          totalConcessoesAtivas={concessoes.filter(c => !c.encerrada_em).length}
+          concessoesView={
+            <VConcessoes
+              lista={concessoes} analises={finalizadas} nomeContratante={nomeContratanteConcessao}
+              onNova={novaConcessao} onEditar={editarConcessao} onEncerrar={c => alterarEncerramento(c, true)}
+              onReativar={c => alterarEncerramento(c, false)} onDel={excluirConcessao}
+            />
+          }
         />
       )}
 
@@ -2958,6 +3134,13 @@ export default function WorkflowProgramasClient() {
         />
       )}
 
+      {modalConcessao && (
+        <ConcessaoModal
+          draft={modalConcessao} catalog={catalog} nomeC={nomeC} analises={finalizadas} empresasBanco={empresasBanco}
+          onChange={setModalConcessao} onSave={salvarConcessao} onClose={() => setModalConcessao(null)}
+        />
+      )}
+
       {/* ── Modal: Gerar relatórios (PDF/Excel/HTML) sobre itens selecionados ── */}
       {modalRelatorio && catalog && (
         <RelatorioModal
@@ -3059,7 +3242,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, quadros, onCopiarQuadro, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, concessoesDaEmpresa, nomeContratanteConcessao, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, quadros, onCopiarQuadro, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   quadros: { doc: string; html: string }[]; onCopiarQuadro: (doc: string, html: string) => void
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
@@ -3068,6 +3251,8 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   nomesContratantes: (ids: string[]) => string
   anexos: Anexo[]
   empresasBanco: string[]
+  /** Concessões de prazo psicossocial ainda ativas da empresa digitada — aviso abaixo do nome. */
+  concessoesDaEmpresa: ConcessaoPsico[]; nomeContratanteConcessao: (c: ConcessaoPsico) => string
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
   onEmpresaBlur: (nome: string) => void
   onToggleDoc: (d: DocKey) => void; onToggleContratante: (id: string) => void; onToggleSetor: (setor: string) => void
@@ -3141,6 +3326,22 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
               <input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('empresa')) }} value={draft.empresa}
                 onChange={e => onField('empresa', e.target.value)} onBlur={e => onEmpresaBlur(e.target.value)} placeholder="Razão social" />
             </Field>
+            {concessoesDaEmpresa.map(c => {
+              const vencida = c.prazo_concedido < hoje()
+              return (
+                <div key={c.id} style={{ marginTop: 10, background: vencida ? NOS : DOURADOS, border: `1px solid ${vencida ? NO : DOURADO}`, borderRadius: 8, padding: '8px 12px', fontSize: 12.5, color: TX }}>
+                  <b style={{ color: vencida ? NO : DOURADO }}>⏳ Concessão de prazo dos psicossociais {vencida ? '— prazo vencido' : 'ativa'}</b>
+                  <div>
+                    {nomeContratanteConcessao(c)} autorizou em {fmtD(c.data_autorizacao)}{c.autorizado_por ? ` (${c.autorizado_por})` : ''} prazo até <b>{fmtD(c.prazo_concedido)}</b> — {difDias(c.prazo_original, c.prazo_concedido)} dia(s) além de {fmtD(c.prazo_original)}.
+                  </div>
+                  <div style={{ color: MU, marginTop: 2 }}>
+                    {draft.contratanteIds.includes(c.contratante_id)
+                      ? 'Se esta análise for finalizada sem reprovação e com o psicossocial conforme (ou com restrição), a empresa sai da concessão automaticamente.'
+                      : 'Selecione essa contratante abaixo para que a aprovação desta análise encerre a concessão.'}
+                  </div>
+                </div>
+              )
+            })}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 12 }}>
               <Field label="E-mail de destino — separe vários com ;">
                 <input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('emailDestino')) }} type="text" value={draft.emailDestino} onChange={e => onField('emailDestino', e.target.value)} placeholder="contato@empresa.com.br;financeiro@empresa.com.br" />
@@ -3552,8 +3753,9 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
 
 // ─── View: Banco de dados ───────────────────────────────────────────────────
 
-function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, nomeC, nomesContratantes, itensDaAnalise, statusAnalise, relatorioItens, relatorioPsico, psicoStats, onLimparFiltros, onDelFiltro, onExportCsv, onGerarRelatorio, onDel, onReabrir }: {
-  aba: 'empresas' | 'relatorio' | 'psico'; setAba: (v: 'empresas' | 'relatorio' | 'psico') => void
+function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, setStatus, de, setDe, ate, setAte, aberto, setAberto, itemAberto, setItemAberto, lista, catalog, nomeC, nomesContratantes, itensDaAnalise, statusAnalise, relatorioItens, relatorioPsico, psicoStats, onLimparFiltros, onDelFiltro, onExportCsv, onGerarRelatorio, onDel, onReabrir, totalConcessoesAtivas, concessoesView }: {
+  aba: BancoAba; setAba: (v: BancoAba) => void
+  totalConcessoesAtivas: number; concessoesView: React.ReactNode
   q: string; setQ: (v: string) => void; contratante: string; setContratante: (v: string) => void
   status: string; setStatus: (v: string) => void; de: string; setDe: (v: string) => void; ate: string; setAte: (v: string) => void
   aberto: string | null; setAberto: (v: string | null) => void; itemAberto: string | null; setItemAberto: (v: string | null) => void
@@ -3590,8 +3792,11 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
           <Btn variant={aba === 'empresas' ? 'pri' : 'default'} onClick={() => setAba('empresas')}>🏢 Empresas</Btn>
           <Btn variant={aba === 'relatorio' ? 'pri' : 'default'} onClick={() => setAba('relatorio')}>📊 Relatório por item</Btn>
           <Btn variant={aba === 'psico' ? 'pri' : 'default'} onClick={() => setAba('psico')}>🧠 Psicossociais por contratante</Btn>
+          <Btn variant={aba === 'concessoes' ? 'pri' : 'default'} onClick={() => setAba('concessoes')}>⏳ Concessões de prazo{totalConcessoesAtivas ? ` (${totalConcessoesAtivas})` : ''}</Btn>
         </div>
       </div>
+
+      {aba === 'concessoes' ? concessoesView : (<>
 
       <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
@@ -3807,7 +4012,159 @@ function VBanco({ aba, setAba, q, setQ, contratante, setContratante, status, set
           </Card>
         )
       )}
+      </>)}
     </div>
+  )
+}
+
+// ─── View: Concessões de prazo (psicossociais) ──────────────────────────────
+
+function VConcessoes({ lista, analises, nomeContratante, onNova, onEditar, onEncerrar, onReativar, onDel }: {
+  lista: ConcessaoPsico[]; analises: AnaliseRow[]; nomeContratante: (c: ConcessaoPsico) => string
+  onNova: () => void; onEditar: (c: ConcessaoPsico) => void; onEncerrar: (c: ConcessaoPsico) => void
+  onReativar: (c: ConcessaoPsico) => void; onDel: (c: ConcessaoPsico) => void
+}) {
+  const [filtro, setFiltro] = useState<'ativas' | 'encerradas' | 'todas'>('ativas')
+  const hj = hoje()
+  const ativas = lista.filter(c => !c.encerrada_em)
+  const visiveis = lista
+    .filter(c => filtro === 'todas' || (filtro === 'ativas' ? !c.encerrada_em : !!c.encerrada_em))
+    .sort((a, b) => (filtro === 'ativas' ? a.prazo_concedido.localeCompare(b.prazo_concedido) : b.data_autorizacao.localeCompare(a.data_autorizacao)))
+  const td: React.CSSProperties = { padding: 10, borderBottom: `1px solid ${LINE}`, verticalAlign: 'top' }
+
+  return (
+    <div>
+      <Card style={{ padding: '12px 16px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, color: MU, maxWidth: 760 }}>
+          Prazo extra autorizado pela contratante para a empresa terceira inserir os psicossociais no PGR/PCMSO, além do prazo geral (26/10 Marcopolo · 29/10 Jungheinrich).
+          A empresa sai da concessão automaticamente quando um novo checklist dela é finalizado e aprovado com o psicossocial conforme.
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select style={{ ...inputStyle, width: 'auto' }} value={filtro} onChange={e => setFiltro(e.target.value as typeof filtro)}>
+            <option value="ativas">Ativas ({ativas.length})</option>
+            <option value="encerradas">Encerradas ({lista.length - ativas.length})</option>
+            <option value="todas">Todas ({lista.length})</option>
+          </select>
+          <Btn variant="pri" onClick={onNova}>✚ Nova concessão</Btn>
+        </div>
+      </Card>
+
+      {!visiveis.length ? (
+        <Empty title={filtro === 'ativas' ? 'Nenhuma concessão ativa' : 'Nenhuma concessão'} sub="Registre aqui o prazo adicional autorizado pela contratante." />
+      ) : (
+        <Card>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead><tr>{['Empresa terceira', 'Contratante que autorizou', 'Autorizado em', 'Prazo original', 'Prazo concedido', 'Situação', ''].map(h => (
+                <th key={h} style={{ fontSize: 11, textTransform: 'uppercase', color: MU, textAlign: 'left', padding: '9px 10px', borderBottom: `1px solid ${LINE}` }}>{h}</th>
+              ))}</tr></thead>
+              <tbody>
+                {visiveis.map(c => {
+                  const extra = difDias(c.prazo_original, c.prazo_concedido)
+                  const restam = difDias(hj, c.prazo_concedido)
+                  const analise = c.encerrada_analise_id ? analises.find(a => a.id === c.encerrada_analise_id) : undefined
+                  return (
+                    <tr key={c.id}>
+                      <td style={td}><b>{c.empresa}</b>{c.cnpj && <div style={{ color: MU, fontSize: 12 }}>{c.cnpj}</div>}
+                        {c.obs && <div style={{ color: MU, fontSize: 12, marginTop: 2 }}>{c.obs}</div>}</td>
+                      <td style={td}>{nomeContratante(c)}{c.autorizado_por && <div style={{ color: MU, fontSize: 12 }}>por {c.autorizado_por}</div>}</td>
+                      <td style={td}>{fmtD(c.data_autorizacao)}</td>
+                      <td style={td}>{fmtD(c.prazo_original)}</td>
+                      <td style={td}><b>{fmtD(c.prazo_concedido)}</b><div style={{ color: MU, fontSize: 12 }}>+{extra} dia(s)</div></td>
+                      <td style={td}>
+                        {c.encerrada_motivo === 'checklist_aprovado' ? (
+                          <>
+                            <Tag tone="ok">Encerrada — checklist aprovado</Tag>
+                            <div style={{ color: MU, fontSize: 12, marginTop: 3 }}>
+                              Saiu automaticamente em {fmtD(c.encerrada_em?.slice(0, 10))}{analise ? ` (análise finalizada em ${fmtD(analise.data_final || analise.dados.data)})` : ''}.
+                            </div>
+                          </>
+                        ) : c.encerrada_em ? (
+                          <Tag tone="na">Encerrada manualmente em {fmtD(c.encerrada_em.slice(0, 10))}</Tag>
+                        ) : restam < 0 ? (
+                          <Tag tone="no">Prazo vencido há {-restam} dia(s)</Tag>
+                        ) : (
+                          <Tag tone={restam <= 3 ? 'dourado' : 'acc'}>{restam === 0 ? 'Vence hoje' : `Ativa — faltam ${restam} dia(s)`}</Tag>
+                        )}
+                      </td>
+                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <Btn small variant="gho" onClick={() => onEditar(c)}>✏️ Editar</Btn>
+                        {c.encerrada_em
+                          ? <Btn small variant="gho" onClick={() => onReativar(c)}>↺ Reativar</Btn>
+                          : <Btn small variant="gho" onClick={() => onEncerrar(c)}>⏹ Encerrar</Btn>}
+                        <Btn small variant="gho" onClick={() => onDel(c)}>🗑</Btn>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+function ConcessaoModal({ draft, catalog, nomeC, analises, empresasBanco, onChange, onSave, onClose }: {
+  draft: ConcessaoDraft; catalog: Catalog; nomeC: (c?: Contratante) => string; analises: AnaliseRow[]; empresasBanco: string[]
+  onChange: (d: ConcessaoDraft) => void; onSave: () => void; onClose: () => void
+}) {
+  function set<K extends keyof ConcessaoDraft>(k: K, v: ConcessaoDraft[K]) { onChange({ ...draft, [k]: v }) }
+  /** Ao escolher a empresa no banco, puxa o CNPJ da análise mais recente dela. */
+  function setEmpresa(nome: string) {
+    const achada = analises.find(a => normalizaEmpresa(a.empresa) === normalizaEmpresa(nome))
+    onChange({ ...draft, empresa: nome, cnpj: achada?.cnpj && !draft.cnpj ? achada.cnpj : draft.cnpj })
+  }
+  const prazoFixo = prazoPsicoPadrao(catalog.contratantes.find(c => c.id === draft.contratante_id))
+  function setContratante(id: string) {
+    const padrao = prazoPsicoPadrao(catalog.contratantes.find(c => c.id === id))
+    // Saindo de Marcopolo/Jung para outra contratante, a data fixa não vale mais — limpa.
+    onChange({ ...draft, contratante_id: id, prazo_original: padrao || (prazoFixo ? '' : draft.prazo_original) })
+  }
+  const extra = draft.prazo_original && draft.prazo_concedido ? difDias(draft.prazo_original, draft.prazo_concedido) : null
+
+  return (
+    <ModalShell title={draft.id ? 'Editar concessão de prazo' : 'Nova concessão de prazo — psicossociais'} onClose={onClose} onSave={onSave}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+        <Field label="Empresa terceira">
+          <input style={inputStyle} list="lista-empresas-concessao" value={draft.empresa} onChange={e => setEmpresa(e.target.value)} placeholder="Razão social" />
+          <datalist id="lista-empresas-concessao">{empresasBanco.map(n => <option key={n} value={n} />)}</datalist>
+        </Field>
+        <Field label="CNPJ (opcional)"><input style={inputStyle} value={draft.cnpj} onChange={e => set('cnpj', e.target.value)} /></Field>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+        <Field label="Contratante que autorizou">
+          <select style={inputStyle} value={draft.contratante_id} onChange={e => setContratante(e.target.value)}>
+            <option value="">— Selecione —</option>
+            {catalog.contratantes.map(c => <option key={c.id} value={c.id}>{nomeC(c)}</option>)}
+          </select>
+        </Field>
+        <Field label="Quem autorizou (opcional)"><input style={inputStyle} value={draft.autorizado_por} onChange={e => set('autorizado_por', e.target.value)} placeholder="Nome do responsável na contratante" /></Field>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginTop: 12 }}>
+        <Field label="Dia da autorização"><input style={inputStyle} type="date" value={draft.data_autorizacao} onChange={e => set('data_autorizacao', e.target.value)} /></Field>
+        <Field label={prazoFixo ? 'Prazo original (fixo)' : 'Prazo original'}>
+          <input style={{ ...inputStyle, ...(prazoFixo ? { background: NAS, color: MU, cursor: 'not-allowed' } : {}) }} type="date" readOnly={!!prazoFixo}
+            title={prazoFixo ? 'Prazo geral da contratante: 26/10 Grupo Marcopolo · 29/10 Jungheinrich' : undefined}
+            value={draft.prazo_original} onChange={e => set('prazo_original', e.target.value)} />
+        </Field>
+        <Field label="Prazo concedido (novo)"><input style={inputStyle} type="date" value={draft.prazo_concedido} onChange={e => set('prazo_concedido', e.target.value)} /></Field>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: MU }}>Somar ao prazo original:</span>
+        {[7, 15, 30, 60].map(n => (
+          <Btn key={n} small disabled={!draft.prazo_original} onClick={() => set('prazo_concedido', somaDias(draft.prazo_original, n))}>+{n} dias</Btn>
+        ))}
+        {extra !== null && <span style={{ fontSize: 12.5, color: extra > 0 ? TX : NO, marginLeft: 6 }}>{extra > 0 ? `Prazo adicional: ${extra} dia(s)` : 'O prazo concedido precisa ser depois do original'}</span>}
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <Field label="Observação (opcional)"><input style={inputStyle} value={draft.obs} onChange={e => set('obs', e.target.value)} placeholder="Ex.: autorizado por e-mail, ata de reunião…" /></Field>
+      </div>
+      <div style={{ marginTop: 12, fontSize: 12, color: MU }}>
+        A empresa sai desta concessão automaticamente quando uma análise dela, para esta contratante, for finalizada a partir do dia da autorização sem reprovação e com o psicossocial conforme (ou aprovado com restrição).
+      </div>
+    </ModalShell>
   )
 }
 
