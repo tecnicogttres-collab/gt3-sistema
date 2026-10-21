@@ -241,41 +241,143 @@ const NA = '#94A3B8', NAS = '#EEF1F5'
 const LARANJA = '#D9730D', LARANJAS = '#FDF0E4'
 const DOURADO = '#9C6B0B', DOURADOS = '#FBF0DA'
 
-/** Mesmo esquema de cor do resultado (Tag/ALL_DOTS) reaproveitado nos relatórios
- *  exportados (PDF/Excel/HTML) — destaca a coluna "Resultado" nas mesmas cores usadas
- *  em toda a tela, em vez de texto simples. */
-type ResultadoTone = 'ok' | 'no' | 'na' | 'acc'
-const RESULTADO_CORES: Record<ResultadoTone, { bg: string; fg: string }> = {
-  ok: { bg: OKS, fg: OK }, no: { bg: NOS, fg: NO }, na: { bg: NAS, fg: '#54617A' }, acc: { bg: ASO, fg: '#8A6A22' },
-}
-/** Rótulo por tom de resultado — usado no filtro de "aprovado/reprovado/etc." do modal de
- *  relatórios e no filtro (dropdown) da coluna Resultado no HTML interativo exportado. */
-const RESULTADO_TONE_LABEL: Record<ResultadoTone, string> = {
-  ok: 'Conforme / Aprovado', no: 'Reprovação', acc: 'Aprovado com restrição', na: 'Não aplicável / Não avaliado',
-}
-const TODOS_TONES: ResultadoTone[] = ['ok', 'no', 'acc', 'na']
+// ─── Relatórios exportados (PDF / Excel / HTML) ─────────────────────────────
+// Uma linha por (análise, item selecionado) com TODOS os campos; a RelatorioConfig escolhe
+// colunas (e a ordem delas), agrupamento, ordenação e filtros. As três saídas partem das
+// mesmas linhas/grupos, e o HTML leva os mesmos controles para mudar tudo ao vivo.
 
-/** Largura (%) de cada coluna de uma tabela de relatório — Resultado estreito, Observação
- *  (sempre a última) mais larga, o resto dividido igualmente. Usada com table-layout:fixed
- *  pra que as tabelas de todos os grupos fiquem com as mesmas colunas alinhadas, em vez de
- *  cada uma calcular a própria largura a partir do conteúdo. */
-function larguraColunasRelatorio(cols: string[], resultadoIdx: number): string[] {
-  const obsIdx = cols.length - 1
-  const restantes = cols.length - 2
-  const pesos = cols.map((_, idx) => {
-    if (idx === resultadoIdx) return 12
-    if (idx === obsIdx) return 30
-    return restantes > 0 ? 58 / restantes : 58
-  })
+/** Resultado do item no relatório — separa a reprovação (item crítico) do "não conforme" de
+ *  item não crítico (orientativo), que no resto da tela aparecem juntos como "Reprovação". */
+type RelResultado = 'ok' | 'restr' | 'orient' | 'reprov' | 'na'
+const REL_RESULTADOS: { k: RelResultado; label: string; bg: string; fg: string }[] = [
+  { k: 'ok', label: 'Conforme', bg: OKS, fg: OK },
+  { k: 'restr', label: 'Aprovado com restrição', bg: ASO, fg: '#8A6A22' },
+  { k: 'orient', label: 'Não conforme (orientativo)', bg: LARANJAS, fg: LARANJA },
+  { k: 'reprov', label: 'Reprovação', bg: NOS, fg: NO },
+  { k: 'na', label: 'Não aplicável / não avaliado', bg: NAS, fg: '#54617A' },
+]
+/** Situação geral da análise — mesmas chaves de statusAnalise().k. */
+type RelSituacao = 'aprovada' | 'restricao' | 'orientativo' | 'reprovada' | 'analise'
+const REL_SITUACOES: { k: RelSituacao; label: string; bg: string; fg: string }[] = [
+  { k: 'aprovada', label: 'Aprovada', bg: OKS, fg: OK },
+  { k: 'restricao', label: 'Aprovada com restrição', bg: ASO, fg: '#8A6A22' },
+  { k: 'orientativo', label: 'Com orientativo', bg: LARANJAS, fg: LARANJA },
+  { k: 'reprovada', label: 'Reprovada', bg: NOS, fg: NO },
+  { k: 'analise', label: 'Em análise', bg: NAS, fg: '#54617A' },
+]
+
+type RelColKey = 'empresa' | 'cnpj' | 'contratante' | 'documentos' | 'situacao' | 'analista' | 'data' | 'finalizada'
+  | 'setores' | 'reincidencia' | 'item' | 'docItem' | 'critico' | 'resultado' | 'obs'
+/** `peso` = largura relativa; as colunas visíveis são normalizadas para 100% e TODAS as tabelas
+ *  do relatório usam as mesmas larguras (table-layout:fixed) — colunas alinhadas entre grupos. */
+const REL_COLUNAS: { key: RelColKey; label: string; peso: number }[] = [
+  { key: 'empresa', label: 'Empresa', peso: 18 },
+  { key: 'cnpj', label: 'CNPJ', peso: 12 },
+  { key: 'contratante', label: 'Contratante', peso: 15 },
+  { key: 'documentos', label: 'Docs da análise', peso: 9 },
+  { key: 'situacao', label: 'Situação da análise', peso: 12 },
+  { key: 'analista', label: 'Analista', peso: 11 },
+  { key: 'data', label: 'Data análise', peso: 9 },
+  { key: 'finalizada', label: 'Finalizada em', peso: 9 },
+  { key: 'setores', label: 'Setor(es) de atuação', peso: 13 },
+  { key: 'reincidencia', label: 'Reincidência', peso: 9 },
+  { key: 'item', label: 'Item', peso: 22 },
+  { key: 'docItem', label: 'Documento', peso: 8 },
+  { key: 'critico', label: 'Crítico', peso: 6 },
+  { key: 'resultado', label: 'Resultado', peso: 13 },
+  { key: 'obs', label: 'Observação', peso: 28 },
+]
+const REL_COL_LABEL = Object.fromEntries(REL_COLUNAS.map(c => [c.key, c.label])) as Record<RelColKey, string>
+
+type RelAgrupar = 'nenhum' | 'empresa' | 'requisito' | 'contratante'
+type RelOrdem = 'empresa' | 'data' | 'resultado' | 'item'
+const REL_AGRUPAR_LABEL: Record<RelAgrupar, string> = { nenhum: 'Tabela única', empresa: 'Empresa', requisito: 'Requisito (item)', contratante: 'Contratante' }
+const REL_ORDEM_LABEL: Record<RelOrdem, string> = { empresa: 'Empresa (A–Z)', data: 'Data de finalização (recentes)', resultado: 'Resultado (reprovações primeiro)', item: 'Item do checklist' }
+/** Coluna que só repetiria o título do grupo — sai da tabela quando agrupado por ela. */
+const REL_COL_DO_GRUPO: Partial<Record<RelAgrupar, RelColKey>> = { empresa: 'empresa', requisito: 'item', contratante: 'contratante' }
+
+type RelatorioConfig = {
+  titulo: string; agrupar: RelAgrupar; ordem: RelOrdem
+  /** Colunas visíveis, na ordem em que aparecem. */
+  colunas: RelColKey[]
+  resultados: RelResultado[]; situacoes: RelSituacao[]
+  somenteComObs: boolean
+}
+const RELATORIO_CFG_PADRAO: RelatorioConfig = {
+  titulo: 'Relatório GT3 · Workflow Programas', agrupar: 'empresa', ordem: 'empresa',
+  colunas: ['empresa', 'contratante', 'item', 'docItem', 'resultado', 'obs'],
+  resultados: REL_RESULTADOS.map(r => r.k), situacoes: REL_SITUACOES.map(s => s.k), somenteComObs: false,
+}
+const RELATORIO_CFG_STORAGE = 'gt3-wp-relatorio-cfg'
+
+type RelLinha = { v: Record<RelColKey, string>; res: RelResultado; sit: RelSituacao; contratantes: string[]; itemOrdem: number; dataOrd: string }
+type RelGrupo = { titulo: string; linhas: RelLinha[] }
+
+function relColunasVisiveis(cfg: RelatorioConfig): RelColKey[] {
+  const doGrupo = REL_COL_DO_GRUPO[cfg.agrupar]
+  const cols = cfg.colunas.filter(k => k !== doGrupo)
+  return cols.length ? cols : cfg.colunas
+}
+function relLarguras(cols: RelColKey[]): string[] {
+  const pesos = cols.map(k => REL_COLUNAS.find(c => c.key === k)?.peso ?? 10)
   const soma = pesos.reduce((a, b) => a + b, 0)
   return pesos.map(p => (p / soma * 100).toFixed(2) + '%')
 }
-
-/** Como agrupar os relatórios exportados: uma seção por empresa (com seus itens dentro)
- *  ou uma seção por item de checklist (com as empresas que o têm dentro). */
-type RelatorioModo = 'empresa' | 'requisito'
-type RelatorioLinha = { valores: string[]; tone?: ResultadoTone }
-type RelatorioGrupo = { titulo: string; meta: string[]; colunas: string[]; resultadoColIdx: number; linhas: RelatorioLinha[] }
+function relFiltrar(linhas: RelLinha[], cfg: RelatorioConfig): RelLinha[] {
+  return linhas.filter(l => cfg.resultados.includes(l.res) && cfg.situacoes.includes(l.sit) && (!cfg.somenteComObs || !!l.v.obs.trim()))
+}
+const REL_PESO_RESULTADO: Record<RelResultado, number> = { reprov: 0, orient: 1, restr: 2, ok: 3, na: 4 }
+function relOrdenar(linhas: RelLinha[], ordem: RelOrdem): RelLinha[] {
+  const cmpEmpresa = (a: RelLinha, b: RelLinha) => a.v.empresa.localeCompare(b.v.empresa, 'pt-BR')
+  const cmpItem = (a: RelLinha, b: RelLinha) => a.itemOrdem - b.itemOrdem
+  return [...linhas].sort((a, b) => {
+    if (ordem === 'data') return b.dataOrd.localeCompare(a.dataOrd) || cmpEmpresa(a, b) || cmpItem(a, b)
+    if (ordem === 'resultado') return REL_PESO_RESULTADO[a.res] - REL_PESO_RESULTADO[b.res] || cmpEmpresa(a, b) || cmpItem(a, b)
+    if (ordem === 'item') return cmpItem(a, b) || cmpEmpresa(a, b)
+    return cmpEmpresa(a, b) || cmpItem(a, b)
+  })
+}
+/** Agrupa (já filtrado e ordenado). Por contratante, a análise que atende duas entra nas duas. */
+function relAgrupar(linhas: RelLinha[], cfg: RelatorioConfig): RelGrupo[] {
+  const ordenadas = relOrdenar(linhas, cfg.ordem)
+  if (cfg.agrupar === 'nenhum') return ordenadas.length ? [{ titulo: '', linhas: ordenadas }] : []
+  const mapa = new Map<string, RelGrupo & { ord: number | string }>()
+  ordenadas.forEach(l => {
+    const chaves: { k: string; titulo: string; ord: number | string }[] =
+      cfg.agrupar === 'empresa' ? [{ k: l.v.empresa + '|' + l.v.cnpj, titulo: l.v.empresa + (l.v.cnpj ? ` — ${l.v.cnpj}` : ''), ord: l.v.empresa }]
+      : cfg.agrupar === 'requisito' ? [{ k: l.v.item, titulo: `${l.v.item} (${l.v.docItem})`, ord: l.itemOrdem }]
+      : (l.contratantes.length ? l.contratantes : ['(sem contratante)']).map(c => ({ k: c, titulo: c, ord: c }))
+    chaves.forEach(ch => {
+      const g = mapa.get(ch.k) ?? { titulo: ch.titulo, linhas: [], ord: ch.ord }
+      g.linhas.push(l)
+      mapa.set(ch.k, g)
+    })
+  })
+  return Array.from(mapa.values())
+    .sort((a, b) => (typeof a.ord === 'number' && typeof b.ord === 'number' ? a.ord - b.ord : String(a.ord).localeCompare(String(b.ord), 'pt-BR')))
+    .map(({ titulo, linhas: ls }) => ({ titulo, linhas: ls }))
+}
+/** "8 conforme · 2 reprovação" — resumo por resultado, usado no cabeçalho de cada grupo. */
+function relResumo(linhas: RelLinha[]): string {
+  return REL_RESULTADOS
+    .map(r => ({ r, n: linhas.filter(l => l.res === r.k).length }))
+    .filter(x => x.n)
+    .map(x => `${x.n} ${x.r.label.toLowerCase()}`)
+    .join(' · ')
+}
+function relCorCelula(l: RelLinha, col: RelColKey): { bg: string; fg: string } | null {
+  if (col === 'resultado') return REL_RESULTADOS.find(r => r.k === l.res) ?? null
+  if (col === 'situacao') return REL_SITUACOES.find(s => s.k === l.sit) ?? null
+  return null
+}
+/** Texto curto dos filtros aplicados — vai no subtítulo do PDF/Excel. */
+function relDescricaoFiltros(cfg: RelatorioConfig): string {
+  const partes: string[] = []
+  if (cfg.resultados.length < REL_RESULTADOS.length) partes.push('Resultado: ' + REL_RESULTADOS.filter(r => cfg.resultados.includes(r.k)).map(r => r.label).join(', '))
+  if (cfg.situacoes.length < REL_SITUACOES.length) partes.push('Situação: ' + REL_SITUACOES.filter(s => cfg.situacoes.includes(s.k)).map(s => s.label).join(', '))
+  if (cfg.somenteComObs) partes.push('somente itens com observação')
+  return partes.join(' · ')
+}
 
 type DotDef = { val: Exclude<StatusResp, ''>; label: string; symbol: string; on: string; onFg: string }
 const ALL_DOTS: DotDef[] = [
@@ -982,8 +1084,7 @@ export default function WorkflowProgramasClient() {
   const [modalReprovacaoNovo, setModalReprovacaoNovo] = useState(false)
   const [modalRelatorio, setModalRelatorio] = useState(false)
   const [relatorioItensSel, setRelatorioItensSel] = useState<Set<string>>(new Set())
-  const [relatorioModo, setRelatorioModo] = useState<RelatorioModo>('empresa')
-  const [relatorioTonesSel, setRelatorioTonesSel] = useState<Set<ResultadoTone>>(new Set(['ok', 'no', 'na', 'acc']))
+  const [relatorioCfg, setRelatorioCfg] = useState<RelatorioConfig>(RELATORIO_CFG_PADRAO)
 
   // "+ Novo segmento" (Textos → Segmento) — cria o setor de atuação e já pergunta se quer
   // manter o mesmo texto padrão de outro segmento já existente, ou escrever um texto próprio.
@@ -2088,117 +2189,108 @@ export default function WorkflowProgramasClient() {
   }
 
   // ── Relatórios (PDF / Excel / HTML) sobre itens específicos ──
-  // Só os itens marcados no modal "Gerar relatórios", agrupados por empresa ou por
-  // requisito (à escolha, no próprio modal) — usa o mesmo filtro do Banco (bancoFiltrado).
+  // Só os itens marcados no modal "Gerar relatórios", sobre o mesmo filtro do Banco
+  // (bancoFiltrado). Colunas, agrupamento, ordem e filtros vêm da RelatorioConfig.
 
-  function montarGruposPorEmpresa(lista: AnaliseRow[], itemIds: Set<string>, tones: Set<ResultadoTone>): RelatorioGrupo[] {
-    const grupos: RelatorioGrupo[] = []
-    lista.forEach(a => {
-      const itens = itensDaAnalise(a.dados).filter(i => itemIds.has(i.id))
-      if (!itens.length) return
-      const nomesC = nomesContratantes(a.dados.contratanteIds)
-      const linhas = itens
-        .map(i => {
-          const r = a.dados.respostas[i.id]
-          const res = resultadoItem(i, r)
-          return { tone: res.tone, valores: [i.titulo, i.documento, res.label, r?.obs ? htmlToPlainText(r.obs) : ''] }
-        })
-        .filter(l => !l.tone || tones.has(l.tone))
-      if (!linhas.length) return
-      grupos.push({
-        titulo: a.empresa || '(sem nome)',
-        meta: [
-          `CNPJ: ${a.cnpj || '—'}`,
-          `Contratante(s): ${nomesC || '—'}`,
-          `Documentos: ${(a.dados.documentos || []).join(' ') || '—'}`,
-          `Análise: ${fmtD(a.dados.data)}`,
-          `Finalizada em: ${fmtD(a.data_final || a.dados.data)}`,
-        ],
-        colunas: ['Item', 'Documento', 'Resultado', 'Observação'],
-        resultadoColIdx: 2,
-        linhas,
-      })
-    })
-    return grupos
-  }
-
-  function montarGruposPorRequisito(lista: AnaliseRow[], itemIds: Set<string>, tones: Set<ResultadoTone>): RelatorioGrupo[] {
+  function montarLinhasRelatorio(lista: AnaliseRow[], itemIds: Set<string>): RelLinha[] {
     if (!catalog) return []
-    const itensSel = ordenarPorDocumento(catalog.itens.filter(i => itemIds.has(i.id)))
-    const grupos: RelatorioGrupo[] = []
-    itensSel.forEach(item => {
-      const linhas: RelatorioLinha[] = []
-      lista.forEach(a => {
-        const ia = itensDaAnalise(a.dados).find(x => x.id === item.id)
-        if (!ia) return
-        const r = a.dados.respostas[item.id]
-        const res = resultadoItem(ia, r)
-        if (res.tone && !tones.has(res.tone)) return
-        const nomesC = nomesContratantes(a.dados.contratanteIds)
+    const ordemItem = new Map(ordenarPorDocumento(catalog.itens).map((i, n) => [i.id, n]))
+    const sitLabel = Object.fromEntries(REL_SITUACOES.map(s => [s.k, s.label])) as Record<RelSituacao, string>
+    const linhas: RelLinha[] = []
+    lista.forEach(a => {
+      const sit = statusAnalise(a).k as RelSituacao
+      const contratantes = a.dados.contratanteIds.map(id => nomeC(getC(id))).filter(Boolean)
+      itensDaAnalise(a.dados).filter(i => itemIds.has(i.id)).forEach(i => {
+        const r = a.dados.respostas[i.id]
+        const base = resultadoItem(i, r)
+        const res: RelResultado = i.tipo === 'opcoes'
+          ? (base.tone === 'ok' ? 'ok' : 'na')
+          : r?.status === 'ok' ? 'ok' : r?.status === 'restricao' ? 'restr' : r?.status === 'nao' ? (i.critico ? 'reprov' : 'orient') : 'na'
         linhas.push({
-          tone: res.tone,
-          valores: [a.empresa, a.cnpj, nomesC, fmtD(a.dados.data), fmtD(a.data_final || a.dados.data), res.label, r?.obs ? htmlToPlainText(r.obs) : ''],
+          res, sit, contratantes,
+          itemOrdem: ordemItem.get(i.id) ?? 9999,
+          dataOrd: a.data_final || a.dados.data || '',
+          v: {
+            empresa: a.empresa || '(sem nome)', cnpj: a.cnpj || '', contratante: contratantes.join(', '),
+            documentos: (a.dados.documentos || []).join(' '), situacao: sitLabel[sit] ?? '', analista: a.dados.responsavel || '',
+            data: fmtD(a.dados.data), finalizada: fmtD(a.data_final || a.dados.data),
+            setores: (a.dados.setoresAtuacao || []).join(', '),
+            reincidencia: a.dados.reincidencia === 'nova' ? 'Nova' : a.dados.reincidencia === 'reincidente' ? 'Reincidente' : '',
+            item: i.titulo, docItem: i.documento, critico: i.critico ? 'Sim' : 'Não',
+            resultado: res === 'orient' ? 'Não conforme (orientativo)' : base.label,
+            obs: r?.obs ? htmlToPlainText(r.obs) : '',
+          },
         })
       })
-      if (!linhas.length) return
-      grupos.push({
-        titulo: item.titulo,
-        meta: [`Documento: ${item.documento}`, item.escopo === 'especifico' ? 'Exigência específica de contratante' : 'Item base do checklist'],
-        colunas: ['Empresa', 'CNPJ', 'Contratante', 'Data análise', 'Finalizada em', 'Resultado', 'Observação'],
-        resultadoColIdx: 5,
-        linhas,
-      })
     })
-    return grupos
+    return linhas
   }
 
-  function montarGruposRelatorio(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>): RelatorioGrupo[] {
-    return modo === 'requisito' ? montarGruposPorRequisito(lista, itemIds, tones) : montarGruposPorEmpresa(lista, itemIds, tones)
+  /** Quantas linhas o relatório terá com esta seleção/config — prévia no rodapé do modal. */
+  function contarLinhasRelatorio(itemIds: Set<string>, cfg: RelatorioConfig): number {
+    return relFiltrar(montarLinhasRelatorio(bancoFiltrado, itemIds), cfg).length
   }
 
   function abrirRelatorioModal() {
-    setRelatorioItensSel(new Set())
-    setRelatorioTonesSel(new Set(TODOS_TONES))
+    // Configuração e itens da última vez ficam guardados neste navegador.
+    let salvo: { cfg?: Partial<RelatorioConfig>; itens?: string[] } = {}
+    try { salvo = JSON.parse(localStorage.getItem(RELATORIO_CFG_STORAGE) || '{}') } catch { /* sem storage */ }
+    const idsValidos = new Set(catalog?.itens.map(i => i.id) ?? [])
+    setRelatorioCfg({ ...RELATORIO_CFG_PADRAO, ...(salvo.cfg ?? {}) })
+    setRelatorioItensSel(new Set((salvo.itens ?? []).filter(id => idsValidos.has(id))))
     setModalRelatorio(true)
   }
+  function lembrarRelatorio(itemIds: Set<string>, cfg: RelatorioConfig) {
+    try { localStorage.setItem(RELATORIO_CFG_STORAGE, JSON.stringify({ cfg, itens: Array.from(itemIds) })) } catch { /* sem storage */ }
+  }
 
-  /** `titulo` vira o título da impressão — é o nome sugerido ao salvar o PDF. */
-  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>, titulo = 'Relatório GT3 · Workflow Programas') {
-    const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
-    if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
-    const totalLinhas = grupos.reduce((n, g) => n + g.linhas.length, 0)
-    const larguras = larguraColunasRelatorio(grupos[0].colunas, grupos[0].resultadoColIdx)
-    const colgroupHtml = `<colgroup>${larguras.map(w => `<col style="width:${w}">`).join('')}</colgroup>`
-    const gruposHtml = grupos.map(g => {
-      const linhasHtml = g.linhas.map(l => '<tr>' + l.valores.map((v, idx) => {
-        if (idx === g.resultadoColIdx && l.tone) {
-          const cor = RESULTADO_CORES[l.tone]
-          return `<td><span class="badge" style="background:${cor.bg};color:${cor.fg}">${escapeHtml(v)}</span></td>`
-        }
-        return `<td>${escapeHtml(v)}</td>`
-      }).join('') + '</tr>').join('')
-      return `<div class="grupo">
-        <div class="grupo-titulo">${escapeHtml(g.titulo)}</div>
-        <div class="grupo-meta">${g.meta.map(escapeHtml).join(' &nbsp;·&nbsp; ')}</div>
-        <table>${colgroupHtml}<thead><tr>${g.colunas.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${linhasHtml}</tbody></table>
-      </div>`
-    }).join('')
+  function prepararRelatorio(lista: AnaliseRow[], itemIds: Set<string>, cfg: RelatorioConfig) {
+    const linhas = relFiltrar(montarLinhasRelatorio(lista, itemIds), cfg)
+    if (!linhas.length) { showToast('Nenhuma linha com os itens e filtros escolhidos'); return null }
+    return { linhas, grupos: relAgrupar(linhas, cfg), cols: relColunasVisiveis(cfg) }
+  }
+  const nomeArquivoRelatorio = (cfg: RelatorioConfig) =>
+    (cfg.titulo.trim() || 'Relatório Workflow Programas').replace(/[\\/:*?"<>|]/g, '-').slice(0, 120)
+
+  /** O título da config vira o título da impressão — é o nome sugerido ao salvar o PDF. */
+  function exportarRelatorioPdf(lista: AnaliseRow[], itemIds: Set<string>, cfg: RelatorioConfig) {
+    const prep = prepararRelatorio(lista, itemIds, cfg)
+    if (!prep) return
+    const { linhas, grupos, cols } = prep
+    const titulo = cfg.titulo.trim() || RELATORIO_CFG_PADRAO.titulo
+    const colgroupHtml = `<colgroup>${relLarguras(cols).map(w => `<col style="width:${w}">`).join('')}</colgroup>`
+    const theadHtml = `<thead><tr>${cols.map(c => `<th>${escapeHtml(REL_COL_LABEL[c])}</th>`).join('')}</tr></thead>`
+    const celula = (l: RelLinha, c: RelColKey) => {
+      const cor = relCorCelula(l, c)
+      return cor && l.v[c]
+        ? `<td><span class="badge" style="background:${cor.bg};color:${cor.fg}">${escapeHtml(l.v[c])}</span></td>`
+        : `<td>${escapeHtml(l.v[c])}</td>`
+    }
+    const gruposHtml = grupos.map(g => `<div class="grupo">
+        ${g.titulo ? `<div class="grupo-titulo">${escapeHtml(g.titulo)}</div><div class="grupo-meta">${g.linhas.length} linha(s) · ${escapeHtml(relResumo(g.linhas))}</div>` : ''}
+        <table>${colgroupHtml}${theadHtml}<tbody>${g.linhas.map(l => '<tr>' + cols.map(c => celula(l, c)).join('') + '</tr>').join('')}</tbody></table>
+      </div>`).join('')
+    const filtros = relDescricaoFiltros(cfg)
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(titulo)}</title><style>
-      @page { size: landscape; margin: 14mm; }
+      @page { size: landscape; margin: 12mm; }
       body{ font-family: Arial, Helvetica, sans-serif; color: #1B2432; }
       h1{ font-size: 15px; margin: 0 0 2px; }
-      p.sub{ font-size: 11px; color: #6B7A90; margin: 0 0 16px; }
-      .grupo{ margin-bottom: 16px; page-break-inside: avoid; }
-      .grupo-titulo{ font-size: 13px; font-weight: 700; color: #1E3A70; background: #E8EEF9; padding: 5px 8px; border-radius: 4px 4px 0 0; }
-      .grupo-meta{ font-size: 10px; color: #6B7A90; padding: 4px 8px; border: 1px solid #E8EEF9; border-top: none; }
-      table{ width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 2px; table-layout: fixed; }
-      th, td{ border: 1px solid #B9C2D0; padding: 4px 6px; text-align: left; vertical-align: top; overflow-wrap: break-word; }
-      th{ background: #F4F6FA; font-weight: 700; }
+      p.sub{ font-size: 10.5px; color: #6B7A90; margin: 0 0 4px; }
+      .resumo{ font-size: 10.5px; margin: 0 0 14px; }
+      .grupo{ margin-bottom: 14px; }
+      .grupo-titulo{ font-size: 12.5px; font-weight: 700; color: #1E3A70; background: #E8EEF9; padding: 5px 8px; border-radius: 4px 4px 0 0; page-break-after: avoid; }
+      .grupo-meta{ font-size: 9.5px; color: #6B7A90; padding: 3px 8px; border: 1px solid #E8EEF9; border-top: none; page-break-after: avoid; }
+      table{ width: 100%; border-collapse: collapse; font-size: 9.5px; margin-top: 2px; table-layout: fixed; }
+      thead{ display: table-header-group; }
+      tr{ page-break-inside: avoid; }
+      th, td{ border: 1px solid #B9C2D0; padding: 4px 6px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+      th{ background: #F4F6FA; font-weight: 700; color: #1E3A70; }
       tr:nth-child(even) td{ background: #FAFBFD; }
-      .badge{ display: inline-block; padding: 1px 8px; border-radius: 99px; font-weight: 700; }
+      .badge{ display: inline-block; padding: 1px 7px; border-radius: 99px; font-weight: 700; }
     </style></head><body>
-      <h1>GT3 · Workflow Programas — Relatório (${modo === 'empresa' ? 'por empresa' : 'por requisito'})</h1>
-      <p class="sub">${totalLinhas} linha(s) em ${grupos.length} grupo(s) · gerado em ${new Date().toLocaleString('pt-BR')}</p>
+      <h1>${escapeHtml(titulo)}</h1>
+      <p class="sub">${linhas.length} linha(s)${cfg.agrupar !== 'nenhum' ? ` em ${grupos.length} grupo(s) por ${escapeHtml(REL_AGRUPAR_LABEL[cfg.agrupar].toLowerCase())}` : ''} · gerado em ${new Date().toLocaleString('pt-BR')}${filtros ? ' · ' + escapeHtml(filtros) : ''}</p>
+      <p class="resumo">${escapeHtml(relResumo(linhas))}</p>
       ${gruposHtml}
     </body></html>`
     // Impressão via iframe isolado (mesmo padrão de app/atas-contratantes/AtasContratantesClient.tsx
@@ -2224,66 +2316,369 @@ export default function WorkflowProgramasClient() {
     else iframe.onload = () => setTimeout(trigger, 150)
   }
 
-  async function exportarRelatorioExcel(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>) {
-    const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
-    if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
+  /** Aba "Dados": tabela única com autofiltro do Excel (filtra por qualquer coluna lá dentro).
+   *  Com agrupamento escolhido, uma 2ª aba repete os dados em seções, como no PDF. */
+  async function exportarRelatorioExcel(lista: AnaliseRow[], itemIds: Set<string>, cfg: RelatorioConfig) {
+    const prep = prepararRelatorio(lista, itemIds, cfg)
+    if (!prep) return
+    const { linhas, grupos, cols } = prep
     const { Workbook } = await import('exceljs')
     const wb = new Workbook()
     wb.creator = 'GT3 Sistema'
     wb.created = new Date()
-    const ws = wb.addWorksheet('Relatório')
-    const maxCols = Math.max(...grupos.map(g => g.colunas.length))
-    for (let c = 1; c <= maxCols; c++) ws.getColumn(c).width = c === maxCols ? 46 : 20
     const bordaFina = { style: 'thin' as const, color: { argb: 'FFB9C2D0' } }
-    const corExcel: Record<ResultadoTone, { bg: string; fg: string }> = {
-      ok: { bg: 'FFE6F6EF', fg: 'FF1E9E6A' }, no: { bg: 'FFFCEBEB', fg: 'FFD64545' },
-      na: { bg: 'FFEEF1F5', fg: 'FF54617A' }, acc: { bg: 'FFFBF4E6', fg: 'FF8A6A22' },
-    }
-    let rowNum = 1
-    grupos.forEach(g => {
-      const numCols = Math.max(g.colunas.length, 1)
-      const tituloCell = ws.getCell(rowNum, 1)
-      tituloCell.value = g.titulo
-      ws.mergeCells(rowNum, 1, rowNum, numCols)
-      tituloCell.font = { bold: true, size: 12, color: { argb: 'FF1E3A70' } }
-      tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
-      rowNum++
-      if (g.meta.length) {
-        const metaCell = ws.getCell(rowNum, 1)
-        metaCell.value = g.meta.join('   ·   ')
-        ws.mergeCells(rowNum, 1, rowNum, numCols)
-        metaCell.font = { italic: true, size: 9, color: { argb: 'FF6B7A90' } }
-        rowNum++
-      }
-      g.colunas.forEach((c, idx) => {
-        const cell = ws.getCell(rowNum, idx + 1)
-        cell.value = c
+    const borda = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
+    const argb = (hex: string) => 'FF' + hex.replace('#', '').toUpperCase()
+    const larguraExcel = (c: RelColKey) => Math.max(10, Math.round((REL_COLUNAS.find(x => x.key === c)?.peso ?? 10) * 2))
+    const titulo = cfg.titulo.trim() || RELATORIO_CFG_PADRAO.titulo
+    const filtros = relDescricaoFiltros(cfg)
+
+    function cabecalho(ws: import('exceljs').Worksheet, colsAba: RelColKey[], linha: number) {
+      colsAba.forEach((c, idx) => {
+        const cell = ws.getCell(linha, idx + 1)
+        cell.value = REL_COL_LABEL[c]
         cell.font = { bold: true, color: { argb: 'FF1E3A70' } }
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
-        cell.border = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
+        cell.border = borda
+        cell.alignment = { vertical: 'middle', wrapText: true }
       })
-      rowNum++
-      g.linhas.forEach(l => {
-        l.valores.forEach((v, idx) => {
-          const cell = ws.getCell(rowNum, idx + 1)
-          cell.value = v
-          cell.alignment = { vertical: 'top', wrapText: true }
-          cell.border = { top: bordaFina, left: bordaFina, bottom: bordaFina, right: bordaFina }
-          if (idx === g.resultadoColIdx && l.tone) {
-            const cor = corExcel[l.tone]
-            cell.font = { bold: true, color: { argb: cor.fg } }
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor.bg } }
-          }
-        })
+    }
+    function escreverLinha(ws: import('exceljs').Worksheet, colsAba: RelColKey[], l: RelLinha, linha: number) {
+      colsAba.forEach((c, idx) => {
+        const cell = ws.getCell(linha, idx + 1)
+        cell.value = l.v[c]
+        cell.alignment = { vertical: 'top', wrapText: true }
+        cell.border = borda
+        const cor = relCorCelula(l, c)
+        if (cor) {
+          cell.font = { bold: true, color: { argb: argb(cor.fg) } }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(cor.bg) } }
+        }
+      })
+    }
+    function topo(ws: import('exceljs').Worksheet, numCols: number) {
+      const t = ws.getCell(1, 1)
+      t.value = titulo
+      ws.mergeCells(1, 1, 1, Math.max(numCols, 1))
+      t.font = { bold: true, size: 13, color: { argb: 'FF1E3A70' } }
+      const s = ws.getCell(2, 1)
+      s.value = `${linhas.length} linha(s) · ${relResumo(linhas)} · gerado em ${new Date().toLocaleString('pt-BR')}${filtros ? ' · ' + filtros : ''}`
+      ws.mergeCells(2, 1, 2, Math.max(numCols, 1))
+      s.font = { italic: true, size: 9, color: { argb: 'FF6B7A90' } }
+    }
+
+    // Aba de dados: todas as colunas escolhidas (inclusive a do agrupamento), uma linha por item.
+    const colsDados = cfg.colunas.length ? cfg.colunas : cols
+    const wsDados = wb.addWorksheet('Dados')
+    colsDados.forEach((c, idx) => { wsDados.getColumn(idx + 1).width = larguraExcel(c) })
+    topo(wsDados, colsDados.length)
+    cabecalho(wsDados, colsDados, 4)
+    relOrdenar(linhas, cfg.ordem).forEach((l, n) => escreverLinha(wsDados, colsDados, l, 5 + n))
+    wsDados.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + linhas.length, column: colsDados.length } }
+    wsDados.views = [{ state: 'frozen', ySplit: 4 }]
+
+    if (cfg.agrupar !== 'nenhum') {
+      const ws = wb.addWorksheet(`Por ${REL_AGRUPAR_LABEL[cfg.agrupar].replace(/[[\]:*?/\\]/g, '-')}`.slice(0, 31))
+      cols.forEach((c, idx) => { ws.getColumn(idx + 1).width = larguraExcel(c) })
+      topo(ws, cols.length)
+      let rowNum = 4
+      grupos.forEach(g => {
+        const tituloCell = ws.getCell(rowNum, 1)
+        tituloCell.value = `${g.titulo}   (${g.linhas.length} · ${relResumo(g.linhas)})`
+        ws.mergeCells(rowNum, 1, rowNum, cols.length)
+        tituloCell.font = { bold: true, size: 11, color: { argb: 'FF1E3A70' } }
+        tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF9' } }
         rowNum++
+        cabecalho(ws, cols, rowNum)
+        rowNum++
+        g.linhas.forEach(l => { escreverLinha(ws, cols, l, rowNum); rowNum++ })
+        rowNum++ // linha em branco separando o próximo grupo
       })
-      rowNum++ // linha em branco separando o próximo grupo
-    })
+    }
+
     const buf = await wb.xlsx.writeBuffer()
     const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
     const el = document.createElement('a')
-    el.href = url; el.download = `gt3-relatorio-workflow-programas-${modo}.xlsx`; el.click(); URL.revokeObjectURL(url)
+    el.href = url; el.download = `${nomeArquivoRelatorio(cfg)}.xlsx`; el.click(); URL.revokeObjectURL(url)
     showToast('Excel exportado')
+  }
+
+  /** HTML autocontido (sem dependências externas). Leva TODAS as linhas dos itens escolhidos,
+   *  e a config vira só o estado inicial: lá dentro dá para filtrar (resultado, situação,
+   *  empresa, contratante, item, documento, texto livre), reagrupar, reordenar (inclusive
+   *  clicando no cabeçalho), mostrar/ocultar colunas, recolher grupos e baixar o CSV filtrado. */
+  function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>, cfg: RelatorioConfig) {
+    const todas = montarLinhasRelatorio(lista, itemIds)
+    if (!relFiltrar(todas, cfg).length) { showToast('Nenhuma linha com os itens e filtros escolhidos'); return }
+    const titulo = cfg.titulo.trim() || RELATORIO_CFG_PADRAO.titulo
+    // Escapa "</script" — sem isso, uma observação com esse trecho literal fecharia a tag
+    // <script> mais cedo e quebraria o HTML gerado.
+    const json = (v: unknown) => JSON.stringify(v).replace(/<\/script/gi, '<\\/script')
+    const dados = {
+      linhas: todas.map(l => ({ v: l.v, r: l.res, s: l.sit, c: l.contratantes, o: l.itemOrdem, d: l.dataOrd })),
+      colunas: REL_COLUNAS, resultados: REL_RESULTADOS, situacoes: REL_SITUACOES,
+      agrupar: REL_AGRUPAR_LABEL, ordem: REL_ORDEM_LABEL, colDoGrupo: REL_COL_DO_GRUPO,
+      cfg: { ...cfg, colunas: cfg.colunas.length ? cfg.colunas : RELATORIO_CFG_PADRAO.colunas },
+    }
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(titulo)}</title><style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#F4F6FA;color:#1B2432;font-size:13px}
+header{padding:20px 24px 6px} h1{font-size:19px;margin:0 0 3px} .sub{color:#6B7A90;font-size:12.5px}
+.painel{position:sticky;top:0;z-index:20;background:#F4F6FA;padding:10px 24px 12px;border-bottom:1px solid #E2E8F2}
+.cards{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.card{border:1.5px solid transparent;border-radius:10px;padding:7px 12px;cursor:pointer;min-width:120px;user-select:none;background:#fff;box-shadow:0 1px 2px rgba(27,36,50,.06)}
+.card b{display:block;font-size:19px;line-height:1.15} .card span{font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.card.off{opacity:.38}
+.linha{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;align-items:end}
+.campo label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#6B7A90;font-weight:600;margin-bottom:3px}
+.campo input,.campo select{width:100%;padding:6px 8px;border:1px solid #D5DDEA;border-radius:7px;font:inherit;font-size:12.5px;background:#fff}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{border:1px solid #D5DDEA;background:#fff;border-radius:99px;padding:3px 10px;font-size:11.5px;cursor:pointer;font-weight:600;user-select:none}
+.acoes{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.btn{border:1px solid #D5DDEA;background:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit;font-size:12.5px}
+.btn:hover{background:#E8EEF9} .contador{margin-left:auto;color:#6B7A90;font-size:12.5px}
+.colmenu{position:relative;display:inline-block}
+.colmenu .lista{position:absolute;top:110%;left:0;background:#fff;border:1px solid #D5DDEA;border-radius:8px;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:30;min-width:230px;max-height:340px;overflow:auto}
+.colmenu .lista div{display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:12.5px}
+.colmenu .lista button{border:none;background:none;cursor:pointer;color:#6B7A90;padding:0 3px}
+main{padding:14px 24px 40px}
+details.grupo{margin-bottom:14px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(27,36,50,.08)}
+details.grupo>summary{cursor:pointer;list-style:none;padding:9px 14px;background:#E8EEF9;color:#1E3A70;font-weight:700;font-size:13.5px;display:flex;gap:10px;align-items:baseline}
+details.grupo>summary::-webkit-details-marker{display:none}
+details.grupo>summary .meta{font-weight:400;font-size:11.5px;color:#6B7A90}
+details.grupo>summary:before{content:"▾";color:#6B7A90} details.grupo:not([open])>summary:before{content:"▸"}
+.tabela-unica{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(27,36,50,.08);overflow:hidden}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th,td{border-bottom:1px solid #E2E8F2;border-right:1px solid #EEF1F6;padding:7px 9px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+th{background:#F7F9FC;color:#1E3A70;font-size:11px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none;white-space:normal}
+th .seta{color:#9AA7BA;margin-left:3px} th.ord .seta{color:#2A4F96}
+tbody tr:nth-child(even){background:#FAFBFD} tbody tr:hover{background:#F1F5FC}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-weight:700;font-size:11.5px}
+.vazio{padding:40px;text-align:center;color:#6B7A90}
+@media (max-width:900px){.linha{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media print{.painel{display:none} body{background:#fff} details.grupo{box-shadow:none;border:1px solid #E2E8F2} th{cursor:default}}
+</style></head><body>
+<header><h1 id="titulo"></h1><div class="sub" id="sub"></div></header>
+<div class="painel">
+  <div class="cards" id="cards"></div>
+  <div class="linha">
+    <div class="campo"><label>Buscar</label><input id="fBusca" placeholder="Qualquer texto…"></div>
+    <div class="campo"><label>Empresa</label><select id="fEmpresa"></select></div>
+    <div class="campo"><label>Contratante</label><select id="fContratante"></select></div>
+    <div class="campo"><label>Item</label><select id="fItem"></select></div>
+    <div class="campo"><label>Documento</label><select id="fDoc"></select></div>
+    <div class="campo"><label>Observação</label><select id="fObs"><option value="">Todas as linhas</option><option value="com">Só com observação</option><option value="sem">Só sem observação</option></select></div>
+  </div>
+  <div class="linha" style="margin-top:8px">
+    <div class="campo" style="grid-column:span 3"><label>Situação da análise</label><div class="chips" id="fSit"></div></div>
+    <div class="campo"><label>Agrupar por</label><select id="fAgrupar"></select></div>
+    <div class="campo"><label>Ordenar por</label><select id="fOrdem"></select></div>
+    <div class="campo"><label>Colunas</label><div class="colmenu"><button class="btn" id="btnCols" style="width:100%">Escolher colunas ▾</button><div class="lista" id="listaCols" hidden></div></div></div>
+  </div>
+  <div class="acoes">
+    <button class="btn" id="btnLimpar">Limpar filtros</button>
+    <button class="btn" id="btnAbrir">Expandir grupos</button>
+    <button class="btn" id="btnFechar">Recolher grupos</button>
+    <button class="btn" id="btnCsv">⬇ CSV do que está na tela</button>
+    <button class="btn" id="btnImprimir">🖨 Imprimir / PDF</button>
+    <span class="contador" id="contador"></span>
+  </div>
+</div>
+<main id="conteudo"></main>
+<script>
+var D = ${json(dados)};
+var TITULO = ${json(titulo)};
+var GERADO = ${json(new Date().toLocaleString('pt-BR'))};
+var st = {
+  busca: '', empresa: '', contratante: '', item: '', doc: '', obs: D.cfg.somenteComObs ? 'com' : '',
+  res: D.cfg.resultados.slice(), sit: D.cfg.situacoes.slice(),
+  agrupar: D.cfg.agrupar, ordem: D.cfg.ordem, cols: D.cfg.colunas.slice(), sortCol: null, sortDir: 1
+};
+var INICIAL = JSON.parse(JSON.stringify(st));
+function $(id){ return document.getElementById(id); }
+function el(tag, attrs, txt){ var e = document.createElement(tag); if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]); if (txt != null) e.textContent = txt; return e; }
+function achar(lista, k){ for (var i = 0; i < lista.length; i++) if (lista[i].k === k) return lista[i]; return null; }
+function colDef(k){ for (var i = 0; i < D.colunas.length; i++) if (D.colunas[i].key === k) return D.colunas[i]; return null; }
+function unicos(fn){ var m = {}; D.linhas.forEach(function(l){ fn(l).forEach(function(v){ if (v) m[v] = 1; }); }); return Object.keys(m).sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); }); }
+function opcoes(sel, vals, todos){ sel.innerHTML = ''; sel.appendChild(el('option', { value: '' }, todos)); vals.forEach(function(v){ sel.appendChild(el('option', { value: v }, v)); }); }
+
+$('titulo').textContent = TITULO;
+opcoes($('fEmpresa'), unicos(function(l){ return [l.v.empresa]; }), 'Todas');
+opcoes($('fContratante'), unicos(function(l){ return l.c; }), 'Todas');
+var itensOrd = {}; D.linhas.forEach(function(l){ itensOrd[l.v.item] = l.o; });
+opcoes($('fItem'), Object.keys(itensOrd).sort(function(a, b){ return itensOrd[a] - itensOrd[b]; }), 'Todos');
+opcoes($('fDoc'), unicos(function(l){ return [l.v.docItem]; }), 'Todos');
+Object.keys(D.agrupar).forEach(function(k){ $('fAgrupar').appendChild(el('option', { value: k }, D.agrupar[k])); });
+Object.keys(D.ordem).forEach(function(k){ $('fOrdem').appendChild(el('option', { value: k }, D.ordem[k])); });
+
+function filtradasSem(ignorar){
+  var q = st.busca.toLowerCase();
+  return D.linhas.filter(function(l){
+    if (ignorar !== 'res' && st.res.indexOf(l.r) === -1) return false;
+    if (st.sit.indexOf(l.s) === -1) return false;
+    if (st.empresa && l.v.empresa !== st.empresa) return false;
+    if (st.contratante && l.c.indexOf(st.contratante) === -1) return false;
+    if (st.item && l.v.item !== st.item) return false;
+    if (st.doc && l.v.docItem !== st.doc) return false;
+    if (st.obs === 'com' && !l.v.obs.trim()) return false;
+    if (st.obs === 'sem' && l.v.obs.trim()) return false;
+    if (q) { var achou = false; for (var k in l.v) if (String(l.v[k]).toLowerCase().indexOf(q) !== -1) { achou = true; break; } if (!achou) return false; }
+    return true;
+  });
+}
+var PESO_RES = { reprov: 0, orient: 1, restr: 2, ok: 3, na: 4 };
+function ordenar(ls){
+  return ls.slice().sort(function(a, b){
+    if (st.sortCol) {
+      var x = st.sortCol === 'resultado' ? PESO_RES[a.r] - PESO_RES[b.r] : st.sortCol === 'data' || st.sortCol === 'finalizada' ? a.d.localeCompare(b.d) : String(a.v[st.sortCol]).localeCompare(String(b.v[st.sortCol]), 'pt-BR');
+      if (x) return x * st.sortDir;
+    }
+    var e = a.v.empresa.localeCompare(b.v.empresa, 'pt-BR'), i = a.o - b.o;
+    if (st.ordem === 'data') return b.d.localeCompare(a.d) || e || i;
+    if (st.ordem === 'resultado') return PESO_RES[a.r] - PESO_RES[b.r] || e || i;
+    if (st.ordem === 'item') return i || e;
+    return e || i;
+  });
+}
+function agrupar(ls){
+  if (st.agrupar === 'nenhum') return [{ t: '', ls: ls }];
+  var mapa = {}, ordem = [];
+  ls.forEach(function(l){
+    var chaves = st.agrupar === 'empresa' ? [[l.v.empresa + '|' + l.v.cnpj, l.v.empresa + (l.v.cnpj ? ' — ' + l.v.cnpj : ''), l.v.empresa]]
+      : st.agrupar === 'requisito' ? [[l.v.item, l.v.item + ' (' + l.v.docItem + ')', l.o]]
+      : (l.c.length ? l.c : ['(sem contratante)']).map(function(c){ return [c, c, c]; });
+    chaves.forEach(function(ch){
+      if (!mapa[ch[0]]) { mapa[ch[0]] = { t: ch[1], ls: [], ord: ch[2] }; ordem.push(mapa[ch[0]]); }
+      mapa[ch[0]].ls.push(l);
+    });
+  });
+  return ordem.sort(function(a, b){ return typeof a.ord === 'number' ? a.ord - b.ord : String(a.ord).localeCompare(String(b.ord), 'pt-BR'); });
+}
+function resumo(ls){
+  return D.resultados.map(function(r){ var n = ls.filter(function(l){ return l.r === r.k; }).length; return n ? n + ' ' + r.label.toLowerCase() : ''; }).filter(Boolean).join(' · ');
+}
+function colsVisiveis(){
+  var g = D.colDoGrupo[st.agrupar];
+  var c = st.cols.filter(function(k){ return k !== g; });
+  return c.length ? c : st.cols;
+}
+function larguras(cols){
+  var pesos = cols.map(function(k){ var d = colDef(k); return d ? d.peso : 10; });
+  var soma = pesos.reduce(function(a, b){ return a + b; }, 0);
+  return pesos.map(function(p){ return (p / soma * 100).toFixed(2) + '%'; });
+}
+function celula(l, k){
+  var td = el('td'), cor = k === 'resultado' ? achar(D.resultados, l.r) : k === 'situacao' ? achar(D.situacoes, l.s) : null;
+  if (cor && l.v[k]) { var b = el('span', { class: 'badge' }, l.v[k]); b.style.background = cor.bg; b.style.color = cor.fg; td.appendChild(b); }
+  else td.textContent = l.v[k];
+  return td;
+}
+function tabela(ls, cols, ws){
+  var t = el('table'), cg = el('colgroup');
+  ws.forEach(function(w){ var c = el('col'); c.style.width = w; cg.appendChild(c); });
+  t.appendChild(cg);
+  var tr = el('tr');
+  cols.forEach(function(k){
+    var th = el('th', null, colDef(k).label);
+    var seta = el('span', { class: 'seta' }, st.sortCol === k ? (st.sortDir > 0 ? '▲' : '▼') : '↕');
+    if (st.sortCol === k) th.className = 'ord';
+    th.appendChild(seta);
+    th.title = 'Ordenar por esta coluna';
+    th.onclick = function(){ if (st.sortCol === k) { if (st.sortDir > 0) st.sortDir = -1; else st.sortCol = null; } else { st.sortCol = k; st.sortDir = 1; } render(); };
+    tr.appendChild(th);
+  });
+  var th = el('thead'); th.appendChild(tr); t.appendChild(th);
+  var tb = el('tbody');
+  ls.forEach(function(l){ var r = el('tr'); cols.forEach(function(k){ r.appendChild(celula(l, k)); }); tb.appendChild(r); });
+  t.appendChild(tb);
+  return t;
+}
+function cards(){
+  var base = filtradasSem('res'), wrap = $('cards');
+  wrap.innerHTML = '';
+  D.resultados.forEach(function(r){
+    var n = base.filter(function(l){ return l.r === r.k; }).length;
+    var c = el('div', { class: 'card' + (st.res.indexOf(r.k) === -1 ? ' off' : ''), title: 'Clique para mostrar/ocultar' });
+    c.style.borderColor = r.fg + '55'; c.style.background = r.bg;
+    var b = el('b', null, String(n)); b.style.color = r.fg;
+    var s = el('span', null, r.label); s.style.color = r.fg;
+    c.appendChild(b); c.appendChild(s);
+    c.onclick = function(){ var i = st.res.indexOf(r.k); if (i === -1) st.res.push(r.k); else st.res.splice(i, 1); render(); };
+    wrap.appendChild(c);
+  });
+}
+function chipsSit(){
+  var wrap = $('fSit'); wrap.innerHTML = '';
+  D.situacoes.forEach(function(s){
+    var on = st.sit.indexOf(s.k) !== -1;
+    var c = el('span', { class: 'chip' }, s.label);
+    c.style.background = on ? s.bg : '#fff'; c.style.color = on ? s.fg : '#9AA7BA'; c.style.borderColor = on ? s.fg + '55' : '#D5DDEA';
+    c.onclick = function(){ var i = st.sit.indexOf(s.k); if (i === -1) st.sit.push(s.k); else st.sit.splice(i, 1); render(); };
+    wrap.appendChild(c);
+  });
+}
+function listaCols(){
+  var wrap = $('listaCols'); wrap.innerHTML = '';
+  var ordem = st.cols.concat(D.colunas.map(function(c){ return c.key; }).filter(function(k){ return st.cols.indexOf(k) === -1; }));
+  ordem.forEach(function(k){
+    var on = st.cols.indexOf(k) !== -1, linha = el('div');
+    var cb = el('input', { type: 'checkbox' }); cb.checked = on;
+    cb.onchange = function(){ if (cb.checked) st.cols.push(k); else if (st.cols.length > 1) st.cols.splice(st.cols.indexOf(k), 1); else cb.checked = true; render(); listaCols(); };
+    linha.appendChild(cb); linha.appendChild(el('span', { style: 'flex:1' }, colDef(k).label));
+    if (on) {
+      var up = el('button', { title: 'Mover para a esquerda' }, '◀'), dn = el('button', { title: 'Mover para a direita' }, '▶');
+      up.onclick = function(){ var i = st.cols.indexOf(k); if (i > 0) { st.cols.splice(i, 1); st.cols.splice(i - 1, 0, k); render(); listaCols(); } };
+      dn.onclick = function(){ var i = st.cols.indexOf(k); if (i < st.cols.length - 1) { st.cols.splice(i, 1); st.cols.splice(i + 1, 0, k); render(); listaCols(); } };
+      linha.appendChild(up); linha.appendChild(dn);
+    }
+    wrap.appendChild(linha);
+  });
+}
+var ULTIMAS = [];
+function render(){
+  cards(); chipsSit();
+  [['fBusca', 'busca'], ['fEmpresa', 'empresa'], ['fContratante', 'contratante'], ['fItem', 'item'], ['fDoc', 'doc'], ['fObs', 'obs'], ['fAgrupar', 'agrupar'], ['fOrdem', 'ordem']].forEach(function(p){
+    if ($(p[0]).value !== st[p[1]]) $(p[0]).value = st[p[1]];
+  });
+  var ls = ordenar(filtradasSem());
+  ULTIMAS = ls;
+  var grupos = agrupar(ls), cols = colsVisiveis(), ws = larguras(cols), main = $('conteudo');
+  main.innerHTML = '';
+  if (!ls.length) main.appendChild(el('div', { class: 'vazio' }, 'Nenhuma linha corresponde aos filtros.'));
+  else if (st.agrupar === 'nenhum') { var box = el('div', { class: 'tabela-unica' }); box.appendChild(tabela(ls, cols, ws)); main.appendChild(box); }
+  else grupos.forEach(function(g){
+    var d = el('details', { class: 'grupo', open: '' }), s = el('summary');
+    s.appendChild(el('span', null, g.t)); s.appendChild(el('span', { class: 'meta' }, g.ls.length + ' linha(s) · ' + resumo(g.ls)));
+    d.appendChild(s); d.appendChild(tabela(g.ls, cols, ws)); main.appendChild(d);
+  });
+  $('contador').textContent = ls.length + ' de ' + D.linhas.length + ' linha(s)' + (st.agrupar !== 'nenhum' && ls.length ? ' em ' + grupos.length + ' grupo(s)' : '');
+  $('sub').textContent = 'Gerado em ' + GERADO + ' · ' + resumo(ls);
+}
+$('fBusca').oninput = function(){ st.busca = this.value; render(); };
+[['fEmpresa', 'empresa'], ['fContratante', 'contratante'], ['fItem', 'item'], ['fDoc', 'doc'], ['fObs', 'obs'], ['fAgrupar', 'agrupar'], ['fOrdem', 'ordem']].forEach(function(p){
+  $(p[0]).onchange = function(){ st[p[1]] = this.value; if (p[1] === 'ordem') st.sortCol = null; render(); };
+});
+$('btnCols').onclick = function(e){ e.stopPropagation(); var l = $('listaCols'); l.hidden = !l.hidden; if (!l.hidden) listaCols(); };
+$('listaCols').onclick = function(e){ e.stopPropagation(); };
+document.addEventListener('click', function(){ $('listaCols').hidden = true; });
+$('btnLimpar').onclick = function(){ var cols = st.cols, ag = st.agrupar, ord = st.ordem; st = JSON.parse(JSON.stringify(INICIAL)); st.res = D.resultados.map(function(r){ return r.k; }); st.sit = D.situacoes.map(function(s){ return s.k; }); st.obs = ''; st.cols = cols; st.agrupar = ag; st.ordem = ord; render(); };
+$('btnAbrir').onclick = function(){ document.querySelectorAll('details.grupo').forEach(function(d){ d.open = true; }); };
+$('btnFechar').onclick = function(){ document.querySelectorAll('details.grupo').forEach(function(d){ d.open = false; }); };
+$('btnImprimir').onclick = function(){ document.querySelectorAll('details.grupo').forEach(function(d){ d.open = true; }); window.print(); };
+$('btnCsv').onclick = function(){
+  var cols = st.cols;
+  var linhas = [cols.map(function(k){ return colDef(k).label; })].concat(ULTIMAS.map(function(l){ return cols.map(function(k){ return l.v[k]; }); }));
+  var csv = '\\ufeff' + linhas.map(function(r){ return r.map(function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(';'); }).join('\\r\\n');
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = TITULO.replace(/[\\\\/:*?"<>|]/g, '-') + '.csv'; a.click();
+};
+render();
+</script>
+</body></html>`
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+    const el = document.createElement('a')
+    el.href = url; el.download = `${nomeArquivoRelatorio(cfg)}.html`; el.click(); URL.revokeObjectURL(url)
+    showToast('HTML interativo exportado')
   }
 
   /** Excel com o checklist que cada contratante vê em "Nova análise" — uma aba por contratante.
@@ -2363,171 +2758,6 @@ export default function WorkflowProgramasClient() {
     const nomeArquivo = lista.length === 1 ? `Checklist ${nomeC(lista[0]).replace(/[\\/:*?"<>|]/g, '-')}` : 'Checklist contratantes'
     el.href = url; el.download = `${nomeArquivo}.xlsx`; el.click(); URL.revokeObjectURL(url)
     showToast('Checklist exportado')
-  }
-
-  function exportarRelatorioHtml(lista: AnaliseRow[], itemIds: Set<string>, modo: RelatorioModo, tones: Set<ResultadoTone>) {
-    const grupos = montarGruposRelatorio(lista, itemIds, modo, tones)
-    if (!grupos.length) { showToast('Nenhum dado para os itens selecionados'); return }
-    const cols = grupos[0].colunas
-    const resultadoIdx = grupos[0].resultadoColIdx
-    const totalLinhas = grupos.reduce((n, g) => n + g.linhas.length, 0)
-    // Escapa "</script" — sem isso, uma observação com esse trecho literal fecharia a tag
-    // <script> mais cedo e quebraria o HTML gerado.
-    const dadosGrupos = grupos.map(g => ({ titulo: g.titulo, meta: g.meta, linhas: g.linhas.map(l => ({ v: l.valores, t: l.tone || '' })) }))
-    const gruposJson = JSON.stringify(dadosGrupos).replace(/<\/script/gi, '<\\/script')
-    const colsJson = JSON.stringify(cols).replace(/<\/script/gi, '<\\/script')
-    const totalLinhasJson = JSON.stringify(totalLinhas)
-    const toneLabelsJson = JSON.stringify(RESULTADO_TONE_LABEL)
-    // Arquivo HTML autocontido (sem dependências externas), com seções por grupo (empresa ou
-    // requisito, conforme escolhido) e filtro por coluna aplicado dentro de cada grupo — um
-    // grupo some da tela se nenhuma linha dele sobreviver ao filtro. A coluna Resultado usa um
-    // <select> (por tom: conforme/reprovação/restrição/n·a·) em vez de texto livre, e todas as
-    // tabelas usam a mesma largura de coluna (table-layout:fixed + colgroup) pra não ficarem
-    // desalinhadas de um grupo pro outro.
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Relatório GT3 · Workflow Programas</title><style>
-      *{box-sizing:border-box} body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#F4F6FA;color:#1B2432;padding:24px}
-      h1{font-size:19px;margin:0 0 4px} p.sub{color:#6B7A90;font-size:13px;margin:0 0 18px}
-      .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;position:sticky;top:0;background:#F4F6FA;padding:8px 0;z-index:5}
-      .toolbar button{border:1px solid #E2E8F2;background:#fff;border-radius:8px;padding:7px 13px;cursor:pointer;font-size:13px}
-      .toolbar button:hover{background:#E8EEF9}
-      .filtros{display:flex;gap:6px;flex-wrap:wrap}
-      .filtros input,.filtros select{padding:6px 8px;border:1px solid #E2E8F2;border-radius:6px;font-size:12px;font-family:inherit;width:130px;background:#fff}
-      .contador{font-size:12.5px;color:#6B7A90;margin-left:auto}
-      .grupo{margin-bottom:20px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(27,36,50,.08)}
-      .grupo-titulo{font-size:14px;font-weight:700;color:#1E3A70;background:#E8EEF9;padding:9px 14px}
-      .grupo-meta{font-size:11.5px;color:#6B7A90;padding:6px 14px;border-bottom:1px solid #E2E8F2}
-      table{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
-      th,td{border:1px solid #E2E8F2;padding:7px 9px;text-align:left;vertical-align:top;overflow-wrap:break-word}
-      th{background:#F4F6FA;color:#1E3A70}
-      tbody tr:nth-child(even){background:#FAFBFD}
-      .badge{display:inline-block;padding:2px 9px;border-radius:99px;font-weight:700;font-size:12px}
-      .res-ok{background:${RESULTADO_CORES.ok.bg};color:${RESULTADO_CORES.ok.fg}}
-      .res-no{background:${RESULTADO_CORES.no.bg};color:${RESULTADO_CORES.no.fg}}
-      .res-na{background:${RESULTADO_CORES.na.bg};color:${RESULTADO_CORES.na.fg}}
-      .res-acc{background:${RESULTADO_CORES.acc.bg};color:${RESULTADO_CORES.acc.fg}}
-      .vazio{padding:30px;text-align:center;color:#6B7A90}
-      @media print{ .toolbar{display:none} }
-      </style></head><body>
-      <h1>GT3 · Workflow Programas — Relatório interativo (${modo === 'empresa' ? 'por empresa' : 'por requisito'})</h1>
-      <p class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · filtre por coluna abaixo (a coluna Resultado filtra por aprovado/reprovado/etc.) — um grupo some se nenhuma linha dele sobrar.</p>
-      <div class="toolbar">
-        <div class="filtros" id="filtrosWrap"></div>
-        <button id="btnLimpar">Limpar filtros</button>
-        <button id="btnImprimir">Imprimir / salvar PDF</button>
-        <span class="contador" id="contador"></span>
-      </div>
-      <div id="grupos"></div>
-      <div class="vazio" id="vazio" hidden>Nenhuma linha corresponde aos filtros.</div>
-      <script>
-        var COLS = ${colsJson};
-        var RESULTADO_IDX = ${resultadoIdx};
-        var GRUPOS = ${gruposJson};
-        var TOTAL_LINHAS = ${totalLinhasJson};
-        var TONE_LABELS = ${toneLabelsJson};
-        var filtros = COLS.map(function(){ return ''; });
-        var filtrosWrap = document.getElementById('filtrosWrap');
-        var gruposEl = document.getElementById('grupos');
-        var contador = document.getElementById('contador');
-
-        // Larguras fixas e iguais em toda tabela do relatório: Resultado estreito, Observação
-        // (sempre a última coluna) mais larga, o resto dividido igualmente — resolve colunas
-        // "desencontradas" de um grupo pro outro, já que cada <table> antes calculava sozinha.
-        var obsIdx = COLS.length - 1;
-        var pesos = COLS.map(function(_, idx){
-          if (idx === RESULTADO_IDX) return 12;
-          if (idx === obsIdx) return 30;
-          var restantes = COLS.length - 2;
-          return restantes > 0 ? 58 / restantes : 58;
-        });
-        var somaPesos = pesos.reduce(function(a, b){ return a + b; }, 0);
-        var larguras = pesos.map(function(p){ return (p / somaPesos * 100).toFixed(2) + '%'; });
-
-        var tonsPresentes = [];
-        GRUPOS.forEach(function(g){ g.linhas.forEach(function(l){ if (l.t && tonsPresentes.indexOf(l.t) === -1) tonsPresentes.push(l.t); }); });
-
-        COLS.forEach(function(c, idx){
-          if (idx === RESULTADO_IDX && tonsPresentes.length) {
-            var sel = document.createElement('select');
-            var optTodos = document.createElement('option'); optTodos.value = ''; optTodos.textContent = c + ' (todos)';
-            sel.appendChild(optTodos);
-            tonsPresentes.forEach(function(t){
-              var opt = document.createElement('option'); opt.value = t; opt.textContent = TONE_LABELS[t] || t;
-              sel.appendChild(opt);
-            });
-            sel.addEventListener('change', function(){ filtros[idx] = sel.value; render(); });
-            filtrosWrap.appendChild(sel);
-          } else {
-            var inp = document.createElement('input');
-            inp.placeholder = c;
-            inp.addEventListener('input', function(){ filtros[idx] = inp.value.toLowerCase(); render(); });
-            filtrosWrap.appendChild(inp);
-          }
-        });
-        function render(){
-          gruposEl.innerHTML = '';
-          var totalVisiveis = 0;
-          var gruposVisiveis = 0;
-          GRUPOS.forEach(function(g){
-            var linhasVisiveis = g.linhas.filter(function(linha){
-              return filtros.every(function(f, idx){
-                if (!f) return true;
-                if (idx === RESULTADO_IDX) return linha.t === f;
-                return String(linha.v[idx]).toLowerCase().indexOf(f) !== -1;
-              });
-            });
-            if (!linhasVisiveis.length) return;
-            gruposVisiveis++;
-            totalVisiveis += linhasVisiveis.length;
-            var sec = document.createElement('div');
-            sec.className = 'grupo';
-            var h = document.createElement('div'); h.className = 'grupo-titulo'; h.textContent = g.titulo;
-            var m = document.createElement('div'); m.className = 'grupo-meta'; m.textContent = g.meta.join(' · ');
-            var tbl = document.createElement('table');
-            var colgroup = document.createElement('colgroup');
-            larguras.forEach(function(w){ var col = document.createElement('col'); col.style.width = w; colgroup.appendChild(col); });
-            tbl.appendChild(colgroup);
-            var thead = document.createElement('thead');
-            var trh = document.createElement('tr');
-            COLS.forEach(function(c){ var th=document.createElement('th'); th.textContent=c; trh.appendChild(th); });
-            thead.appendChild(trh); tbl.appendChild(thead);
-            var tbody = document.createElement('tbody');
-            linhasVisiveis.forEach(function(linha){
-              var tr = document.createElement('tr');
-              linha.v.forEach(function(v, idx){
-                var td = document.createElement('td');
-                if (idx === RESULTADO_IDX && linha.t) {
-                  var span = document.createElement('span');
-                  span.className = 'badge res-' + linha.t;
-                  span.textContent = v;
-                  td.appendChild(span);
-                } else {
-                  td.textContent = v;
-                }
-                tr.appendChild(td);
-              });
-              tbody.appendChild(tr);
-            });
-            tbl.appendChild(tbody);
-            sec.appendChild(h); sec.appendChild(m); sec.appendChild(tbl);
-            gruposEl.appendChild(sec);
-          });
-          contador.textContent = totalVisiveis + ' de ' + TOTAL_LINHAS + ' linha(s) em ' + gruposVisiveis + ' de ' + GRUPOS.length + ' grupo(s)';
-          document.getElementById('vazio').hidden = totalVisiveis > 0;
-        }
-        document.getElementById('btnLimpar').addEventListener('click', function(){
-          filtros = COLS.map(function(){ return ''; });
-          Array.prototype.forEach.call(filtrosWrap.querySelectorAll('input,select'), function(i){ i.value=''; });
-          render();
-        });
-        document.getElementById('btnImprimir').addEventListener('click', function(){ window.print(); });
-        render();
-      </script>
-    </body></html>`
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-    const el = document.createElement('a')
-    el.href = url; el.download = `gt3-relatorio-workflow-programas-${modo}.html`; el.click(); URL.revokeObjectURL(url)
-    showToast('HTML interativo exportado')
   }
 
   // ── catálogo: contratantes ──
@@ -3019,7 +3249,10 @@ export default function WorkflowProgramasClient() {
         }
         const novaSobrescrevendo = () => { substituirEmpresaDuplicada() }
         const pdfEAntiga = () => {
-          exportarRelatorioPdf([dupEmpresa], idsItens(), 'empresa', new Set(TODOS_TONES), `Análise ${dupEmpresa.empresa}`)
+          exportarRelatorioPdf([dupEmpresa], idsItens(), {
+            ...RELATORIO_CFG_PADRAO, titulo: `Análise ${dupEmpresa.empresa}`, agrupar: 'nenhum', ordem: 'item',
+            colunas: ['item', 'docItem', 'resultado', 'obs'],
+          })
           substituirEmpresaDuplicada()
         }
         return (
@@ -3146,12 +3379,12 @@ export default function WorkflowProgramasClient() {
         <RelatorioModal
           catalog={catalog} selecionados={relatorioItensSel} onChange={setRelatorioItensSel}
           totalNaLista={bancoFiltrado.length}
-          modo={relatorioModo} onModoChange={setRelatorioModo}
-          tones={relatorioTonesSel} onTonesChange={setRelatorioTonesSel}
+          cfg={relatorioCfg} onCfgChange={setRelatorioCfg}
+          contarLinhas={() => contarLinhasRelatorio(relatorioItensSel, relatorioCfg)}
           onClose={() => setModalRelatorio(false)}
-          onPdf={() => exportarRelatorioPdf(bancoFiltrado, relatorioItensSel, relatorioModo, relatorioTonesSel)}
-          onExcel={() => exportarRelatorioExcel(bancoFiltrado, relatorioItensSel, relatorioModo, relatorioTonesSel)}
-          onHtml={() => exportarRelatorioHtml(bancoFiltrado, relatorioItensSel, relatorioModo, relatorioTonesSel)}
+          onPdf={() => { lembrarRelatorio(relatorioItensSel, relatorioCfg); exportarRelatorioPdf(bancoFiltrado, relatorioItensSel, relatorioCfg) }}
+          onExcel={() => { lembrarRelatorio(relatorioItensSel, relatorioCfg); exportarRelatorioExcel(bancoFiltrado, relatorioItensSel, relatorioCfg) }}
+          onHtml={() => { lembrarRelatorio(relatorioItensSel, relatorioCfg); exportarRelatorioHtml(bancoFiltrado, relatorioItensSel, relatorioCfg) }}
         />
       )}
     </div>
@@ -4227,103 +4460,170 @@ function VContratantes({ catalog, getI, onNovo, onEditar, onDel, onExportar }: {
 // Não usa ModalShell porque o rodapé precisa de 3 ações de exportação além de Cancelar,
 // em vez do padrão Cancelar/Salvar — mesma linguagem visual (overlay, cantos, sombra).
 
-function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, modo, onModoChange, tones, onTonesChange, onClose, onPdf, onExcel, onHtml }: {
+function RelatorioModal({ catalog, selecionados, onChange, totalNaLista, cfg, onCfgChange, contarLinhas, onClose, onPdf, onExcel, onHtml }: {
   catalog: Catalog; selecionados: Set<string>; onChange: (s: Set<string>) => void; totalNaLista: number
-  modo: RelatorioModo; onModoChange: (m: RelatorioModo) => void
-  tones: Set<ResultadoTone>; onTonesChange: (s: Set<ResultadoTone>) => void
+  cfg: RelatorioConfig; onCfgChange: (c: RelatorioConfig) => void; contarLinhas: () => number
   onClose: () => void; onPdf: () => void; onExcel: () => void; onHtml: () => void
 }) {
+  const [busca, setBusca] = useState('')
   const itens = ordenarPorDocumento(catalog.itens)
-  const todosMarcados = itens.length > 0 && itens.every(i => selecionados.has(i.id))
+  const visiveis = itens.filter(i => !busca.trim() || i.titulo.toLowerCase().includes(busca.trim().toLowerCase()))
+  const docs = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
 
-  function toggleTodos() {
-    onChange(todosMarcados ? new Set() : new Set(itens.map(i => i.id)))
-  }
-  function toggleItem(id: string) {
+  function set<K extends keyof RelatorioConfig>(k: K, v: RelatorioConfig[K]) { onCfgChange({ ...cfg, [k]: v }) }
+  function alternar<T>(lista: T[], v: T): T[] { return lista.includes(v) ? lista.filter(x => x !== v) : [...lista, v] }
+  function marcarItens(ids: string[], marcar: boolean) {
     const next = new Set(selecionados)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
+    ids.forEach(id => (marcar ? next.add(id) : next.delete(id)))
     onChange(next)
   }
-  function toggleTone(t: ResultadoTone) {
-    const next = new Set(tones)
-    if (next.has(t)) next.delete(t)
-    else next.add(t)
-    onTonesChange(next)
+  function moverColuna(k: RelColKey, dir: -1 | 1) {
+    const cols = [...cfg.colunas]
+    const i = cols.indexOf(k), j = i + dir
+    if (i < 0 || j < 0 || j >= cols.length) return
+    ;[cols[i], cols[j]] = [cols[j], cols[i]]
+    set('colunas', cols)
   }
-  const nada = selecionados.size === 0 || tones.size === 0
+  const colunasOrdenadas = [...cfg.colunas, ...REL_COLUNAS.map(c => c.key).filter(k => !cfg.colunas.includes(k))]
+  const colGrupo = REL_COL_DO_GRUPO[cfg.agrupar]
+  const nada = selecionados.size === 0 || !cfg.resultados.length || !cfg.situacoes.length || !cfg.colunas.length
+  const totalLinhas = nada ? 0 : contarLinhas()
+  const secao = (t: string) => <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, fontWeight: 600, margin: '14px 0 6px' }}>{t}</div>
+  const chip = (on: boolean, cor: { bg: string; fg: string }): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 600, userSelect: 'none',
+    border: `1px solid ${on ? cor.fg + '55' : LINE}`, background: on ? cor.bg : '#fff', color: on ? cor.fg : MU,
+  })
 
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
       className="gt3-overlay-fade"
-      style={{ position: 'fixed', inset: 0, background: 'rgba(20,28,42,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflow: 'auto', zIndex: 9999 }}>
-      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 720, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(20,28,42,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '32px 16px', overflow: 'auto', zIndex: 9999 }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 1080, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <b style={{ fontSize: 16 }}>Gerar relatórios</b>
+          <div>
+            <b style={{ fontSize: 16 }}>Gerar relatórios</b>
+            <div style={{ fontSize: 12.5, color: MU, marginTop: 2 }}>
+              Base: as <b>{totalNaLista}</b> análise(s) finalizada(s) do filtro atual do Banco de dados. A configuração fica guardada para a próxima vez.
+            </div>
+          </div>
           <button onClick={onClose} className="gt3-close-btn" style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: MU, lineHeight: 1 }}>×</button>
         </div>
-        <div style={{ padding: '18px 20px', maxHeight: '60vh', overflow: 'auto' }}>
-          <div style={{ fontSize: 13, color: MU, marginBottom: 14 }}>
-            Selecione os itens do checklist que devem entrar no relatório. Os dados vêm das <b>{totalNaLista}</b> análise(s)
-            finalizada(s) que estão no filtro atual do Banco de dados — ajuste os filtros por lá antes de gerar, se precisar.
-          </div>
 
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, display: 'block', marginBottom: 6 }}>Organizar por</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {([['empresa', 'Empresa', 'uma seção por empresa, com os itens dela dentro'], ['requisito', 'Requisito', 'uma seção por item do checklist, com as empresas dentro']] as const).map(([val, label, hint]) => (
-                <label key={val} title={hint} style={{
-                  flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                  border: `1px solid ${modo === val ? P : LINE}`, background: modo === val ? PS : '#fff', color: modo === val ? P : TX,
-                }}>
-                  <input type="radio" name="relatorioModo" checked={modo === val} onChange={() => onModoChange(val)} />
-                  {label}
-                </label>
-              ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.1fr) minmax(0,1fr)', gap: 0, maxHeight: '68vh' }}>
+          {/* ── Configuração ── */}
+          <div style={{ padding: '4px 20px 18px', overflow: 'auto', borderRight: `1px solid ${LINE}` }}>
+            {secao('Título')}
+            <input style={inputStyle} value={cfg.titulo} onChange={e => set('titulo', e.target.value)} placeholder={RELATORIO_CFG_PADRAO.titulo} />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                {secao('Agrupar por')}
+                <select style={inputStyle} value={cfg.agrupar} onChange={e => set('agrupar', e.target.value as RelAgrupar)}>
+                  {(Object.keys(REL_AGRUPAR_LABEL) as RelAgrupar[]).map(k => <option key={k} value={k}>{REL_AGRUPAR_LABEL[k]}</option>)}
+                </select>
+              </div>
+              <div>
+                {secao('Ordenar por')}
+                <select style={inputStyle} value={cfg.ordem} onChange={e => set('ordem', e.target.value as RelOrdem)}>
+                  {(Object.keys(REL_ORDEM_LABEL) as RelOrdem[]).map(k => <option key={k} value={k}>{REL_ORDEM_LABEL[k]}</option>)}
+                </select>
+              </div>
             </div>
-          </div>
 
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, textTransform: 'uppercase', color: MU, fontWeight: 600, display: 'block', marginBottom: 6 }}>Resultado</label>
+            {secao('Resultado do item')}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {TODOS_TONES.map(t => (
-                <label key={t} style={{
-                  display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
-                  border: `1px solid ${tones.has(t) ? RESULTADO_CORES[t].fg + '55' : LINE}`,
-                  background: tones.has(t) ? RESULTADO_CORES[t].bg : '#fff',
-                  color: tones.has(t) ? RESULTADO_CORES[t].fg : MU,
-                }}>
-                  <input type="checkbox" checked={tones.has(t)} onChange={() => toggleTone(t)} style={{ accentColor: RESULTADO_CORES[t].fg }} />
-                  {RESULTADO_TONE_LABEL[t]}
+              {REL_RESULTADOS.map(r => (
+                <label key={r.k} style={chip(cfg.resultados.includes(r.k), r)}>
+                  <input type="checkbox" checked={cfg.resultados.includes(r.k)} onChange={() => set('resultados', alternar(cfg.resultados, r.k))} style={{ accentColor: r.fg, margin: 0 }} />
+                  {r.label}
                 </label>
               ))}
             </div>
-            {tones.size === 0 && <div style={{ fontSize: 12, color: NO, marginTop: 6 }}>Selecione ao menos um resultado.</div>}
+
+            {secao('Situação da análise')}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {REL_SITUACOES.map(s => (
+                <label key={s.k} style={chip(cfg.situacoes.includes(s.k), s)}>
+                  <input type="checkbox" checked={cfg.situacoes.includes(s.k)} onChange={() => set('situacoes', alternar(cfg.situacoes, s.k))} style={{ accentColor: s.fg, margin: 0 }} />
+                  {s.label}
+                </label>
+              ))}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, marginTop: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={cfg.somenteComObs} onChange={e => set('somenteComObs', e.target.checked)} />
+              Somente itens com observação preenchida
+            </label>
+
+            {secao('Colunas — marque e ordene (◀ ▶ = esquerda / direita)')}
+            <div style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: 4 }}>
+              {colunasOrdenadas.map(k => {
+                const on = cfg.colunas.includes(k)
+                const pos = cfg.colunas.indexOf(k)
+                return (
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, background: on ? PS : 'transparent', marginBottom: 2 }}>
+                    <input type="checkbox" checked={on} onChange={() => set('colunas', alternar(cfg.colunas, k))} />
+                    {on && <span style={{ fontSize: 11, color: P, fontWeight: 700, width: 16 }}>{pos + 1}</span>}
+                    <span style={{ flex: 1, fontSize: 13, color: on ? TX : MU }}>
+                      {REL_COL_LABEL[k]}
+                      {on && colGrupo === k && <span style={{ fontSize: 11, color: MU }}> — vira o título de cada grupo</span>}
+                    </span>
+                    {on && (
+                      <>
+                        <button onClick={() => moverColuna(k, -1)} disabled={pos === 0} title="Mover para a esquerda" style={{ border: 'none', background: 'none', cursor: pos === 0 ? 'default' : 'pointer', color: pos === 0 ? LINE : MU }}>◀</button>
+                        <button onClick={() => moverColuna(k, 1)} disabled={pos === cfg.colunas.length - 1} title="Mover para a direita" style={{ border: 'none', background: 'none', cursor: pos === cfg.colunas.length - 1 ? 'default' : 'pointer', color: pos === cfg.colunas.length - 1 ? LINE : MU }}>▶</button>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Btn small variant="gho" onClick={() => onCfgChange({ ...RELATORIO_CFG_PADRAO })}>↺ Voltar ao padrão</Btn>
+            </div>
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: PS, borderRadius: 8, marginBottom: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-            <input type="checkbox" checked={todosMarcados} onChange={toggleTodos} />
-            Selecionar / desmarcar todos ({itens.length} itens)
-          </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {itens.map(i => (
-              <label key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-                <input type="checkbox" checked={selecionados.has(i.id)} onChange={() => toggleItem(i.id)} />
-                <Tag>{i.documento}</Tag>
-                <span style={{ flex: 1 }}>{i.titulo}</span>
-                {i.escopo === 'especifico' && <Tag tone="acc">específico</Tag>}
-              </label>
-            ))}
-            {!itens.length && <span style={{ color: MU, fontSize: 13 }}>Nenhum item de checklist cadastrado.</span>}
+          {/* ── Itens ── */}
+          <div style={{ padding: '4px 20px 18px', overflow: 'auto' }}>
+            {secao(`Itens do checklist (${selecionados.size} de ${itens.length})`)}
+            <input style={{ ...inputStyle, marginBottom: 8 }} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar item…" />
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              <Btn small onClick={() => marcarItens(visiveis.map(i => i.id), true)}>Marcar {busca ? 'filtrados' : 'todos'}</Btn>
+              <Btn small onClick={() => marcarItens(visiveis.map(i => i.id), false)}>Desmarcar {busca ? 'filtrados' : 'todos'}</Btn>
+              {docs.map(d => {
+                const ids = itens.filter(i => i.documento === d).map(i => i.id)
+                const todos = ids.every(id => selecionados.has(id))
+                return <Btn key={d} small variant={todos ? 'pri' : 'default'} onClick={() => marcarItens(ids, !todos)} title={`Marcar/desmarcar todos os itens de ${d}`}>{d}</Btn>
+              })}
+              <Btn small onClick={() => marcarItens(itens.filter(i => i.critico).map(i => i.id), true)} title="Marca todos os itens críticos">+ Críticos</Btn>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {visiveis.map(i => (
+                <label key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: selecionados.has(i.id) ? '#F7F9FD' : 'transparent' }}>
+                  <input type="checkbox" checked={selecionados.has(i.id)} onChange={() => marcarItens([i.id], !selecionados.has(i.id))} />
+                  <Tag>{i.documento}</Tag>
+                  <span style={{ flex: 1 }}>{i.titulo}</span>
+                  {i.critico && <Tag tone="no">crítico</Tag>}
+                  {i.escopo === 'especifico' && <Tag tone="acc">específico</Tag>}
+                </label>
+              ))}
+              {!visiveis.length && <span style={{ color: MU, fontSize: 13 }}>{itens.length ? 'Nenhum item com esse nome.' : 'Nenhum item de checklist cadastrado.'}</span>}
+            </div>
           </div>
         </div>
+
         <div style={{ padding: '14px 20px', borderTop: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12.5, color: MU }}>{selecionados.size} item(ns) selecionado(s)</span>
+          <span style={{ fontSize: 12.5, color: nada || !totalLinhas ? NO : MU }}>
+            {!selecionados.size ? 'Selecione ao menos um item.'
+              : !cfg.resultados.length ? 'Selecione ao menos um resultado.'
+              : !cfg.situacoes.length ? 'Selecione ao menos uma situação.'
+              : !cfg.colunas.length ? 'Selecione ao menos uma coluna.'
+              : `${totalLinhas} linha(s) no relatório${totalLinhas ? '' : ' — ajuste os filtros'}`}
+          </span>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Btn onClick={onClose}>Cancelar</Btn>
-            <Btn variant="gho" disabled={nada} onClick={onHtml} title="Baixa um .html autocontido com filtro por coluna">🌐 HTML interativo</Btn>
-            <Btn variant="gho" disabled={nada} onClick={onExcel} title="Baixa uma planilha .xlsx com bordas e cabeçalho fixo">📊 Excel</Btn>
-            <Btn variant="pri" disabled={nada} onClick={onPdf} title="Abre a impressão para salvar como PDF">🖨 PDF</Btn>
+            <Btn variant="gho" disabled={nada || !totalLinhas} onClick={onHtml} title="Arquivo .html com filtros, agrupamento, colunas e ordenação ajustáveis na própria página">🌐 HTML interativo</Btn>
+            <Btn variant="gho" disabled={nada || !totalLinhas} onClick={onExcel} title="Planilha .xlsx com aba de dados filtrável (autofiltro) e aba agrupada">📊 Excel</Btn>
+            <Btn variant="pri" disabled={nada || !totalLinhas} onClick={onPdf} title="Abre a impressão para salvar como PDF">🖨 PDF</Btn>
           </div>
         </div>
       </div>
