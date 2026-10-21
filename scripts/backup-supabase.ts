@@ -2,13 +2,15 @@
  * GT3 Sistema — Backup Supabase
  * Uso: npm run backup
  *
- * Lê .env.local, faz SELECT * de todas as tabelas via service_role,
+ * Lê .env.local, faz SELECT * de todas as tabelas via service_role (descobertas
+ * automaticamente), baixa os usuários de login e todos os arquivos do Storage,
  * salva cada tabela como JSON em backups/YYYY-MM-DD/
  * e compacta em backups/backup-YYYY-MM-DD.zip.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { mkdirSync, writeFileSync, statSync } from 'fs'
+import { dirname } from 'path'
 import { join } from 'path'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
@@ -37,90 +39,52 @@ function loadEnvLocal() {
 
 loadEnvLocal()
 
-// ── Lista explícita de todas as tabelas do projeto ────────────────────────────
-// Atualizada em 2026-09-14 conferindo contra o schema real do Supabase (endpoint
-// REST /rest/v1/ do PostgREST, que lista todas as tabelas expostas).
-// Ao criar uma tabela nova, adicione o nome aqui.
-const TABLES = [
-  'aniversarios',
-  'anotacoes_cic',
-  'atas',
-  'atas_contratantes',
-  'atas_contratantes_clientes_arquivados',
-  'atas_contratantes_email_config',
-  'atas_contratantes_leituras',
-  'atas_contratantes_notificacoes',
-  'atas_leituras',
-  'banco_empresas_cic',
-  'caf_itens',
-  'caf_modulos',
-  'cafe_sheets',
-  'contratantes',
-  'contratantes_favs',
-  'controle_revisao_sheets',
-  'cronogramas',
-  'dashboard_prefs',
-  'email_templates',
-  'enquete_opcoes',
-  'enquete_perguntas',
-  'enquete_respostas',
-  'enquetes',
-  'ferias',
-  'ferias_pessoas',
-  'frases',
-  'frases_rotacao',
-  'home_office_sheets',
-  'legislacoes',
-  'legislacoes_categorias',
-  'legislacoes_lidas',
-  'lembretes',
-  'lembretes_historico',
-  'manuais_categorias',
-  'manuais_documentos',
-  'modulos_config',
-  'notificacoes_config',
-  'notificacoes_usuario',
-  'observacoes',
-  'observacoes_copy_config',
-  'observacoes_layout',
-  'observacoes_subtabs',
-  'pdi_acoes',
-  'pdi_ciclos',
-  'pdi_conversa_avisos',
-  'pdi_notificacoes',
-  'pdi_rascunhos',
-  'pdis',
-  'pgr_arquivos',
-  'prioridades',
-  'prioridades_avisos',
-  'prioridades_vistas',
-  'profiles',
-  'questionario_convites',
-  'questionarios',
-  'ramais',
-  'repositorio_abas',
-  'repositorio_categorias',
-  'repositorio_modelos',
-  'revisao_nr_registros',
-  'revisoes_datas',
-  'revisoes_docs',
-  'revisoes_documentos',
-  'revisoes_trainee',
-  'rnr_combos',
-  'rnr_config',
-  'rnr_historico',
-  'rnr_treinamentos',
-  'sugestoes',
-  'terceiras',
-  'terceiras_contratantes',
-  'terceiras_historico',
-  'workflow_programas_analises',
-  'workflow_programas_anexos',
-  'workflow_programas_config',
-] as const
+// ── Descobre as tabelas direto do schema (PostgREST /rest/v1/) ────────────────
+// Antes era uma lista fixa e ficava desatualizada (em 2026-10-21 faltavam 19
+// tabelas). Agora qualquer tabela nova entra no backup sozinha.
+async function listTables(url: string, key: string): Promise<string[]> {
+  const res = await fetch(`${url}/rest/v1/`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/openapi+json' },
+  })
+  if (!res.ok) throw new Error(`Não foi possível listar as tabelas: HTTP ${res.status}`)
+  const spec = await res.json() as { definitions?: Record<string, unknown> }
+  return Object.keys(spec.definitions ?? {}).sort()
+}
 
-type TableName = (typeof TABLES)[number]
-type RowSummary = { table: TableName; rows: number; status: 'ok' | 'erro'; error?: string }
+type RowSummary = { table: string; rows: number; status: 'ok' | 'erro'; error?: string }
+
+// O Supabase devolve no máximo 1000 linhas por SELECT — lê em páginas.
+const PAGE = 1000
+// Tabelas com conteúdo pesado (ex.: email_templates guarda .msg em base64) estouram
+// o statement timeout em páginas grandes — nesse caso refaz com páginas pequenas.
+async function fetchAll(supabase: SupabaseClient, table: string, size = PAGE): Promise<unknown[]> {
+  const rows: unknown[] = []
+  for (let from = 0; ; from += size) {
+    const { data, error } = await supabase.from(table).select('*').range(from, from + size - 1)
+    if (error) {
+      if (size > 1 && /timeout/i.test(error.message)) return fetchAll(supabase, table, Math.max(1, Math.floor(size / 10)))
+      throw new Error(error.message)
+    }
+    rows.push(...(data ?? []))
+    if (!data || data.length < size) return rows
+  }
+}
+
+// Lista recursivamente todos os arquivos de um bucket.
+async function listBucket(supabase: SupabaseClient, bucket: string, prefix = ''): Promise<string[]> {
+  const files: string[] = []
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase.storage.from(bucket).list(prefix, { limit: PAGE, offset })
+    if (error) throw new Error(error.message)
+    for (const item of data ?? []) {
+      const path = prefix ? `${prefix}/${item.name}` : item.name
+      // Pastas vêm sem id
+      if (item.id === null) files.push(...await listBucket(supabase, bucket, path))
+      else files.push(path)
+    }
+    if (!data || data.length < PAGE) return files
+  }
+}
 
 // ── Formata bytes de forma legível ────────────────────────────────────────────
 function fmtSize(bytes: number): string {
@@ -160,21 +124,76 @@ async function main() {
 
   const summary: RowSummary[] = []
 
-  for (const table of TABLES) {
-    const { data, error } = await supabase.from(table).select('*')
+  const tables = await listTables(url, key)
 
-    if (error) {
-      summary.push({ table, rows: 0, status: 'erro', error: error.message })
-      console.log(`  ✗  ${table.padEnd(35)} ERRO: ${error.message}`)
+  for (const table of tables) {
+    let rows: unknown[]
+    try {
+      rows = await fetchAll(supabase, table)
+    } catch (e) {
+      const message = (e as Error).message
+      summary.push({ table, rows: 0, status: 'erro', error: message })
+      console.log(`  ✗  ${table.padEnd(35)} ERRO: ${message}`)
       continue
     }
 
-    const rows = data ?? []
     const filePath = join(backupDir, `${table}.json`)
     writeFileSync(filePath, JSON.stringify(rows, null, 2), 'utf-8')
 
     summary.push({ table, rows: rows.length, status: 'ok' })
     console.log(`  ✓  ${table.padEnd(35)} ${String(rows.length).padStart(4)} registros`)
+  }
+
+  // ── Contas de login (auth.users) — sem senhas, só cadastro ────────────────
+  const authUsers: unknown[] = []
+  try {
+    for (let page = 1; ; page++) {
+      const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: PAGE })
+      if (error) throw new Error(error.message)
+      authUsers.push(...data.users)
+      if (data.users.length < PAGE) break
+    }
+    writeFileSync(join(backupDir, '_auth_users.json'), JSON.stringify(authUsers, null, 2), 'utf-8')
+    console.log(`  ✓  ${'(auth) usuários de login'.padEnd(35)} ${String(authUsers.length).padStart(4)} registros`)
+  } catch (e) {
+    summary.push({ table: '_auth_users', rows: 0, status: 'erro', error: (e as Error).message })
+    console.log(`  ✗  ${'(auth) usuários de login'.padEnd(35)} ERRO: ${(e as Error).message}`)
+  }
+
+  // ── Arquivos do Storage (anexos, imagens, PDFs) ────────────────────────────
+  console.log(`\n  📎  Arquivos do Storage`)
+  let storageFiles = 0
+  let storageBytes = 0
+  const { data: buckets, error: bucketsErr } = await supabase.storage.listBuckets()
+  if (bucketsErr) {
+    summary.push({ table: '_storage', rows: 0, status: 'erro', error: bucketsErr.message })
+    console.log(`  ✗  Storage: ERRO ao listar buckets: ${bucketsErr.message}`)
+  }
+  for (const bucket of buckets ?? []) {
+    let paths: string[]
+    try {
+      paths = await listBucket(supabase, bucket.name)
+    } catch (e) {
+      summary.push({ table: `storage:${bucket.name}`, rows: 0, status: 'erro', error: (e as Error).message })
+      console.log(`  ✗  ${bucket.name.padEnd(35)} ERRO: ${(e as Error).message}`)
+      continue
+    }
+    let ok = 0
+    for (const path of paths) {
+      const { data, error } = await supabase.storage.from(bucket.name).download(path)
+      if (error || !data) {
+        summary.push({ table: `storage:${bucket.name}/${path}`, rows: 0, status: 'erro', error: error?.message ?? 'vazio' })
+        continue
+      }
+      const buf = Buffer.from(await data.arrayBuffer())
+      const dest = join(backupDir, '_storage', bucket.name, ...path.split('/'))
+      mkdirSync(dirname(dest), { recursive: true })
+      writeFileSync(dest, buf)
+      storageBytes += buf.length
+      ok++
+    }
+    storageFiles += ok
+    console.log(`  ✓  ${bucket.name.padEnd(35)} ${String(ok).padStart(4)}/${paths.length} arquivos`)
   }
 
   // ── Compacta em .zip via PowerShell (nativo no Windows) ──────────────────
@@ -206,7 +225,8 @@ async function main() {
   console.log(`\n${'─'.repeat(52)}`)
   console.log(`  📊  Resumo do backup`)
   console.log(`${'─'.repeat(52)}`)
-  console.log(`  Tabelas com sucesso: ${ok}/${TABLES.length}`)
+  console.log(`  Tabelas com sucesso: ${ok}/${tables.length}`)
+  console.log(`  Arquivos do Storage: ${storageFiles} (${fmtSize(storageBytes)})`)
   console.log(`  Total de registros:  ${totalRows.toLocaleString('pt-BR')}`)
   console.log(`  Arquivo ZIP:         backups/backup-${today}.zip (${zipSize})`)
   console.log(`  Tempo:               ${elapsed}s`)
