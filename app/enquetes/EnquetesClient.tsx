@@ -30,6 +30,8 @@ type EnqueteItem = {
   total_perguntas: number
   total_respostas: number
   ja_votou: boolean
+  /** Todos os participantes já responderam — a enquete fica inativa (closed) sozinha */
+  todos_responderam: boolean
   /** Enquete enviada para este usuário responder */
   para_mim: boolean
   /** Usuários escolhidos (só vem para gestor/admin); null = vale o público-alvo */
@@ -72,9 +74,10 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function statusBadge(status: string): { label: string; color: string; bg: string } {
+function statusBadge(status: string, todosResponderam = false): { label: string; color: string; bg: string } {
   if (status === 'draft') return { label: 'Rascunho', color: '#6B7A99', bg: '#F1F5F9' }
   if (status === 'active') return { label: 'Ativa', color: '#16A34A', bg: '#F0FFF4' }
+  if (todosResponderam) return { label: 'Inativa · todos responderam', color: '#6B7A99', bg: '#F1F5F9' }
   return { label: 'Encerrada', color: '#DC2626', bg: '#FEF2F2' }
 }
 
@@ -795,7 +798,9 @@ export default function EnquetesClient() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filtered.map(e => {
-            const st = statusBadge(e.status)
+            const st = statusBadge(e.status, e.todos_responderam)
+            // Todos responderam: Resultados em destaque (só aparece para quem pode ver)
+            const resultadosDestaque = e.status === 'closed' && e.todos_responderam
             const expired = e.encerramento && new Date(e.encerramento) < new Date()
             const canVote = e.para_mim && e.status === 'active' && (!e.ja_votou || e.permitir_alterar_voto)
             // Por ora, resultados só para gestor/admin (colaborador/trainee não veem)
@@ -836,8 +841,10 @@ export default function EnquetesClient() {
                       </button>
                     )}
                     {canSeeResults && (
-                      <button onClick={() => setView({ mode: 'results', id: e.id, titulo: e.titulo })} style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                        Resultados
+                      <button onClick={() => setView({ mode: 'results', id: e.id, titulo: e.titulo })} style={resultadosDestaque
+                        ? { padding: '6px 14px', borderRadius: 8, border: 'none', background: PRIMARY, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 0 0 3px ' + PRIMARY_LIGHT }
+                        : { padding: '6px 14px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {resultadosDestaque ? '📊 Ver resultados' : 'Resultados'}
                       </button>
                     )}
                     {isGestorAdmin && e.status === 'draft' && (

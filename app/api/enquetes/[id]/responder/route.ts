@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../lib/api-helpers'
-import { enqueteParaMim } from '../../../../lib/enquetes-destinatarios'
+import { enqueteParaMim, encerrarSeTodosResponderam } from '../../../../lib/enquetes-destinatarios'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const [{ data: enquete }, { data: profile }] = await Promise.all([
     admin.from('enquetes')
-      .select('status, permitir_alterar_voto, encerramento, publico_alvo, destinatarios')
+      .select('status, permitir_alterar_voto, encerramento, publico_alvo, destinatarios, criado_por')
       .eq('id', id)
       .single(),
     admin.from('profiles').select('papel').eq('id', user.id).single(),
@@ -51,6 +51,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { error } = await admin.from('enquete_respostas').insert(rows)
     if (error) return Response.json({ error: error.message }, { status: 500 })
   }
+
+  try { await encerrarSeTodosResponderam(admin, id, enquete) } catch { /* noop — a lista também confere */ }
 
   return Response.json({ ok: true })
 }

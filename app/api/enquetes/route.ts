@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import { getAuthUser } from '../../lib/api-helpers'
-import { enqueteParaMim, notificarEnquete } from '../../lib/enquetes-destinatarios'
+import { enqueteParaMim, notificarEnquete, carregarPerfisAtivos, alvosDaEnquete, todosResponderam } from '../../lib/enquetes-destinatarios'
 
 const COLS = 'id, titulo, descricao, encerramento, publico_alvo, destinatarios, status, anonima, permitir_alterar_voto, mostrar_resultados_parciais, criado_por, criado_em'
 
@@ -31,7 +31,7 @@ export async function GET() {
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
   // Gestor/admin enxergam todas (e sempre os resultados); os demais só as que são para eles.
-  type Row = { id: string; publico_alvo: string | null; destinatarios: string[] | null }
+  type Row = { id: string; publico_alvo: string | null; destinatarios: string[] | null; status: string; criado_por: string | null }
   const enquetes = ((todas ?? []) as Row[])
     .map(e => ({ ...e, para_mim: enqueteParaMim(e, caller.user.id, caller.papel) }))
     .filter(e => isGestorAdmin || e.para_mim)
@@ -53,8 +53,25 @@ export async function GET() {
   ;(respsData ?? []).forEach((r: { enquete_id: string; usuario_id: string }) => { (respMap[r.enquete_id] ??= new Set()).add(r.usuario_id) })
   ;(minhas ?? []).forEach((r: { enquete_id: string }) => votedSet.add(r.enquete_id))
 
+  // Todos os participantes responderam → a enquete fica inativa (closed). O voto já encerra
+  // (ver /responder); aqui cobre as que ficaram completas antes disso existir.
+  const publicadas = enquetes.filter(e => e.status !== 'draft')
+  const completas = new Set<string>()
+  if (publicadas.length) {
+    const perfis = await carregarPerfisAtivos(admin)
+    publicadas.forEach(e => {
+      if (todosResponderam(alvosDaEnquete(e, e.criado_por, perfis), respMap[e.id] ?? new Set())) completas.add(e.id)
+    })
+    const fechar = publicadas.filter(e => e.status === 'active' && completas.has(e.id)).map(e => e.id)
+    if (fechar.length) {
+      await admin.from('enquetes').update({ status: 'closed' }).in('id', fechar).eq('status', 'active')
+      enquetes.forEach(e => { if (fechar.includes(e.id)) e.status = 'closed' })
+    }
+  }
+
   return Response.json(enquetes.map(e => ({
     ...e,
+    todos_responderam: completas.has(e.id),
     // Lista de pessoas só para quem gerencia
     destinatarios: isGestorAdmin ? e.destinatarios : null,
     total_perguntas: pergMap[e.id] ?? 0,
