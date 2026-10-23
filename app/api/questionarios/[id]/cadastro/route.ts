@@ -28,7 +28,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return Response.json({ linhas, semEmail })
 }
 
-/** Cria os convites escolhidos (status_envio = nao_enviado pelo padrão da coluna). Não duplica:
+/** Cria os convites escolhidos (status_envio = nao_enviado pelo padrão da coluna) — usado pelo
+ *  "Incluir do Cadastro de Contratantes" e pelo "Importar planilha". Não duplica:
  *  e-mail que já é destinatário deste questionário é ignorado. Sem e-mail não entra. */
 export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params

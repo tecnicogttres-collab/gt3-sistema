@@ -72,3 +72,41 @@ export const PLANILHA_EMAILS_SEPARADOR_ORIGEM = ' / '
 export function incluirMarcado(valor: unknown): boolean {
   return String(valor ?? '').trim().toLowerCase() === 'sim'
 }
+
+const normCab = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '').toLowerCase()
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export type LinhaPlanilhaEmails = {
+  linha: number; empresa: string; nome: string; email: string; origem: string
+  /** importar = Incluir "Sim" e válida; ignorada = Incluir diferente de "Sim"; os demais são "Sim" com problema. */
+  situacao: 'importar' | 'ignorada' | 'invalida' | 'repetida'
+  motivo?: string
+}
+
+/** Lê a 1ª aba da planilha "Exportar e-mails para planilha" (já com os valores das células em texto,
+ *  linha 1 = cabeçalho). Cabeçalhos achados pelo nome, sem diferenciar caixa/acento/espaço; Empresa, Email
+ *  e Incluir são obrigatórios. Nome vazio usa o PrimeiroNome. Mesmo e-mail com "Sim" duas vezes → repetida. */
+export function lerPlanilhaEmails(linhas: string[][]): { erro: string } | { linhas: LinhaPlanilhaEmails[] } {
+  const cab = (linhas[0] ?? []).map(c => normCab(c ?? ''))
+  const col = Object.fromEntries(PLANILHA_EMAILS_COLUNAS.map(n => [n, cab.indexOf(normCab(n))])) as Record<typeof PLANILHA_EMAILS_COLUNAS[number], number>
+  const faltam = (['Empresa', 'Email', 'Incluir'] as const).filter(n => col[n] < 0)
+  if (faltam.length) {
+    return { erro: `A primeira aba precisa ter na linha 1 as colunas ${PLANILHA_EMAILS_COLUNAS.join(' | ')}. Não encontrei: ${faltam.join(', ')}. Use a planilha gerada em Cadastro de Contratantes → "Exportar e-mails para planilha".` }
+  }
+  const val = (r: string[], n: typeof PLANILHA_EMAILS_COLUNAS[number]) => col[n] < 0 ? '' : String(r[col[n]] ?? '').trim()
+
+  const vistos = new Set<string>()
+  const out: LinhaPlanilhaEmails[] = []
+  linhas.slice(1).forEach((r, i) => {
+    const empresa = val(r, 'Empresa'), email = val(r, 'Email').toLowerCase()
+    if (!empresa && !email && !val(r, 'Nome')) return // linha em branco
+    const base = { linha: i + 2, empresa, email, nome: val(r, 'Nome') || val(r, 'PrimeiroNome'), origem: val(r, 'CampoOrigem') }
+    if (!incluirMarcado(val(r, 'Incluir'))) { out.push({ ...base, situacao: 'ignorada' }); return }
+    if (!empresa) { out.push({ ...base, situacao: 'invalida', motivo: 'sem Empresa' }); return }
+    if (!EMAIL_OK.test(email)) { out.push({ ...base, situacao: 'invalida', motivo: email ? 'e-mail inválido' : 'sem e-mail' }); return }
+    if (vistos.has(email)) { out.push({ ...base, situacao: 'repetida', motivo: 'e-mail repetido na planilha' }); return }
+    vistos.add(email)
+    out.push({ ...base, situacao: 'importar' })
+  })
+  return { linhas: out }
+}

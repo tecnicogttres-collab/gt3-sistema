@@ -6,6 +6,7 @@ import {
   type StatusExib, type PainelConfig,
   TYPE_NAME, TYPE_DESC, STATUS_QN_NAME, STATUS_EXIB_LABEL, statusExib, linkConvite, primeiroNome, valoresResposta,
 } from './types'
+import { lerPlanilhaEmails, type LinhaPlanilhaEmails } from '../lib/contratantes-emails'
 
 // ─── Tokens (mesma paleta do HTML de referência) ─────────────────────────────
 
@@ -286,6 +287,15 @@ const CSS = `
 .qnm .imp-email{overflow-wrap:anywhere;font-weight:600}
 .qnm .imp-origem{font-size:11px;color:var(--text-muted);overflow-wrap:anywhere}
 @media (max-width:640px){.qnm .imp-row{grid-template-columns:20px 1fr}.qnm .imp-row > :nth-child(n+3){grid-column:2}}
+.qnm .pl-resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:14px}
+.qnm .pl-resumo div{border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;background:var(--surface-2)}
+.qnm .pl-resumo b{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.qnm .pl-resumo span{font-size:11.5px;color:var(--text-muted)}
+.qnm .pl-resumo .warn{border-color:#F3C4C4;background:#FFF5F5}
+.qnm .pl-resumo .warn b{color:var(--danger)}
+.qnm .pl-row{display:grid;grid-template-columns:64px minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr);gap:10px;align-items:center;padding:6px 0;border-top:1px dashed var(--border);font-size:12.8px}
+.qnm .pl-ln{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+@media (max-width:640px){.qnm .pl-row{grid-template-columns:56px 1fr}.qnm .pl-row > :nth-child(n+3){grid-column:2}}
 .qnm .dash{color:var(--text-muted)}
 .qnm .empty-row td{text-align:center;color:var(--text-muted);padding:26px 10px;font-size:13px}
 .qnm .tbl-foot{font-size:12px;color:var(--text-muted);margin-top:8px}
@@ -479,6 +489,12 @@ export default function QuestionariosClient() {
   const [impSel, setImpSel] = useState<Set<string>>(new Set())
   const [impNomes, setImpNomes] = useState<Record<string, string>>({})
   const [impBusca, setImpBusca] = useState('')
+  // Importar planilha (a gerada em Cadastro de Contratantes → "Exportar e-mails para planilha", revisada no Excel)
+  const [plOpen, setPlOpen] = useState(false)
+  const [plArquivo, setPlArquivo] = useState('')
+  const [plErr, setPlErr] = useState('')
+  const [plLinhas, setPlLinhas] = useState<LinhaPlanilhaEmails[]>([])
+  const plInput = useRef<HTMLInputElement>(null)
 
   // Painel — filtros
   const [fContratante, setFContratante] = useState('all')
@@ -782,6 +798,45 @@ export default function QuestionariosClient() {
       aplicarConvites(selQn.id, d.convites ?? [])
       setImpOpen(false)
       setToast(`${d.incluidos} incluído(s)${d.duplicados ? ` · ${d.duplicados} já era(m) destinatário(s)` : ''}`)
+    } finally { setBusy(false) }
+  }
+
+  /** Lê o .xlsx no navegador (nada é enviado até confirmar) e abre a prévia. */
+  async function lerPlanilha(arq: File) {
+    setPlOpen(true); setPlArquivo(arq.name); setPlErr(''); setPlLinhas([])
+    try {
+      const { Workbook } = await import('exceljs')
+      const wb = new Workbook()
+      await wb.xlsx.load(await arq.arrayBuffer())
+      const ws = wb.worksheets[0]
+      if (!ws) { setPlErr('A planilha está vazia.'); return }
+      // cell.text = texto exibido (resolve hiperlink de e-mail, texto formatado e fórmula)
+      const linhas: string[][] = []
+      for (let r = 1; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r)
+        linhas.push(Array.from({ length: ws.columnCount }, (_, c) => row.getCell(c + 1).text ?? ''))
+      }
+      const res = lerPlanilhaEmails(linhas)
+      if ('erro' in res) setPlErr(res.erro)
+      else setPlLinhas(res.linhas)
+    } catch {
+      setPlErr('Não consegui ler o arquivo. Ele precisa ser .xlsx (no Excel: Salvar como → Pasta de Trabalho do Excel).')
+    }
+  }
+
+  async function confirmarPlanilha(itens: LinhaPlanilhaEmails[]) {
+    if (!selQn || !itens.length) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/questionarios/${selQn.id}/cadastro`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itens: itens.map(l => ({ empresa: l.empresa, email: l.email, nome: l.nome })) }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setPlErr(d.error ?? 'Erro ao importar'); return }
+      aplicarConvites(selQn.id, d.convites ?? [])
+      setPlOpen(false)
+      setToast(`${d.incluidos} destinatário(s) importado(s)${d.duplicados ? ` · ${d.duplicados} já era(m) destinatário(s)` : ''}${d.invalidos ? ` · ${d.invalidos} inválido(s)` : ''}`)
     } finally { setBusy(false) }
   }
 
@@ -1180,7 +1235,7 @@ export default function QuestionariosClient() {
       <>
         {qnSelect('Questionário')}
         <div className="steps">
-          <div className="step"><div className="step-num">1</div><div><h3>Destinatários</h3><p>Inclua do Cadastro de Contratantes (um convite por e-mail) ou adicione um a um.</p></div></div>
+          <div className="step"><div className="step-num">1</div><div><h3>Destinatários</h3><p>Inclua do Cadastro de Contratantes (um convite por e-mail), importe a planilha revisada no Excel ou adicione um a um.</p></div></div>
           <div className="step"><div className="step-num">2</div><div><h3>Mala direta</h3><p>Exporte a planilha, faça a mala direta no Word/Outlook e confirme a marcação de enviados.</p></div></div>
           <div className="step"><div className="step-num">3</div><div><h3>Acompanhar</h3><p>O status vira Respondido assim que o formulário é enviado pelo link. Para quem não respondeu, exporte os lembretes.</p></div></div>
         </div>
@@ -1199,6 +1254,16 @@ export default function QuestionariosClient() {
             </div>
             <div className="actions">
               {podeGerir && <button className="btn ghost" disabled={busy} onClick={() => void abrirImportacao()}>Incluir do Cadastro de Contratantes</button>}
+              {podeGerir && (
+                <>
+                  <button className="btn ghost" disabled={busy} onClick={() => plInput.current?.click()}
+                    title='Planilha gerada em Cadastro de Contratantes → "Exportar e-mails para planilha", revisada no Excel. Entram as linhas com Incluir = Sim.'>
+                    Importar planilha
+                  </button>
+                  <input ref={plInput} type="file" hidden accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={e => { const arq = e.target.files?.[0]; e.target.value = ''; if (arq) void lerPlanilha(arq) }} />
+                </>
+              )}
               {podeGerir && (
                 <button className="btn ghost" onClick={() => {
                   setAddOpen(o => !o); setNaErr('')
@@ -1318,7 +1383,76 @@ export default function QuestionariosClient() {
           <p className="f-hint" style={{ marginTop: 10 }}>{hint}</p>
         </div>
         {impOpen && renderImportacao()}
+        {plOpen && renderPlanilha(qn)}
       </>
+    )
+  }
+
+  function renderPlanilha(qn: Questionario) {
+    const ja = new Set(convitesDe(qn.id).map(c => c.email.trim().toLowerCase()).filter(Boolean))
+    const importar = plLinhas.filter(l => l.situacao === 'importar' && !ja.has(l.email))
+    const jaDest = plLinhas.filter(l => l.situacao === 'importar' && ja.has(l.email))
+    const problemas = plLinhas.filter(l => l.situacao === 'invalida' || l.situacao === 'repetida')
+    const ignoradas = plLinhas.filter(l => l.situacao === 'ignorada').length
+    const fechar = () => { if (!busy) setPlOpen(false) }
+    return (
+      <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Importar planilha" onClick={e => { if (e.target === e.currentTarget) fechar() }}>
+        <div className="modal">
+          <div className="modal-head">
+            <h2>Importar planilha</h2>
+            <p className="cap" style={{ margin: 0 }}>
+              {plArquivo} · entram as linhas com <b>Incluir = Sim</b>. O Nome vira o PrimeiroNome da mala direta (vazio = saudação genérica). Nada é gravado até você confirmar.
+            </p>
+          </div>
+          <div className="modal-body">
+            {plErr && <p className="form-error" style={{ marginTop: 14 }}>{plErr}</p>}
+            {!plErr && !plLinhas.length && <p className="cap" style={{ marginTop: 14 }}>Lendo a planilha…</p>}
+            {!plErr && plLinhas.length > 0 && (
+              <>
+                <div className="pl-resumo">
+                  <div><b>{importar.length}</b><span>serão importados</span></div>
+                  <div><b>{jaDest.length}</b><span>já são destinatários</span></div>
+                  <div><b>{ignoradas}</b><span>com Incluir = Não</span></div>
+                  <div className={problemas.length ? 'warn' : ''}><b>{problemas.length}</b><span>com problema</span></div>
+                </div>
+                {problemas.length > 0 && (
+                  <div className="imp-emp">
+                    <h3 style={{ color: 'var(--danger)' }}>Com problema — não serão importadas</h3>
+                    {problemas.map(l => (
+                      <div className="pl-row off" key={l.linha}>
+                        <span className="pl-ln">linha {l.linha}</span><span>{l.empresa || '—'}</span><span className="imp-email">{l.email || '—'}</span><span className="warn-sub">{l.motivo}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="imp-emp">
+                  <h3>Serão importados ({importar.length})</h3>
+                  {!importar.length && <p className="cap" style={{ margin: 0 }}>Nenhuma linha nova com Incluir = Sim.</p>}
+                  {importar.map(l => (
+                    <div className="pl-row" key={l.linha}>
+                      <span className="pl-ln">linha {l.linha}</span><span>{l.empresa}</span><span className="imp-email">{l.email}</span><span>{l.nome || <span className="dash">sem nome</span>}</span>
+                    </div>
+                  ))}
+                </div>
+                {jaDest.length > 0 && (
+                  <div className="imp-emp">
+                    <h3>Já são destinatários deste questionário ({jaDest.length}) — ficam como estão</h3>
+                    <p className="cap" style={{ margin: 0 }}>{jaDest.map(l => l.email).join(' · ')}</p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="modal-foot">
+            <button className="btn ghost" disabled={busy} onClick={() => plInput.current?.click()}>Escolher outro arquivo</button>
+            <span style={{ marginRight: 'auto' }} />
+            <button className="btn ghost" disabled={busy} onClick={fechar}>Cancelar</button>
+            <button className="btn" disabled={busy || !importar.length} onClick={() => void confirmarPlanilha(importar)}>
+              Importar {importar.length || ''} destinatário{importar.length === 1 ? '' : 's'}
+            </button>
+          </div>
+        </div>
+      </div>
     )
   }
 
