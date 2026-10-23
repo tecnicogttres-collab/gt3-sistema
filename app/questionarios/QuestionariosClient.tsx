@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   type Questionario, type Convite, type Pergunta, type TipoPergunta, type Publico, type StatusQn,
   type StatusExib, type PainelConfig,
@@ -163,38 +163,96 @@ const CSS = `
 .qnm .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 6px 4px 10px;border-radius:100px;background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
 .qnm .pill button{border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:14px;line-height:1;padding:2px}
 .qnm .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
-.qnm .stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
-.qnm .stat .n{font-weight:800;font-size:26px;line-height:1.1}
-.qnm .stat .l{font-size:12px;color:var(--text-muted);margin-top:3px}
+.qnm .stat{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px 13px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;gap:2px}
+.qnm .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--primary)}
+.qnm .stat.good::before{background:var(--st-good)}
+.qnm .stat.warning::before{background:var(--st-warning)}
+.qnm .stat .l{font-size:12px;font-weight:600;color:var(--text-secondary)}
+.qnm .stat .n{font-weight:700;font-size:28px;line-height:1.15;letter-spacing:-.5px;color:var(--text)}
 .qnm .stat .n.good{color:var(--st-good-text)}
 .qnm .stat .n.warning{color:var(--st-warning-text)}
+.qnm .stat .s{font-size:11.5px;color:var(--text-muted)}
+.qnm .stat-meter{height:6px;border-radius:100px;background:rgba(12,163,12,.14);overflow:hidden;margin:5px 0 3px}
+.qnm .stat-meter i{display:block;height:100%;border-radius:100px;background:var(--st-good);transition:width .5s cubic-bezier(.2,.8,.2,1)}
 .qnm .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media (max-width:760px){.qnm .grid2{grid-template-columns:1fr}}
-.qnm .chart-surface{background:var(--chart-surface);border-radius:10px;padding:12px 10px 6px}
-.qnm .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-secondary)}
+.qnm .chart-card{display:flex;flex-direction:column}
+.qnm .chart-card .chart-surface{flex:1;display:flex;flex-direction:column;justify-content:center}
+.qnm .chart-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+.qnm .chart-head h2{margin:0;flex:1 1 200px;line-height:1.35}
+.qnm .chart-meta{display:flex;gap:6px;flex-wrap:wrap}
+.qnm .kpi-pill{font-size:11.5px;color:var(--text-muted);background:var(--surface-2);border-radius:100px;padding:3px 10px;white-space:nowrap}
+.qnm .kpi-pill b{color:var(--text);font-variant-numeric:tabular-nums}
+.qnm .seg-sm button{padding:5px 10px;font-size:11.5px}
+.qnm .chart-surface{background:var(--chart-surface);border:1px solid #EEF1F6;border-radius:12px;padding:14px 14px 10px}
+.qnm .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--text-secondary)}
 .qnm .legend-item{display:flex;align-items:center;gap:6px}
-.qnm .legend-swatch{width:10px;height:10px;border-radius:2px;flex:none}
-.qnm .barchart{display:flex;align-items:flex-end;gap:10px;height:160px;padding:0 4px}
-.qnm .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;min-width:0}
-.qnm .bar-rect-wrap{width:100%;display:flex;justify-content:center;height:100%;align-items:flex-end}
-.qnm .bar-rect{width:60%;min-width:18px;border-radius:4px 4px 0 0;cursor:pointer;transition:opacity .12s ease;outline:2px solid transparent;outline-offset:2px;border:none;padding:0}
-.qnm .bar-rect:hover{opacity:.85}
-.qnm .bar-rect.dim{opacity:.35}
-.qnm .bar-rect.sel{outline-color:var(--primary)}
-.qnm .bar-val{font-size:11.5px;font-weight:700;color:var(--text-secondary);font-variant-numeric:tabular-nums}
-.qnm .bar-label{font-size:11px;color:var(--text);font-weight:700;text-align:center;line-height:1.25;max-width:90px;overflow-wrap:break-word;min-height:28px}
-.qnm .empty-note{font-size:12.5px;color:var(--text-muted);padding:20px 4px;text-align:center;width:100%;align-self:center}
-.qnm .stacklist{display:flex;flex-direction:column;gap:12px}
-.qnm .stackrow{display:flex;flex-direction:column;gap:5px}
+.qnm .legend-swatch{width:10px;height:10px;border-radius:3px;flex:none}
+/* Dica ao passar o mouse (data-tip) */
+.qnm [data-tip]{position:relative}
+.qnm [data-tip]:hover::after,.qnm [data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);background:#1A2340;color:#fff;font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:7px;white-space:nowrap;pointer-events:none;z-index:20;box-shadow:0 6px 16px rgba(15,25,45,.25)}
+/* Colunas (perguntas de nota 1–5) */
+.qnm .colchart{position:relative;display:flex;gap:6px;flex:1;min-height:190px;max-height:300px;padding-top:4px}
+.qnm .colgrid{position:absolute;left:0;right:0;top:44px;bottom:26px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+.qnm .colgrid i{display:block;height:1px;background:var(--gridline)}
+.qnm .colgrid i:last-child{background:#c9c8c0}
+.qnm .col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;border-radius:8px}
+.qnm .col:hover{background:rgba(42,79,150,.05)}
+.qnm .col-plot{flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;padding-top:18px}
+.qnm .col-val{font-size:12px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.qnm .col-bar{display:block;width:min(56%,40px);min-height:3px;border-radius:6px 6px 0 0;transition:height .5s cubic-bezier(.2,.8,.2,1),opacity .15s ease}
+.qnm .col-label{font-size:12px;font-weight:700;color:var(--text-secondary);height:18px}
+.qnm .col.dim .col-bar,.qnm .hbar.dim .hbar-fill{opacity:.28}
+.qnm .col.sel .col-label{color:var(--primary)}
+.qnm .col.sel .col-bar{box-shadow:0 0 0 2px var(--chart-surface),0 0 0 4px var(--primary)}
+/* Barras horizontais (múltipla escolha) */
+.qnm .hbars{display:flex;flex-direction:column;gap:4px}
+.qnm .hbar{display:flex;flex-direction:column;gap:6px;width:100%;background:none;border:none;padding:7px 8px;border-radius:9px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.qnm .hbar:hover{background:rgba(42,79,150,.05)}
+.qnm .hbar.sel{background:var(--primary-soft)}
+.qnm .hbar-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.qnm .hbar-label{display:flex;align-items:center;gap:7px;font-size:12.8px;font-weight:600;color:var(--text);min-width:0;overflow-wrap:anywhere}
+.qnm .hbar-label i{width:9px;height:9px;border-radius:3px;flex:none}
+.qnm .hbar-val{font-size:12px;color:var(--text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.qnm .hbar-val b{color:var(--text)}
+.qnm .hbar-track{display:block;height:10px;border-radius:100px;background:#EDF0F5;overflow:hidden}
+.qnm .hbar-fill{display:block;height:100%;min-width:3px;border-radius:100px;transition:width .5s cubic-bezier(.2,.8,.2,1),opacity .15s ease}
+.qnm .empty-note{font-size:12.5px;color:var(--text-muted);padding:28px 4px;text-align:center;width:100%;align-self:center}
+/* Status por empresa */
+.qnm .stacklist{display:flex;flex-direction:column;gap:13px}
+.qnm .stackrow{display:flex;flex-direction:column;gap:6px}
 .qnm .stackrow-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.qnm .stackrow-head button{font-size:13px;font-weight:700;color:var(--text);background:none;border:none;cursor:pointer;padding:1px 4px;border-radius:5px;text-align:left}
+.qnm .stackrow-head button{font-size:13px;font-weight:700;color:var(--text);background:none;border:none;cursor:pointer;padding:1px 0;border-radius:5px;text-align:left}
 .qnm .stackrow-head button:hover{color:var(--primary)}
-.qnm .stackrow-head button.on{color:var(--primary);text-decoration:underline}
-.qnm .stackrow-head .tot{font-size:11.5px;color:var(--text-muted);font-variant-numeric:tabular-nums}
-.qnm .stackbar{display:flex;height:16px;border-radius:4px;overflow:hidden;gap:2px;background:var(--gridline)}
-.qnm .stackseg{height:100%;cursor:pointer;transition:opacity .12s ease;min-width:2px;border:none;padding:0}
-.qnm .stackseg:hover{opacity:.8}
-.qnm .stackseg.dim{opacity:.3}
+.qnm .stackrow-head button.on{color:var(--primary);text-decoration:underline;text-underline-offset:3px}
+.qnm .stackrow-head .tot{font-size:11.5px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.qnm .stackrow-head .tot b{color:var(--text)}
+.qnm .stackbar{display:flex;height:10px;border-radius:100px;gap:2px;background:var(--chart-surface)}
+.qnm .stackseg{height:100%;cursor:pointer;transition:opacity .15s ease,width .5s cubic-bezier(.2,.8,.2,1);min-width:4px;border:none;padding:0}
+.qnm .stackseg:first-child{border-radius:100px 0 0 100px}
+.qnm .stackseg:last-child{border-radius:0 100px 100px 0}
+.qnm .stackseg:only-child{border-radius:100px}
+.qnm .stackseg:hover{opacity:.82}
+.qnm .stackseg.dim{opacity:.28}
+/* Filtro de várias opções (Empresa) */
+.qnm .msel{position:relative;min-width:220px}
+.qnm .msel-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;font-size:13.5px;font-weight:600;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer;text-align:left}
+.qnm .msel-btn:hover,.qnm .msel-btn[aria-expanded=true]{border-color:var(--primary)}
+.qnm .msel-btn.on{background:var(--primary-soft);border-color:var(--primary);color:var(--primary)}
+.qnm .msel-btn:disabled{opacity:.55;cursor:default}
+.qnm .msel-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.qnm .msel-caret{font-size:11px;color:var(--text-muted)}
+.qnm .msel-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:50;width:min(340px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(15,25,45,.18);padding:10px;display:flex;flex-direction:column;gap:8px}
+.qnm .msel-pop input[type=text]{width:100%;background:var(--surface-2)}
+.qnm .msel-tools{display:flex;justify-content:space-between;gap:8px}
+.qnm .msel-tools button{background:none;border:none;color:var(--primary);font-weight:700;font-size:12px;cursor:pointer;padding:2px 0}
+.qnm .msel-tools button:disabled{color:var(--text-muted);opacity:.6;cursor:default}
+.qnm .msel-list{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin:0 -4px}
+.qnm .msel-opt{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;font-size:13px;cursor:pointer}
+.qnm .msel-opt:hover{background:var(--surface-2)}
+.qnm .msel-opt.on{font-weight:700;color:var(--primary)}
+.qnm .msel-vazio{font-size:12.5px;color:var(--text-muted);margin:8px}
+.qnm .msel-foot{font-size:11.5px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:7px}
 .qnm .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-top:4px}
 .qnm table{width:100%;border-collapse:collapse;font-size:12.8px}
 .qnm th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;padding:9px 11px;background:var(--surface-2);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
@@ -304,6 +362,60 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   )
 }
 
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+/** Filtro de várias opções num menu suspenso com busca e caixas de marcar (escala para dezenas de empresas). */
+function MultiFiltro({ opcoes, sel, onChange, todosLabel, plural }: {
+  opcoes: string[]; sel: Set<string>; onChange: (s: Set<string>) => void; todosLabel: string; plural: string
+}) {
+  const [aberto, setAberto] = useState(false)
+  const [busca, setBusca] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!aberto) return
+    const fora = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setAberto(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setAberto(false) }
+    document.addEventListener('mousedown', fora)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc) }
+  }, [aberto])
+
+  const termo = semAcento(busca.trim())
+  const visiveis = termo ? opcoes.filter(o => semAcento(o).includes(termo)) : opcoes
+  const resumo = !sel.size ? todosLabel : sel.size === 1 ? [...sel][0] : `${sel.size} ${plural} selecionadas`
+  const marcarVisiveis = () => { const n = new Set(sel); visiveis.forEach(o => n.add(o)); onChange(n) }
+
+  return (
+    <div className="msel" ref={ref}>
+      <button type="button" className={`msel-btn${sel.size ? ' on' : ''}`} aria-haspopup="listbox" aria-expanded={aberto}
+        disabled={!opcoes.length} onClick={() => { setAberto(a => !a); setBusca('') }}>
+        <span className="msel-txt">{opcoes.length ? resumo : `Sem ${plural} ainda`}</span>
+        <span className="msel-caret" aria-hidden>▾</span>
+      </button>
+      {aberto && (
+        <div className="msel-pop">
+          <input type="text" autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Buscar entre ${opcoes.length} ${plural}…`} />
+          <div className="msel-tools">
+            <button type="button" onClick={marcarVisiveis} disabled={!visiveis.length}>{termo ? `Marcar as ${visiveis.length} encontradas` : 'Marcar todas'}</button>
+            <button type="button" onClick={() => onChange(new Set())} disabled={!sel.size}>Limpar</button>
+          </div>
+          <div className="msel-list" role="listbox" aria-multiselectable>
+            {!visiveis.length && <p className="msel-vazio">Nada encontrado para “{busca}”.</p>}
+            {visiveis.map(o => (
+              <label key={o} className={`msel-opt${sel.has(o) ? ' on' : ''}`}>
+                <input type="checkbox" className="chk" checked={sel.has(o)} onChange={() => onChange(toggle(sel, o))} />
+                <span>{o}</span>
+              </label>
+            ))}
+          </div>
+          <div className="msel-foot">{sel.size ? `${sel.size} de ${opcoes.length} marcada${sel.size === 1 ? '' : 's'}` : `Nenhuma marcada = todas as ${plural}`}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AnswersSummary({ q }: { q: Pergunta }) {
   if (q.type === 'escala') {
     return (
@@ -372,6 +484,8 @@ export default function QuestionariosClient() {
   const [fContratante, setFContratante] = useState('all')
   const [fStatus, setFStatus] = useState<Set<StatusExib>>(new Set())
   const [fEmpresa, setFEmpresa] = useState<Set<string>>(new Set())
+  const [stackOrdem, setStackOrdem] = useState<'nome' | 'menor' | 'maior'>('nome')
+  const [stackTodas, setStackTodas] = useState(false)
   const [fSearch, setFSearch] = useState('')
   const [fQ, setFQ] = useState<Record<string, Set<string | number>>>({})
 
@@ -1306,7 +1420,9 @@ export default function QuestionariosClient() {
     // Filtros ativos (pills)
     const pills: { label: string; rm: () => void }[] = []
     if (fContratante !== 'all') pills.push({ label: `Contratante: ${fContratante}`, rm: () => setFContratante('all') })
-    fEmpresa.forEach(v => pills.push({ label: `Empresa: ${v}`, rm: () => setFEmpresa(s => toggle(s, v)) }))
+    // Muitas empresas marcadas viram uma pílula só (senão a faixa de filtros toma a tela)
+    if (fEmpresa.size > 3) pills.push({ label: `Empresas: ${fEmpresa.size} selecionadas`, rm: () => setFEmpresa(new Set()) })
+    else fEmpresa.forEach(v => pills.push({ label: `Empresa: ${v}`, rm: () => setFEmpresa(s => toggle(s, v)) }))
     fStatus.forEach(v => pills.push({ label: `Status: ${STATUS_EXIB_LABEL[v]}`, rm: () => setFStatus(s => toggle(s, v)) }))
     Object.keys(fQ).forEach(qid => {
       const q = qn.perguntas.find(x => x.id === qid)
@@ -1315,11 +1431,13 @@ export default function QuestionariosClient() {
 
     // Stats
     const resp = full.filter(d => d.status === 'respondido').length
-    const stats: { n: string | number; l: string; c: string }[] = []
-    if (cfg.statTiles.total) stats.push({ n: full.length, l: 'Convites no recorte', c: '' })
-    if (cfg.statTiles.taxa) stats.push({ n: `${full.length ? Math.round(resp / full.length * 100) : 0}%`, l: 'Taxa de resposta', c: 'good' })
-    if (cfg.statTiles.respondido) stats.push({ n: resp, l: 'Respondido', c: 'good' })
-    if (cfg.statTiles.pendente) stats.push({ n: full.length - resp, l: 'Ainda sem resposta', c: 'warning' })
+    const taxa = full.length ? Math.round(resp / full.length * 100) : 0
+    const nEmp = new Set(full.map(d => d.empresa)).size
+    const stats: { n: string | number; l: string; c: string; sub: string; meter?: number }[] = []
+    if (cfg.statTiles.total) stats.push({ n: full.length, l: 'Convites no recorte', c: '', sub: `${nEmp} empresa${nEmp === 1 ? '' : 's'}` })
+    if (cfg.statTiles.taxa) stats.push({ n: `${taxa}%`, l: 'Taxa de resposta', c: 'good', sub: `${resp} de ${full.length}`, meter: taxa })
+    if (cfg.statTiles.respondido) stats.push({ n: resp, l: 'Respondido', c: 'good', sub: 'questionários concluídos' })
+    if (cfg.statTiles.pendente) stats.push({ n: full.length - resp, l: 'Ainda sem resposta', c: 'warning', sub: `${full.filter(d => statusExib(d) === 'nao_enviado').length} ainda não enviados` })
 
     const chart = (q: Pergunta) => {
       const domain: (string | number)[] = q.type === 'escala' ? [1, 2, 3, 4, 5] : (q.options ?? [])
@@ -1329,58 +1447,97 @@ export default function QuestionariosClient() {
       const max = Math.max(1, ...counts)
       const sel = fQ[q.id] ?? new Set()
       const totalAns = counts.reduce((a, b) => a + b, 0)
+      // Base das porcentagens = quem respondeu a pergunta (na múltipla com várias respostas a soma passa de 100%)
+      const pct = (n: number) => base.length ? Math.round(n / base.length * 100) : 0
+      const media = q.type === 'escala' && totalAns ? counts.reduce((a, n, i) => a + n * (i + 1), 0) / totalAns : null
+      const clicar = (v: string | number) => setFQ(f => ({ ...f, [q.id]: toggle(f[q.id] ?? new Set(), v) }))
+      const dica = (v: string | number, n: number) => `${v}: ${n} resposta${n === 1 ? '' : 's'} (${pct(n)}%)`
+      const vazio = !totalAns && !sel.size
       return (
-        <div className="card" key={q.id}>
-          <h2>{q.label}</h2>
-          <p className="cap">{q.type === 'escala' ? `1 = ${q.min || ''} · 5 = ${q.max || ''}. ` : ''}Clique numa barra para isolar essa resposta.</p>
-          <div className="chart-surface">
-            <div className="barchart">
-              {!totalAns && !sel.size ? (
-                <div className="empty-note">Ainda sem respostas para esta pergunta no recorte atual.</div>
-              ) : domain.map((v, i) => {
-                const on = sel.has(v)
-                const dim = sel.size > 0 && !on
-                const h = Math.max(4, Math.round(counts[i] / max * 112))
-                return (
-                  <div className="bar-col" key={String(v)}>
-                    <span className="bar-val">{counts[i]}</span>
-                    <div className="bar-rect-wrap">
-                      <button
-                        className={`bar-rect${on ? ' sel' : ''}${dim ? ' dim' : ''}`}
-                        aria-pressed={on}
-                        aria-label={`${v}: ${counts[i]} respostas`}
-                        title={`${v}: ${counts[i]} resposta${counts[i] === 1 ? '' : 's'}`}
-                        style={{ height: h, background: colors[i % colors.length] }}
-                        onClick={() => setFQ(f => ({ ...f, [q.id]: toggle(f[q.id] ?? new Set(), v) }))}
-                      />
-                    </div>
-                    <span className="bar-label">{v}</span>
-                  </div>
-                )
-              })}
+        <div className="card chart-card" key={q.id}>
+          <div className="chart-head">
+            <h2>{q.label}</h2>
+            <div className="chart-meta">
+              {media != null && <span className="kpi-pill"><b>{media.toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 })}</b> média</span>}
+              <span className="kpi-pill"><b>{base.length}</b> resposta{base.length === 1 ? '' : 's'}</span>
             </div>
+          </div>
+          <p className="cap">{q.type === 'escala' ? `1 = ${q.min || '—'} · 5 = ${q.max || '—'}. ` : q.multiplas ? 'Várias respostas por pessoa. ' : ''}Clique numa barra para isolar essa resposta.</p>
+          <div className="chart-surface">
+            {vazio ? (
+              <div className="empty-note">Ainda sem respostas para esta pergunta no recorte atual.</div>
+            ) : q.type === 'escala' ? (
+              <div className="colchart">
+                <div className="colgrid" aria-hidden><i /><i /><i /><i /></div>
+                {domain.map((v, i) => {
+                  const on = sel.has(v)
+                  return (
+                    <button key={String(v)} className={`col${on ? ' sel' : ''}${sel.size && !on ? ' dim' : ''}`}
+                      aria-pressed={on} aria-label={dica(v, counts[i])} data-tip={dica(v, counts[i])} onClick={() => clicar(v)}>
+                      <span className="col-plot">
+                        <span className="col-val">{counts[i]}</span>
+                        <span className="col-bar" style={{ height: `calc((100% - 22px) * ${counts[i] / max})`, background: colors[i % colors.length] }} />
+                      </span>
+                      <span className="col-label">{v}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="hbars">
+                {domain.map((v, i) => {
+                  const on = sel.has(v)
+                  return (
+                    <button key={String(v)} className={`hbar${on ? ' sel' : ''}${sel.size && !on ? ' dim' : ''}`}
+                      aria-pressed={on} aria-label={dica(v, counts[i])} data-tip={dica(v, counts[i])} onClick={() => clicar(v)}>
+                      <span className="hbar-top">
+                        <span className="hbar-label"><i style={{ background: colors[i % colors.length] }} />{v}</span>
+                        <span className="hbar-val"><b>{counts[i]}</b> · {pct(counts[i])}%</span>
+                      </span>
+                      <span className="hbar-track"><span className="hbar-fill" style={{ width: `${counts[i] / max * 100}%`, background: colors[i % colors.length] }} /></span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       )
     }
 
     const empresaStack = () => {
-      const emps = [...new Set(full.map(d => d.empresa))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      const LIMITE = 8
+      const porEmp = [...new Set(full.map(d => d.empresa))].map(emp => {
+        const rows = full.filter(d => d.empresa === emp)
+        const c: Record<StatusExib, number> = { respondido: 0, enviado: 0, nao_enviado: 0 }
+        rows.forEach(d => { c[statusExib(d)]++ })
+        return { emp, rows, c, taxa: c.respondido / rows.length }
+      }).sort((a, b) =>
+        stackOrdem === 'menor' ? a.taxa - b.taxa || a.emp.localeCompare(b.emp, 'pt-BR')
+        : stackOrdem === 'maior' ? b.taxa - a.taxa || a.emp.localeCompare(b.emp, 'pt-BR')
+        : a.emp.localeCompare(b.emp, 'pt-BR'))
+      const exibidas = stackTodas ? porEmp : porEmp.slice(0, LIMITE)
       return (
         <div className="card" key="empresaStack">
-          <h2>Status por empresa</h2>
+          <div className="chart-head">
+            <h2>Status por empresa</h2>
+            {porEmp.length > 1 && (
+              <div className="seg seg-sm" role="group" aria-label="Ordenar empresas">
+                {([['nome', 'A–Z'], ['menor', 'Menor resposta'], ['maior', 'Maior resposta']] as const).map(([k, l]) => (
+                  <button key={k} className={stackOrdem === k ? 'on' : ''} onClick={() => setStackOrdem(k)}>{l}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <p className="cap">Clique no nome da empresa para filtrar por ela, ou num segmento para filtrar por status.</p>
           <div className="stacklist">
-            {!emps.length && <p className="empty-note" style={{ textAlign: 'left', padding: '4px 0' }}>Nenhuma empresa no recorte atual.</p>}
-            {emps.map(emp => {
-              const rows = full.filter(d => d.empresa === emp)
-              const c: Record<StatusExib, number> = { respondido: 0, enviado: 0, nao_enviado: 0 }
-              rows.forEach(d => { c[statusExib(d)]++ })
+            {!porEmp.length && <p className="empty-note" style={{ textAlign: 'left', padding: '4px 0' }}>Nenhuma empresa no recorte atual.</p>}
+            {exibidas.map(({ emp, rows, c, taxa }) => {
               return (
                 <div className="stackrow" key={emp}>
                   <div className="stackrow-head">
                     <button className={fEmpresa.has(emp) ? 'on' : ''} onClick={() => setFEmpresa(s => toggle(s, emp))}>{emp}</button>
-                    <span className="tot">{c.respondido}/{rows.length} responderam</span>
+                    <span className="tot"><b>{Math.round(taxa * 100)}%</b> · {c.respondido}/{rows.length} responderam</span>
                   </div>
                   <div className="stackbar">
                     {(['respondido', 'enviado', 'nao_enviado'] as StatusExib[]).map(st => !c[st] ? null : (
@@ -1388,7 +1545,7 @@ export default function QuestionariosClient() {
                         key={st}
                         className={`stackseg${fStatus.size && !fStatus.has(st) ? ' dim' : ''}`}
                         style={{ width: `${c[st] / rows.length * 100}%`, background: ST_COLOR[st] }}
-                        title={`${STATUS_EXIB_LABEL[st]}: ${c[st]}`}
+                        data-tip={`${STATUS_EXIB_LABEL[st]}: ${c[st]} de ${rows.length}`}
                         aria-label={`${emp}, ${STATUS_EXIB_LABEL[st]}: ${c[st]}`}
                         onClick={() => setFStatus(s => toggle(s, st))}
                       />
@@ -1398,6 +1555,11 @@ export default function QuestionariosClient() {
               )
             })}
           </div>
+          {porEmp.length > LIMITE && (
+            <button className="link-btn" style={{ marginTop: 10 }} onClick={() => setStackTodas(v => !v)}>
+              {stackTodas ? 'Mostrar menos' : `Mostrar todas as ${porEmp.length} empresas`}
+            </button>
+          )}
           <div className="legend">
             {(['respondido', 'enviado', 'nao_enviado'] as StatusExib[]).map(st => (
               <div className="legend-item" key={st}><span className="legend-swatch" style={{ background: ST_COLOR[st] }} />{STATUS_EXIB_LABEL[st]}</div>
@@ -1475,12 +1637,7 @@ export default function QuestionariosClient() {
           </div>
           <div className="f-group">
             <span className="field-label">Empresa</span>
-            <div className="chipset">
-              {!empresas.length && <span className="f-hint">Sem empresas ainda</span>}
-              {empresas.map(emp => (
-                <button key={emp} className={`chip${fEmpresa.has(emp) ? ' on' : ''}`} onClick={() => setFEmpresa(s => toggle(s, emp))}>{emp}</button>
-              ))}
-            </div>
+            <MultiFiltro opcoes={empresas} sel={fEmpresa} onChange={setFEmpresa} todosLabel="Todas as empresas" plural="empresas" />
           </div>
           <div className="f-group f-search">
             <span className="field-label">Buscar respondente</span>
@@ -1504,7 +1661,14 @@ export default function QuestionariosClient() {
           )}
           {stats.length > 0 && (
             <div className="stats">
-              {stats.map(s => <div className="stat" key={s.l}><div className={`n ${s.c}`}>{s.n}</div><div className="l">{s.l}</div></div>)}
+              {stats.map(s => (
+                <div className={`stat ${s.c}`} key={s.l}>
+                  <div className="l">{s.l}</div>
+                  <div className={`n ${s.c}`}>{s.n}</div>
+                  {s.meter != null && <div className="stat-meter" aria-hidden><i style={{ width: `${s.meter}%` }} /></div>}
+                  <div className="s">{s.sub}</div>
+                </div>
+              ))}
             </div>
           )}
           {blocos}
