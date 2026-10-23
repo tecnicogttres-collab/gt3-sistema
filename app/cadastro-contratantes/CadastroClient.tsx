@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Company, Field, FeriasColetivas, SEGMENT_COLORS } from './types'
 import { createClient } from '../lib/supabase'
+import { useUser } from '../components/UserContext'
 import AssociacoesLayer, { novaAssociacao, type PedidoAssoc } from './associacoes/AssociacoesLayer'
 
 function rowToCompany(row: {
@@ -120,6 +121,9 @@ export default function CadastroClient() {
   const [newCompanyName, setNewCompanyName] = useState('')
   const [newCompanySeg, setNewCompanySeg] = useState<string>('Bertolini')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { profile } = useUser()
+  const podeExportar = profile?.papel === 'admin' || profile?.papel === 'gestor'
+  const [exportando, setExportando] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -204,6 +208,25 @@ export default function CadastroClient() {
       }
     }
   }, [favorites])
+
+  // .xlsx montado no servidor (/api/contratantes/exportar-emails, só admin/gestor); só lê o cadastro.
+  const exportarEmails = async () => {
+    setExportando(true)
+    try {
+      const res = await fetch('/api/contratantes/exportar-emails')
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error ?? 'Erro ao exportar os e-mails')
+        return
+      }
+      const nome = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'Emails_contratantes.xlsx'
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(await res.blob())
+      a.download = nome
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    } finally { setExportando(false) }
+  }
 
   // Salva aplicando a alteração sobre a versão ATUAL do banco, não sobre a cópia da tela.
   // Antes gravava a ficha inteira da tela: quem estava com a página aberta há tempo
@@ -468,6 +491,17 @@ export default function CadastroClient() {
               fontSize: 13, fontWeight: 700, boxShadow: '0 3px 10px rgba(42,79,150,0.3)',
             }}
           >🔗 Associações</button>
+          {podeExportar && (
+            <button
+              onClick={() => void exportarEmails()}
+              disabled={exportando}
+              title="Baixa um .xlsx com um e-mail por linha (Empresa, Nome, PrimeiroNome, Email, CampoOrigem, Incluir) e a aba Sem e-mail. Só lê o cadastro."
+              style={{
+                width: '100%', marginTop: 8, padding: '7px 12px', borderRadius: 10, cursor: exportando ? 'wait' : 'pointer',
+                border: '1px solid #BFD0FF', background: '#fff', color: '#2A4F96', fontSize: 12.5, fontWeight: 600,
+              }}
+            >{exportando ? 'Gerando planilha…' : '⬇ Exportar e-mails para planilha'}</button>
+          )}
         </div>
 
         {/* Search */}

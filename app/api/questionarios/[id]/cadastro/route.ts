@@ -2,36 +2,13 @@ import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { requireGestorAdmin } from '../../../../lib/api-helpers'
 import { CONVITE_SELECT } from '../../../../questionarios/types'
+import { extrairEmailsCadastro } from '../../../../lib/contratantes-emails'
 
 type Params = { params: Promise<{ id: string }> }
 
 /* "Incluir do Cadastro de Contratantes" — SÓ LÊ public.contratantes (nunca altera o cadastro) e
-   SÓ INSERE convites. O cadastro guarda tudo em `fields` (texto livre), sem um campo "responsável
-   + e-mail": por isso cada e-mail encontrado vira uma linha, com o nome do campo de onde veio. */
-
-const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
-
-type CampoCadastro = { type: 'text'; label: string; value: string } | { type: 'table'; label: string; headers: string[]; rows: string[][] }
-
-/** Partes de e-mail que são setor/caixa genérica, não nome de pessoa (não sugerem Nome). */
-const GENERICOS = new Set([
-  'seguranca', 'segurancadotrabalho', 'sesmt', 'sst', 'tst', 'seg', 'rh', 'dp', 'contato', 'compras', 'portaria', 'adm',
-  'administrativo', 'administracao', 'financeiro', 'fiscal', 'documentos', 'documentacao', 'docs', 'doc', 'terceiros',
-  'terceirizados', 'cadastro', 'cadastros', 'sac', 'comercial', 'recepcao', 'engenharia', 'qualidade', 'ti', 'suporte',
-  'cracha', 'crachas', 'integracao', 'medicina', 'saude', 'juridico', 'ambiental', 'manutencao', 'logistica', 'faturamento',
-  'nfe', 'nf', 'atendimento', 'info', 'geral', 'noreply', 'naoresponda', 'empresa', 'fabrica', 'unidade', 'trabalho',
-  'concessoes', 'login', 'acesso', 'controle', 'patrimonial', 'seguranca.trabalho', 'servicos', 'obras', 'projetos',
-])
-
-/** "joao.silva@" → "Joao Silva"; "fernanda@" → "Fernanda"; caixa genérica ou com números → "". */
-function nomeSugerido(email: string): string {
-  const local = email.split('@')[0].toLowerCase()
-  if (GENERICOS.has(local.replace(/[._-]/g, ''))) return ''
-  const partes = local.split(/[._-]+/).filter(Boolean)
-  if (!partes.length || partes.length > 4) return ''
-  if (partes.some(p => !/^[a-z]{2,}$/.test(p) || GENERICOS.has(p))) return ''
-  return partes.map(p => p[0].toUpperCase() + p.slice(1)).join(' ')
-}
+   SÓ INSERE convites. A leitura dos e-mails fica em app/lib/contratantes-emails.ts (a mesma da
+   exportação para planilha do Cadastro de Contratantes). */
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params
@@ -45,23 +22,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (error) return Response.json({ error: error.message }, { status: 500 })
   const ja = new Set((existentes ?? []).map(e => String(e.email).trim().toLowerCase()).filter(Boolean))
 
-  const linhas: { contratanteId: string; empresa: string; email: string; origem: string; nome: string; jaIncluido: boolean }[] = []
-  const semEmail: { contratanteId: string; empresa: string }[] = []
-
-  for (const c of cad ?? []) {
-    const vistos = new Set<string>()
-    const campos = (Array.isArray(c.fields) ? c.fields : []) as CampoCadastro[]
-    for (const f of campos) {
-      const texto = f.type === 'text' ? (f.value ?? '') : JSON.stringify(f.rows ?? [])
-      for (const m of texto.match(EMAIL_RE) ?? []) {
-        const email = m.toLowerCase()
-        if (vistos.has(email)) continue
-        vistos.add(email)
-        linhas.push({ contratanteId: c.id, empresa: c.name, email, origem: f.label.trim(), nome: nomeSugerido(email), jaIncluido: ja.has(email) })
-      }
-    }
-    if (!vistos.size) semEmail.push({ contratanteId: c.id, empresa: c.name })
-  }
+  const { linhas: emails, semEmail } = extrairEmailsCadastro(cad ?? [])
+  const linhas = emails.map(l => ({ contratanteId: l.contratanteId, empresa: l.empresa, email: l.email, origem: l.origens[0], nome: l.nome, jaIncluido: ja.has(l.email) }))
 
   return Response.json({ linhas, semEmail })
 }
