@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
-import type { Pergunta } from '../../../questionarios/types'
+import { perguntaVisivel, type Pergunta, type ValorResposta } from '../../../questionarios/types'
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -51,11 +51,19 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const body = await req.json().catch(() => ({})) as { respostas?: Record<string, unknown> }
   const recebidas = body.respostas ?? {}
-  const respostas: Record<string, string | number> = {}
+  const respostas: Record<string, ValorResposta> = {}
+  const erroObrig = () => Response.json({ error: 'Responda todas as perguntas de nota e de múltipla escolha.' }, { status: 400 })
 
+  // Perguntas na ordem: a condicional sempre vem depois da que a libera, então `respostas` já
+  // tem a resposta do gatilho. Pergunta oculta não é exigida e o que vier nela é descartado.
   for (const q of r.qn.perguntas) {
+    if (!perguntaVisivel(q, r.qn.perguntas, respostas)) continue
     const v = recebidas[q.id]
-    if (q.type === 'escala') {
+    if (q.type === 'multipla' && q.multiplas) {
+      const opts = q.options ?? []
+      if (!Array.isArray(v) || !v.length || v.some(x => typeof x !== 'string' || !opts.includes(x))) return erroObrig()
+      respostas[q.id] = opts.filter(o => (v as string[]).includes(o))
+    } else if (q.type === 'escala') {
       const n = Number(v)
       if (!Number.isInteger(n) || n < 1 || n > 5) return Response.json({ error: 'Responda todas as perguntas de nota e de múltipla escolha.' }, { status: 400 })
       respostas[q.id] = n

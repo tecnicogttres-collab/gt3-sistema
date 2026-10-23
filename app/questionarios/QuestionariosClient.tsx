@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   type Questionario, type Convite, type Pergunta, type TipoPergunta, type Publico, type StatusQn,
   type StatusExib, type PainelConfig,
-  TYPE_NAME, TYPE_DESC, STATUS_QN_NAME, STATUS_EXIB_LABEL, statusExib, linkConvite, primeiroNome,
+  TYPE_NAME, TYPE_DESC, STATUS_QN_NAME, STATUS_EXIB_LABEL, statusExib, linkConvite, primeiroNome, valoresResposta,
 } from './types'
 
 // ─── Tokens (mesma paleta do HTML de referência) ─────────────────────────────
@@ -93,7 +93,7 @@ const CSS = `
 .qnm .qitem-body .v{font-size:14px;font-weight:600;line-height:1.4}
 .qnm .answers-inline{display:flex;flex-wrap:wrap;gap:5px}
 .qnm .answers-inline span{font-size:12px;font-weight:600;padding:3px 9px;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-secondary)}
-.qnm .answers-inline .scale-desc{background:none;border:none;padding:3px 0;color:var(--text-muted);font-weight:500}
+.qnm .answers-inline .scale-desc{background:var(--primary-soft);border:none;padding:3px 8px;color:var(--primary);font-weight:600}
 .qnm .add-q{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border:1.5px dashed var(--border);border-radius:12px;background:transparent;cursor:pointer;color:var(--primary);font-weight:700;font-size:14px}
 .qnm .add-q:hover{background:var(--surface-2);border-color:var(--primary)}
 .qnm .add-q .plus-circle{width:32px;height:32px;font-size:20px}
@@ -132,7 +132,18 @@ const CSS = `
 .qnm .pv-label{font-size:13px;font-weight:600}
 .qnm .pv-scale{display:flex;gap:5px}
 .qnm .pv-scale span{flex:1;text-align:center;font-size:12px;font-weight:700;padding:7px 0;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-muted)}
-.qnm .pv-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted)}
+.qnm .pv-ends{display:flex;justify-content:space-between;gap:8px;font-size:11px;font-weight:600;color:var(--primary)}
+.qnm .pv-ends span{background:var(--primary-soft);border-radius:5px;padding:2px 7px}
+.qnm .pv-ends span:last-child{margin-left:auto;text-align:right}
+.qnm .pv-cond{font-size:11px;font-weight:600;color:var(--st-warning-text);background:rgba(250,178,25,.15);border-radius:6px;padding:3px 8px;align-self:flex-start}
+.qnm .pv-choice.multi span::before{border-radius:3px}
+.qnm .pv-regra{align-self:flex-start;font-size:10.5px;font-weight:700;border-radius:100px;padding:2px 9px;background:var(--primary-soft);color:var(--primary)}
+.qnm .pv-regra.opc{background:var(--surface-2);color:var(--text-muted)}
+.qnm .qcond{font-size:11px;font-weight:700;color:var(--st-warning-text);background:rgba(250,178,25,.18);border-radius:100px;padding:2px 9px}
+.qnm .seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;align-self:flex-start}
+.qnm .seg button{border:none;background:var(--surface);padding:7px 13px;font-size:12.5px;font-weight:600;color:var(--text-secondary);cursor:pointer}
+.qnm .seg button + button{border-left:1px solid var(--border)}
+.qnm .seg button.on{background:var(--primary);color:#fff}
 .qnm .pv-choice{display:flex;flex-direction:column;gap:6px}
 .qnm .pv-choice span{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:12.5px;background:var(--surface-2);color:var(--text-secondary)}
 .qnm .pv-choice span::before{content:"";width:11px;height:11px;border-radius:50%;border:1.5px solid var(--text-muted);flex:none}
@@ -253,9 +264,18 @@ const CSS = `
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 type Tab = 'hub' | 'convites' | 'painel' | 'config'
-type Draft = { id: string | null; type: TipoPergunta; label: string; min: string; max: string; options: string[] }
+type Draft = {
+  id: string | null; type: TipoPergunta; label: string; min: string; max: string; options: string[]
+  multiplas: boolean
+  /** Pergunta condicional — id da pergunta-gatilho ('' = sempre aparece) e respostas que a liberam. */
+  condPergunta: string; condValores: (string | number)[]
+}
 
-const blankDraft = (): Draft => ({ id: null, type: 'escala', label: '', min: 'Muito insatisfeito', max: 'Muito satisfeito', options: ['', ''] })
+const blankDraft = (): Draft => ({ id: null, type: 'escala', label: '', min: 'Muito insatisfeito', max: 'Muito satisfeito', options: ['', ''], multiplas: false, condPergunta: '', condValores: [] })
+
+/** Respostas que podem servir de gatilho de uma pergunta condicional. */
+const valoresGatilho = (q: Pergunta): (string | number)[] => q.type === 'escala' ? [1, 2, 3, 4, 5] : q.type === 'multipla' ? (q.options ?? []) : []
+const fmtResposta = (v: Convite['respostas'][string] | undefined) => valoresResposta(v).join(', ')
 const novoIdPergunta = () => `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
 function cfgFor(qn: Questionario): PainelConfig {
@@ -294,7 +314,12 @@ function AnswersSummary({ q }: { q: Pergunta }) {
     )
   }
   if (q.type === 'multipla') {
-    return <div className="answers-inline">{(q.options ?? []).map(o => <span key={o}>{o}</span>)}</div>
+    return (
+      <div className="answers-inline">
+        {(q.options ?? []).map(o => <span key={o}>{o}</span>)}
+        <span className="scale-desc">{q.multiplas ? 'Várias respostas' : 'Uma resposta'}</span>
+      </div>
+    )
   }
   return <div className="answers-inline"><span className="scale-desc">Texto livre, escrito pelo respondente</span></div>
 }
@@ -456,6 +481,13 @@ export default function QuestionariosClient() {
       if (opts.length < 2) { setDraftErr('Defina pelo menos duas respostas possíveis.'); return }
       if (new Set(opts).size !== opts.length) { setDraftErr('As respostas possíveis precisam ser diferentes entre si.'); return }
       q.options = opts
+      if (draft.multiplas) q.multiplas = true
+    }
+    if (draft.condPergunta) {
+      const gatilho = editing.perguntas.find(x => x.id === draft.condPergunta)
+      const valores = gatilho ? draft.condValores.filter(v => valoresGatilho(gatilho).includes(v)) : []
+      if (!valores.length) { setDraftErr('Escolha ao menos uma resposta que faz esta pergunta aparecer.'); return }
+      q.condicao = { perguntaId: draft.condPergunta, valores }
     }
     const perguntas = draft.id
       ? editing.perguntas.map(x => x.id === draft.id ? q : x)
@@ -469,13 +501,25 @@ export default function QuestionariosClient() {
     const p = [...editing.perguntas]
     const j = i + dir
     ;[p[i], p[j]] = [p[j], p[i]]
+    // A condicional precisa vir depois da pergunta que a libera.
+    const quebra = p.some((q, k) => q.condicao && p.findIndex(x => x.id === q.condicao!.perguntaId) > k)
+    if (quebra) { alert('Uma pergunta condicional precisa ficar abaixo da pergunta que a faz aparecer.'); return }
     void patchQn(editing.id, { perguntas: p })
   }
 
   function removerPergunta(q: Pergunta) {
     if (!editing) return
     if (confirmDel !== q.id) { setConfirmDel(q.id); return }
-    void patchQn(editing.id, { perguntas: editing.perguntas.filter(x => x.id !== q.id) })
+    const dependentes = editing.perguntas.filter(x => x.condicao?.perguntaId === q.id)
+    if (dependentes.length && !confirm(`${dependentes.length} pergunta(s) só aparecem conforme a resposta desta. Ao remover, elas passam a aparecer sempre. Continuar?`)) { setConfirmDel(null); return }
+    void patchQn(editing.id, {
+      perguntas: editing.perguntas.filter(x => x.id !== q.id).map(x => {
+        if (x.condicao?.perguntaId !== q.id) return x
+        const resto = { ...x }
+        delete resto.condicao
+        return resto
+      }),
+    })
     setConfirmDel(null)
   }
 
@@ -756,8 +800,10 @@ export default function QuestionariosClient() {
 
   // ── EDITOR ─────────────────────────────────────────────────────────────────
 
-  function renderComposer(d: Draft, index: number) {
+  function renderComposer(d: Draft, index: number, anteriores: Pergunta[]) {
     const upd = (p: Partial<Draft>) => setDraft({ ...d, ...p })
+    const gatilhos = anteriores.filter(q => q.type !== 'texto')
+    const gatilho = gatilhos.find(q => q.id === d.condPergunta)
     return (
       <div className="composer" key="composer">
         <div className="composer-head">{d.id ? `Editando pergunta #${index + 1}` : `Nova pergunta #${index + 1}`}</div>
@@ -804,9 +850,40 @@ export default function QuestionariosClient() {
                 ))}
               </div>
               <button className="btn ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => upd({ options: [...d.options, ''] })}>+ Adicionar resposta</button>
+              <div className="row" style={{ marginTop: 4 }}>
+                <span className="field-label">Quantas respostas o respondente marca</span>
+                <div className="seg">
+                  <button className={!d.multiplas ? 'on' : ''} onClick={() => upd({ multiplas: false })}>Apenas uma (obrigatória)</button>
+                  <button className={d.multiplas ? 'on' : ''} onClick={() => upd({ multiplas: true })}>Múltiplas (ao menos uma)</button>
+                </div>
+              </div>
             </>
           )}
           {d.type === 'texto' && <div className="text-answer-demo">O respondente terá um campo livre para escrever. Não há respostas pré-definidas.</div>}
+        </div>
+        <div className="composer-sec">
+          <div className="sec-title"><span className="n">4</span><h4>Quando aparece</h4><small>opcional — pergunta que só entra depois de outra resposta</small></div>
+          {!gatilhos.length ? (
+            <div className="text-answer-demo">Sempre aparece. Para condicionar, crie antes (acima desta) uma pergunta de nota ou de múltipla escolha.</div>
+          ) : (
+            <>
+              <select value={d.condPergunta} onChange={e => upd({ condPergunta: e.target.value, condValores: [] })} style={{ maxWidth: '100%' }}>
+                <option value="">Sempre aparece</option>
+                {gatilhos.map(q => <option key={q.id} value={q.id}>Só se a #{anteriores.indexOf(q) + 1} ({q.label.slice(0, 60)}{q.label.length > 60 ? '…' : ''}) for respondida com…</option>)}
+              </select>
+              {gatilho && (
+                <div className="chipset">
+                  {valoresGatilho(gatilho).map(v => (
+                    <button key={String(v)} className={`chip${d.condValores.includes(v) ? ' on' : ''}`}
+                      onClick={() => upd({ condValores: d.condValores.includes(v) ? d.condValores.filter(x => x !== v) : [...d.condValores, v] })}>
+                      {gatilho.type === 'escala' ? `Nota ${v}` : v}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {gatilho && <p className="f-hint">Marque uma ou mais respostas. Se nenhuma delas for escolhida, esta pergunta fica oculta e não é exigida.</p>}
+            </>
+          )}
         </div>
         <div className="composer-foot">
           <span className="composer-error">{draftErr}</span>
@@ -820,7 +897,10 @@ export default function QuestionariosClient() {
   function renderPreview(qn: Questionario) {
     let items: (Pergunta & { _draft?: boolean })[] = qn.perguntas
     if (draft) {
-      const dq = { id: draft.id ?? '__novo', type: draft.type, label: draft.label, min: draft.min, max: draft.max, options: draft.options, _draft: true }
+      const dq = {
+        id: draft.id ?? '__novo', type: draft.type, label: draft.label, min: draft.min, max: draft.max, options: draft.options, multiplas: draft.multiplas, _draft: true,
+        condicao: draft.condPergunta ? { perguntaId: draft.condPergunta, valores: draft.condValores } : undefined,
+      }
       items = draft.id ? items.map(q => q.id === draft.id ? dq : q) : [...items, dq]
     }
     return (
@@ -830,16 +910,27 @@ export default function QuestionariosClient() {
           {!items.length && <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>Adicione a primeira pergunta para ver a prévia.</p>}
           {items.map((q, i) => (
             <div key={q.id} className={`pv-q${q._draft ? ' draft' : ''}`}>
+              {q.condicao && (
+                <span className="pv-cond">
+                  ↳ Aparece só se a #{items.findIndex(x => x.id === q.condicao!.perguntaId) + 1} for {q.condicao.valores.length ? q.condicao.valores.join(' / ') : '…'}
+                </span>
+              )}
               <div className="pv-label">{i + 1}. {q.label || <i style={{ fontStyle: 'normal', color: 'var(--text-muted)', fontWeight: 500 }}>Texto da pergunta…</i>}</div>
+              <span className={`pv-regra${q.type === 'texto' ? ' opc' : ''}`}>
+                {q.type === 'escala' ? '● Escolha uma nota · obrigatória'
+                  : q.type === 'texto' ? 'Resposta opcional'
+                  : q.multiplas ? '☑ Pode marcar mais de uma opção · ao menos uma obrigatória'
+                  : '● Escolha apenas uma opção · obrigatória'}
+              </span>
               {q.type === 'escala' && (
                 <>
                   <div className="pv-scale">{[1, 2, 3, 4, 5].map(n => <span key={n}>{n}</span>)}</div>
-                  <div className="pv-ends"><span>{q.min}</span><span>{q.max}</span></div>
+                  <div className="pv-ends">{q.min && <span>1 = {q.min}</span>}{q.max && <span>5 = {q.max}</span>}</div>
                 </>
               )}
               {q.type === 'multipla' && (() => {
                 const opts = (q.options ?? []).filter(o => o.trim())
-                return <div className="pv-choice">{(opts.length ? opts : ['Resposta 1', 'Resposta 2']).map((o, j) => <span key={j}>{o}</span>)}</div>
+                return <div className={`pv-choice${q.multiplas ? ' multi' : ''}`}>{(opts.length ? opts : ['Resposta 1', 'Resposta 2']).map((o, j) => <span key={j}>{o}</span>)}</div>
               })()}
               {q.type === 'texto' && <div className="pv-text">Escreva sua resposta…</div>}
             </div>
@@ -892,13 +983,18 @@ export default function QuestionariosClient() {
             <div className="qlist">
               {!qn.perguntas.length && !draft && <p className="cap" style={{ margin: 0 }}>Este questionário ainda não tem perguntas.</p>}
               {qn.perguntas.map((q, i) => {
-                if (draft && draft.id === q.id) return renderComposer(draft, i)
+                if (draft && draft.id === q.id) return renderComposer(draft, i, qn.perguntas.slice(0, i))
                 const confirming = confirmDel === q.id
                 return (
                   <div key={q.id} className="qitem">
                     <div className="qitem-head">
                       <span className="qnum">#{i + 1}</span>
                       <span className="qtype">{TYPE_NAME[q.type]}</span>
+                      {q.condicao && (
+                        <span className="qcond" title="Só aparece conforme a resposta de outra pergunta">
+                          ↳ se #{qn.perguntas.findIndex(x => x.id === q.condicao!.perguntaId) + 1} = {q.condicao.valores.join(' / ')}
+                        </span>
+                      )}
                       <div className="qitem-tools">
                         <button className="icon-btn" aria-label="Mover para cima" disabled={i === 0} onClick={() => moverPergunta(i, -1)}>▲</button>
                         <button className="icon-btn" aria-label="Mover para baixo" disabled={i === qn.perguntas.length - 1} onClick={() => moverPergunta(i, 1)}>▼</button>
@@ -907,6 +1003,8 @@ export default function QuestionariosClient() {
                             id: q.id, type: q.type, label: q.label,
                             min: q.min ?? 'Muito insatisfeito', max: q.max ?? 'Muito satisfeito',
                             options: q.options && q.options.length >= 2 ? [...q.options] : [...(q.options ?? []), '', ''].slice(0, 2),
+                            multiplas: !!q.multiplas,
+                            condPergunta: q.condicao?.perguntaId ?? '', condValores: [...(q.condicao?.valores ?? [])],
                           })
                           setDraftErr(''); setConfirmDel(null)
                         }}>Editar</button>
@@ -922,7 +1020,7 @@ export default function QuestionariosClient() {
                   </div>
                 )
               })}
-              {draft && !draft.id && renderComposer(draft, qn.perguntas.length)}
+              {draft && !draft.id && renderComposer(draft, qn.perguntas.length, qn.perguntas)}
               {!draft && (
                 <button className="add-q" onClick={() => { setDraft(blankDraft()); setDraftErr(''); setConfirmDel(null) }}>
                   <span className="plus-circle">+</span>Nova pergunta
@@ -1198,7 +1296,7 @@ export default function QuestionariosClient() {
       for (const qid of Object.keys(fQ)) {
         if (qid === excludeId) continue
         const s = fQ[qid]
-        if (s.size && !s.has(d.respostas[qid])) return false
+        if (s.size && !valoresResposta(d.respostas[qid]).some(v => s.has(v))) return false
       }
       return true
     })
@@ -1227,7 +1325,7 @@ export default function QuestionariosClient() {
       const domain: (string | number)[] = q.type === 'escala' ? [1, 2, 3, 4, 5] : (q.options ?? [])
       const colors = q.type === 'escala' ? ORD_COLOR : CAT_COLOR
       const base = withQuestions(broad, q.id).filter(d => d.status === 'respondido' && d.respostas[q.id] != null)
-      const counts = domain.map(v => base.filter(d => d.respostas[q.id] === v).length)
+      const counts = domain.map(v => base.filter(d => valoresResposta(d.respostas[q.id]).includes(v)).length)
       const max = Math.max(1, ...counts)
       const sel = fQ[q.id] ?? new Set()
       const totalAns = counts.reduce((a, b) => a + b, 0)
@@ -1328,7 +1426,7 @@ export default function QuestionariosClient() {
                     <td>{d.empresa}</td>
                     <td>{d.tipo === 'Contratante' ? d.empresa : (d.vinculo || '—')}</td>
                     <td><span className={`badge ${statusExib(d)}`}>{STATUS_EXIB_LABEL[statusExib(d)]}</span></td>
-                    {closed.map(q => <td key={q.id}>{d.respostas[q.id] != null ? String(d.respostas[q.id]) : <span className="dash">—</span>}</td>)}
+                    {closed.map(q => <td key={q.id}>{fmtResposta(d.respostas[q.id]) || <span className="dash">—</span>}</td>)}
                     {open.map(q => <td key={q.id} className="comment-cell">{d.respostas[q.id] ? String(d.respostas[q.id]) : <span className="dash">—</span>}</td>)}
                   </tr>
                 ))}

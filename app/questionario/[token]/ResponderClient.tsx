@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { Pergunta } from '../../questionarios/types'
+import { perguntaVisivel, valoresResposta, type Pergunta, type ValorResposta } from '../../questionarios/types'
 
 // Tela PÚBLICA do respondente — abre sem login, pelo link único do convite.
 
@@ -30,7 +30,7 @@ type Estado =
 
 export default function ResponderClient({ token }: { token: string }) {
   const [estado, setEstado] = useState<Estado>({ k: 'carregando' })
-  const [respostas, setRespostas] = useState<Record<string, string | number>>({})
+  const [respostas, setRespostas] = useState<Record<string, ValorResposta>>({})
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
 
@@ -47,14 +47,17 @@ export default function ResponderClient({ token }: { token: string }) {
   }, [token])
 
   async function enviar(d: Dados) {
-    const faltando = d.perguntas.some(q => q.type !== 'texto' && respostas[q.id] == null)
+    const visiveis = d.perguntas.filter(q => perguntaVisivel(q, d.perguntas, respostas))
+    const faltando = visiveis.some(q => q.type !== 'texto' && !valoresResposta(respostas[q.id]).length)
     if (faltando) { setErro('Responda todas as perguntas de nota e de múltipla escolha.'); return }
+    // Só vai o que está visível — resposta de pergunta que ficou oculta depois não conta.
+    const payload = Object.fromEntries(visiveis.filter(q => respostas[q.id] != null).map(q => [q.id, respostas[q.id]]))
     setEnviando(true); setErro('')
     try {
       const res = await fetch(`/api/questionario-publico/${encodeURIComponent(token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ respostas }),
+        body: JSON.stringify({ respostas: payload }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) { setErro(body.error ?? 'Não foi possível enviar. Tente novamente.'); return }
@@ -103,9 +106,16 @@ export default function ResponderClient({ token }: { token: string }) {
         <>
           {topo(d)}
           <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 22 }}>
-            {d.perguntas.map((q, i) => (
+            {d.perguntas.filter(q => perguntaVisivel(q, d.perguntas, respostas)).map((q, i) => (
               <div key={q.id} style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35, color: TEXT }}>{i + 1}. {q.label}</div>
+                {/* Deixa explícito, antes das opções, quantas respostas a pergunta aceita e se é obrigatória */}
+                <div style={{ marginTop: -4, alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 700, borderRadius: 100, padding: '3px 10px', ...(q.type === 'texto' ? { background: SURF2, color: MUTED } : { background: PRIMARY_SOFT, color: PRIMARY }) }}>
+                  {q.type === 'escala' ? '● Escolha uma nota · obrigatória'
+                    : q.type === 'texto' ? 'Resposta opcional'
+                    : q.multiplas ? '☑ Pode marcar mais de uma opção · ao menos uma obrigatória'
+                    : '● Escolha apenas uma opção · obrigatória'}
+                </div>
                 {q.type === 'escala' && (
                   <>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -124,18 +134,26 @@ export default function ResponderClient({ token }: { token: string }) {
                         )
                       })}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: MUTED, marginTop: -3 }}>
-                      <span>{q.min}</span><span>{q.max}</span>
+                    {/* Legendas do 1 e do 5 com leve destaque, pra não passarem despercebidas */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, fontWeight: 600, color: PRIMARY, marginTop: -3 }}>
+                      {q.min && <span style={{ background: PRIMARY_SOFT, borderRadius: 6, padding: '3px 8px' }}>1 = {q.min}</span>}
+                      {q.max && <span style={{ background: PRIMARY_SOFT, borderRadius: 6, padding: '3px 8px', marginLeft: 'auto', textAlign: 'right' }}>5 = {q.max}</span>}
                     </div>
                   </>
                 )}
                 {q.type === 'multipla' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                     {(q.options ?? []).map(o => {
-                      const sel = respostas[q.id] === o
+                      const marcadas = valoresResposta(respostas[q.id])
+                      const sel = marcadas.includes(o)
+                      const marcar = () => setRespostas(r => {
+                        if (!q.multiplas) return { ...r, [q.id]: o }
+                        const atual = valoresResposta(r[q.id]) as string[]
+                        return { ...r, [q.id]: sel ? atual.filter(x => x !== o) : [...atual, o] }
+                      })
                       return (
                         <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 9, border: `1px solid ${sel ? PRIMARY : BORDER}`, background: sel ? PRIMARY_SOFT : '#fff', borderRadius: 9, padding: '11px 12px', cursor: 'pointer', fontSize: 14, color: TEXT }}>
-                          <input type="radio" name={`rq-${q.id}`} checked={sel} onChange={() => setRespostas(r => ({ ...r, [q.id]: o }))} style={{ accentColor: PRIMARY, margin: 0 }} />
+                          <input type={q.multiplas ? 'checkbox' : 'radio'} name={`rq-${q.id}`} checked={sel} onChange={marcar} style={{ accentColor: PRIMARY, margin: 0 }} />
                           {o}
                         </label>
                       )

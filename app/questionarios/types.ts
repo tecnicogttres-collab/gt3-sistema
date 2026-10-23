@@ -15,6 +15,30 @@ export type Pergunta = {
   min?: string
   max?: string
   options?: string[]
+  /** Só múltipla escolha: true = o respondente pode marcar várias respostas (precisa de ao
+   *  menos uma); ausente/false = exatamente uma. */
+  multiplas?: boolean
+  /** Pergunta condicional: só aparece (e só é exigida) quando a pergunta `perguntaId`, que vem
+   *  antes dela, foi respondida com um dos `valores`. */
+  condicao?: { perguntaId: string; valores: (string | number)[] }
+}
+
+export type ValorResposta = string | number | string[]
+
+/** Respostas de uma pergunta como lista — múltipla com várias respostas grava string[]. */
+export function valoresResposta(v: ValorResposta | undefined | null): (string | number)[] {
+  if (v == null || v === '') return []
+  return Array.isArray(v) ? v : [v]
+}
+
+/** A pergunta está visível com estas respostas? Segue a cadeia: se a pergunta-gatilho também
+ *  está oculta, esta fica oculta. */
+export function perguntaVisivel(q: Pergunta, perguntas: Pergunta[], respostas: Record<string, ValorResposta>, prof = 0): boolean {
+  if (!q.condicao) return true
+  const pai = perguntas.find(p => p.id === q.condicao!.perguntaId)
+  if (!pai || prof > 20) return true
+  if (!perguntaVisivel(pai, perguntas, respostas, prof + 1)) return false
+  return valoresResposta(respostas[pai.id]).some(v => q.condicao!.valores.includes(v))
 }
 
 export type PainelConfig = {
@@ -44,7 +68,7 @@ export type Convite = {
   vinculo: string | null
   status: StatusConvite
   token: string | null
-  respostas: Record<string, string | number>
+  respostas: Record<string, ValorResposta>
   respondido_em: string | null
   created_at: string
   /** Envio feito fora do sistema (mala direta no Word/Outlook) — só registro manual. */
@@ -63,7 +87,7 @@ export const TYPE_NAME: Record<TipoPergunta, string> = {
 
 export const TYPE_DESC: Record<TipoPergunta, string> = {
   escala: 'Respondente dá uma nota de 1 a 5.',
-  multipla: 'Respondente escolhe uma das opções que você definir.',
+  multipla: 'Respondente escolhe uma ou várias das opções que você definir.',
   texto: 'Respondente escreve livremente.',
 }
 
