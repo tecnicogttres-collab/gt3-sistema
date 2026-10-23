@@ -689,6 +689,56 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onUpdateOthers,
     </span>
   )
 
+  // Rascunho do gestor — por usuário. Editável também em ciclo arquivado.
+  const anotacoes = (
+    <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #E2E8F0' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+        Minhas anotações / Pauta da conversa
+      </div>
+      <textarea
+        value={rascunho}
+        onChange={e => setRascunho(e.target.value)}
+        placeholder="Anote pontos de pauta, perguntas ou observações para conduzir a conversa..."
+        rows={5}
+        style={{
+          width: '100%', boxSizing: 'border-box',
+          padding: '10px 12px', border: '1px solid #CBD5E0', borderRadius: 8,
+          fontSize: 13, lineHeight: 1.6, resize: 'vertical',
+          fontFamily: 'inherit', color: '#1E293B', background: '#FAFBFC',
+          outline: 'none',
+        }}
+        onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#5B8DEF'; (e.target as HTMLTextAreaElement).style.background = '#fff' }}
+        onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#CBD5E0'; (e.target as HTMLTextAreaElement).style.background = '#FAFBFC' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 8 }}>
+        {savedRascunho && (
+          <span style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>✓ Salvo</span>
+        )}
+        <button
+          onClick={saveRascunho}
+          disabled={saving === 'rascunho'}
+          style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#475569', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving === 'rascunho' ? 'default' : 'pointer', opacity: saving === 'rascunho' ? 0.7 : 1 }}
+        >
+          {saving === 'rascunho' ? 'Salvando…' : 'Salvar rascunho'}
+        </button>
+      </div>
+
+      {/* Anotações dos demais gestores/admins */}
+      {ciclo.outros_rascunhos.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          {ciclo.outros_rascunhos.map((r, i) => (
+            <div key={i} style={{ marginBottom: 8, padding: '10px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '3px solid #D1AE6E', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {r.user_nome ?? 'Gestor'} — anotações
+              </div>
+              <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{r.texto}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   const arquivadoLabel = ciclo.arquivado_em
     ? `arquivado em ${new Date(ciclo.arquivado_em).toLocaleDateString('pt-BR')}`
     : ''
@@ -908,75 +958,13 @@ function CicloCard({ ciclo, pdi, papel, colaboradorId, onUpdate, onUpdateOthers,
                 )}
               </div>
 
-              {/* Rascunho do gestor — por usuário */}
-              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #E2E8F0' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7A99', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                  Minhas anotações / Pauta da conversa
-                </div>
-                <textarea
-                  value={rascunho}
-                  onChange={e => setRascunho(e.target.value)}
-                  placeholder="Anote pontos de pauta, perguntas ou observações para conduzir a conversa..."
-                  rows={5}
-                  style={{
-                    width: '100%', boxSizing: 'border-box',
-                    padding: '10px 12px', border: '1px solid #CBD5E0', borderRadius: 8,
-                    fontSize: 13, lineHeight: 1.6, resize: 'vertical',
-                    fontFamily: 'inherit', color: '#1E293B', background: '#FAFBFC',
-                    outline: 'none',
-                  }}
-                  onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#5B8DEF'; (e.target as HTMLTextAreaElement).style.background = '#fff' }}
-                  onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#CBD5E0'; (e.target as HTMLTextAreaElement).style.background = '#FAFBFC' }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                  {savedRascunho && (
-                    <span style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>✓ Salvo</span>
-                  )}
-                  <button
-                    onClick={saveRascunho}
-                    disabled={saving === 'rascunho'}
-                    style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#475569', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving === 'rascunho' ? 'default' : 'pointer', opacity: saving === 'rascunho' ? 0.7 : 1 }}
-                  >
-                    {saving === 'rascunho' ? 'Salvando…' : 'Salvar rascunho'}
-                  </button>
-                </div>
-
-                {/* Anotações dos demais gestores/admins */}
-                {ciclo.outros_rascunhos.length > 0 && (
-                  <div style={{ marginTop: 16 }}>
-                    {ciclo.outros_rascunhos.map((r, i) => (
-                      <div key={i} style={{ marginBottom: 8, padding: '10px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '3px solid #D1AE6E', borderRadius: 8 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          {r.user_nome ?? 'Gestor'} — anotações
-                        </div>
-                        <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{r.texto}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {anotacoes}
             </div>
           )}
 
-          {/* Rascunhos somente leitura em ciclos arquivados */}
-          {isGestorAdmin && !isAtivo && (ciclo.meu_rascunho || ciclo.outros_rascunhos.length > 0) && (
-            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                Anotações da conversa
-              </div>
-              {ciclo.meu_rascunho && (
-                <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#F8FAFC', borderRadius: 8, padding: '10px 14px', border: '1px solid #E2E8F0' }}>
-                  {ciclo.meu_rascunho}
-                </div>
-              )}
-              {ciclo.outros_rascunhos.map((r, i) => (
-                <div key={i} style={{ padding: '10px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderLeft: '3px solid #D1AE6E', borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{r.user_nome ?? 'Gestor'}</div>
-                  <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{r.texto}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Anotações seguem editáveis com o período fechado — o ciclo continua arquivado
+              (datas, avaliações e agendamento travados), só o texto pode ser complementado. */}
+          {isGestorAdmin && !isAtivo && anotacoes}
           {isColab && ciclo.data_conversa && (
             <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 14, fontSize: 13, color: '#374151' }}>
               📅 Conversa agendada para <strong>{new Date(ciclo.data_conversa).toLocaleString('pt-BR')}</strong>
