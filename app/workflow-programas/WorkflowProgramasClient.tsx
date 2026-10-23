@@ -77,6 +77,8 @@ type CatalogConfig = {
   modeloAditivoMigrado?: boolean
   /** true depois que o texto "Visão geral do cadastro — pendência" passou a usar {{pendenciacadastro}} — ver upgradeCatalog. */
   cadastroPendenciaMigrado?: boolean
+  /** true depois que a opção "NR 34" foi criada em "Treinamentos" — ver upgradeCatalog. */
+  nr34Migrado?: boolean
   /** Setores de atuação disponíveis em "Setor(es) de atuação" (Nova análise) e no vínculo de
    *  textos de categoria "segmento" — editável em Textos → Segmento → "+ Novo segmento", em vez
    *  de fixo no código (ver SETORES_ATUACAO, usado só como valor inicial/seed). */
@@ -223,6 +225,23 @@ const DEFAULT_STATUS_OPTIONS: StatusResp[] = ['ok', 'nao', 'na']
 /** Psicossocial NR-01 geral (não crítico) x "Psicossociais Marcopolo" — ver ajustarObsPsicoMarcopolo. */
 const PSICO_NAO_CRITICO_ID = 'i_pgr_psico'
 const PSICO_MARCOPOLO_ID = 'e_mpo_psico'
+/** PGR com item crítico reprovado: o PCMSO (quando analisado) ganha o próprio quadro de
+ *  observação com este texto, mesmo sem reprovação própria — ver buildReprovacao. */
+const OBS_AGUARDANDO_PGR = 'Aguardando aprovação do PGR.'
+
+/** Lista "Treinamentos" (resposta de "Possui treinamentos específicos?") — sempre em ordem
+ *  crescente de NR, não na ordem em que as opções foram cadastradas. */
+const TREINAMENTOS_ITEM_ID = 'i_jqyxsqh'
+const NR34_OPCAO = { id: 'op_nr34', label: 'NR 34', corpo: 'NR-34 (Condições e Meio Ambiente de Trabalho na Indústria da Construção, Reparação e Desmonte Naval)' }
+/** "NR 10", "NR10 - SEP", "11 - Empilhadeira" → ordena pelo número; sem número (MOPP,
+ *  Blaster...) vai pro fim, em ordem alfabética. */
+function ordenarOpcoesTreinamento<T extends { label: string }>(opcoes: T[]): T[] {
+  const num = (l: string) => { const m = l.match(/\d+/); return m ? parseInt(m[0], 10) : Infinity }
+  return [...opcoes].sort((a, b) => num(a.label) - num(b.label) || a.label.localeCompare(b.label, 'pt-BR', { numeric: true, sensitivity: 'base' }))
+}
+const opcoesOrdenadas = <T extends { label: string }>(item: { id: string; opcoes: T[] }): T[] =>
+  item.id === TREINAMENTOS_ITEM_ID ? ordenarOpcoesTreinamento(item.opcoes) : item.opcoes
+
 const OBS_PSICO_SO_MARCOPOLO = 'Identificado que foi realizado o levantamento dos fatores de risco psicossociais para o Grupo Marcopolo. Contudo, seria interessante que esse levantamento também fosse realizado para a própria empresa, contemplando todas as suas atividades e funções, conforme a NR-01 — fica como orientação para as próximas revisões do PGR.'
 const STATUS_LABELS: Record<Exclude<StatusResp, ''>, string> = {
   ok: 'Conforme', nao: 'Reprovação', na: 'Não aplicável', restricao: 'Aprovado com restrição',
@@ -592,6 +611,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || raw.itens.some(i => typeof i.formatoLista !== 'string')
     || !raw.config.modeloAditivoMigrado
     || !raw.config.cadastroPendenciaMigrado
+    || !raw.config.nr34Migrado
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
@@ -778,6 +798,15 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     textos = textos.map(t => t.id === 't_ger_cadastro_pendente'
       ? { ...t, corpo: t.corpo.replace('documento(s) de {{itemescolhido}} pendente(s) de envio', '{{pendenciacadastro}}') }
       : t)
+  }
+  // NR 34 na lista de "Treinamentos". Migração única: depois fica editável/removível normalmente.
+  if (!config.nr34Migrado) {
+    config.nr34Migrado = true
+    itensComCadastro = itensComCadastro.map(i => (
+      i.id === TREINAMENTOS_ITEM_ID && !i.opcoes.some(o => /^NR\s*-?\s*34\b/i.test(o.label.trim()))
+        ? { ...i, opcoes: [...i.opcoes, { ...NR34_OPCAO, pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false }] }
+        : i
+    ))
   }
   return { catalog: { ...raw, itens: itensComCadastro, contratantes: contratantesComCadastro, textos, textosReprovacao: textosReprovacaoFinal, config }, changed: true }
 }
@@ -1089,6 +1118,14 @@ export default function WorkflowProgramasClient() {
   // "+ Novo segmento" (Textos → Segmento) — cria o setor de atuação e já pergunta se quer
   // manter o mesmo texto padrão de outro segmento já existente, ou escrever um texto próprio.
   const [modalNovoSegmento, setModalNovoSegmento] = useState(false)
+  // "+ Novo segmento" aberto de dentro da Nova análise: o segmento criado já fica marcado nela.
+  const [novoSegmentoDaAnalise, setNovoSegmentoDaAnalise] = useState(false)
+  // "+ Novo treinamento" (Nova análise) — cria a opção em "Treinamentos" e já marca na análise.
+  const [modalNovoTreinamento, setModalNovoTreinamento] = useState(false)
+  const [novoTreinamentoLabel, setNovoTreinamentoLabel] = useState('')
+  const [novoTreinamentoCorpo, setNovoTreinamentoCorpo] = useState('')
+  // Incrementado a cada análise nova — VAnalise põe o cursor em "Empresa prestadora".
+  const [focoEmpresa, setFocoEmpresa] = useState(0)
   const [novoSegmentoNome, setNovoSegmentoNome] = useState('')
   const [novoSegmentoBaseId, setNovoSegmentoBaseId] = useState('')
 
@@ -1229,7 +1266,7 @@ export default function WorkflowProgramasClient() {
       if (i.tipo !== 'opcoes' || !i.variavel) return
       const sel = a.respostas[i.id]?.opcoesSelecionadas || []
       const livres = a.respostas[i.id]?.textosLivres || {}
-      const opcoesEfetivas = sel.length ? i.opcoes.filter(o => sel.includes(o.id)) : i.opcoes.filter(o => o.padrao)
+      const opcoesEfetivas = sel.length ? opcoesOrdenadas(i).filter(o => sel.includes(o.id)) : opcoesOrdenadas(i).filter(o => o.padrao)
       const partesOpcoes = opcoesEfetivas
         .map(o => {
           const valor = livres[o.id] || ''
@@ -1443,7 +1480,11 @@ export default function WorkflowProgramasClient() {
     const ctx = ctxDe(a, itensDaAnalise(a))
     // Um quadro por documento (PGR, PCMSO, LTCAT...), cada um no modelo do módulo de
     // Observações: "{{data}} {{hora}} - {{observacao}} - {{nome}}".
-    const docs = DOC_ORDER.filter(d => criticosReprovados.some(i => i.documento === d))
+    // PGR reprovado (item crítico) com PCMSO na análise: o PCMSO também sai como reprovação,
+    // com "Aguardando aprovação do PGR" — sozinho, ou abaixo dos itens críticos do próprio PCMSO.
+    // Com o PGR todo conforme nos críticos, o PCMSO segue só com o que tiver de seu.
+    const aguardaPgr = a.documentos.includes('PCMSO') && criticosReprovados.some(i => i.documento === 'PGR')
+    const docs = DOC_ORDER.filter(d => criticosReprovados.some(i => i.documento === d) || (d === 'PCMSO' && aguardaPgr))
     const quadros = docs.map(doc => {
       // Itens do mesmo documento com o mesmo texto de reprovação (ex.: "faltou frente de serviço"
       // em Marcopolo Ana Rech, São Cristóvão e Volare) viram UMA linha só, com as contratantes
@@ -1462,7 +1503,9 @@ export default function WorkflowProgramasClient() {
       }).join('<br>')
       // Cada item em linha própria com <br> (não <div>): ao colar no Portal (texto puro) a lista
       // continua em tópicos, e o " - {{nome}}" do modelo fica no fim da última linha.
-      const observacao = `Favor rever ${entradas.length > 1 ? 'os seguintes itens' : 'o seguinte item'}:<br>${linhas}`
+      const partes = entradas.length ? [`Favor rever ${entradas.length > 1 ? 'os seguintes itens' : 'o seguinte item'}:<br>${linhas}`] : []
+      if (doc === 'PCMSO' && aguardaPgr) partes.push(OBS_AGUARDANDO_PGR)
+      const observacao = partes.join('<br>')
       return { doc, html: aplicarTemplateObs(obsTemplate, observacao, obsAssinatura) }
     })
     const corpo = htmlJoinBlocos(quadros.map(q => `<div style="border:1px solid #C9D3E3;border-radius:6px;padding:8px 10px"><div style="font-weight:700;margin-bottom:4px">${q.doc}</div>${q.html}</div>`))
@@ -1510,6 +1553,7 @@ export default function WorkflowProgramasClient() {
       validades: {},
     })
     setEmailEditado(false)
+    setFocoEmpresa(n => n + 1)
   }
 
   /** Guarda a análise aberta em "Em andamento" (rascunho, sem trocar de tela) — usado ao
@@ -2868,8 +2912,9 @@ render();
 
   /** Abre "+ Novo segmento" já sugerindo, como padrão a manter, o texto de segmento com mais
    *  setores vinculados (o "padrão da casa") — ex.: hoje é "Considerações - gerais". */
-  function abrirNovoSegmento() {
+  function abrirNovoSegmento(daAnalise = false) {
     if (!catalog) return
+    setNovoSegmentoDaAnalise(daAnalise)
     const textosSegmento = catalog.textos.filter(t => t.categoria === 'segmento')
     const maisUsado = [...textosSegmento].sort((a, b) => (b.segmentos?.length ?? 0) - (a.segmentos?.length ?? 0))[0]
     setNovoSegmentoNome('')
@@ -2884,6 +2929,7 @@ render();
     const segmentosAtuais = catalog.config.segmentos ?? [...SETORES_ATUACAO]
     if (segmentosAtuais.some(s => s.toLowerCase() === nome.toLowerCase())) { showToast('Já existe um segmento com esse nome'); return }
     const nextConfig = { ...catalog.config, segmentos: [...segmentosAtuais, nome] }
+    if (novoSegmentoDaAnalise && draft && !draft.setoresAtuacao.includes(nome)) toggleSetorAtuacao(nome)
     if (novoSegmentoBaseId) {
       // Mantém o padrão de escrita: só adiciona o novo segmento à lista do texto escolhido.
       const nextTextos = catalog.textos.map(t => t.id === novoSegmentoBaseId ? { ...t, segmentos: [...(t.segmentos ?? []), nome] } : t)
@@ -2897,6 +2943,28 @@ render();
       setModalTextoNovo(true)
       setModalTextoEdit({ id: uid('t'), titulo: nome, categoria: 'segmento', corpo: '', segmentos: [nome] })
     }
+  }
+  function abrirNovoTreinamento() {
+    setNovoTreinamentoLabel('')
+    setNovoTreinamentoCorpo('')
+    setModalNovoTreinamento(true)
+  }
+
+  function confirmarNovoTreinamento() {
+    if (!catalog) return
+    const item = catalog.itens.find(i => i.id === TREINAMENTOS_ITEM_ID)
+    if (!item) { showToast('Item "Treinamentos" não encontrado no catálogo'); return }
+    const label = novoTreinamentoLabel.trim()
+    if (!label) { showToast('Informe o nome do treinamento'); return }
+    if (item.opcoes.some(o => o.label.trim().toLowerCase() === label.toLowerCase())) { showToast('Já existe um treinamento com esse nome'); return }
+    const opcao: ChecklistOpcao = {
+      id: uid('op'), label, corpo: textoParaHtml(novoTreinamentoCorpo.trim() || label),
+      pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false,
+    }
+    persistCatalog({ ...catalog, itens: catalog.itens.map(i => (i.id === item.id ? { ...i, opcoes: [...i.opcoes, opcao] } : i)) })
+    if (draft) setOpcao(item.id, opcao.id, true)
+    setModalNovoTreinamento(false)
+    showToast(`Treinamento "${label}" criado e marcado nesta análise`)
   }
   function editarTextoModal(t: TextoEmail) { setModalTextoNovo(false); setModalTextoEdit({ ...t }) }
   function salvarTextoModal() {
@@ -3131,6 +3199,7 @@ render();
           itensDaAnalise={itensDaAnalise} getT={getT} getR={getR} nomeC={nomeC} nomesContratantes={nomesContratantes} anexos={anexos} empresasBanco={empresasBanco}
           concessoesDaEmpresa={draft.empresa.trim() ? concessoes.filter(c => !c.encerrada_em && mesmaEmpresa(draft, c)) : []}
           nomeContratanteConcessao={nomeContratanteConcessao}
+          focoEmpresa={focoEmpresa} onNovoSegmento={() => abrirNovoSegmento(true)} onNovoTreinamento={abrirNovoTreinamento}
           onField={setDraftField} onEmpresaBlur={verificarEmpresaDuplicada} onToggleDoc={toggleDoc} onToggleContratante={toggleContratante} onToggleSetor={toggleSetorAtuacao} onDot={toggleDot} onObs={setObs} onPrazoRestricao={setPrazoRestricao} onOpcao={setOpcao} onOpcaoTexto={setOpcaoTexto} onValidade={setValidade}
           onLimpar={limparRespostas} onSalvar={salvarAnalise} onFinalizar={finalizarAnalise} onDescartar={descartarAnalise}
           onEmailChange={(v) => { setEmailOverride(v); setEmailEditado(true) }}
@@ -3223,7 +3292,7 @@ render();
         <div>
           <Btn small variant="gho" onClick={() => setTextosSub('hub')}>← Textos</Btn>
           <div style={{ marginTop: 10 }}>
-            <VTextos catalog={catalog} CATS={{ segmento: 'Segmento' }} onNovo={abrirNovoSegmento} onEditar={editarTextoModal} onDel={delTexto} novoLabel="✚ Novo segmento" />
+            <VTextos catalog={catalog} CATS={{ segmento: 'Segmento' }} onNovo={() => abrirNovoSegmento()} onEditar={editarTextoModal} onDel={delTexto} novoLabel="✚ Novo segmento" />
           </div>
         </div>
       )}
@@ -3355,6 +3424,20 @@ render();
         )
       })()}
 
+      {modalNovoTreinamento && (
+        <ModalShell title="Novo treinamento" saveLabel="Criar treinamento" onClose={() => setModalNovoTreinamento(false)} onSave={confirmarNovoTreinamento}>
+          <Field label="Nome (botão na análise)">
+            <input style={inputStyle} value={novoTreinamentoLabel} onChange={e => setNovoTreinamentoLabel(e.target.value)} placeholder="Ex.: NR 13" autoFocus />
+          </Field>
+          <div style={{ marginTop: 12 }}>
+            <Field label="Texto no parecer ({{treinamentos}})">
+              <input style={inputStyle} value={novoTreinamentoCorpo} onChange={e => setNovoTreinamentoCorpo(e.target.value)} placeholder="Ex.: NR-13 (Caldeiras, Vasos de Pressão, Tubulações e Tanques Metálicos de Armazenamento)" />
+            </Field>
+            <div style={{ fontSize: 11.5, color: MU, marginTop: 4 }}>Em branco, usa o próprio nome. Depois dá pra editar em Itens → Treinamentos.</div>
+          </div>
+        </ModalShell>
+      )}
+
       {modalReprovacaoEdit && (
         <ReprovacaoModal draft={modalReprovacaoEdit} novo={modalReprovacaoNovo} onChange={setModalReprovacaoEdit} onSave={salvarReprovacaoModal} onClose={() => { setModalReprovacaoEdit(null); setPendingLink(null) }} />
       )}
@@ -3475,7 +3558,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, concessoesDaEmpresa, nomeContratanteConcessao, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, quadros, onCopiarQuadro, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, concessoesDaEmpresa, nomeContratanteConcessao, focoEmpresa, onNovoSegmento, onNovoTreinamento, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, quadros, onCopiarQuadro, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
   quadros: { doc: string; html: string }[]; onCopiarQuadro: (doc: string, html: string) => void
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
@@ -3486,6 +3569,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   empresasBanco: string[]
   /** Concessões de prazo psicossocial ainda ativas da empresa digitada — aviso abaixo do nome. */
   concessoesDaEmpresa: ConcessaoPsico[]; nomeContratanteConcessao: (c: ConcessaoPsico) => string
+  focoEmpresa: number; onNovoSegmento: () => void; onNovoTreinamento: () => void
   onField: <K extends keyof AnaliseDados>(k: K, v: AnaliseDados[K]) => void
   onEmpresaBlur: (nome: string) => void
   onToggleDoc: (d: DocKey) => void; onToggleContratante: (id: string) => void; onToggleSetor: (setor: string) => void
@@ -3504,6 +3588,16 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [toolbarH, setToolbarH] = useState(0)
   const [setoresAbertos, setSetoresAbertos] = useState(false)
+  // Análise nova abre com o cursor em "Empresa prestadora" (e não lá embaixo, nas contratantes).
+  const empresaRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (draftId || draft.empresa) return
+    const el = empresaRef.current
+    if (!el) return
+    el.scrollIntoView({ block: 'center' })
+    el.focus({ preventScroll: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focoEmpresa])
   useEffect(() => {
     const el = toolbarRef.current
     if (!el) return
@@ -3517,6 +3611,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
   const itens = itensDaAnalise(draft)
   const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
+  const pgrReprovado = itens.some(i => i.documento === 'PGR' && i.critico && draft.respostas[i.id]?.status === 'nao')
   const segmentosDisponiveis = catalog.config.segmentos ?? SETORES_ATUACAO
   const camposFaltando = (catalog.config.camposObrigatorios ?? []).filter(key => campoAnaliseVazio(draft, key))
   const campoObrigatorioVazio = (key: string) => (catalog.config.camposObrigatorios ?? []).includes(key) && campoAnaliseVazio(draft, key)
@@ -3556,7 +3651,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
         <div>
           <Card style={{ padding: '16px 18px', marginBottom: 14 }}>
             <Field label="Empresa prestadora">
-              <input style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('empresa')) }} value={draft.empresa}
+              <input ref={empresaRef} style={{ ...inputStyle, ...redStyle(campoObrigatorioVazio('empresa')) }} value={draft.empresa}
                 onChange={e => onField('empresa', e.target.value)} onBlur={e => onEmpresaBlur(e.target.value)} placeholder="Razão social" />
             </Field>
             {concessoesDaEmpresa.map(c => {
@@ -3612,6 +3707,10 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                         {s}
                       </label>
                     ))}
+                    <button type="button" onClick={onNovoSegmento} style={{
+                      border: `1px dashed ${P}`, background: '#fff', color: P, borderRadius: 99, padding: '2px 10px',
+                      fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>✚ Novo segmento</button>
                   </div>
                 )}
               </Field>
@@ -3736,7 +3835,7 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                         </div>
                         <div style={{ fontSize: 12.5, color: MU, marginTop: 2 }}>{i.descricao}</div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                          {i.opcoes.map(o => {
+                          {opcoesOrdenadas(i).map(o => {
                             const sel = selecionadas.includes(o.id)
                             return (
                               <button key={o.id} onClick={() => onOpcao(i.id, o.id, i.multiplaEscolha)} style={{
@@ -3746,8 +3845,14 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                             )
                           })}
                           {!i.opcoes.length && <span style={{ fontSize: 12, color: MU }}>Nenhuma opção cadastrada neste item.</span>}
+                          {i.id === TREINAMENTOS_ITEM_ID && (
+                            <button onClick={onNovoTreinamento} style={{
+                              padding: '6px 13px', borderRadius: 99, border: `1.5px dashed ${P}`, background: '#fff', color: P,
+                              fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
+                            }}>✚ Novo treinamento</button>
+                          )}
                         </div>
-                        {i.opcoes.filter(o => o.pedirTexto && selecionadas.includes(o.id)).map(o => (
+                        {opcoesOrdenadas(i).filter(o => o.pedirTexto && selecionadas.includes(o.id)).map(o => (
                           <input key={o.id} style={{ ...inputStyle, marginTop: 8, fontSize: 12.5, padding: '6px 9px' }}
                             placeholder={o.placeholder || `Detalhe de "${o.label}"`}
                             value={draft.respostas[i.id]?.textosLivres?.[o.id] || ''}
@@ -3847,6 +3952,11 @@ function VAnalise({ draft, catalog, emailCorpo, emailBuilt, modoReprovacao, modo
                   <b style={{ fontSize: 13, letterSpacing: '.02em' }}>{d}</b>
                   <span style={{ color: MU, fontSize: 12 }}>{okG}/{gStatus.length} conformes</span>
                 </div>
+                {d === 'PCMSO' && pgrReprovado && (
+                  <div style={{ padding: '8px 14px', background: NOS, borderBottom: `1px solid ${LINE}`, fontSize: 12.5, color: NO }}>
+                    🚫 PGR com item crítico reprovado — o PCMSO também sai como reprovação: <b>{OBS_AGUARDANDO_PGR}</b> (quadro &quot;Copiar PCMSO&quot; no parecer)
+                  </div>
+                )}
                 {!multi ? (
                   comuns.map((i, idx) => renderItem(i, idx, comuns))
                 ) : (
