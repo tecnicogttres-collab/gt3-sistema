@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { CATEGORIES, GUIA_UNICA, subtabCanonico, type Category, type Card } from './data'
+import { CATEGORIES, GUIA_UNICA, subtabCanonico, type Category, type Card, type Column, type Subtab } from './data'
 import { useUser, displayName } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
 import { ObsColumn, matchesSearch, cardId } from './ObsCardGrid'
@@ -272,11 +272,14 @@ type DbSubtab = {
   id: string
   categoria: string
   subtab: string
+  /** Preenchido quando a subcategoria é uma coluna dentro de outra guia (ex.: CRF em Certidões). */
+  guia: string | null
   criado_por: string | null
   created_at: string
 }
 
-type SubtabModal = { open: boolean; name: string; saving: boolean; error: string }
+/** guia = '' cria uma subcategoria (guia própria); senão cria uma coluna dentro dessa guia. */
+type SubtabModal = { open: boolean; name: string; guia: string; saving: boolean; error: string }
 
 const MODAL_INIT: ModalState = {
   open: false, mode: 'create', coluna: '', subtabKey: '',
@@ -360,7 +363,7 @@ export default function ObservacoesClient() {
   const [dbSubtabsByCategoria, setDbSubtabsByCategoria] = useState<Record<string, DbSubtab[]>>({})
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false })
-  const [subtabModal, setSubtabModal] = useState<SubtabModal>({ open: false, name: '', saving: false, error: '' })
+  const [subtabModal, setSubtabModal] = useState<SubtabModal>({ open: false, name: '', guia: '', saving: false, error: '' })
 
   // ── Layout customization state ───────────────────────────────────────────────
   const [layoutMode, setLayoutMode] = useState(false)
@@ -654,22 +657,33 @@ export default function ObservacoesClient() {
     // Também filtra subtabs dinâmicos cujo nome coincide com o título de uma coluna estática
     // (evita duplicatas como "Informações NR" quando já existe como coluna em "Referências NR")
     const staticColTitles = new Set(staticSubs.flatMap(s => s.columns.map(c => _ascii(c.title))))
-    const dynSubs = dbSubtabs
-      .filter(ds =>
-        !staticKeys.has(ds.subtab) &&
-        !staticColTitles.has(_ascii(ds.subtab)) &&
-        !isImageOnlyColuna(ds.subtab)
-      )
-      .map(ds => {
-        const imageOnly = isImageOnlyColuna(ds.subtab)
-        return { key: ds.subtab, columns: [{ title: ds.subtab, cards: [] as Card[], isFixed: false, imageOnly }] }
-      })
+    const validos = dbSubtabs.filter(ds =>
+      !staticKeys.has(ds.subtab) &&
+      !staticColTitles.has(_ascii(ds.subtab)) &&
+      !isImageOnlyColuna(ds.subtab)
+    )
+    const novaColuna = (titulo: string): Column => ({ title: titulo, cards: [], isFixed: false, imageOnly: isImageOnlyColuna(titulo) })
+    // Subcategorias criadas como coluna de outra guia (ex.: CRF em Certidões).
+    // Se a guia de destino não existir mais, a subcategoria volta a ser guia própria.
+    const guiasDinamicas = new Set(validos.filter(ds => !ds.guia).map(ds => ds.subtab))
+    const temGuia = (ds: DbSubtab) => !!ds.guia && (staticKeys.has(ds.guia) || guiasDinamicas.has(ds.guia))
+    const colunasPorGuia = new Map<string, Column[]>()
+    for (const ds of validos) {
+      if (temGuia(ds)) colunasPorGuia.set(ds.guia!, [...(colunasPorGuia.get(ds.guia!) ?? []), novaColuna(ds.subtab)])
+    }
+    const comColunasExtras = (s: Subtab): Subtab => {
+      const extras = (colunasPorGuia.get(s.key) ?? []).filter(c => !s.columns.some(x => _ascii(x.title) === _ascii(c.title)))
+      return extras.length ? { ...s, columns: [...s.columns, ...extras] } : s
+    }
+    const dynSubs = validos
+      .filter(ds => !temGuia(ds))
+      .map(ds => comColunasExtras({ key: ds.subtab, columns: [novaColuna(ds.subtab)] }))
     // Categoria de guia única (ex: BSA): subcategorias criadas viram colunas da guia
     if (GUIA_UNICA[activeCatKey] && staticSubs.length === 1) {
       const [unica] = staticSubs
-      return [{ ...unica, columns: [...unica.columns, ...dynSubs.flatMap(s => s.columns)] }]
+      return [{ ...unica, columns: [...comColunasExtras(unica).columns, ...dynSubs.flatMap(s => s.columns)] }]
     }
-    return [...staticSubs, ...dynSubs]
+    return [...staticSubs.map(comColunasExtras), ...dynSubs]
   }, [activeCategory, dbSubtabs, activeCatKey])
 
   const allSubtabsOrdered = useMemo(() => {
@@ -1092,8 +1106,13 @@ export default function ObservacoesClient() {
     const name = subtabModal.name.trim()
     if (!name) return
     const categoria = activeCatKey
-    if (allSubtabs.some(s => _ascii(s.key) === _ascii(name))) {
+    const guia = GUIA_UNICA[categoria] ? '' : subtabModal.guia
+    if (allSubtabs.some(s => _ascii(s.key) === _ascii(name)) || dbSubtabs.some(d => _ascii(d.subtab) === _ascii(name))) {
       setSubtabModal(s => ({ ...s, error: 'Já existe uma subcategoria com esse nome' }))
+      return
+    }
+    if (guia && allSubtabs.find(s => s.key === guia)?.columns.some(c => _ascii(c.title) === _ascii(name))) {
+      setSubtabModal(s => ({ ...s, error: `Já existe uma coluna com esse nome em ${guia}` }))
       return
     }
     // Otimista: a guia aparece e fica ativa na hora; o servidor confirma em segundo plano.
@@ -1101,15 +1120,15 @@ export default function ObservacoesClient() {
     const anteriorAtiva = activeSubtabKey
     setDbSubtabsByCategoria(prev => ({
       ...prev,
-      [categoria]: [...(prev[categoria] ?? []), { id: tempId, categoria, subtab: name, criado_por: profile?.id ?? null, created_at: new Date().toISOString() }],
+      [categoria]: [...(prev[categoria] ?? []), { id: tempId, categoria, subtab: name, guia: guia || null, criado_por: profile?.id ?? null, created_at: new Date().toISOString() }],
     }))
-    if (!GUIA_UNICA[categoria]) setActiveSubtabKey(name)
-    setSubtabModal({ open: false, name: '', saving: false, error: '' })
+    if (!GUIA_UNICA[categoria]) setActiveSubtabKey(guia || name)
+    setSubtabModal({ open: false, name: '', guia: '', saving: false, error: '' })
     try {
       const res = await fetch('/api/observacoes/subtabs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categoria, subtab: name }),
+        body: JSON.stringify({ categoria, subtab: name, guia: guia || null }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
@@ -1120,7 +1139,7 @@ export default function ObservacoesClient() {
     } catch (e) {
       setDbSubtabsByCategoria(prev => ({ ...prev, [categoria]: (prev[categoria] ?? []).filter(d => d.id !== tempId) }))
       if (!GUIA_UNICA[categoria]) setActiveSubtabKey(anteriorAtiva)
-      setSubtabModal({ open: true, name, saving: false, error: e instanceof Error ? e.message : 'Erro ao criar subcategoria' })
+      setSubtabModal({ open: true, name, guia, saving: false, error: e instanceof Error ? e.message : 'Erro ao criar subcategoria' })
     }
   }
 
@@ -1567,16 +1586,37 @@ export default function ObservacoesClient() {
               padding: '16px 20px',
             }}>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
-                {GUIA_UNICA[activeCatKey] ? '＋ Nova Coluna' : '＋ Nova Subcategoria'}
+                {GUIA_UNICA[activeCatKey] || subtabModal.guia ? '＋ Nova Coluna' : '＋ Nova Subcategoria'}
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>
-                {activeCatKey}
+                {subtabModal.guia ? `${activeCatKey} › ${subtabModal.guia}` : activeCatKey}
               </p>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {!GUIA_UNICA[activeCatKey] && (
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
+                    Onde criar
+                  </label>
+                  <select
+                    value={subtabModal.guia}
+                    onChange={e => setSubtabModal(s => ({ ...s, guia: e.target.value, error: '' }))}
+                    style={{
+                      width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                      border: `1.5px solid ${BORDER}`, background: '#fff',
+                      outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', color: INK,
+                    }}
+                  >
+                    <option value="">Nova subcategoria (guia própria)</option>
+                    {allSubtabsOrdered
+                      .filter(st => !isImageOnlyColuna(st.key) || !!activeCategory?.subtabs.find(s => s.key === st.key))
+                      .map(st => <option key={st.key} value={st.key}>Coluna dentro de {st.key}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6 }}>
-                  {GUIA_UNICA[activeCatKey] ? 'Nome da coluna' : 'Nome da subcategoria'}
+                  {GUIA_UNICA[activeCatKey] || subtabModal.guia ? 'Nome da coluna' : 'Nome da subcategoria'}
                 </label>
                 <input
                   type="text"
@@ -1601,7 +1641,7 @@ export default function ObservacoesClient() {
               display: 'flex', justifyContent: 'flex-end', gap: 8,
             }}>
               <button
-                onClick={() => setSubtabModal({ open: false, name: '', saving: false, error: '' })}
+                onClick={() => setSubtabModal({ open: false, name: '', guia: '', saving: false, error: '' })}
                 style={{
                   padding: '8px 16px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
                   background: '#fff', color: INK, fontSize: 13, cursor: 'pointer', fontWeight: 500,
@@ -1891,7 +1931,7 @@ export default function ObservacoesClient() {
               })}
               {canManageSubtabs && (
                 <button
-                  onClick={() => setSubtabModal({ open: true, name: '', saving: false, error: '' })}
+                  onClick={() => setSubtabModal({ open: true, name: '', guia: '', saving: false, error: '' })}
                   style={{
                     padding: '6px 12px', borderRadius: 20,
                     border: `1.5px dashed ${BORDER}`,

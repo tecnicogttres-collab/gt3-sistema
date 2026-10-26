@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('observacoes_subtabs')
-    .select('id, categoria, subtab, criado_por, created_at')
+    .select('id, categoria, subtab, guia, criado_por, created_at')
     .eq('categoria', categoria)
     .order('created_at', { ascending: true })
 
@@ -64,11 +64,13 @@ export async function POST(req: NextRequest) {
   if (!categoria || !subtab?.trim()) {
     return Response.json({ error: 'categoria e subtab obrigatórios' }, { status: 400 })
   }
+  // guia preenchida = a subcategoria é uma coluna dentro dessa guia
+  const guia = typeof body.guia === 'string' && body.guia.trim() ? body.guia.trim() : null
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('observacoes_subtabs')
-    .insert({ categoria, subtab: subtab.trim(), criado_por: user.id })
+    .insert({ categoria, subtab: subtab.trim(), guia, criado_por: user.id })
     .select()
     .single()
 
