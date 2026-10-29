@@ -34,15 +34,49 @@ export type DeparaJson = {
   respostas: DeparaRespostaJson[]
   pendentes?: { documento: string; item: string }[]
   reprovacoes?: { PGR?: string; PCMSO?: string; LTCAT?: string }
-  orientacoes?: string[]; observacoes?: string[]
+  orientacoes?: ListaPorDoc; observacoes?: ListaPorDoc
   funcoes?: DeparaFuncao[]
 }
+
+/** Orientações/observações: lista simples (formato antigo) ou separadas por documento
+ *  ({ "PGR": [...], "PCMSO": [...], "GERAL": [...] }). */
+export type ListaPorDoc = string[] | Record<string, string[]>
 
 /** Parte do retorno que fica guardada na análise (dados.retornoClaude) para consulta. */
 export type RetornoClaudeResumo = {
   importadoEm: string; geradoEm?: string
   reprovacoes: { PGR?: string; PCMSO?: string; LTCAT?: string }
-  orientacoes: string[]; observacoes: string[]; funcoes: DeparaFuncao[]
+  orientacoes: ListaPorDoc; observacoes: ListaPorDoc; funcoes: DeparaFuncao[]
+}
+
+/** Aceita lista, objeto por documento ou texto solto; descarta o que não for texto. */
+function normalizarLista(x: unknown): ListaPorDoc {
+  const textos = (v: unknown): string[] =>
+    (Array.isArray(v) ? v : [v]).filter((t): t is string => typeof t === 'string' && !!t.trim())
+  if (Array.isArray(x) || typeof x === 'string') return textos(x)
+  if (!x || typeof x !== 'object') return []
+  const out: Record<string, string[]> = {}
+  Object.entries(x).forEach(([doc, v]) => { const t = textos(v); if (t.length) out[doc.trim().toUpperCase()] = t })
+  return out
+}
+
+const ORDEM_DOCS = ['PGR', 'PCMSO', 'LTCAT', 'GERAL']
+
+/** Junta orientações e observações por documento, na ordem PGR, PCMSO, LTCAT, GERAL. Itens
+ *  de lista simples ficam em doc '' (sem documento), no topo. */
+export function agruparPorDocumento(...listas: (ListaPorDoc | undefined)[]): { doc: string; itens: string[] }[] {
+  const grupos = new Map<string, string[]>()
+  const add = (doc: string, itens: string[]) => grupos.set(doc, [...(grupos.get(doc) ?? []), ...itens])
+  listas.forEach(l => {
+    if (!l) return
+    if (Array.isArray(l)) add('', l)
+    else Object.entries(l).forEach(([doc, itens]) => add(doc, itens))
+  })
+  const peso = (d: string) => (d === '' ? -1 : ORDEM_DOCS.includes(d) ? ORDEM_DOCS.indexOf(d) : ORDEM_DOCS.length)
+  return Array.from(grupos.entries())
+    .filter(([, itens]) => itens.length)
+    .sort((a, b) => peso(a[0]) - peso(b[0]) || a[0].localeCompare(b[0]))
+    .map(([doc, itens]) => ({ doc, itens }))
 }
 
 export const normDepara = (s: string) => s
@@ -85,7 +119,13 @@ export function lerRetorno(texto: string): { ok: true; data: DeparaJson } | { ok
   if (!Array.isArray(d.checklists)) return { ok: false, erro: 'O JSON não tem a lista "checklists".' }
   const respostas = d.respostas.filter((r): r is DeparaRespostaJson =>
     !!r && typeof r === 'object' && typeof r.documento === 'string' && typeof r.item === 'string')
-  return { ok: true, data: { ...d, checklists: d.checklists.map(String), respostas } as DeparaJson }
+  return {
+    ok: true,
+    data: {
+      ...d, checklists: d.checklists.map(String), respostas,
+      orientacoes: normalizarLista(d.orientacoes), observacoes: normalizarLista(d.observacoes),
+    } as DeparaJson,
+  }
 }
 
 const STATUS_POR_TEXTO: Record<string, DeparaStatus> = {
@@ -112,6 +152,8 @@ export type LinhaDepara = {
   /** Opções do JSON que não existem no item (múltipla escolha aplica as demais). */
   invalidas: string[]
   motivoInvalido?: string
+  /** O JSON trouxe o item mais de uma vez (um por checklist) com respostas diferentes. */
+  aviso?: string
   proposta?: DeparaResposta
 }
 
@@ -141,7 +183,7 @@ export function montarPreview(
   respostasAtuais: Record<string, DeparaResposta>,
   itensVisiveis: (respostas: Record<string, DeparaResposta>) => DeparaItem[],
 ): LinhaDepara[] {
-  const doJson = data.respostas.map((r, idx) => ({ r, idx })).filter(({ r }) => r.visivel !== false)
+  const doJson = consolidarRepetidas(data.respostas.map((r, idx) => ({ r, idx })).filter(({ r }) => r.visivel !== false))
   const linhas = new Map<number, LinhaDepara>()
   const sim: Record<string, DeparaResposta> = { ...respostasAtuais }
 
@@ -175,12 +217,51 @@ export function montarPreview(
   return Array.from(linhas.entries()).sort((a, b) => a[0] - b[0]).map(([, l]) => l)
 }
 
-function casar(r: DeparaRespostaJson, idx: number, item: DeparaItem, atual?: DeparaResposta): LinhaDepara {
+const PESO_STATUS: Record<DeparaStatus, number> = { nao: 3, restricao: 2, ok: 1, na: 0 }
+
+/** O Claude responde por checklist (Volare, Marcopolo…), mas aqui o item comum aparece uma vez
+ *  só. Sem juntar, as duas respostas do mesmo item iam para o mesmo itemId e a última vencia —
+ *  "Reprovação" na Volare + "Conforme" na Marcopolo saía aprovado. Junta tudo numa resposta:
+ *  bolinha → a mais restritiva (Reprovação > Restrição > Conforme > N/A); opções → união;
+ *  páginas e evidências somadas. */
+function consolidarRepetidas(lista: { r: DeparaRespostaJson; idx: number }[]): { r: DeparaRespostaJson & { aviso?: string }; idx: number }[] {
+  const grupos = new Map<string, { r: DeparaRespostaJson; idx: number }[]>()
+  lista.forEach(e => {
+    const k = normDepara(e.r.documento) + '|' + normDepara(e.r.item)
+    grupos.set(k, [...(grupos.get(k) ?? []), e])
+  })
+  return Array.from(grupos.values()).map(g => {
+    if (g.length === 1) return g[0]
+    const respondidas = g.filter(e => e.r.resposta != null || e.r.valores?.length)
+    const peso = (t?: string | null) => {
+      const s = STATUS_POR_TEXTO[normDepara(t ?? '')]
+      return s ? PESO_STATUS[s] : -1
+    }
+    const escolhida = respondidas.reduce<{ r: DeparaRespostaJson; idx: number } | undefined>(
+      (m, e) => (!m || peso(e.r.resposta) > peso(m.r.resposta) ? e : m), undefined) ?? g[0]
+    const unicos = <T,>(xs: T[]) => Array.from(new Set(xs))
+    const textos = unicos(respondidas.map(e => e.r.resposta ?? (e.r.valores ?? []).join(', ')))
+    const valores = unicos(g.flatMap(e => e.r.valores ?? []))
+    const r: DeparaRespostaJson & { aviso?: string } = {
+      ...escolhida.r,
+      valores: valores.length ? valores : escolhida.r.valores,
+      checklists: unicos(g.flatMap(e => e.r.checklists ?? [])),
+      paginas: unicos(g.flatMap(e => e.r.paginas ?? [])).sort((a, b) => a - b),
+      evidencia: unicos(g.map(e => e.r.evidencia?.trim()).filter(Boolean)).join(' | '),
+      aviso: textos.length > 1
+        ? `Respostas diferentes entre checklists (${g.map(e => `${(e.r.checklists ?? []).join(', ') || '?'}: ${e.r.resposta ?? ((e.r.valores ?? []).join(', ') || '—')}`).join(' · ')}) — mantida a mais restritiva.`
+        : undefined,
+    }
+    return { r, idx: escolhida.idx }
+  })
+}
+
+function casar(r: DeparaRespostaJson & { aviso?: string }, idx: number, item: DeparaItem, atual?: DeparaResposta): LinhaDepara {
   const base: LinhaDepara = {
     chave: String(idx), documento: r.documento, item: item.titulo, itemId: item.id,
     situacao: 'novo', atualTxt: respostaTxt(item, atual), claudeTxt: '',
     paginas: (r.paginas ?? []).filter(n => Number.isFinite(n)), evidencia: r.evidencia ?? '',
-    reprovacao: false, invalidas: [],
+    reprovacao: false, invalidas: [], aviso: r.aviso,
   }
   const claude = { paginas: base.paginas, evidencia: base.evidencia }
   const temValores = !!r.valores?.length

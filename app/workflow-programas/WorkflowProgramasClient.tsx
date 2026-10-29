@@ -238,7 +238,7 @@ const DEFAULT_STATUS_OPTIONS: StatusResp[] = ['ok', 'nao', 'na']
 const PSICO_NAO_CRITICO_ID = 'i_pgr_psico'
 const PSICO_MARCOPOLO_ID = 'e_mpo_psico'
 /** PGR com item crítico reprovado: o PCMSO (quando analisado) ganha o próprio quadro de
- *  observação com este texto, mesmo sem reprovação própria — ver buildReprovacao. */
+ *  observação com este texto quando não tem reprovação própria — ver buildReprovacao. */
 const OBS_AGUARDANDO_PGR = 'Aguardando aprovação do PGR.'
 
 /** Lista "Treinamentos" (resposta de "Possui treinamentos específicos?") — sempre em ordem
@@ -1598,7 +1598,8 @@ export default function WorkflowProgramasClient() {
     // Um quadro por documento (PGR, PCMSO, LTCAT...), cada um no modelo do módulo de
     // Observações: "{{data}} {{hora}} - {{observacao}} - {{nome}}".
     // PGR reprovado (item crítico) com PCMSO na análise: o PCMSO também sai como reprovação,
-    // com "Aguardando aprovação do PGR" — sozinho, ou abaixo dos itens críticos do próprio PCMSO.
+    // com "Aguardando aprovação do PGR" — só quando o PCMSO não tem item crítico próprio; com
+    // reprovação própria, o quadro do PCMSO sai só com os itens dele.
     // Com o PGR todo conforme nos críticos, o PCMSO segue só com o que tiver de seu.
     const aguardaPgr = a.documentos.includes('PCMSO') && criticosReprovados.some(i => i.documento === 'PGR')
     const docs = DOC_ORDER.filter(d => criticosReprovados.some(i => i.documento === d) || (d === 'PCMSO' && aguardaPgr))
@@ -1621,7 +1622,7 @@ export default function WorkflowProgramasClient() {
       // Cada item em linha própria com <br> (não <div>): ao colar no Portal (texto puro) a lista
       // continua em tópicos, e o " - {{nome}}" do modelo fica no fim da última linha.
       const partes = entradas.length ? [`Favor rever ${entradas.length > 1 ? 'os seguintes itens' : 'o seguinte item'}:<br>${linhas}`] : []
-      if (doc === 'PCMSO' && aguardaPgr) partes.push(OBS_AGUARDANDO_PGR)
+      if (doc === 'PCMSO' && aguardaPgr && !entradas.length) partes.push(OBS_AGUARDANDO_PGR)
       const observacao = partes.join('<br>')
       return { doc, html: aplicarTemplateObs(obsTemplate, observacao, obsAssinatura) }
     })
@@ -3796,6 +3797,7 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
   const itensStatus = itens.filter(i => i.tipo !== 'opcoes')
   const grupos = DOC_ORDER.filter(d => itens.some(i => i.documento === d))
   const pgrReprovado = itens.some(i => i.documento === 'PGR' && i.critico && draft.respostas[i.id]?.status === 'nao')
+  const pcmsoReprovado = itens.some(i => i.documento === 'PCMSO' && i.critico && draft.respostas[i.id]?.status === 'nao')
   const segmentosDisponiveis = catalog.config.segmentos ?? SETORES_ATUACAO
   const camposFaltando = (catalog.config.camposObrigatorios ?? []).filter(key => campoAnaliseVazio(draft, key))
   const campoObrigatorioVazio = (key: string) => (catalog.config.camposObrigatorios ?? []).includes(key) && campoAnaliseVazio(draft, key)
@@ -4168,7 +4170,7 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
                   <b style={{ fontSize: 13, letterSpacing: '.02em' }}>{d}</b>
                   <span style={{ color: MU, fontSize: 12 }}>{okG}/{gStatus.length} conformes</span>
                 </div>
-                {d === 'PCMSO' && pgrReprovado && (
+                {d === 'PCMSO' && pgrReprovado && !pcmsoReprovado && (
                   <div style={{ padding: '8px 14px', background: NOS, borderBottom: `1px solid ${LINE}`, fontSize: 12.5, color: NO }}>
                     🚫 PGR com item crítico reprovado — o PCMSO também sai como reprovação: <b>{OBS_AGUARDANDO_PGR}</b> (quadro &quot;Copiar PCMSO&quot; no parecer)
                   </div>

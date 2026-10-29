@@ -2,7 +2,7 @@
 
 import { useMemo, useState, Fragment } from 'react'
 import {
-  lerRetorno, montarPreview, soDigitos, normDepara, SITUACAO_LABEL,
+  lerRetorno, montarPreview, soDigitos, normDepara, agruparPorDocumento, SITUACAO_LABEL,
   type DeparaJson, type DeparaItem, type DeparaResposta, type LinhaDepara, type Situacao, type RetornoClaudeResumo,
 } from './depara'
 
@@ -49,8 +49,11 @@ export default function ImportarRetornoModal({ respostasAtuais, itensVisiveis, c
     if (!r.ok) { setErro(r.erro); setData(null); return }
     setErro('')
     setData(r.data)
-    setLinhas(montarPreview(r.data, respostasAtuais, itensVisiveis))
-    setSobrescrever(new Set())
+    const novas = montarPreview(r.data, respostasAtuais, itensVisiveis)
+    setLinhas(novas)
+    // Itens já marcados (pré-preenchidos) que o Claude respondeu diferente vêm com
+    // "sobrescrever" ligado — o analista desmarca o que quiser manter.
+    setSobrescrever(new Set(novas.filter(l => l.situacao === 'diferente').map(l => l.chave)))
     setForcarCnpj(false)
     setFiltro('todos')
   }
@@ -190,7 +193,7 @@ export default function ImportarRetornoModal({ respostasAtuais, itensVisiveis, c
                   {visiveis.map(l => {
                     const cor = SIT_COR[l.situacao]
                     const expandida = aberta === l.chave
-                    const temDetalhe = !!(l.evidencia || l.motivoInvalido || l.invalidas.length)
+                    const temDetalhe = !!(l.evidencia || l.motivoInvalido || l.aviso || l.invalidas.length)
                     return (
                       <Fragment key={l.chave}>
                         <tr style={{ borderBottom: expandida ? 'none' : `1px solid ${LINE}`, background: l.reprovacao ? '#FEF8F8' : undefined, cursor: temDetalhe ? 'pointer' : undefined }}
@@ -220,6 +223,7 @@ export default function ImportarRetornoModal({ respostasAtuais, itensVisiveis, c
                             <td />
                             <td colSpan={6} style={{ padding: '0 8px 9px', fontSize: 12, color: MU }}>
                               {l.evidencia && <div>📄 {l.evidencia}</div>}
+                              {l.aviso && <div style={{ color: '#8A6A22' }}>⚠ {l.aviso}</div>}
                               {l.motivoInvalido && <div style={{ color: NO }}>⚠ {l.motivoInvalido}</div>}
                               {l.situacao !== 'invalido' && l.invalidas.length > 0 && <div style={{ color: NO }}>⚠ Opções inexistentes no item (não aplicadas): {l.invalidas.join(', ')}</div>}
                             </td>
@@ -277,7 +281,8 @@ export function PainelRetornoClaude({ resumo, onCopiar, onRemover }: {
   const [aberto, setAberto] = useState(true)
   const [funcoesAbertas, setFuncoesAbertas] = useState(false)
   const reprov = (['PGR', 'PCMSO', 'LTCAT'] as const).filter(d => resumo.reprovacoes[d]?.trim())
-  const orient = [...resumo.orientacoes, ...resumo.observacoes]
+  const grupos = agruparPorDocumento(resumo.orientacoes, resumo.observacoes)
+  const textoGrupo = (g: { doc: string; itens: string[] }) => (g.doc ? g.doc + ':\n' : '') + g.itens.map(o => '- ' + o).join('\n')
   const SIT: Record<string, string> = { igual: 'Nos dois', so_pgr: 'Só no PGR', so_pcmso: 'Só no PCMSO' }
   return (
     <div style={{ border: `1px solid ${AC}`, borderLeft: `5px solid ${AC}`, borderRadius: 10, background: '#fff', marginBottom: 14, overflow: 'hidden' }}>
@@ -288,26 +293,23 @@ export function PainelRetornoClaude({ resumo, onCopiar, onRemover }: {
       </div>
       {aberto && (
         <div style={{ padding: '12px 14px', fontSize: 12.5, color: TX, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {reprov.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11.5, color: MU, marginBottom: 4 }}>
-                Texto de reprovação sugerido — o parecer continua sendo montado pelo sistema a partir das bolinhas; use este só como apoio.
-              </div>
-              {reprov.map(d => (
-                <div key={d} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6 }}>
-                  <div style={{ flex: 1, whiteSpace: 'pre-wrap', background: BG, borderRadius: 6, padding: '8px 10px', maxHeight: 140, overflow: 'auto' }}><b>{d}:</b> {resumo.reprovacoes[d]}</div>
-                  <button onClick={() => onCopiar(resumo.reprovacoes[d]!, `Texto do Claude (${d})`)} style={{ ...btn(false), padding: '5px 10px', fontSize: 12 }}>📋 Copiar texto do Claude</button>
-                </div>
-              ))}
-            </div>
-          )}
-          {orient.length > 0 && (
+          {grupos.length > 0 && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 11.5, color: MU }}>Orientações e observações do Claude (não entram no texto de reprovação)</span>
-                <button onClick={() => onCopiar(orient.map(o => '- ' + o).join('\n'), 'Orientações do Claude')} style={{ ...btn(false), padding: '3px 9px', fontSize: 11.5, marginLeft: 'auto' }}>📋 Copiar</button>
+                <span style={{ fontSize: 11.5, color: MU }}>Observações sobre a análise (não entram no texto de reprovação)</span>
+                <button onClick={() => onCopiar(grupos.map(textoGrupo).join('\n\n'), 'Observações do Claude')} style={{ ...btn(false), padding: '3px 9px', fontSize: 11.5, marginLeft: 'auto' }}>📋 Copiar todas</button>
               </div>
-              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.55 }}>{orient.map((o, i) => <li key={i}>{o}</li>)}</ul>
+              {grupos.map(g => (
+                <div key={g.doc || '-'} style={{ marginTop: 6 }}>
+                  {g.doc && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <b style={{ fontSize: 12, color: P }}>{g.doc}</b>
+                      <button onClick={() => onCopiar(textoGrupo(g), `Observações do Claude (${g.doc})`)} style={{ background: 'none', border: 0, padding: 0, color: MU, fontSize: 11.5, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>copiar</button>
+                    </div>
+                  )}
+                  <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.55 }}>{g.itens.map((o, i) => <li key={i}>{o}</li>)}</ul>
+                </div>
+              ))}
             </div>
           )}
           {resumo.funcoes.length > 0 && (
@@ -333,6 +335,19 @@ export function PainelRetornoClaude({ resumo, onCopiar, onRemover }: {
                   </tbody>
                 </table>
               )}
+            </div>
+          )}
+          {reprov.length > 0 && (
+            <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
+              <div style={{ fontSize: 11.5, color: MU, marginBottom: 4 }}>
+                Textos para colar — reprovação sugerida pelo Claude. O parecer continua sendo montado pelo sistema a partir das bolinhas; use este só como apoio.
+              </div>
+              {reprov.map(d => (
+                <div key={d} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div style={{ flex: 1, whiteSpace: 'pre-wrap', background: BG, borderRadius: 6, padding: '8px 10px', maxHeight: 140, overflow: 'auto' }}><b>{d}:</b> {resumo.reprovacoes[d]}</div>
+                  <button onClick={() => onCopiar(resumo.reprovacoes[d]!, `Texto do Claude (${d})`)} style={{ ...btn(false), padding: '5px 10px', fontSize: 12 }}>📋 Copiar texto do Claude</button>
+                </div>
+              ))}
             </div>
           )}
           <div style={{ textAlign: 'right' }}>
