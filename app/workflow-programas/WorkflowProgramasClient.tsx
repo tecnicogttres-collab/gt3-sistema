@@ -4,11 +4,15 @@ import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { useUser, displayName } from '../components/UserContext'
 import { baixarEml as emlBaixar, abrirNoOutlook } from '../lib/email-envio'
 import { TEMPLATE_COPIA_PADRAO, aplicarTemplateObs, lerNomeCompleto, nomeParaAssinatura } from '../lib/obs-assinatura'
+import ImportarRetornoModal, { PainelRetornoClaude, type ResultadoImportacao } from './ImportarRetornoModal'
+import type { RetornoClaudeResumo } from './depara'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type StatusResp = 'ok' | 'nao' | 'na' | 'restricao' | ''
-type Resposta = { status: StatusResp; obs: string; opcoesSelecionadas?: string[]; textosLivres?: Record<string, string>; prazoRestricaoDias?: number }
+/** `claude`: marca "preenchido pelo Claude" (Importar retorno) com as páginas e a evidência —
+ *  some assim que o analista mexe na bolinha/opção do item. */
+type Resposta = { status: StatusResp; obs: string; opcoesSelecionadas?: string[]; textosLivres?: Record<string, string>; prazoRestricaoDias?: number; claude?: { paginas: number[]; evidencia: string } }
 type DocKey = 'PGR' | 'PCMSO' | 'LTCAT' | 'GERAL'
 type Escopo = 'base' | 'especifico'
 type CategoriaTexto = 'abertura' | 'apontamento' | 'fechamento' | 'assinatura' | 'aprovacao' | 'restricao' | 'validade' | 'segmento'
@@ -79,6 +83,9 @@ type CatalogConfig = {
   cadastroPendenciaMigrado?: boolean
   /** true depois que a opção "NR 34" foi criada em "Treinamentos" — ver upgradeCatalog. */
   nr34Migrado?: boolean
+  /** true depois que as opções de "Local de assinatura" passaram a carregar a própria semântica
+   *  ("capa ou em local de preferência" / "página X, onde é solicitado") — ver upgradeCatalog. */
+  localAssinaturaMigrado?: boolean
   /** Setores de atuação disponíveis em "Setor(es) de atuação" (Nova análise) e no vínculo de
    *  textos de categoria "segmento" — editável em Textos → Segmento → "+ Novo segmento", em vez
    *  de fixo no código (ver SETORES_ATUACAO, usado só como valor inicial/seed). */
@@ -130,6 +137,11 @@ type AnaliseDados = {
   subcontratada: boolean; empresaContratanteSub: string
   respostas: Record<string, Resposta>
   validades: Partial<Record<DocValidavel, ValidadeInfo>>
+  /** Nova análise de empresa já aprovada que reaproveita o preenchimento de alguns documentos
+   *  da anterior (ex.: só o PCMSO foi reanalisado, o PGR continua valendo) — só para exibição. */
+  docsMantidos?: DocKey[]; dataAnaliseAnterior?: string
+  /** Textos do último retorno do Claude importado (reprovações sugeridas, orientações, funções). */
+  retornoClaude?: RetornoClaudeResumo
 }
 
 /** Setores genéricos de atuação da empresa prestadora — usado no campo "Setor de atuação". */
@@ -612,6 +624,7 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
     || !raw.config.modeloAditivoMigrado
     || !raw.config.cadastroPendenciaMigrado
     || !raw.config.nr34Migrado
+    || !raw.config.localAssinaturaMigrado
   if (!precisaUpgrade) return { catalog: raw, changed: false }
   const seed = seedCatalog()
   // Migração única de corpo em texto puro (\n) para HTML — feita antes de qualquer outro ajuste
@@ -808,6 +821,24 @@ function upgradeCatalog(raw: Catalog): { catalog: Catalog; changed: boolean } {
         : i
     ))
   }
+  // "Local de assinatura": o texto do item dizia "na {{localdeassinatura}}, onde é solicitado" —
+  // com "Capa" virava "na capa, onde é solicitado". Agora cada opção carrega a própria frase:
+  // Capa → "capa ou em local de preferência"; Página específica → "página X, onde é solicitado".
+  // Migração única: só troca o que ainda estiver no formato antigo.
+  if (!config.localAssinaturaMigrado) {
+    config.localAssinaturaMigrado = true
+    const semOndeSolicitado = (corpo: string) => corpo.replace(/\{\{localdeassinatura\}\},\s*onde é solicitado/g, '{{localdeassinatura}}')
+    textos = textos.map(t => ({ ...t, corpo: semOndeSolicitado(t.corpo) }))
+    textosReprovacaoFinal = textosReprovacaoFinal.map(t => ({ ...t, corpo: semOndeSolicitado(t.corpo) }))
+    itensComCadastro = itensComCadastro.map(i => i.tipo !== 'opcoes' || i.variavel !== 'localdeassinatura' ? i : {
+      ...i,
+      opcoes: i.opcoes.map(o => {
+        if (o.corpo.trim().toLowerCase() === 'capa') return { ...o, label: 'Capa ou local de preferência', corpo: 'capa ou em local de preferência' }
+        if (o.corpo.trim() === 'página {{detalhe}}') return { ...o, corpo: 'página {{detalhe}}, onde é solicitado' }
+        return o
+      }),
+    })
+  }
   return { catalog: { ...raw, itens: itensComCadastro, contratantes: contratantesComCadastro, textos, textosReprovacao: textosReprovacaoFinal, config }, changed: true }
 }
 
@@ -823,6 +854,18 @@ function Tag({ children, tone = 'default' }: { children: React.ReactNode; tone?:
   return (
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: c.bg, color: c.fg }}>
       {children}
+    </span>
+  )
+}
+
+/** Marca discreta de resposta preenchida pelo "Colar retorno do Claude" — páginas no rótulo,
+ *  evidência ao passar o mouse. */
+function TagClaude({ r }: { r?: Resposta }) {
+  if (!r?.claude) return null
+  const pags = r.claude.paginas
+  return (
+    <span title={r.claude.evidencia || 'Preenchido pelo Claude'} style={{ display: 'inline-block', padding: '1px 7px', borderRadius: 99, fontSize: 10.5, fontWeight: 500, background: '#F1F3F8', color: MU, border: `1px dashed ${LINE}` }}>
+      🤖 Claude{pags.length ? ` · p. ${pags.slice(0, 6).join(', ')}${pags.length > 6 ? '…' : ''}` : ''}
     </span>
   )
 }
@@ -1029,6 +1072,58 @@ function htmlJoinBlocos(partes: string[]): string {
   return partes.filter(Boolean).join('<div style="height:12px"></div>')
 }
 
+/** Une textos de segmento sem repetir o que eles têm em comum (ex.: Transporte + Manutenção
+ *  começam com o mesmo "Considerações:" e os mesmos tópicos): o primeiro texto entra inteiro;
+ *  dos seguintes, só entram os tópicos (<li>) e trechos fora de lista que ainda não apareceram,
+ *  comparando pelo texto (ignora formatação, espaços e maiúsculas). Tópicos novos vão para a
+ *  última lista já montada, a menos que venham depois de um trecho novo fora de lista. */
+function mesclarHtmlSegmentos(htmls: string[]): string {
+  const partes = htmls.filter(h => h.trim())
+  if (partes.length <= 1 || typeof document === 'undefined') return htmlJoinBlocos(partes)
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
+  const ehLista = (n: Node): n is HTMLUListElement | HTMLOListElement => n.nodeName === 'UL' || n.nodeName === 'OL'
+  const out = document.createElement('div')
+  out.innerHTML = partes[0]
+  const vistos = new Set(Array.from(out.querySelectorAll('li')).map(li => norm(li.textContent || '')))
+  partes.slice(1).forEach(html => {
+    const tmp = document.createElement('div')
+    tmp.innerHTML = html
+    let listaDestino: Element | null = null
+    let trecho: Node[] = []
+    const fecharTrecho = () => {
+      const txt = norm(trecho.map(n => n.textContent || '').join(' '))
+      if (txt && !norm(out.textContent || '').includes(txt)) {
+        out.appendChild(document.createElement('br'))
+        trecho.forEach(n => out.appendChild(n))
+        listaDestino = null // tópicos que vierem depois pertencem a este trecho novo
+      }
+      trecho = []
+    }
+    Array.from(tmp.childNodes).forEach(n => {
+      if (!ehLista(n)) { trecho.push(n); return }
+      fecharTrecho()
+      const novos = Array.from(n.children).filter(li => {
+        const t = norm(li.textContent || '')
+        if (!t || vistos.has(t)) return false
+        vistos.add(t)
+        return true
+      })
+      if (!novos.length) return
+      if (!listaDestino) {
+        const listas = out.querySelectorAll('ul, ol')
+        listaDestino = listas[listas.length - 1] ?? null
+        if (!listaDestino || out.lastElementChild !== listaDestino) {
+          listaDestino = document.createElement(n.nodeName.toLowerCase())
+          out.appendChild(listaDestino)
+        }
+      }
+      novos.forEach(li => listaDestino!.appendChild(li))
+    })
+    fecharTrecho()
+  })
+  return out.innerHTML
+}
+
 /** Converte HTML (de um corpo formatado) para texto puro — usado nos canais que não
  *  suportam formatação (mailto, CSV/relatórios) e como fallback text/plain ao copiar. */
 function htmlToPlainText(html: string): string {
@@ -1103,6 +1198,8 @@ export default function WorkflowProgramasClient() {
 
   // modals
   const [dupEmpresa, setDupEmpresa] = useState<AnaliseRow | null>(null)
+  // Modal de empresa aprovada: documentos cuja análise anterior será mantida na nova.
+  const [manterDocs, setManterDocs] = useState<DocKey[]>([])
   const [modalContratante, setModalContratante] = useState<Contratante | null>(null)
   const [modalContratanteNovo, setModalContratanteNovo] = useState(false)
   const [modalItemEdit, setModalItemEdit] = useState<ChecklistItem | null>(null)
@@ -1259,31 +1356,42 @@ export default function WorkflowProgramasClient() {
     return joinDocs(ids.map(id => nomeC(getC(id))).filter(Boolean))
   }
 
+  function opcoesEfetivasDe(i: ChecklistItem, a: AnaliseDados): ChecklistOpcao[] {
+    const sel = a.respostas[i.id]?.opcoesSelecionadas || []
+    return sel.length ? opcoesOrdenadas(i).filter(o => sel.includes(o.id)) : opcoesOrdenadas(i).filter(o => o.padrao)
+  }
+
+  /** Valor de {{variavel}} de um item tipo "opcoes", conforme as opções marcadas na análise. */
+  function valorVariavelOpcoes(i: ChecklistItem, a: AnaliseDados): string {
+    const livres = a.respostas[i.id]?.textosLivres || {}
+    const partesOpcoes = opcoesEfetivasDe(i, a)
+      .map(o => {
+        // Detalhe pedido mas não preenchido (ex.: número da página) vira "XX" em vez de sumir
+        // e deixar a frase quebrada ("na página , onde é solicitado").
+        const valor = livres[o.id]?.trim() || (o.pedirTexto ? 'XX' : '')
+        const varsDetalhe: Record<string, string> = { detalhe: valor }
+        if (o.variavelDetalhe && o.variavelDetalhe !== 'detalhe') varsDetalhe[o.variavelDetalhe] = valor
+        return aplicaVars(o.corpo, varsDetalhe)
+      })
+      .filter(Boolean)
+    // Múltipla escolha (ex.: treinamentos) entra como lista de tópicos por padrão; com
+    // formatoLista "linha" (ex.: frentes do cadastro pendentes) entra numa frase só, no
+    // formato "A", "A e B", "A, B e C" — pensado para observações tipo "há pendência de
+    // {{itemescolhido}}". Escolha única (ex.: local de assinatura) sempre entra inline.
+    return !i.multiplaEscolha
+      ? partesOpcoes.join(', ')
+      : i.formatoLista === 'linha'
+        ? joinDocs(partesOpcoes)
+        : '<ul>' + partesOpcoes.map(p => `<li>${p}</li>`).join('') + '</ul>'
+  }
+
   function ctxDe(a: AnaliseDados, itens?: ChecklistItem[]) {
     const c = getC(a.contratanteIds[0])
     const vars: Record<string, string> = {}
     itens?.forEach(i => {
       if (i.tipo !== 'opcoes' || !i.variavel) return
-      const sel = a.respostas[i.id]?.opcoesSelecionadas || []
-      const livres = a.respostas[i.id]?.textosLivres || {}
-      const opcoesEfetivas = sel.length ? opcoesOrdenadas(i).filter(o => sel.includes(o.id)) : opcoesOrdenadas(i).filter(o => o.padrao)
-      const partesOpcoes = opcoesEfetivas
-        .map(o => {
-          const valor = livres[o.id] || ''
-          const varsDetalhe: Record<string, string> = { detalhe: valor }
-          if (o.variavelDetalhe && o.variavelDetalhe !== 'detalhe') varsDetalhe[o.variavelDetalhe] = valor
-          return aplicaVars(o.corpo, varsDetalhe)
-        })
-        .filter(Boolean)
-      // Múltipla escolha (ex.: treinamentos) entra como lista de tópicos por padrão; com
-      // formatoLista "linha" (ex.: frentes do cadastro pendentes) entra numa frase só, no
-      // formato "A", "A e B", "A, B e C" — pensado para observações tipo "há pendência de
-      // {{itemescolhido}}". Escolha única (ex.: local de assinatura) sempre entra inline.
-      vars[i.variavel] = !i.multiplaEscolha
-        ? partesOpcoes.join(', ')
-        : i.formatoLista === 'linha'
-          ? joinDocs(partesOpcoes)
-          : '<ul>' + partesOpcoes.map(p => `<li>${p}</li>`).join('') + '</ul>'
+      const opcoesEfetivas = opcoesEfetivasDe(i, a)
+      vars[i.variavel] = valorVariavelOpcoes(i, a)
       // Frentes do cadastro: Pessoas/Empresas são documentos pendentes de ENVIO; opções
       // "Cadastro de …" são algo a CADASTRAR — cada grupo ganha a sua frase em {{pendenciacadastro}}.
       if (i.id === 'i_ger_cadastro_opcoes') {
@@ -1318,6 +1426,14 @@ export default function WorkflowProgramasClient() {
       if (nome) next = { ...next, contratante: nome }
     }
     const r = a.respostas[item.id]
+    // Itens "opcoes" condicionados a este item (ex.: "Local de assinatura - reprovação PGR") têm
+    // prioridade sobre a variável global: PGR, PCMSO e LTCAT usam o mesmo {{localdeassinatura}},
+    // e sem isso o texto do PGR saía com a página/capa marcada no PCMSO (a última sobrescrevia).
+    catalog?.itens.forEach(x => {
+      if (x.tipo !== 'opcoes' || !x.variavel || x.condicaoItemId !== item.id || !x.condicaoValor) return
+      if (r?.status !== x.condicaoValor) return
+      next = { ...next, [x.variavel]: valorVariavelOpcoes(x, a) }
+    })
     if (r?.status === 'restricao') {
       next = { ...next, prazorestricao: String(r.prazoRestricaoDias || 60) }
     }
@@ -1375,7 +1491,8 @@ export default function WorkflowProgramasClient() {
   }
 
   /** Observações automáticas por setor de atuação da empresa (categoria "segmento") — entram
-   *  no parecer sempre que a análise tiver algum dos setores vinculados àquele texto. */
+   *  no parecer sempre que a análise tiver algum dos setores vinculados àquele texto. Com mais
+   *  de um texto (ex.: Transporte + Manutenção), o que eles têm em comum entra uma vez só. */
   function buildSegmentoObservacoes(a: AnaliseDados, baseCtx: Record<string, string>): string {
     if (!catalog || !a.setoresAtuacao?.length) return ''
     const partes: string[] = []
@@ -1385,7 +1502,7 @@ export default function WorkflowProgramasClient() {
         const txt = aplicaVars(t.corpo, baseCtx)
         if (txt.trim()) partes.push(txt)
       })
-    return htmlJoinBlocos(partes)
+    return mesclarHtmlSegmentos(partes)
   }
 
   /** Parecer — só para aprovado / aprovado com restrição. Não conforme não-crítico entra como orientativo (não bloqueia). */
@@ -1613,25 +1730,46 @@ export default function WorkflowProgramasClient() {
     // Rascunho (em andamento, de qualquer usuário) tem prioridade sobre o registro finalizado.
     const mesmas = analises.filter(a => normalizaEmpresa(a.empresa) === alvo)
     const achado = mesmas.find(a => !a.finalizada) ?? mesmas[0]
-    if (achado) setDupEmpresa(achado)
+    if (achado) { setManterDocs([]); setDupEmpresa(achado) }
   }
 
-  function substituirEmpresaDuplicada() {
+  /** Nova análise de empresa já aprovada: sempre "Reincidente". `manter` = documentos cuja
+   *  análise anterior continua valendo (ex.: só o PCMSO foi reenviado) — as respostas e a
+   *  validade deles vêm da análise antiga, junto com contratantes/setores/e-mail (sem os
+   *  contratantes, os itens desses documentos nem apareceriam no checklist). */
+  function substituirEmpresaDuplicada(manter: DocKey[] = []) {
     if (!dupEmpresa || !catalog) return
+    const antiga = dupEmpresa.dados
+    const respostas: Record<string, Resposta> = {}
+    const validades: Partial<Record<DocValidavel, ValidadeInfo>> = {}
+    if (manter.length) {
+      Object.entries(antiga.respostas || {}).forEach(([id, r]) => {
+        const item = getI(id)
+        if (item && manter.includes(item.documento)) respostas[id] = JSON.parse(JSON.stringify(r))
+      })
+      manter.forEach(d => {
+        const v = antiga.validades?.[d as DocValidavel]
+        if (v) validades[d as DocValidavel] = { ...v }
+      })
+    }
     setDraftId(dupEmpresa.id)
     setDraft({
-      contratanteIds: [], documentos: ['PGR', 'PCMSO'],
-      empresa: dupEmpresa.empresa, cnpj: dupEmpresa.cnpj, emailDestino: '',
+      contratanteIds: manter.length ? [...(antiga.contratanteIds || [])] : [],
+      documentos: manter.length && antiga.documentos?.length ? [...antiga.documentos] : ['PGR', 'PCMSO'],
+      empresa: dupEmpresa.empresa, cnpj: dupEmpresa.cnpj, emailDestino: manter.length ? antiga.emailDestino || '' : '',
       data: hoje(), prazo: addDias(catalog.config.prazoDias || 7),
       responsavel: displayName(profile, catalog.config.responsavel || ''),
-      reincidencia: '', setoresAtuacao: [],
-      subcontratada: false, empresaContratanteSub: '',
-      respostas: {},
-      validades: {},
+      reincidencia: 'reincidente', setoresAtuacao: manter.length ? [...(antiga.setoresAtuacao || [])] : [],
+      subcontratada: manter.length ? !!antiga.subcontratada : false, empresaContratanteSub: manter.length ? antiga.empresaContratanteSub || '' : '',
+      respostas,
+      validades,
+      ...(manter.length ? { docsMantidos: manter, dataAnaliseAnterior: antiga.data || '' } : {}),
     })
     setEmailEditado(false)
     setDupEmpresa(null)
-    showToast('Preenchimento reiniciado — vai substituir o registro anterior dessa empresa ao salvar')
+    showToast(manter.length
+      ? `Nova análise (reincidente) — ${joinDocs(manter.map(d => d === 'GERAL' ? 'itens gerais' : d))} mantido(s) da análise anterior`
+      : 'Preenchimento reiniciado (reincidente) — vai substituir o registro anterior dessa empresa ao salvar')
   }
 
   function abrirAnalise(row: AnaliseRow) {
@@ -1787,7 +1925,9 @@ export default function WorkflowProgramasClient() {
       if (!prev) return prev
       const cur = prev.respostas[itemId]?.status
       const status: StatusResp = cur === val ? '' : val
-      const respostas = ajustarObsPsicoMarcopolo(limparRespostasOrfas({ ...prev.respostas, [itemId]: { ...prev.respostas[itemId], status, obs: prev.respostas[itemId]?.obs || '' } }))
+      const { claude: _preenchidoPeloClaude, ...anterior } = prev.respostas[itemId] || { status: '' as StatusResp, obs: '' }
+      void _preenchidoPeloClaude
+      const respostas = ajustarObsPsicoMarcopolo(limparRespostasOrfas({ ...prev.respostas, [itemId]: { ...anterior, status, obs: anterior.obs || '' } }))
       return { ...prev, respostas }
     })
     setEmailEditado(false)
@@ -1837,6 +1977,27 @@ export default function WorkflowProgramasClient() {
       return { ...prev, respostas }
     })
     setEmailEditado(false)
+  }
+
+  /** Importar retorno do Claude: entra pelo mesmo caminho da marcação manual (setDraft +
+   *  limparRespostasOrfas), então salvar/finalizar seguem iguais. */
+  function aplicarRetornoClaude(r: ResultadoImportacao) {
+    setDraft(prev => prev && ({
+      ...prev,
+      respostas: ajustarObsPsicoMarcopolo(limparRespostasOrfas({ ...prev.respostas, ...(r.respostas as Record<string, Resposta>) })),
+      retornoClaude: r.resumo,
+    }))
+    setEmailEditado(false)
+    showToast(`${r.preenchidos} ite${r.preenchidos === 1 ? 'm preenchido' : 'ns preenchidos'}, ${r.reprovacoes} reprovaç${r.reprovacoes === 1 ? 'ão' : 'ões'}, ${r.pendentes} pendente(s)`)
+    if (r.focoItemId) {
+      const id = r.focoItemId
+      setTimeout(() => {
+        const el = document.getElementById('wf-item-' + id)
+        if (!el) return
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.animate?.([{ outline: `3px solid ${AC}` }, { outline: '3px solid transparent' }], { duration: 1800 })
+      }, 150)
+    }
   }
 
   function setOpcaoTexto(itemId: string, opcaoId: string, texto: string) {
@@ -3209,6 +3370,8 @@ render();
           onEml={baixarEml} onMailto={abrirMailto}
           onRegerar={() => { setEmailEditado(false); showToast('E-mail regerado') }}
           onBaixarAnexo={baixarAnexo}
+          onAplicarRetorno={aplicarRetornoClaude}
+          onCopiarTexto={(t, rotulo) => { navigator.clipboard.writeText(t); showToast(rotulo + ' copiado') }}
         />
       )}
 
@@ -3316,14 +3479,16 @@ render();
           abrirAnalise(dupEmpresa); setDupEmpresa(null)
           showToast((tipo === 'andamento' ? 'Continuando o rascunho de ' : 'Partindo da análise existente de ') + dupEmpresa.empresa)
         }
-        const novaSobrescrevendo = () => { substituirEmpresaDuplicada() }
+        const novaSobrescrevendo = () => { substituirEmpresaDuplicada(manterDocs) }
         const pdfEAntiga = () => {
           exportarRelatorioPdf([dupEmpresa], idsItens(), {
             ...RELATORIO_CFG_PADRAO, titulo: `Análise ${dupEmpresa.empresa}`, agrupar: 'nenhum', ordem: 'item',
             colunas: ['item', 'docItem', 'resultado', 'obs'],
           })
-          substituirEmpresaDuplicada()
+          substituirEmpresaDuplicada(manterDocs)
         }
+        // Documentos da análise antiga que têm algum item respondido — só esses dá pra manter.
+        const docsAntigos = DOC_ORDER.filter(d => Object.keys(dupEmpresa.dados?.respostas || {}).some(id => getI(id)?.documento === d))
         return (
           <div
             onClick={e => { if (e.target === e.currentTarget) setDupEmpresa(null) }}
@@ -3351,13 +3516,30 @@ render();
                     <b style={{ color: NO }}>Análise reprovada.</b> Partiremos <b>de uma análise existente</b>: o preenchimento anterior será aberto para você continuar de onde parou.
                   </>)}
                   {tipo === 'aprovado' && (<>
-                    <b style={{ color: OK }}>Análise aprovada.</b> Partiremos de uma <b>nova análise</b>, <b>sobrescrevendo a anterior</b>: ela será eliminada das estatísticas e do banco de dados.
+                    <b style={{ color: OK }}>Análise aprovada.</b> Partiremos de uma <b>nova análise</b> (já marcada como <b>reincidente</b>), <b>sobrescrevendo a anterior</b>: ela será eliminada das estatísticas e do banco de dados.
                     Se precisar do registro antigo, escolha <i>“OK e gerar PDF da avaliação antiga”</i>.
                   </>)}
                   {tipo === 'andamento' && (<>
                     Há um <b>rascunho em andamento</b> desta empresa. <b>Continuar a partir desse?</b> O preenchimento salvo será aberto para você seguir de onde parou.
                   </>)}
                 </div>
+                {tipo === 'aprovado' && docsAntigos.length > 0 && (
+                  <div style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: '10px 14px', marginBottom: 18 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: TX, marginBottom: 2 }}>Manter a análise anterior de:</div>
+                    <div style={{ fontSize: 11.5, color: MU, marginBottom: 8 }}>
+                      Ex.: reanálise só do PCMSO — marque o PGR para ele continuar com o preenchimento antigo, sem precisar refazer.
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      {docsAntigos.map(d => (
+                        <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={manterDocs.includes(d)}
+                            onChange={() => setManterDocs(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])} />
+                          {d === 'GERAL' ? 'Itens gerais' : d}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <Btn variant="gho" onClick={() => setDupEmpresa(null)}>Cancelar</Btn>
                   {tipo === 'aprovado' ? (<>
@@ -3558,7 +3740,7 @@ function VAnalises({ lista, nomesContratantes, statusAnalise, onNova, onAbrir, o
 
 // ─── View: Nova análise (checklist + e-mail) ────────────────────────────────
 
-function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, concessoesDaEmpresa, nomeContratanteConcessao, focoEmpresa, onNovoSegmento, onNovoTreinamento, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, quadros, onCopiarQuadro, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo }: {
+function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprovacao, modoRestricaoCritica, itensDaAnalise, getT, getR, nomeC, nomesContratantes, anexos, empresasBanco, concessoesDaEmpresa, nomeContratanteConcessao, focoEmpresa, onNovoSegmento, onNovoTreinamento, onField, onEmpresaBlur, onToggleDoc, onToggleContratante, onToggleSetor, onDot, onObs, onPrazoRestricao, onOpcao, onOpcaoTexto, onValidade, onLimpar, onSalvar, onFinalizar, onDescartar, onEmailChange, onCopiar, quadros, onCopiarQuadro, onCopiarAssunto, onEml, onMailto, onRegerar, onBaixarAnexo, onAplicarRetorno, onCopiarTexto }: {
   quadros: { doc: string; html: string }[]; onCopiarQuadro: (doc: string, html: string) => void
   draft: AnaliseDados; draftId: string | null; catalog: Catalog
   emailCorpo: string; emailBuilt: { assunto: string; corpo: string; restricoes: number; orientativos: number; aprovados: number; criticos: number; total: number; marcados: number } | null; modoReprovacao: boolean; modoRestricaoCritica: boolean
@@ -3581,6 +3763,7 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
   onLimpar: () => void; onSalvar: () => void; onFinalizar: () => void; onDescartar: () => void
   onEmailChange: (v: string) => void; onCopiar: () => void; onCopiarAssunto: () => void; onEml: () => void; onMailto: () => void; onRegerar: () => void
   onBaixarAnexo: (id: string) => void
+  onAplicarRetorno: (r: ResultadoImportacao) => void; onCopiarTexto: (texto: string, rotulo: string) => void
 }) {
   // Mede a própria barra de ações (também congelada) pra empilhar o painel do parecer
   // logo abaixo dela — sem isso o painel (sticky com offset fixo) ficaria por baixo do
@@ -3588,6 +3771,7 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [toolbarH, setToolbarH] = useState(0)
   const [setoresAbertos, setSetoresAbertos] = useState(false)
+  const [importarAberto, setImportarAberto] = useState(false)
   // Análise nova abre com o cursor em "Empresa prestadora" (e não lá embaixo, nas contratantes).
   const empresaRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -3777,6 +3961,36 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
             </div>
           </Card>
 
+          {(() => {
+            // "Colar retorno" só libera junto com o checklist: contratante (tipo de checklist)
+            // escolhida e campos obrigatórios preenchidos — antes disso não há onde casar os itens.
+            const motivoTrava = !draft.contratanteIds.length ? 'Selecione a contratante (tipo de checklist) acima'
+              : camposFaltando.length ? 'Preencha os campos obrigatórios acima'
+                : !itens.length ? 'Nenhum item de checklist vinculado' : ''
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 0 12px' }}>
+                <Btn variant="acc" disabled={!!motivoTrava} onClick={() => setImportarAberto(true)}
+                  title={motivoTrava || 'Colar o JSON devolvido pelo Claude e preencher as bolinhas automaticamente'}>
+                  🤖 Colar retorno do Claude
+                </Btn>
+                {motivoTrava && <span style={{ fontSize: 12, color: MU }}>🔒 {motivoTrava} para liberar.</span>}
+              </div>
+            )
+          })()}
+          {draft.retornoClaude && draft.contratanteIds.length > 0 && (
+            <PainelRetornoClaude resumo={draft.retornoClaude} onCopiar={onCopiarTexto} onRemover={() => onField('retornoClaude', undefined)} />
+          )}
+          {importarAberto && (
+            <ImportarRetornoModal
+              respostasAtuais={draft.respostas}
+              itensVisiveis={respostas => itensDaAnalise({ ...draft, respostas: respostas as Record<string, Resposta> })}
+              cnpjAnalise={draft.cnpj}
+              checklistsAnalise={draft.contratanteIds.map(id => nomeC(catalog.contratantes.find(c => c.id === id))).filter(Boolean)}
+              onAplicar={r => { setImportarAberto(false); onAplicarRetorno(r) }}
+              onClose={() => setImportarAberto(false)}
+            />
+          )}
+
           {!draft.contratanteIds.length ? (
             <Empty title="Selecione ao menos uma contratante" sub="O checklist libera assim que uma contratante for indicada acima." />
           ) : camposFaltando.length > 0 ? (
@@ -3821,9 +4035,10 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
                     const corTxtSel = seguindoRestricao ? '#3A2E14' : '#fff'
                     const bgDerivado = seguindoRestricao ? ASO : seguindoReprovacao ? NOS : undefined
                     return (
-                      <div key={i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, background: bgDerivado, boxShadow: bgDerivado ? `inset 4px 0 0 ${corSel}` : undefined }}>
+                      <div key={i.id} id={'wf-item-' + i.id} style={{ padding: '12px 14px', borderBottom: idx < arr.length - 1 ? '1px solid #F0F3F8' : undefined, background: bgDerivado, boxShadow: bgDerivado ? `inset 4px 0 0 ${corSel}` : undefined }}>
                         <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           {i.titulo}
+                          <TagClaude r={draft.respostas[i.id]} />
                           {seguindoRestricao && <Tag tone="acc">◐ segue aprovado com restrição</Tag>}
                           {seguindoReprovacao && <Tag tone="no">✕ segue reprovação</Tag>}
                           {multi && i.contratanteIds.length < draft.contratanteIds.length ? (
@@ -3875,7 +4090,7 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
                   const opcoesStatus = i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS
                   const dots = ALL_DOTS.filter(dd => opcoesStatus.includes(dd.val))
                   return (
-                    <div key={i.id} style={{ display: 'flex', gap: 14, padding: '12px 14px', borderBottom: idx < arr.length - 1 && !abriuAdicional ? '1px solid #F0F3F8' : undefined, alignItems: 'flex-start', background: bg, boxShadow: corVinculo ? `inset 4px 0 0 ${corVinculo}` : undefined }}>
+                    <div key={i.id} id={'wf-item-' + i.id} style={{ display: 'flex', gap: 14, padding: '12px 14px', borderBottom: idx < arr.length - 1 && !abriuAdicional ? '1px solid #F0F3F8' : undefined, alignItems: 'flex-start', background: bg, boxShadow: corVinculo ? `inset 4px 0 0 ${corVinculo}` : undefined }}>
                       <div style={{ display: 'flex', gap: 6, paddingTop: 2 }}>
                         {dots.map(dd => {
                           const on = r.status === dd.val
@@ -3893,6 +4108,7 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
                         <div style={{ fontWeight: 600, fontSize: 13.5, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           {i.titulo}
                           {i.critico && <Tag tone="no">crítico</Tag>}
+                          <TagClaude r={r} />
                           {multi && i.contratanteIds.length < draft.contratanteIds.length ? (
                             <Tag tone="acc">{i.contratanteIds.map(cid => nomeC(catalog.contratantes.find(c => c.id === cid))).join(', ')}</Tag>
                           ) : i.escopo === 'especifico' ? (
@@ -3955,6 +4171,11 @@ function VAnalise({ draft, draftId, catalog, emailCorpo, emailBuilt, modoReprova
                 {d === 'PCMSO' && pgrReprovado && (
                   <div style={{ padding: '8px 14px', background: NOS, borderBottom: `1px solid ${LINE}`, fontSize: 12.5, color: NO }}>
                     🚫 PGR com item crítico reprovado — o PCMSO também sai como reprovação: <b>{OBS_AGUARDANDO_PGR}</b> (quadro &quot;Copiar PCMSO&quot; no parecer)
+                  </div>
+                )}
+                {draft.docsMantidos?.includes(d) && (
+                  <div style={{ padding: '8px 14px', background: OKS, borderBottom: `1px solid ${LINE}`, fontSize: 12.5, color: OK }}>
+                    📌 {d === 'GERAL' ? 'Itens gerais mantidos' : `${d} mantido`} da análise anterior{draft.dataAnaliseAnterior ? ` (${fmtD(draft.dataAnaliseAnterior)})` : ''} — o preenchimento abaixo veio de lá; altere só se precisar.
                   </div>
                 )}
                 {!multi ? (
