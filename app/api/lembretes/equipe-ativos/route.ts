@@ -1,6 +1,7 @@
 import { createAdminClient } from '../../../lib/supabase-admin'
 import { requireGestorAdmin } from '../../../lib/api-helpers'
-import { currentMonthOccurrence } from '../../../lib/lembretes'
+import { dataConfirmada, fimDoMes, ocorrenciaVigente } from '../../../lib/lembretes'
+import { carregarConfirmacoes } from '../../../lib/lembretes-server'
 
 // IDs dos colaboradores (que não o próprio caller) com pelo menos um lembrete
 // próprio ainda pendente neste mês — usado pra destacar, na lista de "Lembretes
@@ -12,16 +13,15 @@ export async function GET() {
 
   const admin = createAdminClient()
   const now = new Date()
-  const mesRef = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const hoje = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-  const [{ data: profiles }, { data: lembretes }, { data: historico }] = await Promise.all([
+  const [{ data: profiles }, { data: lembretes }] = await Promise.all([
     admin.from('profiles').select('id, papel'),
     admin.from('lembretes').select('id, periodo, data_inicio, hora_inicio, dia_semana, semana_ordinal, concluido, criado_por'),
-    admin.from('lembretes_historico').select('lembrete_id, usuario_id').eq('mes_referencia', mesRef),
   ])
 
+  const confirmacoes = await carregarConfirmacoes(admin, lembretes ?? [], hoje)
   const profileMap = new Map((profiles ?? []).map(p => [p.id as string, p as { id: string; papel: string }]))
-  const confirmedSet = new Set((historico ?? []).map(h => `${h.lembrete_id}|${h.usuario_id}`))
   const allowedPapeis = caller.role === 'admin' ? null : ['colaborador', 'trainee']
 
   const ativos = new Set<string>()
@@ -30,11 +30,11 @@ export async function GET() {
     const p = profileMap.get(r.criado_por)
     if (!p) continue
     if (allowedPapeis && !allowedPapeis.includes(p.papel ?? '')) continue
-    if (confirmedSet.has(`${r.id}|${r.criado_por}`)) continue
     if (r.concluido && r.periodo === 'unico') continue
-    const occ = currentMonthOccurrence(r, now)
-    if (!occ) continue
-    ativos.add(r.criado_por)
+    const doDono = confirmacoes.filter(c => c.lembrete_id === r.id && c.usuario_id === r.criado_por)
+    const confirmadas = new Set(doDono.map(c => dataConfirmada(r, c)).filter((d): d is string => !!d))
+    const vigente = ocorrenciaVigente(r, confirmadas, now)
+    if (vigente && vigente.data <= fimDoMes(now)) ativos.add(r.criado_por)
   }
 
   return Response.json([...ativos])

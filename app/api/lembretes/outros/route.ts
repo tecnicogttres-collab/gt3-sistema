@@ -1,6 +1,8 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
 import { getAuthUser } from '../../../lib/api-helpers'
+import { dataConfirmada } from '../../../lib/lembretes'
+import { carregarConfirmacoes } from '../../../lib/lembretes-server'
 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser()
@@ -37,11 +39,12 @@ export async function GET(req: NextRequest) {
 
   const now = new Date()
   const mesRef = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const hoje = `${mesRef.slice(0, 8)}${String(now.getDate()).padStart(2, '0')}`
 
   const [{ data: all }, { data: histData }] = await Promise.all([
     admin
       .from('lembretes')
-      .select('id, titulo, descricao, periodo, data_inicio, concluido, criado_por, created_at, visibilidade, destinatarios')
+      .select('id, titulo, descricao, periodo, data_inicio, hora_inicio, dia_semana, semana_ordinal, concluido, criado_por, created_at, visibilidade, destinatarios')
       .order('data_inicio', { ascending: true }),
     admin
       .from('lembretes_historico')
@@ -51,9 +54,7 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false }),
   ])
 
-  const confirmedIds = new Set((histData ?? []).map(h => h.lembrete_id))
-
-  const lembretes = (all ?? [])
+  const visiveis = (all ?? [])
     .filter(r => {
       const vis = r.visibilidade ?? 'todos'
       if (vis === 'todos') return true
@@ -61,7 +62,12 @@ export async function GET(req: NextRequest) {
       if (vis === 'selecionados') return r.criado_por === targetId || (r.destinatarios ?? []).includes(targetId)
       return false
     })
-    .map(r => ({ ...r, confirmado: confirmedIds.has(r.id) }))
+
+  const confirmacoes = (await carregarConfirmacoes(admin, visiveis, hoje)).filter(c => c.usuario_id === targetId)
+  const lembretes = visiveis.map(r => ({
+    ...r,
+    confirmadas: confirmacoes.filter(c => c.lembrete_id === r.id).map(c => dataConfirmada(r, c)).filter(Boolean),
+  }))
 
   return Response.json({ lembretes, historico: histData ?? [] })
 }

@@ -38,6 +38,21 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   const admin = createAdminClient()
+
+  // Reagendar substitui adiamentos e descartes feitos para a data antiga. Apaga antes do update:
+  // o realtime do update faz as telas recarregarem, e elas não podem ler o adiamento velho.
+  const { data: atual } = await admin
+    .from('lembretes')
+    .select('periodo, data_inicio, dia_semana, semana_ordinal')
+    .eq('id', id)
+    .single()
+  const reagendou = atual && (['periodo', 'data_inicio', 'dia_semana', 'semana_ordinal'] as const)
+    .some(c => update[c] !== undefined && update[c] !== atual[c])
+  if (reagendou) {
+    const { error: adiError } = await admin.from('lembretes_adiamentos').delete().eq('lembrete_id', id)
+    if (adiError) return Response.json({ error: adiError.message }, { status: 500 })
+  }
+
   const { data, error } = await admin
     .from('lembretes')
     .update(update)

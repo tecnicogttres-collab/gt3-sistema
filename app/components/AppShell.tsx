@@ -15,7 +15,7 @@ import {
   type SplitState,
 } from './SplitView'
 import { createClient } from '../lib/supabase'
-import { isLembreteOverdue, findMonthOccurrences } from '../lib/lembretes'
+import { isLembreteOverdue, ocorrenciaVigente } from '../lib/lembretes'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
 import SugestaoNotificacao from './SugestaoNotificacao'
@@ -536,7 +536,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch('/api/lembretes')
         if (!mounted || !res.ok) return
-        const data: Array<{ id: string; data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'mensal_dia_semana'; hora_inicio: string | null; dia_semana?: number | null; semana_ordinal?: number | null; concluido: boolean; confirmado?: boolean; criado_por: string | null }> = await res.json()
+        const data: Array<{ id: string; data_inicio: string; periodo: 'unico' | 'diario' | 'semanal' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'mensal_dia_semana'; hora_inicio: string | null; dia_semana?: number | null; semana_ordinal?: number | null; concluido: boolean; confirmadas: string[]; criado_por: string | null }> = await res.json()
         const today = new Date().toISOString().split('T')[0]
         const snoozedAte = getLembreteSnoozedAte(userId)
         if (snoozedAte && today <= snoozedAte) return
@@ -545,9 +545,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // na tela inicial do módulo, sem interromper com pop-up quem não é o dono dele.
         const isGestorOuAdmin = userPapel === 'gestor' || userPapel === 'admin'
         const meus = isGestorOuAdmin ? data.filter(r => r.criado_por === userId) : data
-        // Só conta como atrasado quem tem ocorrência real neste mês (não apenas
-        // uma data_inicio antiga) — senão um lembrete "único" já confirmado no
-        // passado volta a acusar atraso todo mês, sem nenhuma forma de resolver.
         const { data: adiRows } = await supabase
           .from('lembretes_adiamentos')
           .select('lembrete_id, mostrar_a_partir_de, data_original')
@@ -555,11 +552,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .eq('adiado', true)
         const adiados = new Map((adiRows ?? []).map(a => [a.lembrete_id as string, a.mostrar_a_partir_de as string]))
         const originais = new Map((adiRows ?? []).map(a => [a.lembrete_id as string, (a.data_original as string | null) ?? null]))
-        const vencidos = meus.filter(r => isLembreteOverdue(r, !!r.confirmado, new Date(), adiados.get(r.id)))
+        const vencidos = meus.filter(r => !(r.concluido && r.periodo === 'unico') && isLembreteOverdue(r, new Set(r.confirmadas), new Date(), adiados.get(r.id)))
         if (vencidos.length > 0) {
-          const agora = new Date()
           setLembretesVencidos(vencidos.map(r => {
-            const occ = findMonthOccurrences(r, agora.getFullYear(), agora.getMonth(), adiados.get(r.id)).sort()[0] ?? null
+            const occ = ocorrenciaVigente(r, new Set(r.confirmadas), new Date(), adiados.get(r.id))?.data ?? null
             // Se a ocorrência atrasada já é a data de um adiamento, mantém a data original guardada nele.
             const original = occ && occ === adiados.get(r.id) ? (originais.get(r.id) ?? occ) : occ
             return { id: r.id, original }

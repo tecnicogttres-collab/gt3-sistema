@@ -78,39 +78,123 @@ export function findMonthOccurrence(r: LembreteOcorrencia, year: number, month: 
   return cur <= mEnd ? fmtDateStr(cur) : null
 }
 
-export function currentMonthOccurrence(r: LembreteOcorrencia, now: Date = new Date()): Date | null {
-  const ds = findMonthOccurrence(r, now.getFullYear(), now.getMonth())
-  return ds ? parseDate(ds) : null
+// Todas as ocorrências da série no mês. Só "semanal" tem mais de uma por mês no calendário;
+// "diario" é tratado à parte para não lotar todos os dias com um mesmo lembrete.
+function ocorrenciasDaSerieNoMes(r: LembreteOcorrencia, year: number, month: number): string[] {
+  const first = findMonthOccurrence(r, year, month)
+  if (!first) return []
+  if (r.periodo !== 'semanal') return [first]
+  const datas: string[] = []
+  const cur = parseDate(first)
+  while (cur.getMonth() === month) {
+    datas.push(fmtDateStr(cur))
+    cur.setDate(cur.getDate() + 7)
+  }
+  return datas
 }
 
-/** Datas (YYYY-MM-DD) em que o lembrete aparece no mês, considerando um adiamento do
- *  usuário (data para a qual a ocorrência foi empurrada). Sem adiamento é a própria
- *  ocorrência do mês. Com adiamento: se a ocorrência do mês é anterior à data adiada, ela
- *  foi a adiada (some daqui e aparece na data nova, se esta cair no mês); se é posterior,
- *  a adiada era a ocorrência do mês anterior, que aparece na data nova além da do mês. */
-export function findMonthOccurrences(r: LembreteOcorrencia, year: number, month: number, adiamento?: string | null): string[] {
-  const base = findMonthOccurrence(r, year, month)
-  if (!adiamento) return base ? [base] : []
-  const a = parseDate(adiamento)
-  const inMonth = a.getFullYear() === year && a.getMonth() === month
-  if (base && base < adiamento) return inMonth ? [adiamento] : []
-  if (inMonth) return base ? [adiamento, base] : [adiamento]
-  return base ? [base] : []
+// Quantos meses procurar a ocorrência vizinha — cobre até a recorrência anual.
+const MESES_BUSCA = 24
+
+function ultimaOcorrenciaAte(r: LembreteOcorrencia, ds: string): string | null {
+  if (r.periodo === 'unico' || r.periodo === 'diario') {
+    if (r.data_inicio > ds) return null
+    return r.periodo === 'unico' ? r.data_inicio : ds
+  }
+  const d = parseDate(ds)
+  for (let i = 0; i <= MESES_BUSCA; i++) {
+    const m = new Date(d.getFullYear(), d.getMonth() - i, 1)
+    const datas = ocorrenciasDaSerieNoMes(r, m.getFullYear(), m.getMonth()).filter(o => o <= ds)
+    if (datas.length > 0) return datas[datas.length - 1]
+  }
+  return null
 }
 
-// Um lembrete só conta como atrasado se tiver uma ocorrência real neste mês
-// (não apenas uma data_inicio antiga) e ainda não tiver sido confirmado.
-export function isLembreteOverdue(r: LembreteOcorrencia, confirmed: boolean, now: Date = new Date(), adiamento?: string | null): boolean {
-  if (confirmed) return false
+function proximaOcorrenciaApos(r: LembreteOcorrencia, ds: string): string | null {
+  if (r.periodo === 'unico') return r.data_inicio > ds ? r.data_inicio : null
+  if (r.periodo === 'diario') {
+    const next = parseDate(ds)
+    next.setDate(next.getDate() + 1)
+    const s = fmtDateStr(next)
+    return s > r.data_inicio ? s : r.data_inicio
+  }
+  const d = parseDate(ds)
+  for (let i = 0; i <= MESES_BUSCA; i++) {
+    const m = new Date(d.getFullYear(), d.getMonth() + i, 1)
+    const data = ocorrenciasDaSerieNoMes(r, m.getFullYear(), m.getMonth()).find(o => o > ds)
+    if (data) return data
+  }
+  return null
+}
+
+export type OcorrenciaVigente = {
+  /** Data real na série — é a que vai para lembretes_historico.data_ocorrencia ao dar OK. */
+  serie: string
+  /** Data em que o lembrete aparece: a da série, ou a do adiamento quando ele a empurrou. */
+  data: string
+}
+
+/** Ocorrência que representa o lembrete agora: a mais recente até hoje se ainda não teve OK
+ *  (vencida ou de hoje), senão a próxima sem OK. Uma recorrência vencida sem OK é substituída
+ *  quando chega a seguinte. null = não há mais nada pendente (único já confirmado).
+ *  Adiamento anterior à data da série é ignorado: sobrou de antes de o lembrete mudar de data. */
+export function ocorrenciaVigente(r: LembreteOcorrencia, confirmadas: Set<string>, now: Date = new Date(), adiamento?: string | null): OcorrenciaVigente | null {
+  let serie = ultimaOcorrenciaAte(r, fmtDateStr(now))
+  if (!serie || confirmadas.has(serie)) {
+    let cursor: string | null = serie ?? fmtDateStr(now)
+    serie = null
+    for (let i = 0; cursor && i < 400 && !serie; i++) {
+      cursor = proximaOcorrenciaApos(r, cursor)
+      if (cursor && !confirmadas.has(cursor)) serie = cursor
+    }
+  }
+  if (!serie) return null
+  return { serie, data: adiamento && adiamento > serie ? adiamento : serie }
+}
+
+/** Mês (YYYY-MM-01) ao qual uma ocorrência pertence — lembretes_historico.mes_referencia. */
+export function mesReferenciaDe(ds: string): string {
+  return `${ds.slice(0, 7)}-01`
+}
+
+/** Último dia (YYYY-MM-DD) do mês de `now`. */
+export function fimDoMes(now: Date = new Date()): string {
+  return fmtDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+}
+
+export type ConfirmacaoLembrete = { lembrete_id: string; data_ocorrencia: string | null; mes_referencia: string }
+
+/** Data confirmada por uma linha do histórico. Linhas antigas não têm data_ocorrencia: o OK
+ *  era por mês, então valem para a ocorrência daquele mês. */
+export function dataConfirmada(r: LembreteOcorrencia, h: ConfirmacaoLembrete): string | null {
+  if (h.data_ocorrencia) return h.data_ocorrencia
+  const mes = parseDate(h.mes_referencia)
+  return findMonthOccurrence(r, mes.getFullYear(), mes.getMonth())
+}
+
+/** Datas (YYYY-MM-DD) em que o lembrete aparece no mês, com a ocorrência vigente já na data
+ *  do adiamento. O diário aparece só na vigente; a série é pulada entre ela e a data adiada. */
+export function findMonthOccurrences(r: LembreteOcorrencia, year: number, month: number, vigente?: OcorrenciaVigente | null): string[] {
+  const datas = r.periodo === 'diario' ? [] : ocorrenciasDaSerieNoMes(r, year, month)
+  const noMes = datas.filter(ds => !vigente || ds < vigente.serie || ds >= vigente.data)
+  if (vigente && parseDate(vigente.data).getFullYear() === year && parseDate(vigente.data).getMonth() === month && !noMes.includes(vigente.data)) {
+    noMes.push(vigente.data)
+  }
+  return noMes.sort()
+}
+
+// Vencido = a ocorrência vigente já passou sem OK. Continua vencido, mesmo em outro mês, até
+// o OK; na recorrência, até chegar a ocorrência seguinte.
+export function isLembreteOverdue(r: LembreteOcorrencia, confirmadas: Set<string>, now: Date = new Date(), adiamento?: string | null): boolean {
+  const vigente = ocorrenciaVigente(r, confirmadas, now, adiamento)
+  if (!vigente) return false
+  const occ = parseDate(vigente.data)
+  if (r.hora_inicio) {
+    const [h, m] = r.hora_inicio.split(':').map(Number)
+    occ.setHours(h, m, 0, 0)
+    return occ < now
+  }
   const today = new Date(now)
   today.setHours(0, 0, 0, 0)
-  return findMonthOccurrences(r, now.getFullYear(), now.getMonth(), adiamento).some(ds => {
-    const occ = parseDate(ds)
-    if (r.hora_inicio) {
-      const [h, m] = r.hora_inicio.split(':').map(Number)
-      occ.setHours(h, m, 0, 0)
-      return occ < now
-    }
-    return occ < today
-  })
+  return occ < today
 }

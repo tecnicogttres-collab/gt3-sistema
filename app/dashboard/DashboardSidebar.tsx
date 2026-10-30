@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../lib/supabase'
-import { nthWeekdayOfMonth } from '../lib/lembretes'
+import { isLembreteOverdue, mesReferenciaDe, ocorrenciaVigente, type LembreteOcorrencia } from '../lib/lembretes'
 import { urgenciaDesig } from '../lib/desig-urgencia'
 import { useUser } from '../components/UserContext'
 import EnqueteDashboardCard from './EnqueteDashboardCard'
@@ -39,11 +39,14 @@ type LembreteItem = {
   titulo: string
   daysLeft: number
   dataOcorrencia: string
+  /** Data da ocorrência na série — é ela que o OK finaliza */
+  dataSerie: string
+  vencido: boolean
   /** Data original da ocorrência quando o lembrete está voltando de um adiamento */
   adiadoDesde: string | null
 }
 
-type LembreteRaw = { id: string; titulo: string; periodo: string; data_inicio: string; dia_semana: number | null; semana_ordinal: number | null; concluido: boolean; confirmado: boolean }
+type LembreteRaw = LembreteOcorrencia & { id: string; titulo: string; concluido: boolean; confirmadas: string[] }
 type Adiamento = { mostrar: string; adiado: boolean; original: string | null }
 
 type TeamLembreteItem = {
@@ -118,31 +121,6 @@ function fmtConversaLabel(iso: string): { primary: string; urgent: boolean } {
   if (diffDays <= 7) return { primary: `Em ${diffDays} dias · ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} às ${time}`, urgent: false }
   return { primary: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} às ${time}`, urgent: false }
 }
-
-function nextOccStr(periodo: string, dataInicio: string, diaSemana: number | null, semanaOrdinal: number | null): Date {
-  const parse = (s: string) => new Date(s + 'T00:00:00')
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const start = parse(dataInicio)
-  if (periodo === 'unico') return start
-  if (periodo === 'diario') return today < start ? start : today
-  if (periodo === 'mensal_dia_semana' && diaSemana != null && semanaOrdinal != null) {
-    let y = today.getFullYear(), m = today.getMonth()
-    let occ = nthWeekdayOfMonth(y, m, diaSemana, semanaOrdinal)
-    while (!occ || occ < today || occ < start) {
-      m++; if (m > 11) { m = 0; y++ }
-      occ = nthWeekdayOfMonth(y, m, diaSemana, semanaOrdinal)
-    }
-    return occ
-  }
-  const d = new Date(start)
-  if (periodo === 'semanal') { while (d < today) d.setDate(d.getDate() + 7) }
-  else if (periodo === 'mensal') { while (d < today) d.setMonth(d.getMonth() + 1) }
-  else if (periodo === 'trimestral') { while (d < today) d.setMonth(d.getMonth() + 3) }
-  else if (periodo === 'semestral') { while (d < today) d.setMonth(d.getMonth() + 6) }
-  else if (periodo === 'anual') { while (d < today) d.setFullYear(d.getFullYear() + 1) }
-  return d
-}
-
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -299,13 +277,24 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       }
     })()
 
-    // Lembretes próximos (próximos 3 dias, inclusive hoje) — filtrados por visibilidade e confirmação
+    // Lembretes vencidos e próximos (até 3 dias) — filtrados por visibilidade e confirmação.
+    // Adiamentos vêm junto (a RLS só devolve os do próprio usuário): reagendar um lembrete os apaga.
     ;(async () => {
       try {
-        const res = await fetch('/api/lembretes')
+        const [res, { data: adiRows }] = await Promise.all([
+          fetch('/api/lembretes'),
+          createClient().from('lembretes_adiamentos').select('lembrete_id, mostrar_a_partir_de, adiado, data_original'),
+        ])
         if (!res.ok) { setLembretesRaw([]); return }
         const data: LembreteRaw[] = await res.json()
-        setLembretesRaw(data.filter(r => !r.confirmado && !(r.concluido && r.periodo === 'unico')))
+        setLembretesRaw(data.filter(r => !(r.concluido && r.periodo === 'unico')))
+        if (adiRows) {
+          const map: Record<string, Adiamento> = {}
+          for (const row of adiRows as { lembrete_id: string; mostrar_a_partir_de: string; adiado: boolean | null; data_original: string | null }[]) {
+            map[row.lembrete_id] = { mostrar: row.mostrar_a_partir_de, adiado: !!row.adiado, original: row.data_original }
+          }
+          setAdiamentos(map)
+        }
       } catch {
         setLembretesRaw([])
       }
@@ -384,47 +373,37 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
 
-  // Adiamentos/descartes do próprio usuário para o bloco de Lembretes do Dashboard
-  useEffect(() => {
-    if (!profile?.id) return
-    const supabase = createClient()
-    void (async () => {
-      const { data } = await supabase
-        .from('lembretes_adiamentos')
-        .select('lembrete_id, mostrar_a_partir_de, adiado, data_original')
-        .eq('usuario_id', profile.id)
-      if (!data) return
-      const map: Record<string, Adiamento> = {}
-      for (const row of data as { lembrete_id: string; mostrar_a_partir_de: string; adiado: boolean | null; data_original: string | null }[]) {
-        map[row.lembrete_id] = { mostrar: row.mostrar_a_partir_de, adiado: !!row.adiado, original: row.data_original }
-      }
-      setAdiamentos(map)
-    })()
-  }, [profile?.id])
-
   const todayStrLembretes = dateToStr(new Date())
   const diasEntre = (de: string, ate: string) =>
     Math.round((new Date(ate + 'T00:00:00').getTime() - new Date(de + 'T00:00:00').getTime()) / 86400000)
 
-  // Lembretes do dashboard: aparecem só a partir de 3 dias antes da data. Adiado some e
-  // volta 3 dias antes da NOVA data, avisando há quantos dias vem sendo adiado.
-  // Descartado some só da ocorrência atual (volta no dia seguinte ao descarte).
+  // Lembretes do dashboard: aparecem a partir de 3 dias antes da data e, vencidos, ficam aqui
+  // até o OK (na recorrência, até a próxima ocorrência). Adiado some e volta 3 dias antes da
+  // NOVA data, avisando há quantos dias vem sendo adiado.
+  // Descartado some só até o dia seguinte ao descarte/ocorrência.
   const visibleLembreteItems = useMemo(() => {
     const items: LembreteItem[] = []
+    const agora = new Date()
     for (const r of lembretesRaw) {
       const adi = adiamentos[r.id]
-      if (adi?.adiado && adi.mostrar >= todayStrLembretes) {
-        const diff = diasEntre(todayStrLembretes, adi.mostrar)
-        if (diff <= 3) items.push({ id: r.id, titulo: r.titulo, daysLeft: diff, dataOcorrencia: adi.mostrar, adiadoDesde: adi.original })
-        continue
-      }
       if (adi && !adi.adiado && adi.mostrar > todayStrLembretes) continue
-      const next = dateToStr(nextOccStr(r.periodo, r.data_inicio, r.dia_semana, r.semana_ordinal))
-      const diff = diasEntre(todayStrLembretes, next)
-      if (diff >= 0 && diff <= 3) items.push({ id: r.id, titulo: r.titulo, daysLeft: diff, dataOcorrencia: next, adiadoDesde: null })
+      const confirmadas = new Set(r.confirmadas)
+      const adiamento = adi?.adiado ? adi.mostrar : null
+      const vigente = ocorrenciaVigente(r, confirmadas, agora, adiamento)
+      if (!vigente) continue
+      const diff = diasEntre(todayStrLembretes, vigente.data)
+      if (diff > 3) continue
+      items.push({
+        id: r.id,
+        titulo: r.titulo,
+        daysLeft: diff,
+        dataOcorrencia: vigente.data,
+        dataSerie: vigente.serie,
+        vencido: isLembreteOverdue(r, confirmadas, agora, adiamento),
+        adiadoDesde: adi?.adiado && vigente.data === adi.mostrar ? adi.original : null,
+      })
     }
     return items.sort((a, b) => a.daysLeft - b.daysLeft)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lembretesRaw, adiamentos, todayStrLembretes])
 
   // adiado=true também move o lembrete no calendário do módulo; "Descartar" só some do Dashboard.
@@ -443,22 +422,25 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     setLembreteActingId(item.id)
     try {
       const supabase = createClient()
-      const mesRef = `${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}-01`
       const { error } = await supabase.from('lembretes_historico').insert({
         lembrete_id: item.id,
         lembrete_titulo: item.titulo,
         usuario_id: profile.id,
         usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
         usuario_login: profile.usuario ?? profile.email ?? profile.nome ?? 'Usuário',
-        mes_referencia: mesRef,
+        mes_referencia: mesReferenciaDe(item.dataSerie),
+        data_ocorrencia: item.dataSerie,
       })
-      // 23505 = este usuário já confirmou o lembrete neste mês — segue como confirmado.
+      // 23505 = este usuário já confirmou esta ocorrência — segue como confirmada.
       // Qualquer outro erro: mantém o item na lista em vez de fingir que foi confirmado.
       if (error && error.code !== '23505') {
         console.error('Erro ao confirmar lembrete:', error.message)
         return
       }
-      setLembretesRaw(prev => prev.filter(r => r.id !== item.id))
+      // O adiamento era desta ocorrência: não pode valer para a próxima.
+      await supabase.from('lembretes_adiamentos').delete().eq('lembrete_id', item.id).eq('usuario_id', profile.id)
+      setAdiamentos(prev => { const n = { ...prev }; delete n[item.id]; return n })
+      setLembretesRaw(prev => prev.map(r => r.id === item.id ? { ...r, confirmadas: [...r.confirmadas, item.dataSerie] } : r))
     } finally {
       setLembreteActingId(null)
     }
@@ -468,7 +450,9 @@ export default function DashboardSidebar({ role }: { role?: string }) {
     if (lembreteActingId) return
     setLembreteActingId(item.id)
     try {
-      await persistAdiamento(item.id, addDaysStr(item.dataOcorrencia, 1), false, null)
+      // Vencido: a ocorrência já passou, então conta do dia de hoje para sumir até amanhã.
+      const base = item.dataOcorrencia > todayStrLembretes ? item.dataOcorrencia : todayStrLembretes
+      await persistAdiamento(item.id, addDaysStr(base, 1), false, null)
     } finally {
       setLembreteActingId(null)
     }
@@ -900,8 +884,10 @@ export default function DashboardSidebar({ role }: { role?: string }) {
                       <span style={{ fontWeight: 500, fontSize: 13, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {item.titulo}
                       </span>
-                      <span style={{ color: item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11 }}>
-                        {item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
+                      <span style={{ color: item.vencido ? '#D64545' : item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11, fontWeight: item.vencido ? 700 : 400 }}>
+                        {item.vencido
+                          ? item.daysLeft === 0 ? 'Vencido hoje' : `Vencido há ${-item.daysLeft} dia${item.daysLeft === -1 ? '' : 's'}`
+                          : item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
                       </span>
                       {adiadoHa !== null && (
                         <span style={{ display: 'block', color: '#B45309', fontSize: 10.5, fontWeight: 600, fontStyle: 'italic' }}>

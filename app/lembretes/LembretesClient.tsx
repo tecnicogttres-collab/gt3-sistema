@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '../components/UserContext'
 import { createClient } from '../lib/supabase'
-import { PERIODS, type Period, findMonthOccurrence, findMonthOccurrences, currentMonthOccurrence, isLembreteOverdue } from '../lib/lembretes'
+import { PERIODS, type Period, dataConfirmada, fimDoMes, findMonthOccurrences, isLembreteOverdue, mesReferenciaDe, ocorrenciaVigente } from '../lib/lembretes'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +36,8 @@ type Lembrete = {
   created_at: string
   visibilidade: Visibilidade
   destinatarios: string[] | null
+  /** Ocorrências (YYYY-MM-DD) já finalizadas com OK */
+  confirmadas: string[]
 }
 
 type UserOption = { id: string; nome: string | null; usuario: string | null; papel: string | null }
@@ -48,6 +50,7 @@ type HistoricoRow = {
   usuario_nome: string
   usuario_login: string
   mes_referencia: string
+  data_ocorrencia: string | null
   created_at: string
 }
 
@@ -103,7 +106,7 @@ export default function LembretesClient() {
   const [lembretes, setLembretes] = useState<Lembrete[]>([])
   const [historico, setHistorico] = useState<HistoricoRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [ativosExpanded, setAtivosExpanded] = useState(false)
+  const [ativosExpanded, setAtivosExpanded] = useState(true)
   const [finalizadosExpanded, setFinalizadosExpanded] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -129,7 +132,7 @@ export default function LembretesClient() {
 
   const [outrosOpen, setOutrosOpen] = useState(false)
   const [outrosUserId, setOutrosUserId] = useState<string | null>(null)
-  const [outrosData, setOutrosData] = useState<{ lembretes: (Lembrete & { confirmado: boolean })[]; historico: { lembrete_id: string; created_at: string }[] } | null>(null)
+  const [outrosData, setOutrosData] = useState<{ lembretes: Lembrete[]; historico: { lembrete_id: string; created_at: string }[] } | null>(null)
   const [outrosLoading, setOutrosLoading] = useState(false)
   const [outrosUserSearch, setOutrosUserSearch] = useState('')
   // IDs de colaboradores com lembrete próprio ainda pendente neste mês — bolinha na lista.
@@ -141,37 +144,31 @@ export default function LembretesClient() {
     return new Set(historico.map(h => h.lembrete_id))
   }, [historico])
 
-  function isDone(r: Lembrete) { return confirmedIds.has(r.id) }
+  // Ocorrência que representa o lembrete agora, já com o adiamento aplicado.
+  function vigenteDe(r: Lembrete) {
+    return ocorrenciaVigente(r, new Set(r.confirmadas), new Date(), adiadosMap[r.id])
+  }
 
-  // Confirmações do mês que o calendário está mostrando (não do mês atual): um lembrete recorrente
-  // finalizado neste mês volta a aparecer pendente nos meses seguintes.
-  const calConfirmedIds = useMemo(
-    () => calHistoricoLoading ? new Set<string>() : new Set(calHistorico.map(h => h.lembrete_id)),
-    [calHistorico, calHistoricoLoading],
-  )
+  // Ativo = tem ocorrência vencida ou ainda neste mês. Ao dar OK, a recorrência continua ativa
+  // só se a próxima ocorrência cair neste mês.
+  function isAtivo(r: Lembrete) {
+    const v = vigenteDe(r)
+    return !!v && v.data <= fimDoMes()
+  }
+
+  function isDone(r: Lembrete) { return !isAtivo(r) && confirmedIds.has(r.id) }
 
   function isOverdue(r: Lembrete) {
-    return isLembreteOverdue(r, isDone(r), new Date(), adiadosMap[r.id])
+    return isLembreteOverdue(r, new Set(r.confirmadas), new Date(), adiadosMap[r.id])
   }
 
-  // Datas do lembrete no mês atual (já com o adiamento aplicado), em ordem.
-  function datasDoMes(r: Lembrete): string[] {
-    const n = new Date()
-    return findMonthOccurrences(r, n.getFullYear(), n.getMonth(), adiadosMap[r.id]).sort()
-  }
-
-  // Ocorrência que representa o lembrete hoje: a atrasada mais antiga, senão a próxima.
   function ocorrenciaAtual(r: Lembrete): Date | null {
-    const dates = datasDoMes(r)
-    if (dates.length === 0) return null
-    const hoje = fmtDateStr(todayLocal())
-    const ds = dates[0] < hoje ? dates[0] : (dates.find(d => d >= hoje) ?? dates[0])
-    return parseDate(ds)
+    const v = vigenteDe(r)
+    return v ? parseDate(v.data) : null
   }
 
   function isToday(r: Lembrete) {
-    if (isDone(r)) return false
-    return datasDoMes(r).includes(fmtDateStr(todayLocal()))
+    return !isDone(r) && vigenteDe(r)?.data === fmtDateStr(todayLocal())
   }
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -182,8 +179,9 @@ export default function LembretesClient() {
       const mesRef = mesReferenciaAtual()
       const baseQuery = supabase
         .from('lembretes_historico')
-        .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, created_at')
-        .eq('mes_referencia', mesRef)
+        .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, data_ocorrencia, created_at')
+        // Inclui o OK dado neste mês numa ocorrência vencida de um mês anterior.
+        .or(`mes_referencia.eq.${mesRef},created_at.gte.${mesRef}`)
         .order('created_at', { ascending: false })
       const histQuery = !isGestorOrAdmin && profile?.id ? baseQuery.eq('usuario_id', profile.id) : baseQuery
       const [lembretesRes, { data: histData }, adiRes] = await Promise.all([
@@ -210,6 +208,8 @@ export default function LembretesClient() {
   // /lembretes) e, no efeito seguinte, quando alguém confirma/edita/exclui.
   const pathname = usePathname()
   useEffect(() => { void load() }, [load, pathname])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (pathname === '/lembretes') setAtivosExpanded(true) }, [pathname])
 
   useEffect(() => {
     const supabase = createClient()
@@ -285,7 +285,7 @@ export default function LembretesClient() {
     const supabase = createClient()
     const baseQuery = supabase
       .from('lembretes_historico')
-      .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, created_at')
+      .select('id, lembrete_id, lembrete_titulo, usuario_id, usuario_nome, usuario_login, mes_referencia, data_ocorrencia, created_at')
       .eq('mes_referencia', mesRef)
       .order('created_at', { ascending: false })
     const calQuery = !isGestorOrAdmin && profile?.id ? baseQuery.eq('usuario_id', profile.id) : baseQuery
@@ -300,8 +300,9 @@ export default function LembretesClient() {
   const now = useMemo(() => new Date(), [])
 
   const currentMonthLembretes = useMemo(() =>
-    lembretes.filter(r => findMonthOccurrences(r, now.getFullYear(), now.getMonth(), adiadosMap[r.id]).length > 0),
-    [lembretes, now, adiadosMap]
+    lembretes.filter(r => isAtivo(r) || confirmedIds.has(r.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lembretes, adiadosMap, confirmedIds]
   )
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -359,8 +360,10 @@ export default function LembretesClient() {
           }),
         })
         if (res.ok) {
-          const updated: Lembrete = await res.json()
-          setLembretes(prev => prev.map(r => r.id === editingId ? updated : r))
+          const updated: Omit<Lembrete, 'confirmadas'> = await res.json()
+          setLembretes(prev => prev.map(r => r.id === editingId ? { ...r, ...updated } : r))
+          // Reagendar apaga os adiamentos da data antiga: relê para sair de "Atrasados" na hora.
+          void load()
         }
       } else {
         const res = await fetch('/api/lembretes', {
@@ -389,10 +392,12 @@ export default function LembretesClient() {
   async function handleConfirm(r: Lembrete) {
     if (!profile) return
     if (confirmandoIds.has(r.id)) return
+    const vigente = vigenteDe(r)
+    if (!vigente) return
     setConfirmandoIds(prev => new Set([...prev, r.id]))
     try {
       const supabase = createClient()
-      const mesRef = mesReferenciaAtual()
+      const mesRef = mesReferenciaDe(vigente.serie)
       const { error } = await supabase
         .from('lembretes_historico')
         .insert({
@@ -402,10 +407,11 @@ export default function LembretesClient() {
           usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
           usuario_login: profile.usuario ?? profile.email ?? profile.nome ?? 'Usuário',
           mes_referencia: mesRef,
+          data_ocorrencia: vigente.serie,
         })
 
       if (error) {
-        // Já confirmado (ex.: pelo dashboard) mas a tela estava desatualizada: só sincroniza.
+        // Já confirmada (ex.: pelo dashboard) mas a tela estava desatualizada: só sincroniza.
         if (error.code === '23505') {
           await load()
           setFinalizadosExpanded(true)
@@ -422,8 +428,13 @@ export default function LembretesClient() {
         usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
         usuario_login: profile.usuario ?? profile.email ?? 'Usuário',
         mes_referencia: mesRef,
+        data_ocorrencia: vigente.serie,
         created_at: new Date().toISOString(),
       }
+      // O adiamento era desta ocorrência: não pode valer para a próxima.
+      await supabase.from('lembretes_adiamentos').delete().eq('lembrete_id', r.id).eq('usuario_id', profile.id)
+      setAdiadosMap(prev => { const n = { ...prev }; delete n[r.id]; return n })
+      setLembretes(prev => prev.map(x => x.id === r.id ? { ...x, confirmadas: [...x.confirmadas, vigente.serie] } : x))
       setHistorico(prev => [novaEntrada, ...prev])
       setFinalizadosExpanded(true)
       setHistExpanded(true)
@@ -510,14 +521,28 @@ export default function LembretesClient() {
   const calDayMap = useMemo(() => {
     const map = new Map<string, Lembrete[]>()
     for (const r of lembretes) {
-      for (const ds of findMonthOccurrences(r, calYear, calMonth, adiadosMap[r.id])) {
+      for (const ds of findMonthOccurrences(r, calYear, calMonth, vigenteDe(r))) {
         const arr = map.get(ds) ?? []
         arr.push(r)
         map.set(ds, arr)
       }
     }
     return map
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lembretes, calYear, calMonth, adiadosMap])
+
+  // Ocorrências confirmadas no mês do calendário, como "lembrete|data": a recorrência finalizada
+  // num dia continua pendente nas datas seguintes.
+  const calConfirmadas = useMemo(() => {
+    const keys = new Set<string>()
+    if (calHistoricoLoading) return keys
+    for (const h of calHistorico) {
+      const r = lembretes.find(x => x.id === h.lembrete_id)
+      const ds = r ? dataConfirmada(r, h) : null
+      if (ds) keys.add(`${h.lembrete_id}|${ds}`)
+    }
+    return keys
+  }, [calHistorico, calHistoricoLoading, lembretes])
 
   const calFirstDay  = new Date(calYear, calMonth, 1).getDay()
   const calTotalDays = new Date(calYear, calMonth + 1, 0).getDate()
@@ -992,7 +1017,7 @@ export default function LembretesClient() {
                   {d}
                 </div>
                 {hits.slice(0, 5).map((r, idx) => {
-                  const confirmed = calConfirmedIds.has(r.id)
+                  const confirmed = calConfirmadas.has(`${r.id}|${ds}`)
                   const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
                     <div key={idx} title="Clique para editar" onClick={e => { e.stopPropagation(); openEdit(r) }} style={{
@@ -1115,8 +1140,10 @@ export default function LembretesClient() {
                   const selectedUser = users.find(u => u.id === outrosUserId)
                   const userName = selectedUser?.nome?.trim() || selectedUser?.usuario?.trim() || 'Usuário'
                   const nowD = new Date()
-                  const thisMonthLembretes = outrosData.lembretes.filter(r => findMonthOccurrence(r, nowD.getFullYear(), nowD.getMonth()) !== null)
+                  const vigenteOutro = (r: Lembrete) => ocorrenciaVigente(r, new Set(r.confirmadas), nowD)
+                  const ativoOutro = (r: Lembrete) => { const v = vigenteOutro(r); return !!v && v.data <= fimDoMes(nowD) }
                   const confirmedSet = new Set(outrosData.historico.map(h => h.lembrete_id))
+                  const thisMonthLembretes = outrosData.lembretes.filter(r => ativoOutro(r) || confirmedSet.has(r.id))
 
                   return (
                     <>
@@ -1135,17 +1162,15 @@ export default function LembretesClient() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {thisMonthLembretes
                             .sort((a, b) => {
-                              const ad = confirmedSet.has(a.id), bd = confirmedSet.has(b.id)
+                              const ad = !ativoOutro(a), bd = !ativoOutro(b)
                               if (!ad && bd) return -1; if (ad && !bd) return 1
-                              const ao = currentMonthOccurrence(a), bo = currentMonthOccurrence(b)
-                              return (ao?.getTime() ?? 0) - (bo?.getTime() ?? 0)
+                              return (vigenteOutro(a)?.data ?? '').localeCompare(vigenteOutro(b)?.data ?? '')
                             })
                             .map(r => {
-                              const done = confirmedSet.has(r.id)
-                              const occ = currentMonthOccurrence(r)
-                              const occStr = occ ? fmtDateStr(occ) : r.data_inicio
-                              const overdue = !done && occ ? occ < todayLocal() : false
-                              const todayFlag = !done && occ ? fmtDateStr(occ) === fmtDateStr(todayLocal()) : false
+                              const done = !ativoOutro(r)
+                              const occStr = vigenteOutro(r)?.data ?? r.data_inicio
+                              const overdue = !done && isLembreteOverdue(r, new Set(r.confirmadas), nowD)
+                              const todayFlag = !done && occStr === fmtDateStr(todayLocal())
                               return (
                                 <div key={r.id} style={{
                                   background: done ? '#F0FDF4' : '#fff',
