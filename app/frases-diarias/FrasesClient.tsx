@@ -45,6 +45,11 @@ function nextWeekday(fromDate: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+// Busca sem diferenciar maiúsculas nem acentos ("acao" acha "Ação").
+function normBusca(s: string) {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
 function formatDatePlaylist(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('pt-BR', {
@@ -69,6 +74,8 @@ export default function FrasesClient() {
   const [activeTab, setActiveTab] = useState<'frases' | 'playlist'>('frases')
   const [addingToPlaylist, setAddingToPlaylist] = useState(false)
   const [playlistSelectId, setPlaylistSelectId] = useState('')
+  const [playlistBusca, setPlaylistBusca] = useState('')
+  const [playlistFiltro, setPlaylistFiltro] = useState('')
   const [settingTodayId, setSettingTodayId] = useState<string | null>(null)
 
   async function loadTodayQuote(allQuotes: Quote[]) {
@@ -165,16 +172,16 @@ export default function FrasesClient() {
   }
 
   // ── Playlist — adicionar ──────────────────────────────────────
-  async function handleAddToPlaylist() {
-    if (!playlistSelectId) return
+  async function handleAddToPlaylist(fraseId = playlistSelectId) {
+    if (!fraseId) return
     setAddingToPlaylist(true)
     const lastDate = playlist.length > 0 ? playlist[playlist.length - 1].data : todayStr()
     const nextDate = nextWeekday(lastDate)
     const supabase = createClient()
     const { error } = await supabase.from('frases_rotacao')
-      .upsert({ data: nextDate, frase_id: playlistSelectId }, { onConflict: 'data' })
+      .upsert({ data: nextDate, frase_id: fraseId }, { onConflict: 'data' })
     if (!error) {
-      setPlaylist(prev => [...prev, { data: nextDate, fraseId: playlistSelectId }])
+      setPlaylist(prev => [...prev, { data: nextDate, fraseId }])
       setPlaylistSelectId('')
       showToast(`Programada para ${formatDatePlaylist(nextDate)}.`)
     } else {
@@ -321,6 +328,26 @@ export default function FrasesClient() {
 
   const activeQuotes = useMemo(() => quotes.filter(q => q.active), [quotes])
 
+  // Datas em que cada frase já está programada — avisa no seletor para não repetir sem querer.
+  const datasPorFrase = useMemo(() => {
+    const m = new Map<string, string[]>()
+    playlist.forEach(p => m.set(p.fraseId, [...(m.get(p.fraseId) ?? []), p.data]))
+    return m
+  }, [playlist])
+
+  const candidatasPlaylist = useMemo(() => {
+    const s = normBusca(playlistBusca.trim())
+    return s ? activeQuotes.filter(q => normBusca(q.text + ' ' + q.author).includes(s)) : activeQuotes
+  }, [activeQuotes, playlistBusca])
+
+  const filtrandoPlaylist = !!playlistFiltro.trim()
+  const playlistVisivel = useMemo(() => {
+    const s = normBusca(playlistFiltro.trim())
+    return playlist
+      .map((item, idx) => ({ item, idx, frase: quotes.find(q => q.id === item.fraseId) }))
+      .filter(({ frase }) => !s || (frase && normBusca(frase.text + ' ' + frase.author).includes(s)))
+  }, [playlist, quotes, playlistFiltro])
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`,
     outline: 'none', fontSize: 13, fontFamily: 'inherit', color: INK, background: '#fff',
@@ -381,7 +408,7 @@ export default function FrasesClient() {
 
       <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={handleImport} />
 
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24, paddingBottom: 20, borderBottom: `1px solid ${BORDER}`, gap: 12, flexWrap: 'wrap' }}>
@@ -567,19 +594,11 @@ export default function FrasesClient() {
             <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '20px 24px', marginBottom: 20 }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: INK, margin: '0 0 12px' }}>Programar frase para o próximo dia útil disponível</p>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <select
-                  value={playlistSelectId}
-                  onChange={e => setPlaylistSelectId(e.target.value)}
-                  style={{ flex: 1, minWidth: 260, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', color: playlistSelectId ? INK : MUTED, background: '#fff', cursor: 'pointer' }}
-                >
-                  <option value="">Selecione uma frase ativa…</option>
-                  {activeQuotes.map(q => (
-                    <option key={q.id} value={q.id}>
-                      {q.text.length > 70 ? q.text.slice(0, 70) + '…' : q.text}
-                      {q.author ? ` — ${q.author}` : ''}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text" value={playlistBusca} onChange={e => setPlaylistBusca(e.target.value)}
+                  placeholder="Pesquisar frase ativa por texto ou autor…"
+                  style={{ flex: 1, minWidth: 260, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', color: INK, outline: 'none' }}
+                />
                 <button
                   onClick={() => void handleAddToPlaylist()}
                   disabled={!playlistSelectId || addingToPlaylist}
@@ -594,6 +613,39 @@ export default function FrasesClient() {
                   {addingToPlaylist ? '…' : '+ Adicionar'}
                 </button>
               </div>
+              <div style={{ fontSize: 12, color: MUTED, margin: '8px 0 6px' }}>
+                {candidatasPlaylist.length} {candidatasPlaylist.length === 1 ? 'frase ativa' : 'frases ativas'}{playlistBusca.trim() ? ' encontrada(s)' : ''} — clique para selecionar (duplo clique adiciona direto)
+              </div>
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, maxHeight: 340, overflowY: 'auto' }}>
+                {candidatasPlaylist.length === 0 ? (
+                  <div style={{ padding: '18px 14px', fontSize: 13, color: '#94A3B8', textAlign: 'center' }}>Nenhuma frase ativa encontrada.</div>
+                ) : candidatasPlaylist.map((q, i) => {
+                  const sel = playlistSelectId === q.id
+                  const datas = datasPorFrase.get(q.id) ?? []
+                  return (
+                    <div key={q.id}
+                      onClick={() => setPlaylistSelectId(sel ? '' : q.id)}
+                      onDoubleClick={() => { setPlaylistSelectId(q.id); if (!addingToPlaylist) void handleAddToPlaylist(q.id) }}
+                      style={{
+                        padding: '9px 12px', cursor: 'pointer', borderTop: i > 0 ? `1px solid ${BORDER}` : undefined,
+                        background: sel ? PRIMARY_LIGHT : '#fff', borderLeft: `3px solid ${sel ? PRIMARY : 'transparent'}`,
+                      }}>
+                      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: INK, wordBreak: 'break-word' }}>{q.text}</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+                        <span style={{ fontSize: 12, color: MUTED, fontWeight: 500 }}>{q.author || <em style={{ color: '#94A3B8' }}>Sem autor</em>}</span>
+                        {datas.length > 0 && (
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, background: '#FFFBEB', color: '#92400E' }}>
+                            já programada: {datas.map(d => `${d.slice(8, 10)}/${d.slice(5, 7)}`).join(', ')}
+                          </span>
+                        )}
+                        {quoteOfDay?.id === q.id && (
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 10, background: '#FFFBEB', color: '#92400E' }}>⭐ frase de hoje</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
               <p style={{ fontSize: 12, color: MUTED, margin: '10px 0 0' }}>
                 A rotação automática usa esta playlist. Dias sem programação usam a rotação normal.
               </p>
@@ -603,9 +655,18 @@ export default function FrasesClient() {
             <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: `1px solid ${BORDER}`, background: '#FAFBFD' }}>
                 <span style={{ fontSize: 14, fontWeight: 500, color: MUTED }}>Frases programadas</span>
-                <span style={{ fontSize: 12, color: '#94A3B8' }}>
-                  {playlist.length === 0 ? 'Nenhuma' : `${playlist.length} ${playlist.length === 1 ? 'dia programado' : 'dias programados'}`}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {playlist.length > 0 && (
+                    <input type="text" value={playlistFiltro} onChange={e => setPlaylistFiltro(e.target.value)}
+                      placeholder="Filtrar programadas…"
+                      style={{ width: 220, padding: '5px 10px', borderRadius: 7, border: `1.5px solid ${BORDER}`, fontSize: 12.5, fontFamily: 'inherit', color: INK, outline: 'none', background: '#fff' }} />
+                  )}
+                  <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                    {playlist.length === 0 ? 'Nenhuma'
+                      : playlistFiltro.trim() ? `${playlistVisivel.length} de ${playlist.length}`
+                      : `${playlist.length} ${playlist.length === 1 ? 'dia programado' : 'dias programados'}`}
+                  </span>
+                </div>
               </div>
 
               {playlist.length === 0 ? (
@@ -614,13 +675,14 @@ export default function FrasesClient() {
                   <div style={{ fontSize: 15, fontWeight: 500, color: MUTED, marginBottom: 6 }}>Playlist vazia</div>
                   <div style={{ fontSize: 13 }}>Selecione frases acima para programar os próximos dias.</div>
                 </div>
+              ) : playlistVisivel.length === 0 ? (
+                <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 13, color: '#94A3B8' }}>Nenhuma frase programada corresponde ao filtro.</div>
               ) : (
-                playlist.map((item, idx) => {
-                  const frase = quotes.find(q => q.id === item.fraseId)
+                playlistVisivel.map(({ item, idx, frase }, pos) => {
                   return (
                     <div key={item.data} style={{
                       display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 20px',
-                      borderTop: idx > 0 ? `1px solid ${BORDER}` : undefined,
+                      borderTop: pos > 0 ? `1px solid ${BORDER}` : undefined,
                     }}>
                       {/* Data badge */}
                       <div style={{
@@ -639,9 +701,7 @@ export default function FrasesClient() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {frase ? (
                           <>
-                            <p style={{ fontSize: 14, lineHeight: 1.5, margin: '0 0 4px', color: INK, wordBreak: 'break-word' }}>
-                              {frase.text.length > 120 ? frase.text.slice(0, 120) + '…' : frase.text}
-                            </p>
+                            <p style={{ fontSize: 14, lineHeight: 1.5, margin: '0 0 4px', color: INK, wordBreak: 'break-word' }}>{frase.text}</p>
                             <span style={{ fontSize: 12, color: MUTED }}>{frase.author || <em style={{ color: '#94A3B8' }}>Sem autor</em>}</span>
                           </>
                         ) : (
@@ -651,17 +711,18 @@ export default function FrasesClient() {
 
                       {/* Ações */}
                       <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                        {/* Com filtro, a vizinha da troca pode estar escondida — reordenar só sem filtro. */}
                         <button
-                          title="Mover para cima"
+                          title={filtrandoPlaylist ? 'Limpe o filtro para reordenar' : 'Mover para cima'}
                           onClick={() => void handleMovePlaylistItem(idx, 'up')}
-                          disabled={idx === 0}
-                          style={{ ...btnSm, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'default' : 'pointer' }}
+                          disabled={filtrandoPlaylist || idx === 0}
+                          style={{ ...btnSm, opacity: filtrandoPlaylist || idx === 0 ? 0.3 : 1, cursor: filtrandoPlaylist || idx === 0 ? 'default' : 'pointer' }}
                         >▲</button>
                         <button
-                          title="Mover para baixo"
+                          title={filtrandoPlaylist ? 'Limpe o filtro para reordenar' : 'Mover para baixo'}
                           onClick={() => void handleMovePlaylistItem(idx, 'down')}
-                          disabled={idx === playlist.length - 1}
-                          style={{ ...btnSm, opacity: idx === playlist.length - 1 ? 0.3 : 1, cursor: idx === playlist.length - 1 ? 'default' : 'pointer' }}
+                          disabled={filtrandoPlaylist || idx === playlist.length - 1}
+                          style={{ ...btnSm, opacity: filtrandoPlaylist || idx === playlist.length - 1 ? 0.3 : 1, cursor: filtrandoPlaylist || idx === playlist.length - 1 ? 'default' : 'pointer' }}
                         >▼</button>
                         <button
                           title="Remover da playlist"
