@@ -236,7 +236,7 @@ type UsosCatalogo = {
   /** Onde um texto (de e-mail ou de reprovação) é usado. */
   usosDoTexto: (textoId: string) => Uso[]
   /** Textos que usam a {{variavel}} de um item tipo "opcoes" (ex.: {{treinamentos}}). */
-  textosComVariavel: (variavel: string) => { titulo: string; reprovacao: boolean }[]
+  textosComVariavel: (variavel: string) => { id: string; titulo: string; reprovacao: boolean }[]
   /** Itens tipo "opcoes" cuja {{variavel}} aparece no corpo informado. */
   listasNoCorpo: (corpo: string) => ChecklistItem[]
 }
@@ -281,8 +281,8 @@ function mapearUsos(catalog: Catalog | null): UsosCatalogo {
     contratantesDoItem: id => porItem.get(id) ?? [],
     usosDoTexto: id => porTexto.get(id) ?? [],
     textosComVariavel: v => [
-      ...(catalog?.textos ?? []).filter(t => t.corpo.includes(`{{${v}}}`)).map(t => ({ titulo: t.titulo, reprovacao: false })),
-      ...(catalog?.textosReprovacao ?? []).filter(r => r.corpo.includes(`{{${v}}}`)).map(r => ({ titulo: r.titulo, reprovacao: true })),
+      ...(catalog?.textos ?? []).filter(t => t.corpo.includes(`{{${v}}}`)).map(t => ({ id: t.id, titulo: t.titulo, reprovacao: false })),
+      ...(catalog?.textosReprovacao ?? []).filter(r => r.corpo.includes(`{{${v}}}`)).map(r => ({ id: r.id, titulo: r.titulo, reprovacao: true })),
     ],
     listasNoCorpo: corpo => listas.filter(i => corpo.includes(`{{${i.variavel}}}`)),
   }
@@ -5504,7 +5504,7 @@ function VItens({ catalog, usos, getT, getR, onNovo, onEditar, onDel, onMover, o
                               <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                                 <span style={{ fontSize: 11.5, color: MU }}>entra em:</span>
                                 {textosVar.length
-                                  ? textosVar.map(t => <Tag key={t.titulo} tone={t.reprovacao ? 'no' : 'default'}>{t.titulo}</Tag>)
+                                  ? textosVar.map(t => <Tag key={t.id} tone={t.reprovacao ? 'no' : 'default'}>{t.titulo}</Tag>)
                                   : <Tag tone="na">⚠ nenhum texto usa esta lista</Tag>}
                               </div>
                             </td>
@@ -5740,7 +5740,7 @@ function ItemModal({ draft, catalog, usos, novo, onChange, onSave, onClose }: {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', marginTop: 6 }}>
             <span style={{ fontSize: 12, color: MU }}>Hoje entra em:</span>
             {textosVar.length
-              ? textosVar.map(t => <Tag key={t.titulo} tone={t.reprovacao ? 'no' : 'default'}>{t.titulo}</Tag>)
+              ? textosVar.map(t => <Tag key={t.id} tone={t.reprovacao ? 'no' : 'default'}>{t.titulo}</Tag>)
               : <Tag tone="na">⚠ nenhum texto usa {'{{' + (draft.variavel || '…') + '}}'} — o que for marcado não vai para o parecer</Tag>}
           </div>
           <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', margin: '12px 0' }}>
