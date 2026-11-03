@@ -241,7 +241,7 @@ type UsosCatalogo = {
   listasNoCorpo: (corpo: string) => ChecklistItem[]
 }
 
-function mapearUsos(catalog: Catalog | null): UsosCatalogo {
+function mapearUsosInterno(catalog: Catalog | null): UsosCatalogo {
   const porItem = new Map<string, Contratante[]>()
   const porTexto = new Map<string, Uso[]>()
   const add = (id: string | null | undefined, uso: Uso) => {
@@ -261,11 +261,11 @@ function mapearUsos(catalog: Catalog | null): UsosCatalogo {
   catalog?.contratantes.forEach(c => {
     add(c.aprovadoId, { label: `Parecer · ${nome(c)}`, tone: 'default' })
     add(c.assinaturaId, { label: `Assinatura · ${nome(c)}`, tone: 'default' })
-    c.itens.forEach(l => {
+    for (const l of c.itens ?? []) {
       porItem.set(l.itemId, [...(porItem.get(l.itemId) ?? []), c])
       const item = catalog.itens.find(i => i.id === l.itemId)
       if (l.textoId) add(l.textoId, { label: `✕ ${item?.titulo ?? 'item'} · só ${nome(c)}`, tone: 'laranja' })
-    })
+    }
   })
   if (catalog) {
     const cfg = catalog.config
@@ -281,10 +281,29 @@ function mapearUsos(catalog: Catalog | null): UsosCatalogo {
     contratantesDoItem: id => porItem.get(id) ?? [],
     usosDoTexto: id => porTexto.get(id) ?? [],
     textosComVariavel: v => [
-      ...(catalog?.textos ?? []).filter(t => t.corpo.includes(`{{${v}}}`)).map(t => ({ id: t.id, titulo: t.titulo, reprovacao: false })),
-      ...(catalog?.textosReprovacao ?? []).filter(r => r.corpo.includes(`{{${v}}}`)).map(r => ({ id: r.id, titulo: r.titulo, reprovacao: true })),
+      ...(catalog?.textos ?? []).filter(t => (t.corpo ?? '').includes(`{{${v}}}`)).map(t => ({ id: t.id, titulo: t.titulo, reprovacao: false })),
+      ...(catalog?.textosReprovacao ?? []).filter(r => (r.corpo ?? '').includes(`{{${v}}}`)).map(r => ({ id: r.id, titulo: r.titulo, reprovacao: true })),
     ],
-    listasNoCorpo: corpo => listas.filter(i => corpo.includes(`{{${i.variavel}}}`)),
+    listasNoCorpo: corpo => listas.filter(i => (corpo ?? '').includes(`{{${i.variavel}}}`)),
+  }
+}
+
+const USOS_VAZIO: UsosCatalogo = { contratantesDoItem: () => [], usosDoTexto: () => [], textosComVariavel: () => [], listasNoCorpo: () => [] }
+
+/** Roda sempre que o módulo carrega (também para quem só usa Nova análise / Banco): um dado
+ *  inesperado no catálogo nunca pode derrubar a tela — no pior caso, as Configurações ficam
+ *  sem as indicações de uso. */
+function mapearUsos(catalog: Catalog | null): UsosCatalogo {
+  try {
+    const usos = mapearUsosInterno(catalog)
+    const seguro = <A extends unknown[], R>(fn: (...a: A) => R[]) => (...a: A): R[] => { try { return fn(...a) } catch { return [] } }
+    return {
+      contratantesDoItem: seguro(usos.contratantesDoItem), usosDoTexto: seguro(usos.usosDoTexto),
+      textosComVariavel: seguro(usos.textosComVariavel), listasNoCorpo: seguro(usos.listasNoCorpo),
+    }
+  } catch (e) {
+    console.error('Workflow Programas: falha ao mapear usos do catálogo', e)
+    return USOS_VAZIO
   }
 }
 
