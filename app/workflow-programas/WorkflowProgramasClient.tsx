@@ -1304,6 +1304,11 @@ export default function WorkflowProgramasClient() {
   const [modalNovoTreinamento, setModalNovoTreinamento] = useState(false)
   const [novoTreinamentoLabel, setNovoTreinamentoLabel] = useState('')
   const [novoTreinamentoCorpo, setNovoTreinamentoCorpo] = useState('')
+  // "✚ Adicionar opção" das Configurações — acrescenta uma opção a qualquer lista (ex.: Treinamentos)
+  // sem abrir o formulário inteiro do item e sem marcar nada em análise aberta.
+  const [novaOpcaoItemId, setNovaOpcaoItemId] = useState<string | null>(null)
+  const [novaOpcaoLabel, setNovaOpcaoLabel] = useState('')
+  const [novaOpcaoCorpo, setNovaOpcaoCorpo] = useState('')
   // Incrementado a cada análise nova — VAnalise põe o cursor em "Empresa prestadora".
   const [focoEmpresa, setFocoEmpresa] = useState(0)
   const [novoSegmentoNome, setNovoSegmentoNome] = useState('')
@@ -3190,6 +3195,28 @@ render();
       setModalTextoEdit({ id: uid('t'), titulo: nome, categoria: 'segmento', corpo: '', segmentos: [nome] })
     }
   }
+  function abrirNovaOpcao(itemId: string) {
+    setNovaOpcaoLabel('')
+    setNovaOpcaoCorpo('')
+    setNovaOpcaoItemId(itemId)
+  }
+
+  function confirmarNovaOpcao() {
+    if (!catalog || !novaOpcaoItemId) return
+    const item = catalog.itens.find(i => i.id === novaOpcaoItemId)
+    if (!item) return
+    const label = novaOpcaoLabel.trim()
+    if (!label) { showToast('Informe o nome da opção'); return }
+    if (item.opcoes.some(o => o.label.trim().toLowerCase() === label.toLowerCase())) { showToast(`Já existe "${label}" em ${item.titulo}`); return }
+    const opcao: ChecklistOpcao = {
+      id: uid('op'), label, corpo: textoParaHtml(novaOpcaoCorpo.trim() || label),
+      pedirTexto: false, placeholder: '', variavelDetalhe: '', padrao: false,
+    }
+    persistCatalog({ ...catalog, itens: catalog.itens.map(i => (i.id === item.id ? { ...i, opcoes: [...i.opcoes, opcao] } : i)) })
+    setNovaOpcaoItemId(null)
+    showToast(`"${label}" adicionado em ${item.titulo}`)
+  }
+
   function abrirNovoTreinamento() {
     setNovoTreinamentoLabel('')
     setNovoTreinamentoCorpo('')
@@ -3486,6 +3513,7 @@ render();
         <VConfigHome
           catalog={catalog} usos={usosCatalogo} onIr={go} onAbrirTextos={k => { setTextosSub(k); setView('textos') }}
           onEditarItem={editarItemModal} onEditarTexto={editarTextoModal} onEditarReprovacao={editarReprovacaoModal}
+          onNovaOpcao={abrirNovaOpcao}
         />
       )}
 
@@ -3494,7 +3522,7 @@ render();
       )}
 
       {view === 'itens' && (
-        <VItens catalog={catalog} usos={usosCatalogo} getT={getT} getR={getR} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} onMover={moverItem} onAbrirTexto={abrirTexto} />
+        <VItens catalog={catalog} usos={usosCatalogo} getT={getT} getR={getR} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} onMover={moverItem} onAbrirTexto={abrirTexto} onNovaOpcao={abrirNovaOpcao} />
       )}
 
       {view === 'textos' && textosSub === 'hub' && (
@@ -3693,6 +3721,36 @@ render();
           </div>
         </ModalShell>
       )}
+
+      {novaOpcaoItemId && (() => {
+        const item = catalog.itens.find(i => i.id === novaOpcaoItemId)
+        if (!item) return null
+        const ehTreinamento = item.id === TREINAMENTOS_ITEM_ID
+        const existentes = opcoesOrdenadas(item)
+        return (
+          <ModalShell title={`Adicionar em "${item.titulo}"`} saveLabel="Adicionar" onClose={() => setNovaOpcaoItemId(null)} onSave={confirmarNovaOpcao}>
+            <Field label="Nome (botão que aparece na análise)">
+              <input style={inputStyle} value={novaOpcaoLabel} onChange={e => setNovaOpcaoLabel(e.target.value)} placeholder={ehTreinamento ? 'Ex.: NR 13' : 'Ex.: nova opção'} autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') confirmarNovaOpcao() }} />
+            </Field>
+            <div style={{ marginTop: 12 }}>
+              <Field label={`Texto que entra no parecer${item.variavel ? ` (no lugar de {{${item.variavel}}})` : ''}`}>
+                <input style={inputStyle} value={novaOpcaoCorpo} onChange={e => setNovaOpcaoCorpo(e.target.value)}
+                  placeholder={ehTreinamento ? 'Ex.: NR-13 (Caldeiras, Vasos de Pressão, Tubulações e Tanques Metálicos de Armazenamento)' : 'Em branco, usa o próprio nome'} />
+              </Field>
+              <div style={{ fontSize: 11.5, color: MU, marginTop: 4 }}>
+                Em branco, usa o próprio nome.{ehTreinamento ? ' A lista fica sempre em ordem de NR.' : ''} Para detalhes (pedir número de página etc.), use Editar no item.
+              </div>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, fontWeight: 600, marginBottom: 6 }}>Já cadastrados ({existentes.length})</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 140, overflowY: 'auto' }}>
+                {existentes.map(o => <Tag key={o.id} tone={o.label.trim().toLowerCase() === novaOpcaoLabel.trim().toLowerCase() && novaOpcaoLabel.trim() ? 'no' : 'default'}>{o.label || '(sem nome)'}</Tag>)}
+              </div>
+            </div>
+          </ModalShell>
+        )
+      })()}
 
       {modalReprovacaoEdit && (
         <ReprovacaoModal draft={modalReprovacaoEdit} novo={modalReprovacaoNovo} onChange={setModalReprovacaoEdit} onSave={salvarReprovacaoModal} onClose={() => { setModalReprovacaoEdit(null); setPendingLink(null) }} />
@@ -4823,10 +4881,14 @@ const RESULTADOS_BOLINHA: { symbol: string; on: string; onFg: string; titulo: st
     efeito: 'O e-mail vira "Reprovação em construção" e o cadastro é reprovado.', texto: 'Texto de reprovação' },
 ]
 
-function VConfigHome({ catalog, usos, onIr, onAbrirTextos, onEditarItem, onEditarTexto, onEditarReprovacao }: {
+function VConfigHome({ catalog, usos, onIr, onAbrirTextos, onEditarItem, onEditarTexto, onEditarReprovacao, onNovaOpcao }: {
   catalog: Catalog; usos: UsosCatalogo; onIr: (v: View) => void; onAbrirTextos: (k: TextosSub) => void
   onEditarItem: (i: ChecklistItem) => void; onEditarTexto: (t: TextoEmail) => void; onEditarReprovacao: (r: TextoReprovacao) => void
+  onNovaOpcao: (itemId: string) => void
 }) {
+  // Treinamentos primeiro: é a lista que mais recebe opções novas.
+  const listas = catalog.itens.filter(i => i.tipo === 'opcoes').sort((a, b) => Number(b.id === TREINAMENTOS_ITEM_ID) - Number(a.id === TREINAMENTOS_ITEM_ID))
+  const paiDe = (i: ChecklistItem) => (i.condicaoItemId ? catalog.itens.find(x => x.id === i.condicaoItemId) : undefined)
   const [expandido, setExpandido] = useState<Set<string>>(new Set())
   const itensStatus = catalog.itens.filter(i => i.tipo === 'status')
   const reprovam = itensStatus.filter(i => i.critico)
@@ -4914,6 +4976,34 @@ function VConfigHome({ catalog, usos, onIr, onAbrirTextos, onEditarItem, onEdita
           </div>
         ))}
       </div>
+
+      {listas.length > 0 && (
+        <Card style={{ padding: '18px 20px' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Listas de opções</div>
+          <div style={{ fontSize: 12.5, color: MU, marginBottom: 12 }}>Botões que aparecem na análise, como os treinamentos de “Possui treinamentos?”. Use <b>✚ Adicionar</b> para incluir uma opção nova.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {listas.map(i => {
+              const pai = paiDe(i)
+              const ops = opcoesOrdenadas(i)
+              return (
+                <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: `1px solid ${i.id === TREINAMENTOS_ITEM_ID ? AC : LINE}`, background: i.id === TREINAMENTOS_ITEM_ID ? ASO : '#fff', borderRadius: 9, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{i.titulo} <span style={{ color: MU, fontWeight: 400 }}>· {i.documento} · {ops.length} opções</span></div>
+                    {pai && <div style={{ fontSize: 11.5, color: MU }}>abre quando “{pai.titulo}” é marcado</div>}
+                    <div style={{ fontSize: 11.5, color: MU, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 640 }} title={ops.map(o => o.label).join(', ')}>
+                      {ops.map(o => o.label).filter(Boolean).join(' · ') || 'nenhuma opção ainda'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Btn small variant="pri" onClick={() => onNovaOpcao(i.id)}>✚ Adicionar</Btn>
+                    <Btn small onClick={() => onEditarItem(i)}>Editar lista</Btn>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
 
       <Card style={{ padding: '18px 20px' }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Pontos de atenção</div>
@@ -5360,11 +5450,13 @@ function TextoCell({ texto, tone, vazio = 'sem texto', onClick }: { texto: { tit
   )
 }
 
-function VItens({ catalog, usos, getT, getR, onNovo, onEditar, onDel, onMover, onAbrirTexto }: {
+function VItens({ catalog, usos, getT, getR, onNovo, onEditar, onDel, onMover, onAbrirTexto, onNovaOpcao }: {
   catalog: Catalog; usos: UsosCatalogo; getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined
   onNovo: () => void; onEditar: (i: ChecklistItem) => void; onDel: (id: string) => void; onMover: (id: string, dir: -1 | 1) => void
-  onAbrirTexto: (item: ChecklistItem, campo: InspectorCampo) => void
+  onAbrirTexto: (item: ChecklistItem, campo: InspectorCampo) => void; onNovaOpcao: (itemId: string) => void
 }) {
+  // Listas de opções abertas por um item (ex.: "Possui treinamentos?" → Treinamentos).
+  const listasFilhas = (paiId: string) => catalog.itens.filter(x => x.tipo === 'opcoes' && x.condicaoItemId === paiId)
   const [fechados, setFechados] = useState<Set<DocKey>>(new Set())
   const [q, setQ] = useState('')
   const [fDoc, setFDoc] = useState<DocKey | ''>('')
@@ -5495,6 +5587,12 @@ function VItens({ catalog, usos, getT, getR, onNovo, onEditar, onDel, onMover, o
                             </div>
                             {i.descricao && <div style={{ color: MU, fontSize: 12, marginTop: 2 }}>{i.descricao}</div>}
                             {condItem && <div style={{ fontSize: 11.5, color: '#8A6A22', marginTop: 3 }}>↳ só aparece se “{condItem.titulo}” = {condLabel}</div>}
+                            {listasFilhas(i.id).map(f => (
+                              <div key={f.id} style={{ fontSize: 11.5, color: '#8A6A22', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                ↳ abre a lista “{f.titulo}” ({f.opcoes.length} opções)
+                                <button onClick={() => onNovaOpcao(f.id)} style={{ border: `1px solid ${AC}`, background: ASO, color: '#8A6A22', borderRadius: 99, padding: '1px 9px', fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>✚ adicionar</button>
+                              </div>
+                            ))}
                           </td>
                           {i.tipo === 'opcoes' ? (
                             <td colSpan={3} style={td}>
@@ -5533,6 +5631,7 @@ function VItens({ catalog, usos, getT, getR, onNovo, onEditar, onDel, onMover, o
                             </>
                           )}
                           <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {i.tipo === 'opcoes' && <><Btn small variant="acc" onClick={() => onNovaOpcao(i.id)} title="Adicionar uma opção nova a esta lista">✚ Opção</Btn>{' '}</>}
                             <Btn small onClick={() => onEditar(i)}>Editar</Btn>{' '}<Btn small variant="gho" onClick={() => onDel(i.id)}>Excluir</Btn>
                           </td>
                         </tr>
