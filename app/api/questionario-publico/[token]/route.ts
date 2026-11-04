@@ -1,16 +1,26 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
-import { perguntaVisivel, type Pergunta, type ValorResposta } from '../../../questionarios/types'
+import { perguntaVisivel, NOME_ANONIMO, type Pergunta, type ValorResposta } from '../../../questionarios/types'
 
 type Params = { params: Promise<{ token: string }> }
 
-/* Rota PÚBLICA (sem login) — o token do convite é a única credencial. Só expõe o que o
-   respondente precisa ver: título, nome da empresa e perguntas. Nada de outros convites/respostas,
-   nem nome/e-mail do destinatário ou contratante vinculada. */
+/* Rota PÚBLICA (sem login) — o token é a única credencial. Só expõe o que o respondente precisa
+   ver: título, nome da empresa e perguntas. Nada de outros convites/respostas, nem nome/e-mail do
+   destinatário ou contratante vinculada.
+
+   Dois tipos de token:
+   - convite: link único de um destinatário, aceita UMA resposta (fica ligada ao nome dele);
+   - link anônimo do questionário (questionarios.link_anonimo): o mesmo link para todos, cada
+     envio cria uma resposta nova "Anônimo", sem nome, e-mail nem horário exato. */
 
 const TOKEN_RE = /^[a-f0-9]{16,64}$/
 
-async function carregar(token: string) {
+type Qn = { id: string; titulo: string; status: string; perguntas: Pergunta[]; publico: string }
+type Alvo =
+  | { anonimo: false; qn: Qn; conv: { id: string; empresa: string; status: string } }
+  | { anonimo: true; qn: Qn }
+
+async function carregar(token: string): Promise<Alvo | null> {
   if (!TOKEN_RE.test(token)) return null
   const admin = createAdminClient()
   const { data: conv } = await admin
@@ -18,26 +28,36 @@ async function carregar(token: string) {
     .select('id, questionario_id, empresa, status')
     .eq('token', token)
     .maybeSingle()
-  if (!conv) return null
+  if (conv) {
+    const { data: qn } = await admin
+      .from('questionarios')
+      .select('id, titulo, status, perguntas, publico')
+      .eq('id', conv.questionario_id)
+      .single()
+    if (!qn) return null
+    return { anonimo: false, qn: qn as Qn, conv }
+  }
   const { data: qn } = await admin
     .from('questionarios')
-    .select('titulo, status, perguntas')
-    .eq('id', conv.questionario_id)
-    .single()
+    .select('id, titulo, status, perguntas, publico')
+    .eq('link_anonimo', token)
+    .maybeSingle()
   if (!qn) return null
-  return { conv, qn: qn as { titulo: string; status: string; perguntas: Pergunta[] } }
+  return { anonimo: true, qn: qn as Qn }
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const { token } = await params
   const r = await carregar(token)
   if (!r) return Response.json({ error: 'Link inválido' }, { status: 404 })
+  const respondido = !r.anonimo && r.conv.status === 'respondido'
   return Response.json({
     titulo: r.qn.titulo,
-    empresa: r.conv.empresa,
+    empresa: r.anonimo ? 'Resposta anônima' : r.conv.empresa,
+    anonimo: r.anonimo,
     disponivel: r.qn.status === 'ativo',
-    respondido: r.conv.status === 'respondido',
-    perguntas: r.qn.status === 'ativo' && r.conv.status !== 'respondido' ? r.qn.perguntas : [],
+    respondido,
+    perguntas: r.qn.status === 'ativo' && !respondido ? r.qn.perguntas : [],
     total_perguntas: r.qn.perguntas.length,
   })
 }
@@ -47,7 +67,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const r = await carregar(token)
   if (!r) return Response.json({ error: 'Link inválido' }, { status: 404 })
   if (r.qn.status !== 'ativo') return Response.json({ error: 'Este questionário não está recebendo respostas no momento.' }, { status: 400 })
-  if (r.conv.status === 'respondido') return Response.json({ error: 'Este link já foi utilizado.' }, { status: 409 })
+  if (!r.anonimo && r.conv.status === 'respondido') return Response.json({ error: 'Este link já foi utilizado.' }, { status: 409 })
 
   const body = await req.json().catch(() => ({})) as { respostas?: Record<string, unknown> }
   const recebidas = body.respostas ?? {}
@@ -65,18 +85,38 @@ export async function POST(req: NextRequest, { params }: Params) {
       respostas[q.id] = opts.filter(o => (v as string[]).includes(o))
     } else if (q.type === 'escala') {
       const n = Number(v)
-      if (!Number.isInteger(n) || n < 1 || n > 5) return Response.json({ error: 'Responda todas as perguntas de nota e de múltipla escolha.' }, { status: 400 })
+      if (!Number.isInteger(n) || n < 1 || n > 5) return erroObrig()
       respostas[q.id] = n
     } else if (q.type === 'multipla') {
-      if (typeof v !== 'string' || !(q.options ?? []).includes(v)) return Response.json({ error: 'Responda todas as perguntas de nota e de múltipla escolha.' }, { status: 400 })
+      if (typeof v !== 'string' || !(q.options ?? []).includes(v)) return erroObrig()
       respostas[q.id] = v
     } else if (typeof v === 'string' && v.trim()) {
       respostas[q.id] = v.trim().slice(0, 5000)
     }
   }
 
-  // Condição no status garante uma única resposta mesmo com dois envios simultâneos
   const admin = createAdminClient()
+
+  if (r.anonimo) {
+    // Sem nome, e-mail nem horário exato: grava só o dia (meio-dia UTC), para a hora do envio
+    // não servir para descobrir quem respondeu.
+    const dia = new Date().toISOString().slice(0, 10) + 'T12:00:00Z'
+    const { error } = await admin.from('questionario_convites').insert({
+      questionario_id: r.qn.id,
+      nome: NOME_ANONIMO,
+      email: '',
+      empresa: NOME_ANONIMO,
+      tipo: r.qn.publico,
+      status: 'respondido',
+      respostas,
+      respondido_em: dia,
+      created_at: dia,
+    })
+    if (error) return Response.json({ error: 'Erro ao registrar a resposta.' }, { status: 500 })
+    return Response.json({ ok: true, empresa: 'Resposta anônima' })
+  }
+
+  // Condição no status garante uma única resposta mesmo com dois envios simultâneos
   const { data, error } = await admin
     .from('questionario_convites')
     .update({ respostas, status: 'respondido', respondido_em: new Date().toISOString() })

@@ -16,6 +16,8 @@ const DANGER = '#C53030'
 type Dados = {
   titulo: string
   empresa: string
+  /** Link anônimo do questionário: o mesmo para todos, sem nome. */
+  anonimo?: boolean
   disponivel: boolean
   respondido: boolean
   perguntas: Pergunta[]
@@ -24,9 +26,21 @@ type Dados = {
 
 type Estado =
   | { k: 'carregando' }
+  | { k: 'ja_anonimo'; d: Dados }
   | { k: 'invalido' }
   | { k: 'form'; d: Dados }
   | { k: 'enviado'; d: Dados }
+
+/* Link anônimo aceita vários envios (é o mesmo link para todos). Para a mesma pessoa não
+   responder duas vezes sem querer, o navegador guarda que já respondeu — não é trava de
+   segurança (outro navegador ou aba anônima passa), só evita o envio repetido por engano. */
+const chaveAnon = (token: string) => `gt3-qn-anon-${token}`
+function jaRespondeuAnon(token: string): boolean {
+  try { return localStorage.getItem(chaveAnon(token)) === '1' } catch { return false }
+}
+function marcarRespondidoAnon(token: string) {
+  try { localStorage.setItem(chaveAnon(token), '1') } catch { /* sem storage: segue sem a marca */ }
+}
 
 export default function ResponderClient({ token }: { token: string }) {
   const [estado, setEstado] = useState<Estado>({ k: 'carregando' })
@@ -40,7 +54,8 @@ export default function ResponderClient({ token }: { token: string }) {
       .then(async r => {
         if (cancelled) return
         if (!r.ok) { setEstado({ k: 'invalido' }); return }
-        setEstado({ k: 'form', d: await r.json() })
+        const d: Dados = await r.json()
+        setEstado(d.anonimo && d.disponivel && jaRespondeuAnon(token) ? { k: 'ja_anonimo', d } : { k: 'form', d })
       })
       .catch(() => { if (!cancelled) setEstado({ k: 'invalido' }) })
     return () => { cancelled = true }
@@ -61,6 +76,7 @@ export default function ResponderClient({ token }: { token: string }) {
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) { setErro(body.error ?? 'Não foi possível enviar. Tente novamente.'); return }
+      if (d.anonimo) marcarRespondidoAnon(token)
       setEstado({ k: 'enviado', d })
     } finally {
       setEnviando(false)
@@ -94,7 +110,10 @@ export default function ResponderClient({ token }: { token: string }) {
     conteudo = <>{topo(null)}{aviso('!', '#B7791F', 'Link inválido', 'Não encontramos este questionário. Confira se o link foi copiado por completo.')}</>
   } else if (estado.k === 'enviado') {
     const d = estado.d
-    conteudo = <>{topo(d)}{aviso('✓', '#0B7A0B', 'Resposta registrada', `Obrigado! Sua resposta foi registrada para ${d.empresa}.`)}</>
+    conteudo = <>{topo(d)}{aviso('✓', '#0B7A0B', 'Resposta registrada', d.anonimo ? 'Obrigado! Sua resposta foi registrada de forma anônima.' : `Obrigado! Sua resposta foi registrada para ${d.empresa}.`)}</>
+  } else if (estado.k === 'ja_anonimo') {
+    const d = estado.d
+    conteudo = <>{topo(d)}{aviso('✓', '#0B7A0B', 'Você já respondeu', 'Este navegador já enviou uma resposta para esta pesquisa. Obrigado pela participação!')}</>
   } else {
     const d = estado.d
     if (d.respondido) {
@@ -106,6 +125,11 @@ export default function ResponderClient({ token }: { token: string }) {
         <>
           {topo(d)}
           <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 22 }}>
+            {d.anonimo && (
+              <div style={{ background: PRIMARY_SOFT, color: PRIMARY, borderRadius: 10, padding: '11px 13px', fontSize: 13, lineHeight: 1.45, fontWeight: 600 }}>
+                🔒 Esta pesquisa é anônima. Não pedimos seu nome nem e-mail, e a resposta não fica ligada a você.
+              </div>
+            )}
             {d.perguntas.filter(q => perguntaVisivel(q, d.perguntas, respostas)).map((q, i) => (
               <div key={q.id} style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35, color: TEXT }}>{i + 1}. {q.label}</div>

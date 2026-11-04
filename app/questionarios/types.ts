@@ -1,5 +1,6 @@
 export type TipoPergunta = 'escala' | 'multipla' | 'texto'
-export type Publico = 'Contratante' | 'Prestador'
+export type Publico = 'Contratante' | 'Prestador' | 'Colaborador'
+export const PUBLICOS: Publico[] = ['Contratante', 'Prestador', 'Colaborador']
 export type StatusQn = 'rascunho' | 'ativo' | 'encerrado'
 /** Ciclo do LINK: pendente = sem link, enviado = link gerado, respondido = resposta gravada pelo link. */
 export type StatusConvite = 'pendente' | 'enviado' | 'respondido'
@@ -54,6 +55,12 @@ export type Questionario = {
   status: StatusQn
   perguntas: Pergunta[]
   painel_config: Partial<PainelConfig>
+  /** Restrito: só gestor e admin enxergam o questionário, os convites e as respostas (ex.: pesquisa
+   *  interna). Para os demais perfis ele não existe — a API filtra e responde 404. */
+  restrito: boolean
+  /** Token do link anônimo: um link só para todos, sem nome. Cada envio vira uma resposta
+   *  "Anônimo". null = desligado. */
+  link_anonimo: string | null
   created_at: string
   updated_at: string
 }
@@ -97,7 +104,7 @@ export const STATUS_QN_NAME: Record<StatusQn, string> = {
   encerrado: 'Encerrado',
 }
 
-export const QN_SELECT = 'id, titulo, publico, status, perguntas, painel_config, created_at, updated_at'
+export const QN_SELECT = 'id, titulo, publico, status, perguntas, painel_config, restrito, link_anonimo, created_at, updated_at'
 export const CONVITE_SELECT = 'id, questionario_id, nome, email, empresa, tipo, vinculo, status, token, respostas, respondido_em, created_at, status_envio, canal_envio, enviado_em, lembretes_enviados, ultimo_lembrete_em'
 
 export const STATUS_EXIB_LABEL: Record<StatusExib, string> = {
@@ -115,6 +122,9 @@ export function statusExib(c: Pick<Convite, 'status' | 'status_envio'>): StatusE
  *  localhost mesmo exportada de um ambiente de teste. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://gt3-sistema-gt3.vercel.app').replace(/\/+$/, '')
 export const linkConvite = (token: string) => `${SITE_URL}/questionario/${token}`
+
+/** Nome/empresa gravados nas respostas que chegam pelo link anônimo. */
+export const NOME_ANONIMO = 'Anônimo'
 
 /** Primeira palavra do nome do responsável (coluna PrimeiroNome da mala direta). */
 export const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0] ?? ''

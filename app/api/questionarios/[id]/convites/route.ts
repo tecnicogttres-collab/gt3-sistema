@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const email = String(body.email ?? '').trim()
   if (!nome || !empresa) return Response.json({ error: 'Preencha nome e empresa' }, { status: 400 })
   if (email && !email.includes('@')) return Response.json({ error: 'O e-mail parece incompleto' }, { status: 400 })
-  const tipo = body.tipo === 'Prestador' ? 'Prestador' : 'Contratante'
+  const tipo = body.tipo === 'Prestador' || body.tipo === 'Colaborador' ? body.tipo : 'Contratante'
 
   const admin = createAdminClient()
   const { data, error } = await admin

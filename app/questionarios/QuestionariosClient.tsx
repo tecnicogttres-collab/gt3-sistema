@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  type Questionario, type Convite, type Pergunta, type TipoPergunta, type Publico, type StatusQn,
+  type Questionario, type Convite, type Pergunta, type TipoPergunta, type Publico, type StatusQn, PUBLICOS,
   type StatusExib, type PainelConfig,
-  TYPE_NAME, TYPE_DESC, STATUS_QN_NAME, STATUS_EXIB_LABEL, statusExib, linkConvite, primeiroNome, valoresResposta,
+  TYPE_NAME, TYPE_DESC, STATUS_QN_NAME, STATUS_EXIB_LABEL, statusExib, linkConvite, primeiroNome, NOME_ANONIMO, valoresResposta,
 } from './types'
 import { lerPlanilhaEmails, type LinhaPlanilhaEmails } from '../lib/contratantes-emails'
 
@@ -448,6 +448,8 @@ function AnswersSummary({ q }: { q: Pergunta }) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+const TIP_RESTRITO = 'Só gestor e admin veem este questionário, os convites e as respostas. Para os demais perfis ele não aparece.'
+
 export default function QuestionariosClient() {
   const [qns, setQns] = useState<Questionario[]>([])
   const [convites, setConvites] = useState<Convite[]>([])
@@ -467,6 +469,7 @@ export default function QuestionariosClient() {
   const [newOpen, setNewOpen] = useState(false)
   const [newTitulo, setNewTitulo] = useState('')
   const [newPublico, setNewPublico] = useState<Publico>('Contratante')
+  const [newRestrito, setNewRestrito] = useState(false)
   const [tituloDraft, setTituloDraft] = useState('')
 
   // Convites
@@ -572,12 +575,12 @@ export default function QuestionariosClient() {
     setBusy(true)
     try {
       const res = await fetch('/api/questionarios', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ titulo, publico: newPublico }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ titulo, publico: newPublico, restrito: newRestrito }),
       })
       if (!res.ok) { setToast((await res.json().catch(() => ({}))).error ?? 'Erro ao criar'); return }
       const qn: Questionario = await res.json()
       setQns(prev => [qn, ...prev])
-      setNewOpen(false); setNewTitulo('')
+      setNewOpen(false); setNewTitulo(''); setNewRestrito(false)
       abrirEditor(qn, true)
     } finally { setBusy(false) }
   }
@@ -689,6 +692,30 @@ export default function QuestionariosClient() {
       setConvites(prev => [...prev.filter(c => c.questionario_id !== selQn.id), ...lista])
       setToast('Links gerados')
     } finally { setBusy(false) }
+  }
+
+  async function linkAnonimo(qn: Questionario, acao: 'gerar' | 'desligar') {
+    if (acao === 'desligar' && !confirm('Desligar o link anônimo? Quem abrir o link não conseguirá mais responder. As respostas já recebidas continuam guardadas.')) return
+    if (acao === 'gerar' && qn.link_anonimo && !confirm('Gerar um link novo? O link atual para de funcionar.')) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/questionarios/${qn.id}/link-anonimo`, { method: acao === 'gerar' ? 'POST' : 'DELETE' })
+      if (!res.ok) { setToast((await res.json().catch(() => ({}))).error ?? 'Erro ao salvar'); return }
+      const updated: Questionario = await res.json()
+      setQns(prev => prev.map(q => q.id === qn.id ? updated : q))
+      setToast(acao === 'gerar' ? 'Link anônimo gerado' : 'Link anônimo desligado')
+    } finally { setBusy(false) }
+  }
+
+  async function copiarLinkAnon(qn: Questionario) {
+    if (!qn.link_anonimo) return
+    const url = linkConvite(qn.link_anonimo)
+    try {
+      await navigator.clipboard.writeText(url)
+      setToast('Link anônimo copiado')
+    } catch {
+      prompt('Copie o link:', url)
+    }
   }
 
   // Sempre o endereço de produção (NEXT_PUBLIC_SITE_URL), nunca o do navegador — o link exportado
@@ -895,6 +922,7 @@ export default function QuestionariosClient() {
         <span style={{ display: 'flex', gap: 6 }}>
           <span className={`status-tag ${selQn.status}`}>{STATUS_QN_NAME[selQn.status]}</span>
           <span className="pill-tag">Público: {selQn.publico}</span>
+          {selQn.restrito && <span className="pill-tag" title={TIP_RESTRITO}>🔒 Restrito</span>}
         </span>
       )}
     </div>
@@ -922,7 +950,7 @@ export default function QuestionariosClient() {
                 <h3>{qn.titulo}</h3>
                 <span className={`status-tag ${qn.status}`}>{STATUS_QN_NAME[qn.status]}</span>
               </div>
-              <div><span className="pill-tag">Público: {qn.publico}</span></div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><span className="pill-tag">Público: {qn.publico}</span>{qn.restrito && <span className="pill-tag" title={TIP_RESTRITO}>🔒 Restrito</span>}</div>
               <div className="qn-numbers">
                 <div><b>{qn.perguntas.length}</b><span>pergunta{qn.perguntas.length === 1 ? '' : 's'}</span></div>
                 <div><b>{rows.length}</b><span>convites</span></div>
@@ -953,11 +981,17 @@ export default function QuestionariosClient() {
               <div className="row">
                 <span className="field-label">Público</span>
                 <select value={newPublico} onChange={e => setNewPublico(e.target.value as Publico)}>
-                  <option>Contratante</option><option>Prestador</option>
+                  {PUBLICOS.map(p => <option key={p}>{p}</option>)}
                 </select>
               </div>
+              {podeGerir && (
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }} title={TIP_RESTRITO}>
+                  <input type="checkbox" checked={newRestrito} onChange={e => setNewRestrito(e.target.checked)} />
+                  Restrito — só gestor e admin veem
+                </label>
+              )}
               <div className="qn-actions">
-                <button className="btn ghost" onClick={() => { setNewOpen(false); setNewTitulo('') }}>Cancelar</button>
+                <button className="btn ghost" onClick={() => { setNewOpen(false); setNewTitulo(''); setNewRestrito(false) }}>Cancelar</button>
                 <button className="btn" disabled={busy || !newTitulo.trim()} onClick={() => void criarQn()}>Criar e abrir</button>
               </div>
             </div>
@@ -1126,7 +1160,7 @@ export default function QuestionariosClient() {
             <div className="row">
               <span className="field-label">Público</span>
               <select value={qn.publico} onChange={e => void patchQn(qn.id, { publico: e.target.value as Publico })}>
-                <option>Contratante</option><option>Prestador</option>
+                {PUBLICOS.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
             <div className="row">
@@ -1135,6 +1169,16 @@ export default function QuestionariosClient() {
                 {(['rascunho', 'ativo', 'encerrado'] as StatusQn[]).map(s => <option key={s} value={s}>{STATUS_QN_NAME[s]}</option>)}
               </select>
             </div>
+            {podeGerir && (
+              <div className="row">
+                <span className="field-label">Quem vê</span>
+                <select value={qn.restrito ? 'restrito' : 'todos'} title={TIP_RESTRITO}
+                  onChange={e => void patchQn(qn.id, { restrito: e.target.value === 'restrito' })}>
+                  <option value="todos">Todos com acesso ao módulo</option>
+                  <option value="restrito">Restrito — só gestor e admin</option>
+                </select>
+              </div>
+            )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="btn ghost small" onClick={() => irPara('convites', qn.id)}>Convites</button>
               <button className="btn ghost small" onClick={() => irPara('painel', qn.id)}>Ver respostas</button>
@@ -1234,6 +1278,36 @@ export default function QuestionariosClient() {
     return (
       <>
         {qnSelect('Questionário')}
+        {podeGerir && (
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="card-head">
+              <div>
+                <h2>🔒 Link anônimo</h2>
+                <p className="cap" style={{ margin: 0 }}>
+                  Um link só para todos, sem nome nem e-mail. Cada envio vira uma resposta &quot;{NOME_ANONIMO}&quot;, com a data do dia (sem horário).
+                  {' '}{rows.filter(d => d.nome === NOME_ANONIMO && !d.email).length} resposta(s) anônima(s) até agora.
+                </p>
+              </div>
+              <div className="actions">
+                {qn.link_anonimo ? (
+                  <>
+                    <button className="btn" disabled={busy} onClick={() => void copiarLinkAnon(qn)}>Copiar link</button>
+                    <button className="btn ghost" disabled={busy} onClick={() => void linkAnonimo(qn, 'gerar')}>Gerar novo</button>
+                    <button className="btn danger" disabled={busy} onClick={() => void linkAnonimo(qn, 'desligar')}>Desligar</button>
+                  </>
+                ) : (
+                  <button className="btn" disabled={busy} onClick={() => void linkAnonimo(qn, 'gerar')}>Gerar link anônimo</button>
+                )}
+              </div>
+            </div>
+            {qn.link_anonimo && (
+              <code style={{ fontSize: 12, overflowWrap: 'anywhere', background: 'var(--surface-2)', padding: '8px 10px', borderRadius: 8 }}>{linkConvite(qn.link_anonimo)}</code>
+            )}
+            {qn.link_anonimo && qn.status !== 'ativo' && (
+              <p className="f-hint" style={{ margin: 0 }}>O link só aceita respostas com o questionário Ativo.</p>
+            )}
+          </div>
+        )}
         <div className="steps">
           <div className="step"><div className="step-num">1</div><div><h3>Destinatários</h3><p>Inclua do Cadastro de Contratantes (um convite por e-mail), importe a planilha revisada no Excel ou adicione um a um.</p></div></div>
           <div className="step"><div className="step-num">2</div><div><h3>Mala direta</h3><p>Exporte a planilha, faça a mala direta no Word/Outlook e confirme a marcação de enviados.</p></div></div>
@@ -1284,7 +1358,7 @@ export default function QuestionariosClient() {
               <div className="row"><span className="field-label">Empresa</span><input type="text" value={na.empresa} onChange={e => setNa({ ...na, empresa: e.target.value })} placeholder={na.tipo === 'Prestador' ? 'Ex: Segflex Terceirizada' : 'Ex: Marcopolo S.A.'} /></div>
               <div className="row">
                 <span className="field-label">Tipo</span>
-                <select value={na.tipo} onChange={e => setNa({ ...na, tipo: e.target.value as Publico })}><option>Contratante</option><option>Prestador</option></select>
+                <select value={na.tipo} onChange={e => setNa({ ...na, tipo: e.target.value as Publico })}>{PUBLICOS.map(p => <option key={p}>{p}</option>)}</select>
               </div>
               {na.tipo === 'Prestador' && (
                 <div className="row">

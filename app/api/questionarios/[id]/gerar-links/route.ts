@@ -2,15 +2,18 @@ import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { getCaller } from '../../../../lib/api-helpers'
 import { CONVITE_SELECT, gerarToken } from '../../../../questionarios/types'
+import { podeAcessarQn, naoEncontrado } from '../../../../lib/questionarios-acesso'
 
 type Params = { params: Promise<{ id: string }> }
 
 /** Gera o link único de cada destinatário ainda sem link (pendente → enviado). */
 export async function POST(_req: NextRequest, { params }: Params) {
   const { id } = await params
-  if (!await getCaller()) return Response.json({ error: 'Sem permissão' }, { status: 403 })
+  const caller = await getCaller()
+  if (!caller) return Response.json({ error: 'Sem permissão' }, { status: 403 })
 
   const admin = createAdminClient()
+  if (!await podeAcessarQn(admin, id, caller.role)) return naoEncontrado()
   const { data: qn } = await admin.from('questionarios').select('status').eq('id', id).single()
   if (!qn) return Response.json({ error: 'Questionário não encontrado' }, { status: 404 })
   if (qn.status !== 'ativo') return Response.json({ error: 'Só dá para gerar links com o questionário Ativo' }, { status: 400 })
