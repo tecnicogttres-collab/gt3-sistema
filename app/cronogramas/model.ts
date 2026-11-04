@@ -150,7 +150,8 @@ export type Model = ReturnType<typeof makeModel>
 
 // ─── Operações de edição (recebem uma cópia mutável e devolvem a nova lista) ──
 
-export type OpResult = { arr: Item[]; msg?: string; focus?: string }
+/** `ren`: ids trocados pela operação (antigo → novo), para a tela atualizar o que guarda por id. */
+export type OpResult = { arr: Item[]; msg?: string; focus?: string; ren?: Map<string, string> }
 
 export function log(it: Item, t: string, user: string) {
   it.hist = it.hist ?? []
@@ -230,12 +231,77 @@ export function mergeItem(arr: Item[], id: string, user: string, today: Date): O
   return { arr: next, msg: `Item ${id} voltou a ser uma etapa única` }
 }
 
+// ─── Numeração ───────────────────────────────────────────────────────────────
+// O número do item é o próprio id ("3", "3.2"…). Subitens levam o número do pai como prefixo.
+
+const lastNum = (id: string) => parseInt(id.split('.').pop()!, 10) || 0
+const childId = (parentId: string | null, n: number) => parentId ? `${parentId}.${n}` : String(n)
+
+/** Anota em `map` o novo id do item e, recursivamente, de todos os seus subitens. */
+function mapBranch(m: Model, it: Item, newId: string, map: Map<string, string>) {
+  map.set(it.id, newId)
+  m.kids(it.id).forEach(k => mapBranch(m, k, childId(newId, lastNum(k.id)), map))
+}
+
+/** Aplica a troca de ids (toda de uma vez, para não colidir) nos ids, pais e dependências. */
+function applyIds(arr: Item[], map: Map<string, string>) {
+  if (!map.size) return
+  arr.forEach(o => {
+    o.id = map.get(o.id) ?? o.id
+    if (o.parent) o.parent = map.get(o.parent) ?? o.parent
+    o.deps = (o.deps ?? []).map(d => map.get(d) ?? d)
+  })
+}
+
+/** Muda o número de um item (e de seus subitens), reposicionando-o entre os irmãos pela nova ordem. */
+export function renumberItem(arr: Item[], id: string, n: number, user: string, today: Date): OpResult | null {
+  const m = makeModel(arr, today)
+  const it = m.find(id)
+  if (!it) return null
+  if (!Number.isInteger(n) || n < 1) return { arr, msg: 'Informe um número inteiro maior que zero' }
+  const parent = it.parent && m.find(it.parent) ? it.parent : null
+  const newId = childId(parent, n)
+  if (newId === id) return null
+  if (m.find(newId)) return { arr, msg: `Já existe o item ${newId} — escolha outro número` }
+
+  const map = new Map<string, string>()
+  mapBranch(m, it, newId, map)
+  const branch = new Set([it, ...m.desc(id)])
+  const moved = arr.filter(o => branch.has(o))
+  const rest = arr.filter(o => !branch.has(o))
+  // Reposiciona: antes do primeiro irmão com número maior; senão, logo depois do último irmão (e seus subitens)
+  const mr = makeModel(rest, today)
+  const sibs = mr.kids(parent)
+  const after = sibs.filter(s => lastNum(s.id) > n).sort((a, b) => lastNum(a.id) - lastNum(b.id))[0]
+  let at: number
+  if (after) at = rest.indexOf(after)
+  else if (sibs.length) { const last = sibs[sibs.length - 1]; at = Math.max(...[last, ...mr.desc(last.id)].map(x => rest.indexOf(x))) + 1 }
+  else at = parent ? rest.indexOf(mr.find(parent)!) + 1 : rest.length
+  rest.splice(at, 0, ...moved)
+
+  log(it, `Numeração alterada: ${id} → ${newId}`, user)
+  applyIds(rest, map)
+  return { arr: rest, msg: `Item ${id} agora é ${newId}`, ren: map }
+}
+
 export function removeItem(arr: Item[], id: string, today: Date): OpResult {
   const m = makeModel(arr, today)
+  const it = m.find(id)
   const gone = new Set([id, ...m.desc(id).map(x => x.id)])
   const next = arr.filter(o => !gone.has(o.id))
   next.forEach(o => { o.deps = (o.deps ?? []).filter(d => !gone.has(d)) })
-  return { arr: next, msg: `Item ${id} excluído` }
+  // Renumera os irmãos seguintes e seus subitens: excluindo o 3, o 4 vira 3 (4.1 → 3.1), o 5 vira 4…
+  const map = new Map<string, string>()
+  if (it) {
+    const parent = it.parent && m.find(it.parent) ? it.parent : null
+    const k = lastNum(id)
+    m.kids(parent).filter(s => s.id !== id && lastNum(s.id) > k)
+      .forEach(s => mapBranch(m, s, childId(parent, lastNum(s.id) - 1), map))
+    // Não renumera se algum novo número já estiver ocupado por outro item (numeração irregular)
+    if ([...map.values()].some(v => next.some(o => o.id === v && !map.has(o.id)))) map.clear()
+    applyIds(next, map)
+  }
+  return { arr: next, msg: map.size ? `Item ${id} excluído — numeração ajustada` : `Item ${id} excluído`, ren: map }
 }
 
 export function addEtapa(arr: Item[], user: string, today: Date): OpResult {

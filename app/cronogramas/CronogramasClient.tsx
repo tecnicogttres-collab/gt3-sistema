@@ -6,7 +6,7 @@ import { CSS as STYLES } from './styles'
 import {
   type Cronograma, type Item, type Model, type OpResult, type Resp, type StKey,
   PROJETO_PADRAO, ST, DAY, D, MNF, addDays, days, fmt, fmtDT, inicioResultante, iso, makeModel, startOfToday,
-  addEtapa, addSub, log, mergeItem, removeItem, setStatus, splitItem,
+  addEtapa, addSub, log, mergeItem, removeItem, renumberItem, setStatus, splitItem,
 } from './model'
 import { exportPdf, exportXls, reportHtml, respName, snapshot } from './exporters'
 
@@ -36,6 +36,9 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type Drag = { id: string; mode: 'm' | 'l' | 'r'; x0: number; ini: string; fim: string; dx: number; moved: boolean; a?: string; b?: string }
 
 const EMPTY: Item[] = []
+/** Ordem alfabética (pt-BR, sem diferenciar acento/maiúscula) por contratante e depois projeto. */
+const byName = (a: Cronograma, b: Cronograma) =>
+  a.cliente.localeCompare(b.cliente, 'pt-BR', { sensitivity: 'base' }) || a.projeto.localeCompare(b.projeto, 'pt-BR', { sensitivity: 'base' })
 /** Etapas com subetapas começam recolhidas, como no HTML de referência. */
 const groupIds = (itens: Item[]) => new Set(itens.filter(i => itens.some(o => o.parent === i.id)).map(i => i.id))
 
@@ -68,13 +71,13 @@ function Menu({ rect, children }: { rect: Rect; children: ReactNode }) {
 }
 
 /** Campo de renomear direto na linha do tempo (duplo clique no nome). */
-function RenameInput({ initial, onDone }: { initial: string; onDone: (v: string | null) => void }) {
+function RenameInput({ initial, onDone, className = 'tt-ed' }: { initial: string; onDone: (v: string | null) => void; className?: string }) {
   const ref = useRef<HTMLInputElement>(null)
   const done = useRef(false)
   useEffect(() => { ref.current?.focus(); ref.current?.select() }, [])
   const fin = (ok: boolean) => { if (done.current) return; done.current = true; onDone(ok ? (ref.current?.value.trim() ?? '') : null) }
   return (
-    <input ref={ref} className="tt-ed" defaultValue={initial}
+    <input ref={ref} className={className} defaultValue={initial}
       onBlur={() => fin(true)}
       onKeyDown={e => { if (e.key === 'Enter') fin(true); if (e.key === 'Escape') fin(false) }} />
   )
@@ -186,6 +189,7 @@ export default function CronogramasClient() {
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [layer, setLayer] = useState<Layer | null>(null)
   const [renameId, setRenameId] = useState<string | null>(null)
+  const [numId, setNumId] = useState<string | null>(null)
   const [dragView, setDragView] = useState<{ id: string; a: string; b: string } | null>(null)
   const [toast, setToast] = useState('')
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -211,8 +215,9 @@ export default function CronogramasClient() {
   const cur = useMemo(() => cronos?.find(c => c.id === curId) ?? null, [cronos, curId])
   const isModelo = !!cur?.modelo
   const m: Model = useMemo(() => makeModel(cur?.itens ?? EMPTY, today, { modelo: isModelo }), [cur?.itens, today, isModelo])
-  const cronList = useMemo(() => (cronos ?? []).filter(c => !c.modelo), [cronos])
-  const modList = useMemo(() => (cronos ?? []).filter(c => c.modelo), [cronos])
+  const cronList = useMemo(() => (cronos ?? []).filter(c => !c.modelo).sort(byName), [cronos])
+  const modList = useMemo(() => (cronos ?? []).filter(c => c.modelo).sort(byName), [cronos])
+  const [selQ, setSelQ] = useState('')
   const list = modo === 'mod' ? modList : cronList
 
   // ── toasts ─────────────────────────────────────────────────────────────────
@@ -230,9 +235,8 @@ export default function CronogramasClient() {
       .then(async r => r.ok ? r.json() as Promise<Cronograma[]> : Promise.reject((await r.json().catch(() => ({}))).error ?? 'Erro ao carregar'))
       .then(list => {
         if (!alive) return
+        // Nenhum cronograma abre sozinho: o usuário escolhe na tela de seleção
         setCronos(list)
-        const first = list.find(c => !c.modelo)
-        if (first) { setCurId(first.id); setClosed(groupIds(first.itens)) }
       })
       .catch(e => { if (alive) setLoadErr(String(e)) })
     return () => { alive = false }
@@ -285,6 +289,14 @@ export default function CronogramasClient() {
     const id = cur.id
     setCronos(prev => prev ? prev.map(c => c.id === id ? { ...c, itens: res.arr } : c) : prev)
     queueSave(id, res.arr)
+    const ren = res.ren
+    if (ren?.size) {
+      // Ids renumerados: mantém recolhida/selecionada a mesma etapa com o novo número
+      const r = (x: string) => ren.get(x) ?? x
+      setClosed(prev => new Set([...prev].map(r)))
+      setEtapaSel(prev => prev && r(prev))
+      setLayer(prev => prev?.k === 'drawer' ? { ...prev, id: r(prev.id) } : prev)
+    }
     if (res.msg) showToast(res.msg)
     return res
   }, [cur, queueSave, showToast])
@@ -375,6 +387,11 @@ export default function CronogramasClient() {
   const doSub = (id: string) => afterOp(mutate(arr => addSub(arr, id, user, today)), id)
   const doMerge = (id: string) => mutate(arr => mergeItem(arr, id, user, today))
   const doRemove = (id: string) => mutate(arr => removeItem(arr, id, today))
+  const finishNum = (id: string, v: string | null) => {
+    setNumId(null)
+    if (v === null || v === '' || v === id.split('.').pop()) return
+    mutate(arr => renumberItem(arr, id, Number(v), user, today))
+  }
   /** Dá um prazo inicial (1 semana a partir de hoje) a um item que ainda não tem datas. */
   const setPrazo = (id: string) => editItem(id, x => {
     const ini = x.ini || iso(today)
@@ -436,9 +453,11 @@ export default function CronogramasClient() {
   }
   const exitModelos = () => {
     setModo('cron'); setFOpen(false); setFQ(''); setFResp('todos')
-    showItem(cronList.find(x => x.id === backId.current) ?? cronList[0])
+    showItem(cronList.find(x => x.id === backId.current))
     setLayer(null)
   }
+  /** Volta para a tela de seleção de cronogramas. */
+  const backToList = () => { setLayer(null); setSelQ(''); showItem(undefined) }
 
   async function loadContratantes() {
     if (contratantes.length) return
@@ -505,7 +524,7 @@ export default function CronogramasClient() {
     if (t) { clearTimeout(t); timers.current.delete(row.id) }
     const rest = (cronos ?? []).filter(c => c.id !== row.id)
     setCronos(rest)
-    if (row.id === curId) showItem(rest.find(c => c.modelo === row.modelo))
+    if (row.id === curId) showItem(row.modelo ? rest.filter(c => c.modelo).sort(byName)[0] : undefined)
     showToast(row.modelo ? `Modelo “${row.cliente}” excluído` : `Cronograma de ${row.cliente} excluído`)
   }
 
@@ -691,7 +710,9 @@ export default function CronogramasClient() {
             ? <button className={`cv ${isClosed ? 'closed' : ''}`} aria-label="Recolher/expandir" onClick={() => setClosed(prev => { const n = new Set(prev); if (n.has(it.id)) n.delete(it.id); else n.add(it.id); return n })}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg></button>
             : <span className="cvs" />}
-          <span className="id">{it.id}</span>
+          {numId === it.id
+            ? <span className="id">{it.parent ? `${it.parent}.` : ''}<RenameInput className="id-ed" initial={it.id.split('.').pop()!} onDone={v => finishNum(it.id, v)} /></span>
+            : <button className="id" title="Clique para alterar o número (os subitens acompanham)" onClick={() => setNumId(it.id)}>{it.id}</button>}
           {renameId === it.id
             ? <RenameInput initial={it.t} onDone={v => finishRename(it.id, v)} />
             : <button className="tt" title={`${it.t} — clique para detalhes, duplo clique para renomear`}
@@ -968,6 +989,46 @@ export default function CronogramasClient() {
         </div>
       </div>
     )
+  } else if (!cur && cronList.length) {
+    const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    const q = norm(selQ.trim())
+    const shown = q ? cronList.filter(c => norm(`${c.cliente} ${c.projeto}`).includes(q)) : cronList
+    content = (
+      <>
+        <header className="top">
+          <div className="ttl">
+            <div className="crumb">Cronogramas</div>
+            <h1>Escolha um cronograma</h1>
+          </div>
+          <div className="actions">
+            <label className="search"><svg {...svgp}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+              <input type="search" placeholder="Buscar contratante" value={selQ} autoFocus onChange={e => setSelQ(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && shown.length === 1) showItem(shown[0]) }} /></label>
+            <button className="btn" title="Modelos de cronograma" onClick={() => setLayer({ k: 'config' })}>{I_MG}<span className="hide-sm">Modelos</span></button>
+            <button className="btn pri" onClick={() => openForm('cron-new')}>{I_PL}Novo cronograma</button>
+          </div>
+        </header>
+        <section className="pick">
+          {shown.length === 0
+            ? <div className="empty-state">Nenhum cronograma encontrado para “{selQ}”.</div>
+            : shown.map(c => {
+              const st = makeModel(c.itens, today).stats()
+              const etapas = c.itens.filter(i => !i.parent).length
+              return (
+                <button key={c.id} className="pcard" onClick={() => showItem(c)}>
+                  <span className="pl">{c.cliente.trim().charAt(0).toUpperCase()}</span>
+                  <span className="pi">
+                    <b>{c.cliente}</b>
+                    <span>{c.projeto}</span>
+                    <small>{etapas} {etapas === 1 ? 'etapa' : 'etapas'}{st.ini && st.fim ? ` · ${fmt(st.ini)} → ${fmt(st.fim)}` : ''}{st.late ? ` · ${st.late} atrasado${st.late > 1 ? 's' : ''}` : ''}</small>
+                  </span>
+                  <span className="pp"><Ring p={st.pct} sz={34} sw={4} /><span className="num">{Math.round(st.pct * 100)}%</span></span>
+                </button>
+              )
+            })}
+        </section>
+      </>
+    )
   } else if (!cur) {
     content = (
       <div className="blank">
@@ -984,11 +1045,12 @@ export default function CronogramasClient() {
       <>
         <header className="top">
           <div className="ttl">
-            <div className="crumb">{isModelo ? 'Modelos' : 'Cronogramas'} › <b>{cur.cliente}</b></div>
+            <div className="crumb">{isModelo ? 'Modelos' : <button className="crumb-lk" title="Voltar à lista de cronogramas" onClick={backToList}>Cronogramas</button>} › <b>{cur.cliente}</b></div>
             <h1>{cur.projeto}{isModelo && <span className="tag-modelo">Modelo</span>}</h1>
           </div>
           <div className="actions">
             <span className={`savest ${saveState === 'error' ? 'err' : ''}`} aria-live="polite">{saveState === 'saving' ? 'Salvando…' : saveState === 'saved' ? 'Salvo' : saveState === 'error' ? 'Erro ao salvar' : ''}</span>
+            {!isModelo && <button className="btn" title="Voltar à lista de cronogramas" onClick={backToList}>← <span className="hide-sm">Todos</span></button>}
             <select className="sel" aria-label={isModelo ? 'Modelo' : 'Contratante'} value={cur.id} onChange={e => selectCrono(e.target.value)}>
               {list.map(c => <option key={c.id} value={c.id}>{dupCliente(c) ? `${c.cliente} · ${c.projeto}` : c.cliente}</option>)}
             </select>
