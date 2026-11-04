@@ -152,6 +152,24 @@ export function ocorrenciaVigente(r: LembreteOcorrencia, confirmadas: Set<string
   return { serie, data: adiamento && adiamento > serie ? adiamento : serie }
 }
 
+/** Ocorrências que venceram sem OK e já foram "passadas para trás" pela vigente (a recorrência
+ *  seguinte chegou). Para não perder a gestão, elas continuam pendentes até alguém dar OK.
+ *  Conta só as posteriores ao último OK (as anteriores são tidas como tratadas) e ignora o
+ *  diário, que geraria uma pendência por dia. */
+export function ocorrenciasVencidasAnteriores(r: LembreteOcorrencia, confirmadas: Set<string>, vigente: OcorrenciaVigente | null): string[] {
+  if (r.periodo === 'diario' || r.periodo === 'unico' || !vigente) return []
+  const ultimoOk = [...confirmadas].filter(d => d < vigente.serie).sort().pop() ?? null
+  const fim = parseDate(vigente.serie)
+  const datas: string[] = []
+  for (let i = MESES_BUSCA; i >= 0; i--) {
+    const m = new Date(fim.getFullYear(), fim.getMonth() - i, 1)
+    datas.push(...ocorrenciasDaSerieNoMes(r, m.getFullYear(), m.getMonth()))
+  }
+  return [...new Set(datas)]
+    .filter(d => d >= r.data_inicio && d < vigente.serie && !confirmadas.has(d) && (!ultimoOk || d > ultimoOk))
+    .sort()
+}
+
 /** Mês (YYYY-MM-01) ao qual uma ocorrência pertence — lembretes_historico.mes_referencia. */
 export function mesReferenciaDe(ds: string): string {
   return `${ds.slice(0, 7)}-01`

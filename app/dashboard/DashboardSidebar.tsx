@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../lib/supabase'
-import { isLembreteOverdue, mesReferenciaDe, ocorrenciaVigente, type LembreteOcorrencia } from '../lib/lembretes'
+import { isLembreteOverdue, mesReferenciaDe, ocorrenciaVigente, ocorrenciasVencidasAnteriores, type LembreteOcorrencia } from '../lib/lembretes'
 import { urgenciaDesig } from '../lib/desig-urgencia'
 import { useUser } from '../components/UserContext'
 import EnqueteDashboardCard from './EnqueteDashboardCard'
@@ -35,6 +35,10 @@ type BdayItem = {
 }
 
 type LembreteItem = {
+  /** id + ocorrência — um mesmo lembrete pode ter várias ocorrências vencidas na lista */
+  key: string
+  /** false = ocorrência antiga, já superada pela recorrência seguinte (só aceita OK) */
+  atual: boolean
   id: string
   titulo: string
   daysLeft: number
@@ -377,33 +381,53 @@ export default function DashboardSidebar({ role }: { role?: string }) {
   const diasEntre = (de: string, ate: string) =>
     Math.round((new Date(ate + 'T00:00:00').getTime() - new Date(de + 'T00:00:00').getTime()) / 86400000)
 
-  // Lembretes do dashboard: aparecem a partir de 3 dias antes da data e, vencidos, ficam aqui
-  // até o OK (na recorrência, até a próxima ocorrência). Adiado some e volta 3 dias antes da
-  // NOVA data, avisando há quantos dias vem sendo adiado.
-  // Descartado some só até o dia seguinte ao descarte/ocorrência.
-  const visibleLembreteItems = useMemo(() => {
-    const items: LembreteItem[] = []
+  // Lembretes do dashboard: aparecem a partir de 3 dias antes da data. Vencidos vão para o bloco
+  // "Vencidos" e ficam lá até alguém dar OK — inclusive quando a recorrência seguinte já chegou
+  // (a ocorrência antiga continua pendente) e mesmo que tenham sido descartados, para não se
+  // perder a gestão. Adiado some e volta 3 dias antes da NOVA data, avisando há quantos dias
+  // vem sendo adiado. Descartar só esconde um lembrete que ainda não venceu.
+  const { lembretesVencidos, visibleLembreteItems } = useMemo(() => {
+    const vencidos: LembreteItem[] = []
+    const proximos: LembreteItem[] = []
     const agora = new Date()
     for (const r of lembretesRaw) {
       const adi = adiamentos[r.id]
-      if (adi && !adi.adiado && adi.mostrar > todayStrLembretes) continue
       const confirmadas = new Set(r.confirmadas)
       const adiamento = adi?.adiado ? adi.mostrar : null
       const vigente = ocorrenciaVigente(r, confirmadas, agora, adiamento)
+      // Adiado (até o OK, que apaga o adiamento) nunca conta como vencido — nem a ocorrência
+      // vigente, nem pendências antigas da recorrência.
+      const adiado = !!adi?.adiado
+
+      if (!adiado) for (const d of ocorrenciasVencidasAnteriores(r, confirmadas, vigente)) {
+        vencidos.push({
+          key: `${r.id}|${d}`, atual: false, id: r.id, titulo: r.titulo,
+          daysLeft: diasEntre(todayStrLembretes, d), dataOcorrencia: d, dataSerie: d, vencido: true, adiadoDesde: null,
+        })
+      }
+
       if (!vigente) continue
+      const vencido = !adiado && isLembreteOverdue(r, confirmadas, agora, adiamento)
+      if (!vencido && adi && !adi.adiado && adi.mostrar > todayStrLembretes) continue
       const diff = diasEntre(todayStrLembretes, vigente.data)
       if (diff > 3) continue
-      items.push({
+      const item: LembreteItem = {
+        key: `${r.id}|${vigente.serie}`,
+        atual: true,
         id: r.id,
         titulo: r.titulo,
         daysLeft: diff,
         dataOcorrencia: vigente.data,
         dataSerie: vigente.serie,
-        vencido: isLembreteOverdue(r, confirmadas, agora, adiamento),
+        vencido,
         adiadoDesde: adi?.adiado && vigente.data === adi.mostrar ? adi.original : null,
-      })
+      }
+      ;(vencido ? vencidos : proximos).push(item)
     }
-    return items.sort((a, b) => a.daysLeft - b.daysLeft)
+    return {
+      lembretesVencidos: vencidos.sort((a, b) => a.daysLeft - b.daysLeft),
+      visibleLembreteItems: proximos.sort((a, b) => a.daysLeft - b.daysLeft),
+    }
   }, [lembretesRaw, adiamentos, todayStrLembretes])
 
   // adiado=true também move o lembrete no calendário do módulo; "Descartar" só some do Dashboard.
@@ -419,7 +443,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
 
   async function handleConfirmDashboard(item: LembreteItem) {
     if (!profile || lembreteActingId) return
-    setLembreteActingId(item.id)
+    setLembreteActingId(item.key)
     try {
       const supabase = createClient()
       const { error } = await supabase.from('lembretes_historico').insert({
@@ -437,9 +461,12 @@ export default function DashboardSidebar({ role }: { role?: string }) {
         console.error('Erro ao confirmar lembrete:', error.message)
         return
       }
-      // O adiamento era desta ocorrência: não pode valer para a próxima.
-      await supabase.from('lembretes_adiamentos').delete().eq('lembrete_id', item.id).eq('usuario_id', profile.id)
-      setAdiamentos(prev => { const n = { ...prev }; delete n[item.id]; return n })
+      // O adiamento era da ocorrência vigente: não pode valer para a próxima. OK numa ocorrência
+      // antiga (já superada) não mexe no adiamento da vigente.
+      if (item.atual) {
+        await supabase.from('lembretes_adiamentos').delete().eq('lembrete_id', item.id).eq('usuario_id', profile.id)
+        setAdiamentos(prev => { const n = { ...prev }; delete n[item.id]; return n })
+      }
       setLembretesRaw(prev => prev.map(r => r.id === item.id ? { ...r, confirmadas: [...r.confirmadas, item.dataSerie] } : r))
     } finally {
       setLembreteActingId(null)
@@ -448,7 +475,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
 
   async function handleDescartar(item: LembreteItem) {
     if (lembreteActingId) return
-    setLembreteActingId(item.id)
+    setLembreteActingId(item.key)
     try {
       // Vencido: a ocorrência já passou, então conta do dia de hoje para sumir até amanhã.
       const base = item.dataOcorrencia > todayStrLembretes ? item.dataOcorrencia : todayStrLembretes
@@ -460,7 +487,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
 
   async function handleAdiarPara(item: LembreteItem, dataAlvo: string) {
     if (lembreteActingId) return
-    setLembreteActingId(item.id)
+    setLembreteActingId(item.key)
     setAdiarPopoverId(null)
     try {
       // Adiar de novo mantém a data original do primeiro adiamento.
@@ -472,6 +499,112 @@ export default function DashboardSidebar({ role }: { role?: string }) {
 
   function abrirLembreteNaPagina(item: LembreteItem) {
     router.push(`/lembretes?highlight=${item.id}`)
+  }
+
+  /** Linha de um lembrete no dashboard (usada pelo bloco "Vencidos" e pelo de próximos). */
+  function renderLembreteRow(item: LembreteItem, i: number, list: LembreteItem[]) {
+      const acting = lembreteActingId === item.key
+      const popoverOpen = adiarPopoverId === item.key
+      const adiadoHa = item.adiadoDesde ? Math.max(0, diasEntre(item.adiadoDesde, todayStrLembretes)) : null
+      return (
+        <div key={item.key} style={{ padding: '7px 0', borderBottom: i < list.length - 1 ? `1px solid ${item.vencido ? '#FBD5D5' : '#FDDFC4'}` : 'none' }}>
+          <button
+            onClick={() => abrirLembreteNaPagina(item)}
+            title="Ver este lembrete em Lembretes ativos"
+            style={{
+              display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0,
+              cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.5,
+            }}
+          >
+            <span style={{ fontWeight: 500, fontSize: 13, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.titulo}
+            </span>
+            <span style={{ color: item.vencido ? '#D64545' : item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11, fontWeight: item.vencido ? 700 : 400 }}>
+              {item.vencido
+                ? (item.daysLeft === 0 ? 'Vencido hoje' : `Vencido há ${-item.daysLeft} dia${item.daysLeft === -1 ? '' : 's'}`) + ` · ${item.dataOcorrencia.split('-').reverse().join('/')}`
+                : item.daysLeft < 0 ? `Adiado para ${item.dataOcorrencia.split('-').reverse().join('/')} (há ${-item.daysLeft} dia${item.daysLeft === -1 ? '' : 's'})`
+                : item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
+            </span>
+            {adiadoHa !== null && (
+              <span style={{ display: 'block', color: '#B45309', fontSize: 10.5, fontWeight: 600, fontStyle: 'italic' }}>
+                {adiadoHa === 0 ? '↻ Adiado hoje' : `↻ Vem sendo adiado há ${adiadoHa} dia${adiadoHa === 1 ? '' : 's'}`}
+              </span>
+            )}
+          </button>
+
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, position: 'relative' }}>
+            <button
+              onClick={() => void handleConfirmDashboard(item)}
+              disabled={acting}
+              style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #16A34A', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 700, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
+            >
+              OK
+            </button>
+            {/* Vencido não pode ser descartado: só sai do dashboard com OK (ou adiando a data) */}
+            {!item.vencido && (
+            <button
+              onClick={() => void handleDescartar(item)}
+              disabled={acting}
+              style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 11, fontWeight: 600, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
+            >
+              Descartar
+            </button>
+            )}
+            {/* Ocorrência antiga (a recorrência seguinte já chegou) só aceita OK — adiar mexeria na vigente */}
+            {item.atual && (
+            <button
+              onClick={() => { setAdiarPopoverId(popoverOpen ? null : item.key); setAdiarCustomDate('') }}
+              disabled={acting}
+              style={{ padding: '3px 10px', borderRadius: 6, border: `1px solid ${popoverOpen ? '#B85C1A' : '#D1D5DB'}`, background: popoverOpen ? '#FFF3D9' : '#fff', color: '#7A3A0E', fontSize: 11, fontWeight: 600, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
+            >
+              Adiar
+            </button>
+            )}
+
+            {popoverOpen && item.atual && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+                background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.12)', padding: 10, width: 200,
+              }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                  {[{ lbl: '+1 dia', d: 1 }, { lbl: '+3 dias', d: 3 }, { lbl: '+7 dias', d: 7 }].map(opt => (
+                    <button
+                      key={opt.d}
+                      onClick={() => void handleAdiarPara(item, addDaysStr(todayStrLembretes, opt.d))}
+                      style={{ flex: 1, padding: '4px 0', borderRadius: 5, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#374151', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {opt.lbl}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <input
+                    type="date"
+                    value={adiarCustomDate}
+                    onChange={e => setAdiarCustomDate(e.target.value)}
+                    min={todayStrLembretes}
+                    style={{ flex: 1, padding: '3px 6px', border: '1px solid #E2E8F0', borderRadius: 5, fontSize: 11, fontFamily: 'inherit', color: '#1E293B' }}
+                  />
+                  <button
+                    onClick={() => { if (adiarCustomDate) void handleAdiarPara(item, adiarCustomDate) }}
+                    disabled={!adiarCustomDate}
+                    style={{ padding: '3px 10px', borderRadius: 5, border: 'none', background: '#B85C1A', color: '#fff', fontSize: 11, fontWeight: 600, cursor: adiarCustomDate ? 'pointer' : 'default', opacity: adiarCustomDate ? 1 : 0.5, fontFamily: 'inherit' }}
+                  >
+                    OK
+                  </button>
+                </div>
+                <button
+                  onClick={() => setAdiarPopoverId(null)}
+                  style={{ marginTop: 6, width: '100%', padding: '3px 0', borderRadius: 5, border: 'none', background: 'none', color: '#9CA3AF', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )
   }
 
   // Real-time: atualiza conversa PDI do colaborador imediatamente quando gestor agendar
@@ -822,6 +955,25 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           )
         })()}
 
+        {/* ── Block 3b: Lembretes vencidos — ficam até alguém dar OK ──── */}
+        {lembretesVencidos.length > 0 && (
+          <div style={{
+            background: '#FEF2F2',
+            borderRadius: 8,
+            border: '1px solid #FCA5A5',
+            borderLeft: '4px solid #D64545',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(214,69,69,0.12)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#991B1B' }}>⚠️ Lembretes vencidos</div>
+              <span style={{ background: '#D64545', color: '#fff', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>{lembretesVencidos.length}</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#B91C1C', marginBottom: 4 }}>Permanecem aqui até alguém dar OK.</div>
+            {lembretesVencidos.map((item, i) => renderLembreteRow(item, i, lembretesVencidos))}
+          </div>
+        )}
+
         {/* ── Block 4: Lembretes próximos (conditional) ────────────────── */}
         {(visibleLembreteItems.length > 0 || (isManager && teamLembretes.length > 0)) && (
           <div style={{
@@ -867,103 +1019,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             {(!isManager || abaLembretes === 'meus') ? (
               visibleLembreteItems.length === 0 ? (
                 <div style={{ fontSize: 12.5, color: '#9CA3AF', fontStyle: 'italic' }}>Nenhum lembrete seu para os próximos dias.</div>
-              ) : visibleLembreteItems.map((item, i) => {
-                const acting = lembreteActingId === item.id
-                const popoverOpen = adiarPopoverId === item.id
-                const adiadoHa = item.adiadoDesde ? Math.max(0, diasEntre(item.adiadoDesde, todayStrLembretes)) : null
-                return (
-                  <div key={item.id} style={{ padding: '7px 0', borderBottom: i < visibleLembreteItems.length - 1 ? '1px solid #FDDFC4' : 'none' }}>
-                    <button
-                      onClick={() => abrirLembreteNaPagina(item)}
-                      title="Ver este lembrete em Lembretes ativos"
-                      style={{
-                        display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0,
-                        cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.5,
-                      }}
-                    >
-                      <span style={{ fontWeight: 500, fontSize: 13, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.titulo}
-                      </span>
-                      <span style={{ color: item.vencido ? '#D64545' : item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11, fontWeight: item.vencido ? 700 : 400 }}>
-                        {item.vencido
-                          ? item.daysLeft === 0 ? 'Vencido hoje' : `Vencido há ${-item.daysLeft} dia${item.daysLeft === -1 ? '' : 's'}`
-                          : item.daysLeft === 0 ? 'Hoje' : item.daysLeft === 1 ? 'Amanhã' : `Em ${item.daysLeft} dias`}
-                      </span>
-                      {adiadoHa !== null && (
-                        <span style={{ display: 'block', color: '#B45309', fontSize: 10.5, fontWeight: 600, fontStyle: 'italic' }}>
-                          {adiadoHa === 0 ? '↻ Adiado hoje' : `↻ Vem sendo adiado há ${adiadoHa} dia${adiadoHa === 1 ? '' : 's'}`}
-                        </span>
-                      )}
-                    </button>
-
-                    <div style={{ display: 'flex', gap: 6, marginTop: 6, position: 'relative' }}>
-                      <button
-                        onClick={() => void handleConfirmDashboard(item)}
-                        disabled={acting}
-                        style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #16A34A', background: '#F0FDF4', color: '#15803D', fontSize: 11, fontWeight: 700, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
-                      >
-                        OK
-                      </button>
-                      <button
-                        onClick={() => void handleDescartar(item)}
-                        disabled={acting}
-                        style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', color: '#6B7280', fontSize: 11, fontWeight: 600, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
-                      >
-                        Descartar
-                      </button>
-                      <button
-                        onClick={() => { setAdiarPopoverId(popoverOpen ? null : item.id); setAdiarCustomDate('') }}
-                        disabled={acting}
-                        style={{ padding: '3px 10px', borderRadius: 6, border: `1px solid ${popoverOpen ? '#B85C1A' : '#D1D5DB'}`, background: popoverOpen ? '#FFF3D9' : '#fff', color: '#7A3A0E', fontSize: 11, fontWeight: 600, cursor: acting ? 'default' : 'pointer', opacity: acting ? 0.5 : 1, fontFamily: 'inherit' }}
-                      >
-                        Adiar
-                      </button>
-
-                      {popoverOpen && (
-                        <div style={{
-                          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
-                          background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8,
-                          boxShadow: '0 6px 20px rgba(0,0,0,0.12)', padding: 10, width: 200,
-                        }}>
-                          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-                            {[{ lbl: '+1 dia', d: 1 }, { lbl: '+3 dias', d: 3 }, { lbl: '+7 dias', d: 7 }].map(opt => (
-                              <button
-                                key={opt.d}
-                                onClick={() => void handleAdiarPara(item, addDaysStr(todayStrLembretes, opt.d))}
-                                style={{ flex: 1, padding: '4px 0', borderRadius: 5, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#374151', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-                              >
-                                {opt.lbl}
-                              </button>
-                            ))}
-                          </div>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <input
-                              type="date"
-                              value={adiarCustomDate}
-                              onChange={e => setAdiarCustomDate(e.target.value)}
-                              min={todayStrLembretes}
-                              style={{ flex: 1, padding: '3px 6px', border: '1px solid #E2E8F0', borderRadius: 5, fontSize: 11, fontFamily: 'inherit', color: '#1E293B' }}
-                            />
-                            <button
-                              onClick={() => { if (adiarCustomDate) void handleAdiarPara(item, adiarCustomDate) }}
-                              disabled={!adiarCustomDate}
-                              style={{ padding: '3px 10px', borderRadius: 5, border: 'none', background: '#B85C1A', color: '#fff', fontSize: 11, fontWeight: 600, cursor: adiarCustomDate ? 'pointer' : 'default', opacity: adiarCustomDate ? 1 : 0.5, fontFamily: 'inherit' }}
-                            >
-                              OK
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => setAdiarPopoverId(null)}
-                            style={{ marginTop: 6, width: '100%', padding: '3px 0', borderRadius: 5, border: 'none', background: 'none', color: '#9CA3AF', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
+              ) : visibleLembreteItems.map((item, i) => renderLembreteRow(item, i, visibleLembreteItems))
             ) : (
               teamLembretes.length === 0 ? (
                 <div style={{ fontSize: 12.5, color: '#9CA3AF', fontStyle: 'italic' }}>Nenhum lembrete de outros colaboradores hoje.</div>
