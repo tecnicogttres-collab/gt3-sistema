@@ -15,7 +15,7 @@ import {
   type SplitState,
 } from './SplitView'
 import { createClient } from '../lib/supabase'
-import { isLembreteOverdue, ocorrenciaVigente } from '../lib/lembretes'
+import { VENCIDOS_EXIBIR_DESDE, isLembreteOverdue, ocorrenciaVigente } from '../lib/lembretes'
 import PrioridadeNotificacao from './PrioridadeNotificacao'
 import AtaNotificacao from './AtaNotificacao'
 import SugestaoNotificacao from './SugestaoNotificacao'
@@ -552,7 +552,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .eq('adiado', true)
         const adiados = new Map((adiRows ?? []).map(a => [a.lembrete_id as string, a.mostrar_a_partir_de as string]))
         const originais = new Map((adiRows ?? []).map(a => [a.lembrete_id as string, (a.data_original as string | null) ?? null]))
-        const vencidos = meus.filter(r => !(r.concluido && r.periodo === 'unico') && isLembreteOverdue(r, new Set(r.confirmadas), new Date(), adiados.get(r.id)))
+        const vencidos = meus.filter(r => !(r.concluido && r.periodo === 'unico') && isLembreteOverdue(r, new Set(r.confirmadas), new Date(), adiados.get(r.id))
+          && (ocorrenciaVigente(r, new Set(r.confirmadas), new Date(), adiados.get(r.id))?.data ?? '') >= VENCIDOS_EXIBIR_DESDE)
         if (vencidos.length > 0) {
           setLembretesVencidos(vencidos.map(r => {
             const occ = ocorrenciaVigente(r, new Set(r.confirmadas), new Date(), adiados.get(r.id))?.data ?? null

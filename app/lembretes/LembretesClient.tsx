@@ -112,6 +112,9 @@ export default function LembretesClient() {
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  // Data do calendário em que o lembrete foi clicado — o OK do modal finaliza essa ocorrência.
+  const [editingOcc, setEditingOcc] = useState<string | null>(null)
+  const [dragOverDs, setDragOverDs] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [calYear, setCalYear] = useState(new Date().getFullYear())
@@ -238,6 +241,14 @@ export default function LembretesClient() {
     router.replace('/lembretes')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, lembretes, searchParams])
+
+  // "+ Novo" do Dashboard (?novo=1): abre direto a tela de novo lembrete.
+  useEffect(() => {
+    if (loading || searchParams.get('novo') !== '1') return
+    openNew()
+    router.replace('/lembretes')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams])
 
   // Vem do widget "Lembretes" do Dashboard (?highlight=<id>) — não abre popup,
   // só expande "Lembretes ativos", rola até o card e destaca ele por um instante.
@@ -389,15 +400,22 @@ export default function LembretesClient() {
 
   // ── Confirmar (OK) ─────────────────────────────────────────────────────────
 
-  async function handleConfirm(r: Lembrete) {
-    if (!profile) return
-    if (confirmandoIds.has(r.id)) return
+  /** Ocorrência da série que corresponde a uma data do calendário (a vigente pode estar adiada). */
+  function serieDaData(r: Lembrete, ds: string): string {
+    const v = vigenteDe(r)
+    return v && ds === v.data ? v.serie : ds
+  }
+
+  async function handleConfirm(r: Lembrete, serieAlvo?: string): Promise<boolean> {
+    if (!profile) return false
+    if (confirmandoIds.has(r.id)) return false
     const vigente = vigenteDe(r)
-    if (!vigente) return
+    const serie = serieAlvo ?? vigente?.serie
+    if (!serie) return false
     setConfirmandoIds(prev => new Set([...prev, r.id]))
     try {
       const supabase = createClient()
-      const mesRef = mesReferenciaDe(vigente.serie)
+      const mesRef = mesReferenciaDe(serie)
       const { error } = await supabase
         .from('lembretes_historico')
         .insert({
@@ -407,7 +425,7 @@ export default function LembretesClient() {
           usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
           usuario_login: profile.usuario ?? profile.email ?? profile.nome ?? 'Usuário',
           mes_referencia: mesRef,
-          data_ocorrencia: vigente.serie,
+          data_ocorrencia: serie,
         })
 
       if (error) {
@@ -417,7 +435,7 @@ export default function LembretesClient() {
           setFinalizadosExpanded(true)
           setHistExpanded(true)
         }
-        return
+        return false
       }
 
       const novaEntrada: HistoricoRow = {
@@ -428,25 +446,75 @@ export default function LembretesClient() {
         usuario_nome: profile.nome ?? profile.usuario ?? 'Usuário',
         usuario_login: profile.usuario ?? profile.email ?? 'Usuário',
         mes_referencia: mesRef,
-        data_ocorrencia: vigente.serie,
+        data_ocorrencia: serie,
         created_at: new Date().toISOString(),
       }
       // O adiamento era desta ocorrência: não pode valer para a próxima.
-      await supabase.from('lembretes_adiamentos').delete().eq('lembrete_id', r.id).eq('usuario_id', profile.id)
-      setAdiadosMap(prev => { const n = { ...prev }; delete n[r.id]; return n })
-      setLembretes(prev => prev.map(x => x.id === r.id ? { ...x, confirmadas: [...x.confirmadas, vigente.serie] } : x))
+      if (serie === vigente?.serie) {
+        await supabase.from('lembretes_adiamentos').delete().eq('lembrete_id', r.id).eq('usuario_id', profile.id)
+        setAdiadosMap(prev => { const n = { ...prev }; delete n[r.id]; return n })
+      }
+      setLembretes(prev => prev.map(x => x.id === r.id ? { ...x, confirmadas: [...x.confirmadas, serie] } : x))
       setHistorico(prev => [novaEntrada, ...prev])
+      setCalHistorico(prev => [novaEntrada, ...prev])
       setFinalizadosExpanded(true)
       setHistExpanded(true)
+      return true
     } finally {
       setConfirmandoIds(prev => { const n = new Set(prev); n.delete(r.id); return n })
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Excluir este lembrete?')) return
+  async function handleDelete(id: string): Promise<boolean> {
+    if (!confirm('Excluir este lembrete?')) return false
     const res = await fetch(`/api/lembretes/${id}`, { method: 'DELETE' })
     if (res.ok) setLembretes(prev => prev.filter(r => r.id !== id))
+    return res.ok
+  }
+
+  // ── Arrastar no calendário: muda a data e mantém o horário ─────────────────
+
+  function podeArrastar(r: Lembrete, ds: string): boolean {
+    return !calConfirmadas.has(`${r.id}|${ds}`)
+  }
+
+  function addDias(ds: string, n: number): string {
+    const d = parseDate(ds)
+    d.setDate(d.getDate() + n)
+    return fmtDateStr(d)
+  }
+
+  async function moverLembrete(id: string, de: string, para: string) {
+    const r = lembretes.find(x => x.id === id)
+    if (!r || de === para) return
+    const delta = Math.round((parseDate(para).getTime() - parseDate(de).getTime()) / 86400000)
+    let body: Record<string, unknown>
+    if (r.periodo === 'unico' || r.periodo === 'diario') {
+      body = { periodo: r.periodo, data_inicio: para }
+    } else {
+      if (!confirm(`"${r.titulo}" é recorrente. Mover toda a série para ${fmtBR(para)}? O horário é mantido.`)) return
+      if (r.periodo === 'mensal_dia_semana') {
+        const alvo = parseDate(para)
+        const ord = Math.ceil(alvo.getDate() / 7)
+        body = {
+          periodo: r.periodo,
+          data_inicio: para < r.data_inicio ? para : r.data_inicio,
+          dia_semana: alvo.getDay(),
+          semana_ordinal: ord > 4 ? -1 : ord,
+        }
+      } else {
+        body = { periodo: r.periodo, data_inicio: addDias(r.data_inicio, delta) }
+      }
+    }
+    const res = await fetch(`/api/lembretes/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    if (res.ok) {
+      const updated: Omit<Lembrete, 'confirmadas'> = await res.json()
+      setLembretes(prev => prev.map(x => x.id === id ? { ...x, ...updated } : x))
+      // Mudar a data apaga adiamentos da data antiga: relê.
+      void load()
+    } else alert('Não foi possível mover o lembrete.')
   }
 
   async function loadUsers() {
@@ -459,6 +527,7 @@ export default function LembretesClient() {
 
   function openNew() {
     setEditingId(null)
+    setEditingOcc(null)
     setForm({ ...emptyForm, data_inicio: fmtDateStr(new Date()) })
     setUserSearch('')
     setModalOpen(true)
@@ -467,14 +536,16 @@ export default function LembretesClient() {
 
   function openNewOnDate(dataIso: string) {
     setEditingId(null)
+    setEditingOcc(null)
     setForm({ ...emptyForm, data_inicio: dataIso })
     setUserSearch('')
     setModalOpen(true)
     void loadUsers()
   }
 
-  function openEdit(r: Lembrete) {
+  function openEdit(r: Lembrete, occ?: string) {
     setEditingId(r.id)
+    setEditingOcc(occ ?? null)
     setForm({
       titulo: r.titulo, descricao: r.descricao ?? '', periodo: r.periodo, data_inicio: r.data_inicio, hora_inicio: r.hora_inicio ?? '',
       dia_semana: r.dia_semana ?? 1, semana_ordinal: r.semana_ordinal ?? 1,
@@ -691,6 +762,8 @@ export default function LembretesClient() {
       </div>
     )
   }
+
+  const editingLembrete = editingId ? lembretes.find(x => x.id === editingId) ?? null : null
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -1003,7 +1076,16 @@ export default function LembretesClient() {
                 key={d}
                 onClick={() => openNewOnDate(ds)}
                 title="Clique para criar um lembrete nesta data"
+                onDragOver={e => { if (e.dataTransfer.types.includes('application/x-lembrete')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverDs !== ds) setDragOverDs(ds) } }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDs(d => d === ds ? null : d) }}
+                onDrop={e => {
+                  e.preventDefault()
+                  setDragOverDs(null)
+                  const [id, de] = (e.dataTransfer.getData('application/x-lembrete') || '').split('|')
+                  if (id && de) void moverLembrete(id, de, ds)
+                }}
                 style={{
+                  outline: dragOverDs === ds ? `2px dashed ${INK}` : 'none', outlineOffset: -3,
                   minHeight: 72, minWidth: 0, overflow: 'hidden', boxSizing: 'border-box',
                   background: isT ? '#FFF8EA' : hits.length > 0 ? '#F5F8FF' : '#fff',
                   border: `${isT ? 2 : 1.5}px solid ${isT ? GOLD : hits.length > 0 ? '#4A6DB5' : '#C8C5BC'}`,
@@ -1020,12 +1102,17 @@ export default function LembretesClient() {
                   const confirmed = calConfirmadas.has(`${r.id}|${ds}`)
                   const over = parseDate(ds) < todayLocal() && !confirmed
                   return (
-                    <div key={idx} title="Clique para editar" onClick={e => { e.stopPropagation(); openEdit(r) }} style={{
+                    <div key={idx}
+                      title={podeArrastar(r, ds) ? 'Clique para abrir · arraste para mudar a data' : 'Clique para abrir'}
+                      draggable={podeArrastar(r, ds)}
+                      onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('application/x-lembrete', `${r.id}|${ds}`); e.dataTransfer.effectAllowed = 'move' }}
+                      onDragEnd={() => setDragOverDs(null)}
+                      onClick={e => { e.stopPropagation(); openEdit(r, ds) }} style={{
                       fontSize: 10, borderRadius: 3, padding: '1px 4px', marginBottom: 2,
                       background: confirmed ? '#DCFCE7' : over ? '#FBF0E8' : '#EBF0FA',
                       color: confirmed ? '#166534' : over ? '#7A3A0E' : '#1A3266',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      cursor: 'pointer',
+                      cursor: podeArrastar(r, ds) ? 'grab' : 'pointer',
                     }}
                     onMouseEnter={e => { e.stopPropagation(); (e.currentTarget as HTMLElement).style.filter = 'brightness(0.93)' }}
                     onMouseLeave={e => { e.stopPropagation(); (e.currentTarget as HTMLElement).style.filter = 'none' }}>
@@ -1434,7 +1521,33 @@ export default function LembretesClient() {
                 </Field>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4, flexWrap: 'wrap' }}>
+                {editingLembrete && (() => {
+                  const r = editingLembrete
+                  const serie = editingOcc ? serieDaData(r, editingOcc) : vigenteDe(r)?.serie ?? null
+                  const jaOk = !!serie && (r.confirmadas.includes(serie) || (!!editingOcc && calConfirmadas.has(`${r.id}|${editingOcc}`)))
+                  const confirmando = confirmandoIds.has(r.id)
+                  return (
+                    <div style={{ display: 'flex', gap: 8, marginRight: 'auto', alignItems: 'center' }}>
+                      <button
+                        onClick={async () => { if (await handleDelete(r.id)) setModalOpen(false) }}
+                        style={{ padding: '9px 14px', border: '1px solid #F5C2C2', borderRadius: 6, background: '#FFF5F5', color: '#B42318', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                        Excluir
+                      </button>
+                      {serie && (jaOk ? (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: OK_TEXT }}>Concluído ✓</span>
+                      ) : (
+                        <button
+                          onClick={async () => { if (await handleConfirm(r, serie)) setModalOpen(false) }}
+                          disabled={confirmando}
+                          title={`Dar OK na ocorrência de ${fmtBR(serie)}`}
+                          style={{ padding: '9px 16px', border: `1.5px solid ${OK_GREEN}`, borderRadius: 6, background: '#F0FDF4', color: OK_TEXT, fontSize: 13, fontWeight: 700, cursor: confirmando ? 'default' : 'pointer', opacity: confirmando ? 0.6 : 1 }}>
+                          {confirmando ? '…' : 'OK'}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
                 <button onClick={() => setModalOpen(false)} style={{ padding: '9px 18px', border: `1px solid #C8C5BC`, borderRadius: 6, background: '#fff', color: TEXT_MID, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   Cancelar
                 </button>

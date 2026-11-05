@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '../lib/supabase'
-import { isLembreteOverdue, mesReferenciaDe, ocorrenciaVigente, ocorrenciasVencidasAnteriores, type LembreteOcorrencia } from '../lib/lembretes'
+import { VENCIDOS_EXIBIR_DESDE, isLembreteOverdue, mesReferenciaDe, ocorrenciaVigente, ocorrenciasVencidasAnteriores, type LembreteOcorrencia } from '../lib/lembretes'
 import { urgenciaDesig } from '../lib/desig-urgencia'
 import { useUser } from '../components/UserContext'
 import EnqueteDashboardCard from './EnqueteDashboardCard'
@@ -396,10 +396,12 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       const adiamento = adi?.adiado ? adi.mostrar : null
       const vigente = ocorrenciaVigente(r, confirmadas, agora, adiamento)
       // Adiado (até o OK, que apaga o adiamento) nunca conta como vencido — nem a ocorrência
-      // vigente, nem pendências antigas da recorrência.
-      const adiado = !!adi?.adiado
+      // vigente, nem pendências antigas da recorrência. Só vale o adiamento que de fato empurrou a
+      // ocorrência vigente: um que sobrou de uma data anterior (ex.: lembrete reagendado) é ignorado,
+      // como em ocorrenciaVigente — senão o lembrete nunca apareceria como vencido aqui.
+      const adiado = !!adi?.adiado && !!vigente && vigente.data !== vigente.serie
 
-      if (!adiado) for (const d of ocorrenciasVencidasAnteriores(r, confirmadas, vigente)) {
+      if (!adiado) for (const d of ocorrenciasVencidasAnteriores(r, confirmadas, vigente).filter(d => d >= VENCIDOS_EXIBIR_DESDE)) {
         vencidos.push({
           key: `${r.id}|${d}`, atual: false, id: r.id, titulo: r.titulo,
           daysLeft: diasEntre(todayStrLembretes, d), dataOcorrencia: d, dataSerie: d, vencido: true, adiadoDesde: null,
@@ -408,6 +410,7 @@ export default function DashboardSidebar({ role }: { role?: string }) {
 
       if (!vigente) continue
       const vencido = !adiado && isLembreteOverdue(r, confirmadas, agora, adiamento)
+      if (vencido && vigente.data < VENCIDOS_EXIBIR_DESDE) continue
       if (!vencido && adi && !adi.adiado && adi.mostrar > todayStrLembretes) continue
       const diff = diasEntre(todayStrLembretes, vigente.data)
       if (diff > 3) continue
@@ -967,7 +970,15 @@ export default function DashboardSidebar({ role }: { role?: string }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#991B1B' }}>⚠️ Lembretes vencidos</div>
-              <span style={{ background: '#D64545', color: '#fff', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>{lembretesVencidos.length}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {!(visibleLembreteItems.length > 0 || (isManager && teamLembretes.length > 0)) && (
+                  <button onClick={() => router.push('/lembretes?novo=1')} title="Criar um novo lembrete"
+                    style={{ border: '1px solid #FCA5A5', background: '#fff', color: '#991B1B', borderRadius: 99, padding: '1px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    + Novo
+                  </button>
+                )}
+                <span style={{ background: '#D64545', color: '#fff', borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>{lembretesVencidos.length}</span>
+              </div>
             </div>
             <div style={{ fontSize: 11, color: '#B91C1C', marginBottom: 4 }}>Permanecem aqui até alguém dar OK.</div>
             {lembretesVencidos.map((item, i) => renderLembreteRow(item, i, lembretesVencidos))}
@@ -984,8 +995,12 @@ export default function DashboardSidebar({ role }: { role?: string }) {
             boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#7A3A0E' }}>
-                📌 Lembretes
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#7A3A0E' }}>📌 Lembretes</div>
+                <button onClick={() => router.push('/lembretes?novo=1')} title="Criar um novo lembrete"
+                  style={{ border: '1px solid #FDDFC4', background: '#fff', color: '#7A3A0E', borderRadius: 99, padding: '1px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  + Novo
+                </button>
               </div>
               {isManager && (
                 <div style={{ display: 'flex', gap: 4 }}>

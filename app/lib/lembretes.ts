@@ -201,6 +201,11 @@ export function findMonthOccurrences(r: LembreteOcorrencia, year: number, month:
   return noMes.sort()
 }
 
+/** Vencidos só aparecem no Dashboard e no aviso de atraso a partir desta data: ocorrências
+ *  anteriores (sobras de antes da regra de "vencido até o OK") não são exibidas a ninguém.
+ *  O módulo de Lembretes continua mostrando tudo, para a gestão. */
+export const VENCIDOS_EXIBIR_DESDE = '2026-11-04'
+
 // Vencido = a ocorrência vigente já passou sem OK. Continua vencido, mesmo em outro mês, até
 // o OK; na recorrência, até chegar a ocorrência seguinte.
 export function isLembreteOverdue(r: LembreteOcorrencia, confirmadas: Set<string>, now: Date = new Date(), adiamento?: string | null): boolean {
