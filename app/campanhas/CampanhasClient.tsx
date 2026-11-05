@@ -32,7 +32,7 @@ const COLOR_PRESETS: { color: string; bg: string; name: string }[] = [
 
 /** Cores sugeridas para a barra de aviso no topo da tela (ex.: Outubro Rosa, Novembro Azul). */
 const COR_BARRA_PRESETS: { cor: string; name: string }[] = [
-  { cor: '#B45309', name: 'Padrão (âmbar)' },
+  { cor: '#B45309', name: 'Âmbar' },
   { cor: '#D6336C', name: 'Outubro Rosa' },
   { cor: '#1C7ED6', name: 'Novembro Azul' },
   { cor: '#F59F00', name: 'Setembro Amarelo' },
@@ -110,7 +110,7 @@ function destinatarioLabels(c: Campanha, users: UserRow[]) {
   })
 }
 
-const FORM_VAZIO = (categoria: string): Form => ({ titulo: '', descricao: '', link: '', categoria, cor: COR_PADRAO, todos: true, perfis: [], pessoas: [] })
+const FORM_VAZIO = (categoria: string): Form => ({ titulo: '', descricao: '', link: '', categoria, cor: '', todos: true, perfis: [], pessoas: [] })
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -132,6 +132,7 @@ export default function CampanhasClient() {
   const [form, setForm]             = useState<Form>(FORM_VAZIO(''))
   const [saving, setSaving]         = useState(false)
   const [errDestino, setErrDestino] = useState(false)
+  const [errCor, setErrCor]         = useState(false)
 
   // Quem leu / quem não leu (por campanha, só gestor/admin)
   const [leiturasAbertas, setLeiturasAbertas] = useState<Set<string>>(new Set())
@@ -269,19 +270,21 @@ export default function CampanhasClient() {
   function abrirNova() {
     setEditandoId(null)
     setForm(FORM_VAZIO(categorias[0]?.id ?? ''))
-    setErrDestino(false)
+    setErrDestino(false); setErrCor(false)
     setDrawerOpen(true)
   }
 
   function abrirEdicao(c: Campanha) {
     setEditandoId(c.id)
-    setForm({ titulo: c.titulo, descricao: c.descricao ?? '', link: c.link, categoria: c.categoria, cor: c.cor || COR_PADRAO, todos: true, perfis: [], pessoas: [] })
-    setErrDestino(false)
+    setForm({ titulo: c.titulo, descricao: c.descricao ?? '', link: c.link, categoria: c.categoria, cor: c.cor || '', todos: true, perfis: [], pessoas: [] })
+    setErrDestino(false); setErrCor(false)
     setDrawerOpen(true)
   }
 
   async function handlePublicar() {
     if (!form.titulo.trim() || !form.link.trim()) { showToast('Preencha título e link antes de publicar.'); return }
+    if (!form.cor) { setErrCor(true); showToast('Escolha a cor da barra de aviso.'); return }
+    setErrCor(false)
     const categoria = form.categoria || categorias[0]?.id || ''
 
     // Edição: título, descrição, link, categoria e cor da barra (destinatários não mudam)
@@ -304,7 +307,7 @@ export default function CampanhasClient() {
 
     const destinatarios: string[] = form.todos ? ['todos'] : [...form.perfis, ...form.pessoas]
     if (destinatarios.length === 0) { setErrDestino(true); return }
-    setErrDestino(false)
+    setErrDestino(false); setErrCor(false)
     setSaving(true)
     const res = await fetch('/api/campanhas', {
       method: 'POST',
@@ -657,21 +660,27 @@ export default function CampanhasClient() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: TEXT, marginBottom: 6 }}>Cor da barra de aviso</label>
-            <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>É a barra que fica no topo da tela de quem recebe, até abrir o link.</div>
+            <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>É a barra que fica no topo da tela de quem recebe, até abrir o link. Escolha uma cor que combine com o tema do informativo.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {COR_BARRA_PRESETS.map(p => (
-                <div key={p.cor} title={p.name} onClick={() => setForm(f => ({ ...f, cor: p.cor }))}
-                  style={{ width: 26, height: 26, borderRadius: '50%', background: p.cor, cursor: 'pointer', flexShrink: 0, outline: form.cor.toLowerCase() === p.cor.toLowerCase() ? `3px solid ${TEXT}` : '2px solid transparent', outlineOffset: 2 }} />
+                <div key={p.cor} title={p.name} onClick={() => { setForm(f => ({ ...f, cor: p.cor })); setErrCor(false) }}
+                  style={{ width: 26, height: 26, borderRadius: '50%', background: p.cor, cursor: 'pointer', flexShrink: 0, outline: form.cor && form.cor.toLowerCase() === p.cor.toLowerCase() ? `3px solid ${TEXT}` : '2px solid transparent', outlineOffset: 2 }} />
               ))}
               <label title="Escolher outra cor" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED, cursor: 'pointer' }}>
-                <input type="color" value={form.cor} onChange={e => setForm(f => ({ ...f, cor: e.target.value }))} style={{ width: 30, height: 26, padding: 0, border: `1px solid ${BORDER}`, borderRadius: 6, background: 'transparent', cursor: 'pointer' }} />
+                <input type="color" value={form.cor || '#888888'} onChange={e => { setForm(f => ({ ...f, cor: e.target.value })); setErrCor(false) }} style={{ width: 30, height: 26, padding: 0, border: `1px solid ${BORDER}`, borderRadius: 6, background: 'transparent', cursor: 'pointer' }} />
                 Outra
               </label>
             </div>
+            {form.cor ? (
             <div style={{ marginTop: 10, background: form.cor, color: '#fff', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📣 {form.titulo.trim() || 'Título da campanha'}</span>
               <span style={{ background: '#fff', color: form.cor, borderRadius: 6, padding: '3px 10px', fontSize: 12, flexShrink: 0 }}>Abrir</span>
             </div>
+            ) : (
+            <div style={{ marginTop: 10, border: `1px dashed ${errCor ? '#C53030' : BORDER}`, color: errCor ? '#C53030' : MUTED, borderRadius: 8, padding: '9px 14px', fontSize: 12.5, textAlign: 'center' }}>
+              {errCor ? 'Escolha uma cor para publicar.' : 'Nenhuma cor selecionada'}
+            </div>
+            )}
           </div>
           {!editandoId && (
           <div>
