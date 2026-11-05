@@ -7,6 +7,7 @@ import * as allPdis from '../../data/pdis/index'
 import type { PdiColaborador } from '../../data/pdis/types'
 import type { DbPdi, DbCicloScore } from './page'
 import PdiAgendaDrawer from './PdiAgendaDrawer'
+import PdiExportModal, { type PdiExportOpcao } from './PdiExportModal'
 
 const staticPdis = Object.values(allPdis) as PdiColaborador[]
 
@@ -503,6 +504,7 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
     .filter(p => !migratedSlugs.has(p.id) && !deletedStaticIds.has(p.id))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   const [agendaOpen, setAgendaOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [agendaBadge, setAgendaBadge] = useState(0)
   const searchParams = useSearchParams()
 
@@ -519,6 +521,13 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
     ...activeDbPdis.map(p => ({ type: 'db' as const, pdi: p })),
   ].sort((a, b) => a.pdi.nome.localeCompare(b.pdi.nome, 'pt-BR'))
   const totalCount = allActive.length + archivedDbPdis.length
+
+  const exportOpcoes: PdiExportOpcao[] = [
+    ...allActive.map(x => x.type === 'static'
+      ? { id: x.pdi.id, nome: x.pdi.nome, funcao: x.pdi.funcao, estatico: x.pdi }
+      : { id: x.pdi.id, nome: x.pdi.nome, funcao: x.pdi.funcao }),
+    ...archivedDbPdis.map(p => ({ id: p.id, nome: p.nome, funcao: p.funcao, arquivado: true })),
+  ]
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8,
@@ -647,6 +656,7 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
 
   return (
     <div>
+      {isGestorAdmin && exportOpen && <PdiExportModal opcoes={exportOpcoes} onClose={() => setExportOpen(false)} />}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1E293B' }}>PDI</h1>
@@ -674,6 +684,20 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
                 }} />
               </div>
             </label>
+            <button
+              onClick={() => setExportOpen(true)}
+              title="Exportar informações dos PDIs"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '9px 16px', backgroundColor: '#fff', color: '#2A4F96',
+                border: '1px solid #2A4F96', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#EBF0FB' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
+            >
+              ⬇ Exportar
+            </button>
             <button
               onClick={() => setAgendaOpen(true)}
               style={{
