@@ -143,7 +143,7 @@ export default function CampanhasClient() {
   const [editingCatId, setEditingCatId] = useState<string | null>(null)
   const [catDraft, setCatDraft]         = useState<{ label: string; color: string; bg: string }>({ label: '', color: COLOR_PRESETS[0].color, bg: COLOR_PRESETS[0].bg })
   const [addingCat, setAddingCat]       = useState(false)
-  const [newCat, setNewCat]             = useState<{ label: string; color: string; bg: string }>({ label: '', color: COLOR_PRESETS[0].color, bg: COLOR_PRESETS[0].bg })
+  const [newCat, setNewCat]             = useState<{ label: string; color: string; bg: string }>({ label: '', color: '', bg: '' })
   const [catSaving, setCatSaving]       = useState(false)
 
   const [toast, setToast] = useState<{ msg: string; show: boolean }>({ msg: '', show: false })
@@ -355,7 +355,7 @@ export default function CampanhasClient() {
   }
 
   async function saveNewCat() {
-    if (!newCat.label.trim()) return
+    if (!newCat.label.trim() || !newCat.color) return
     setCatSaving(true)
     const res = await fetch('/api/campanhas/categorias', {
       method: 'POST',
@@ -366,7 +366,7 @@ export default function CampanhasClient() {
     if (res.ok) {
       const created: CatRow = await res.json()
       setCategorias(prev => [...prev, created])
-      setNewCat({ label: '', color: COLOR_PRESETS[0].color, bg: COLOR_PRESETS[0].bg })
+      setNewCat({ label: '', color: '', bg: '' })
       setAddingCat(false)
     } else {
       let msg = 'Erro ao criar categoria.'
@@ -604,13 +604,17 @@ export default function CampanhasClient() {
                     placeholder="Nome da categoria"
                     autoFocus
                     style={{ width: '100%', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '8px 10px', fontSize: 13.5, fontFamily: 'inherit', background: SURF, color: TEXT, boxSizing: 'border-box', marginBottom: 4 }} />
+                  <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6 }}>Escolha a cor que combina com o tema.</div>
                   <ColorPicker selected={newCat.color} onSelect={(color, bg) => setNewCat(d => ({ ...d, color, bg }))} />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 999, fontWeight: 700, color: newCat.color, background: newCat.bg }}>{newCat.label || 'Prévia'}</span>
+                    {newCat.color
+                      ? <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 999, fontWeight: 700, color: newCat.color, background: newCat.bg }}>{newCat.label || 'Prévia'}</span>
+                      : <span style={{ fontSize: 11, color: MUTED }}>Nenhuma cor selecionada</span>}
                     <div style={{ flex: 1 }} />
                     <button onClick={() => setAddingCat(false)} style={{ background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 7, padding: '6px 12px', fontSize: 13, color: MUTED, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
-                    <button onClick={saveNewCat} disabled={catSaving || !newCat.label.trim()}
-                      style={{ background: PRIMARY, border: 'none', color: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: catSaving || !newCat.label.trim() ? 0.6 : 1 }}>
+                    <button onClick={saveNewCat} disabled={catSaving || !newCat.label.trim() || !newCat.color}
+                      title={!newCat.color ? 'Escolha uma cor' : undefined}
+                      style={{ background: PRIMARY, border: 'none', color: '#fff', borderRadius: 7, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: catSaving || !newCat.label.trim() || !newCat.color ? 0.6 : 1 }}>
                       Criar
                     </button>
                   </div>
@@ -660,7 +664,7 @@ export default function CampanhasClient() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: TEXT, marginBottom: 6 }}>Cor da barra de aviso</label>
-            <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>É a barra que fica no topo da tela de quem recebe, até abrir o link. Escolha uma cor que combine com o tema do informativo.</div>
+            <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>Escolha a cor que combina com o tema do informativo.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {COR_BARRA_PRESETS.map(p => (
                 <div key={p.cor} title={p.name} onClick={() => { setForm(f => ({ ...f, cor: p.cor })); setErrCor(false) }}
