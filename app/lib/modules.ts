@@ -309,6 +309,15 @@ export const MODULES: Module[] = [
     allowedRoles: ['gestor', 'admin'],
   },
   {
+    // Nome provisório: editável em Custo de Servir › Configurações › Parâmetros (cs_config + modulos_config)
+    id: 'custo-servir',
+    label: 'Custo de Servir',
+    color: '#4A90D9',
+    path: '/custo-servir',
+    description: 'Cronometragem de documentos, tempo-padrão por grupo e horas e margem por contratante',
+    allowedRoles: ['colaborador', 'trainee', 'gestor', 'admin'],
+  },
+  {
     id: 'coisas-a-fazer',
     label: 'Melhorias',
     color: '#4A90D9',

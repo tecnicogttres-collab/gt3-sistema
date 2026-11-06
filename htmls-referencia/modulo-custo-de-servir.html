@@ -1,0 +1,811 @@
+<title>Módulo Custo de Servir</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: casca do GT3 Sistema (sidebar branca com contorno azul) + módulo em abas. Cronometrar é a tela do avaliador: grupo → documento → cronômetro, em 2 cliques */
+:root{
+  --bg:#FFFFFF; --ink:#1A2540; --muted:#5B6684; --line:#C9D7EF; --edge:#2A4F96; --edge-2:#1E3A73; --tint:#EEF3FB; --tint2:#F7F9FD;
+  --gold:#D1AE6E; --gold-ink:#6B5420; --good:#1F8A5B; --good-bg:#EDF8F2; --bad:#C2412D; --bad-bg:#FDF1EE; --warn:#A86A12; --warn-bg:#FBF4E6; --gray:#9AA6BD;
+  --font-ui:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14.5px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+h1,h2,h3,h4{margin:0;line-height:1.2;text-wrap:balance}
+p{margin:0}
+.mono{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.note{font-size:13px;color:var(--muted)}
+.app{display:grid;grid-template-columns:210px minmax(0,1fr);gap:18px;padding-block:18px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1440px;margin:0 auto}
+.side{border:1.5px solid var(--edge);border-radius:14px;padding:16px 10px;align-self:start;position:sticky;top:max(18px,env(safe-area-inset-top,0px))}
+.brand{display:flex;gap:10px;align-items:center;padding:0 6px 14px;border-bottom:1.5px solid var(--line);margin-bottom:10px}
+.brand b{width:34px;height:34px;border-radius:8px;background:var(--edge);color:#FFFFFF;display:grid;place-items:center;font-weight:900;font-size:12px}
+.brand span{font-weight:800}
+.brand small{display:block;color:var(--muted);font-size:11px;font-weight:500}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{padding:7px 10px;border-radius:7px;color:var(--muted);text-decoration:none;font-size:13.5px}
+.nav a.on{background:var(--tint);color:var(--edge);font-weight:700;box-shadow:inset 3px 0 0 var(--gold)}
+.nav .sep{height:1px;background:var(--line);margin:6px}
+main{min-width:0;display:flex;flex-direction:column;gap:16px}
+.head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
+.head h1{font-size:26px;font-weight:900;color:var(--edge-2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.head h1 .tmp{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--gold-ink);border:1.5px dashed var(--gold-ink);border-radius:99px;padding:1px 9px;text-transform:uppercase}
+.head p{color:var(--muted);margin-top:4px;max-width:70ch}
+.who{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);font-weight:600}
+select,input[type=text],input[type=number],input[type=search],textarea{border:1.5px solid var(--edge);border-radius:8px;padding:7px 10px;background:var(--bg);min-width:0}
+.tabs{display:flex;gap:2px;border-bottom:2px solid var(--edge);overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 14px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;display:flex;gap:7px;align-items:center}
+.tabs button.on{color:var(--edge);border-bottom-color:var(--gold)}
+.tabs .cnt{font-family:var(--font-num);font-size:11px;background:var(--tint);color:var(--edge);border-radius:99px;padding:0 7px}
+.btn{border:1.5px solid var(--edge);background:var(--bg);color:var(--edge);font-weight:700;border-radius:9px;padding:7px 13px;cursor:pointer;white-space:nowrap}
+.btn:hover:not(:disabled){background:var(--tint)}
+.btn.solid{background:var(--edge);color:#FFFFFF}
+.btn.solid:hover:not(:disabled){background:var(--edge-2)}
+.btn.good{background:var(--good);border-color:var(--good);color:#FFFFFF}
+.btn.bad{border-color:var(--bad);color:var(--bad)}
+.btn.bad.solid{background:var(--bad);color:#FFFFFF}
+.btn.sm{padding:3px 9px;font-size:12.5px;border-radius:7px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.link{background:none;border:0;padding:0;color:var(--edge);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.box{border:1.5px solid var(--edge);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.box h2{font-size:17px;font-weight:800;color:var(--edge-2)}
+.box h3{font-size:15px;font-weight:800}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid2.wide{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{border:1.5px solid var(--edge);border-radius:10px;padding:10px 14px}
+.tile b{display:block;font-family:var(--font-num);font-size:22px;color:var(--edge-2);line-height:1.2}
+.tile span{font-size:12px;color:var(--muted)}
+.tbl{overflow-x:auto;border:1.5px solid var(--edge);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--edge);text-align:left;font-weight:800;padding:8px 10px;border-bottom:1.5px solid var(--edge);background:var(--tint);white-space:nowrap;position:sticky;top:0}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right} td.c,th.c{text-align:center}
+tr.click{cursor:pointer} tr.click:hover td{background:var(--tint2)}
+tr.sel td{background:var(--tint)}
+.scroll{max-height:520px;overflow:auto}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:1px 8px;border-radius:99px;border:1.5px solid currentColor;white-space:nowrap}
+.p-good{color:var(--good);background:var(--good-bg)} .p-bad{color:var(--bad);background:var(--bad-bg)} .p-warn{color:var(--warn);background:var(--warn-bg)} .p-blue{color:var(--edge);background:var(--tint)} .p-gray{color:var(--muted);background:var(--tint2)}
+.ex{font-size:10px;font-weight:800;color:var(--warn);border:1px dashed var(--warn);border-radius:4px;padding:0 4px;margin-left:4px}
+.empty{color:var(--muted);padding:18px;text-align:center}
+
+/* Cronometrar */
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13.5px;font-weight:700}
+.crumbs button{border:0;background:none;color:var(--edge);cursor:pointer;padding:0;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.crumbs span.cur{color:var(--ink)}
+.groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.gcard{border:2px solid var(--edge);border-radius:14px;padding:16px;text-align:left;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;gap:8px;transition:transform .15s,box-shadow .15s}
+.gcard:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgb(42 79 150 / .15)}
+.gcard b{font-size:17px;color:var(--edge-2)}
+.gcard .chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font-size:11.5px;font-weight:700;border:1.5px solid var(--edge);color:var(--edge);border-radius:99px;padding:0 8px}
+.prog{height:8px;border-radius:4px;background:var(--tint);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--good);border-radius:4px}
+.dlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:8px}
+.dcard{border:1.5px solid var(--edge);border-radius:10px;padding:10px 12px;text-align:left;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;gap:6px;min-width:0}
+.dcard:hover{background:var(--tint2)}
+.dcard b{font-size:13px;line-height:1.3}
+.dcard .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+.dcard.ready{border-color:var(--good)}
+.timer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:16px;align-items:start}
+.clock{border:2.5px solid var(--edge);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:16px;align-items:center;text-align:center}
+.clock .doc{font-weight:800;font-size:15px;color:var(--edge-2)}
+.clock .disp{font-family:var(--font-num);font-size:clamp(48px,8vw,86px);font-weight:600;line-height:1;color:var(--ink);letter-spacing:-.02em}
+.clock.run .disp{color:var(--edge)}
+.clock.run{border-color:var(--gold);box-shadow:0 0 0 4px color-mix(in srgb,var(--gold) 25%,transparent)}
+.clock.stop{border-color:var(--good)}
+.seg{display:inline-flex;border:1.5px solid var(--edge);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--bg);padding:7px 16px;font-weight:800;cursor:pointer;color:var(--edge)}
+.seg button.on.A{background:var(--good);color:#FFFFFF}
+.seg button.on.R{background:var(--bad);color:#FFFFFF}
+.ctl{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.ctl .btn{font-size:16px;padding:12px 22px;border-radius:12px}
+.keys{font-size:12px;color:var(--muted)}
+.keys kbd{font-family:var(--font-num);border:1.5px solid var(--line);border-radius:5px;padding:0 5px;background:var(--tint2)}
+.reasons{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.reasons button{border:1.5px solid var(--bad);color:var(--bad);background:var(--bg);border-radius:99px;padding:3px 11px;font-size:12.5px;font-weight:700;cursor:pointer}
+.reasons button:hover{background:var(--bad-bg)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stats div{border:1.5px solid var(--edge);border-radius:9px;padding:8px 10px}
+.stats b{display:block;font-family:var(--font-num);font-size:18px}
+.stats span{font-size:11.5px;color:var(--muted)}
+.float{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--edge);color:#FFFFFF;border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 10px 24px rgb(26 37 64 / .3);cursor:pointer;border:0;font-weight:700}
+.float .mono{font-size:18px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--gold);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+
+/* Configurações */
+.cfgnav{display:flex;flex-wrap:wrap;gap:6px}
+.cfgnav button{border:1.5px solid var(--edge);background:var(--bg);color:var(--edge);border-radius:99px;padding:5px 12px;font-weight:700;cursor:pointer;font-size:13px}
+.cfgnav button.on{background:var(--edge);color:#FFFFFF}
+.mv{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:start}
+.mv .col{border:1.5px solid var(--edge);border-radius:10px;display:flex;flex-direction:column;min-width:0}
+.mv .col header{padding:10px 12px;border-bottom:1.5px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.mv .list{max-height:420px;overflow:auto;padding:6px}
+.mv label.it{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 6px;border-radius:6px;font-size:13px;cursor:pointer}
+.mv label.it:hover{background:var(--tint2)}
+.mv .mid{display:flex;flex-direction:column;gap:8px;padding-top:60px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.kv label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600;color:var(--muted)}
+td input[type=text],td input[type=number]{padding:4px 8px;width:100%;min-width:70px}
+.drop{border:2px dashed var(--edge);border-radius:12px;padding:18px;text-align:center;background:var(--tint2);display:flex;flex-direction:column;gap:8px;align-items:center}
+pre.code{font-family:var(--font-num);font-size:12px;background:var(--tint2);border:1.5px solid var(--edge);border-radius:10px;padding:14px;overflow:auto;white-space:pre-wrap;margin:0;max-height:440px;line-height:1.5}
+.hist{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px;padding:4px 0 2px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#FFFFFF;padding:9px 16px;border-radius:9px;font-weight:600;z-index:40;font-size:14px;max-width:90vw}
+.dlg{position:fixed;inset:0;background:rgb(26 37 64 / .35);display:grid;place-items:center;z-index:30;padding:16px}
+.dlg .card{background:var(--bg);border:2px solid var(--edge);border-radius:12px;padding:18px;width:min(620px,100%);display:flex;flex-direction:column;gap:10px;max-height:90vh;overflow:auto}
+.dlg textarea{width:100%;height:220px;font-family:var(--font-num);font-size:12px}
+.chart{border:1.5px solid var(--edge);border-radius:10px;padding:10px;overflow-x:auto}
+.chart svg{display:block;min-width:560px}
+
+@media (max-width:1000px){.timer,.grid2{grid-template-columns:minmax(0,1fr)}.mv{grid-template-columns:minmax(0,1fr)}.mv .mid{flex-direction:row;padding-top:0;flex-wrap:wrap}}
+@media (max-width:820px){.app{grid-template-columns:minmax(0,1fr)}.side{position:static}.nav{display:none}.brand{border:0;margin:0;padding-bottom:0}}
+@media (max-width:480px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.head h1{font-size:22px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><b>GT3</b><div><span>GT3 Sistema</span><small>Protótipo de módulo</small></div></div>
+    <nav class="nav" aria-label="Módulos">
+      <a href="#cronometrar">Dashboard</a><a href="#cronometrar">Observações</a><a href="#cronometrar">Cadastro Contratantes</a><a href="#cronometrar">Designação de Reprovados</a>
+      <div class="sep"></div><a href="#cronometrar" class="on" id="navName">Custo de Servir</a><div class="sep"></div>
+      <a href="#cronometrar">Prioridades</a><a href="#cronometrar">PDI</a>
+    </nav>
+  </aside>
+  <main>
+    <div class="head">
+      <div><div class="eyebrow">Tempo-padrão e custo de servir</div><h1><span id="modName">Custo de Servir</span><span class="tmp">nome provisório</span></h1>
+      <p>Cronometre os documentos por grupo de critério, acompanhe os tempos-padrão e transforme o relatório do sistema em horas por contratante.</p></div>
+      <label class="who" for="me">Você é<select id="me"></select></label>
+    </div>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <section id="view"></section>
+  </main>
+</div>
+<button class="float" id="float" hidden><span class="dot"></span><span class="mono" id="floatT">00:00.0</span><span id="floatD"></span></button>
+<div class="toast" id="toast" hidden></div>
+<div class="dlg" id="dlg" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+const KEY='gt3-custo-servir-modulo-v1';
+const DOCS0=[["INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO", 716, 47], ["FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO", 688, 8], ["RECIBO DCTFWEB - MENSAL", 649, 21], ["DETALHE DA GUIA EMITIDA - RELATÓRIO DO FGTS MENSAL", 566, 27], ["ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL", 473, 45], ["CARTAO PONTO", 445, 11], ["EPI - FICHA ENTREGA DE EQUIP PROTEÇÃO INDIVIDUAL - ANUAL", 307, 16], ["EPI - FICHA ENTREGA DE EQUIP PROTEÇÃO INDIVIDUAL - 60 DIAS", 273, 9], ["RECIBO DE PAGAMENTO (HOLERITE + COMPROVANTE PGTO)", 250, 26], ["CERTIDÃO DE TRIBUTOS ESTADUAIS - INFORMADA", 241, 6], ["FICHA REGISTRO DO EMPREGADO - UNICO", 221, 16], ["CERTIDÃO DE TRIBUTOS MUNICIPAIS", 211, 11], ["ORDEM DE SERVICO SST - CF NR01", 189, 34], ["CERTIDÃO DE DEBITOS RELATIVOS TRIBUTOS FEDERAIS - SEMESTRAL", 145, 3], ["PGR - PROGRAMA DE GERENCIAMENTO DE RISCO - BIENAL", 142, 49], ["CRF - CERTIFICADO DE REGULARIDADE DE FGTS - INFORMADA", 136, 4], ["CERTIDÃO TRABALHISTA CNDT (TST - TRIB SUP TRAB) - SEMESTRAL", 123, 3], ["PCMSO - PROGRAMA CONTROLE MÉDICO SAÚDE OCUPACIONAL", 117, 28], ["DECLARACAO TREINAMENTO APR - DTA FINAL CFME APR EMPRESA", 93, 5], ["COMPROVANTE DEPOSITO + HOLERITE", 89, 0], ["TRCT TERMO RESCISÃO CONTR TRAB + COMPROV PGTO - UNICO", 88, 6], ["NR 06 - TREINAMENTO/ORIENTAÇÕES SOBRE EPIS ENTREGUES", 87, 3], ["DAS - DOCUMENTO ARRECADACAO SIMPLES NACIONAL/PGMEI - MENSAL", 86, 4], ["CONTRATO SOCIAL EMPRESA / MEI CCMEI", 83, 9], ["NR 35 - BASICO - TRABALHO EM ALTURA - 8H - BIENAL", 83, 9], ["NR 12 - SEGURANÇA MÁQUINAS E EQUIPAMENTOS - 8H - BIENAL", 76, 8], ["NR 18 - TREIN BÁSICO SEG TRAB (ITEM 2.1 ANEXO 1) -4H BIENAL", 73, 2], ["ALVARÁ DE LOCALIZAÇÃO E FUNCIONAMENTO - PERIODICO", 65, 16], ["CONTRATO DE TRABALHO EFETIVO (CLT) - ÚNICO", 60, 2], ["FGTS EXTRATO P/FINS RESCISORIOS", 55, 1], ["CONTRATO DE PRESTAÇAO DE SERV. ENTRE PRESTADORES PERIODICO", 48, 7], ["CARTÃO CNPJ", 47, 2], ["ASO - DEMISSIONAL", 47, 0], ["ACORDO INDIVIDUAL DE TRABALHO - INTERVALO REFEIÇÃO", 46, 0], ["EPI - FICHA ENTREGA DE EQUI PROTEÇÃO INDIVIDUAL - 180 DIAS", 45, 2], ["NR 10 BÁSICO - SEGURANCA INSTALAÇÕES ELÉTRICAS 40H - BIENAL", 43, 9], ["FOTO (3 X 4) EM JPEG PARA CONFECÇÃO DO CRACHÁ - UNICO", 43, 5], ["POLÍTICA DE SEGURANÇA DA INFORMAÇÃO - ÚNICO", 43, 1], ["CERTIFICADO FORMAÇÃO (TÉCNICA / SUPERIOR OU SIMILAR)", 43, 1], ["CARTA DE DESLIGAMENTO", 39, 0], ["CONTRATO DE TRABALHO TEMPORÁRIO - INFORMADA", 37, 2], ["CTPS - DIGITAL", 36, 4], ["DETALHE GUIA EMITIDA DO COLABORADOR - ANTIGO DEMONSTRATIVO", 35, 0], ["COMPROVANTE DE RESIDÊNCIA", 35, 5], ["DOCUMENTO DE IDENTIFICAÇÃO (RG COM CPF OU CNH) - COLORIDO", 35, 4], ["FICHA REGISTRO EMPREGADO TEMPORÁRIO - INFORMADA", 34, 2], ["NR 18 - PEMT (PLATAFORMA ELEVATÓRIA MÓVEL) - 4H - BIENAL", 34, 3], ["COMPROVANTE VACINA ANTITETANICA - 10A", 29, 0], ["CNH - CARTEIRA NAC HABILITAÇÃO - FRENTE E VERSO - INFORMADA", 29, 0], ["TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - PETTENATI", 27, 1], ["TERMO DE RESPONSABILIDADE INTEGRAÇÃO GASTRONOMIA - ÚNICO", 26, 0], ["CARTEIRA DE VACINACAO", 26, 4], ["CULTURE-SE PARA TERCEIROS - GRUPO IMEC", 26, 4], ["CONVOCAÇÃO DE TRABALHO INTERMITENTE - INFORMADO", 25, 0], ["NR 11 - EMPILHADEIRA - ANUAL", 24, 6], ["GUIA SIMPLES NACIONAL + COMP PGTO", 22, 2], ["RQ 245 NORMAS PROC MOTORISTA E AJUDANTE", 22, 0], ["CERTIDÃO DÉBITOS TRABALHISTAS (MPT - MIN PÚBLICO TRAB)", 21, 2], ["TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - MADAL PALFINGER", 20, 0], ["APR ANALISE PRELIMINAR DE RISCOS - EMPRESA - INFORMADA", 19, 10], ["TERMO DE PROIBICAO CAMARA FRIA - UNICO", 19, 0], ["PPP PERFIL PROFISSIOGRAFICO PREVIDENC", 18, 0], ["RQ246 - NORMAS E PROCEDIM PARA PRESTADORES SERVIÇO", 18, 0], ["EPI - FICHA ENTREGA DE EQUIP PROTEÇÃO INDIVIDUAL - 120 DIAS", 16, 3], ["TREINAMENTO DE TERCEIROS VINICOLA SALTON", 16, 0], ["COMPROVANTE FERIAS", 15, 4], ["ITEM B - PACOTE INF AO CONTRATADO - EMPREGADO", 15, 0], ["CERTIDÃO JUDICIAL CIVIL- P JURIDICA", 14, 3], ["CERTIFICADO DE HIGIENIZAÇÃO CAIXA D'ÁGUA - SEMESTRAL", 13, 7], ["APOLICE DE SEGURO - VIDA", 11, 6], ["TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - BRASLUX", 11, 1], ["DOCS PESSOAIS COM FOTO (CTPS - RG OU CNH) - ÚNICO", 11, 0], ["CERTIFICADO DE CONTROLE INTEGRADO DE PRAGAS - ANUAL", 10, 2], ["DECLARACAO RECEBIMENTO E CONHECIMENTO CIPA MARCOPOLO", 10, 0], ["COMPROVANTE DE PAGAMENTO - MEI", 10, 0], ["NR 11 - OPERACAO ESCAVADEIRA / RETROESCAVADEIRA 8H - ANUAL", 10, 0], ["NR 22 - TREINAMENTO INTRODUTÓRIO GERAL - 16H - BIENAL", 9, 1], ["LTCAT (LAUDO TÉCNICO DAS CONDIÇÕES DO AMBIENTE DE TRABALHO)", 8, 2], ["LAUDO DE ANÁLISE DA ÁGUA - ANUAL", 7, 0], ["PROPOSTA COMERCIAL", 7, 0], ["CERTIDÃO DE FEITOS MPT", 7, 2], ["DECLARAÇÃO CIÊNCIA MANUAL PRESTADORES MADAL PALFINGER", 7, 1], ["COMPROVANTE DE DEPOSITO BANCARIO REFERENTE AO SALÁRIO", 7, 0], ["CERTIDÃO NEGATIVA DE DÉBITO IBAMA", 7, 0], ["TERMO INTEGRACAO - ACEITACAO MANUAL SSO JUNGHEINRICH", 7, 2], ["ESPELHO DE NOTA", 6, 2], ["CRF - CERTIFICADO DE REGULARIDADE DE FGTS - TRIMESTRAL", 6, 0], ["NR 33 - SUPERVISOR DE ESPACO CONFINADO - 40H - ANUAL", 6, 0], ["NR 33 - VIGIA / OP ESPAÇO CONFINADO - 16H - ANUAL", 6, 1], ["ALVARÁ DE VIGILÂNCIA SANITÁRIA - ANUAL", 5, 1], ["CERTIDÃO INIDÔNEA", 5, 0], ["COMPROVANTE ANTT DE REGISTRO REGULARIDADE TRANSPORTADORA", 5, 3], ["CURSO DE CONDUTORES TRANSPORTE COLETIVO - 50H - ÚNICO", 5, 2], ["COMPRA VT - RECARGA VALE TRANSPORTE", 5, 4], ["NR 11 - OPERADOR GUINDASTE / GUINCHO / MUNCK - 8H - BIENAL", 5, 2], ["TREINAMENTO TERCEIROS TABONE", 5, 1], ["ITEM C - PACOTE INF AO CONTRATADO - EMPRESA", 4, 0], ["CHECK LIST DE DADOS DA EMPRESA", 4, 0], ["CERTIDÃO NEGATIVA DE FALÊNCIA", 4, 0], ["CONTRATO PRESTAÇÃO SERVIÇOS", 4, 2], ["DECLARACAO RECEBIMENTO CONHEC CIPA MP SÃO CRISTOVÃO(MENSAL)", 4, 0], ["COMPROVAÇÃO DE CAPACIDADE TÉCNICA", 3, 0], ["NR 11 - PONTE ROLANTE E TALHA - 8H - ANUAL", 3, 0], ["TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - MEBRAFE", 3, 0], ["RESTRIÇÃO HIGIENIZAÇÃO/COLETA RESÍDUOS SANITÁRIOS - ANUAL", 3, 0], ["NR 20 - AVANCADO I 20H - BIENAL", 3, 0], ["EVENTO S1020 E-SOCIAL(ANALÍTICA + RESUMO DE BASES INSS/FGTS)", 2, 0], ["CONTRATO PRESTAÇAO SERVIÇOS ENTRE PRESTADORES", 2, 1], ["APOLICE DE SEGURO VEICULOS - REGISTRADO NA SUSEP - INFORMADA", 2, 1], ["RECIBO DCTFWEB COMPLETO - DECLARAÇÃO + RELATÓRIOS", 2, 0], ["ACORDO / DISSIDIO COLETIVO CATEGORIA", 2, 1], ["COMPROVANTE DE PAGAMENTO DE APOLICE DE SEGURO - MENSAL", 2, 1], ["APOLICE DE SEGURO DE RESPONSABILIDADE CIVIL RODOVIARIO", 2, 0], ["FGTS EXTRATO ANALITICO TRABALHADOR", 2, 0], ["NR 10 SEP - SISTEMA ELÉTRICO DE POTENCIA - 40H - BIENAL", 2, 1], ["AUTORIZAÇÃO HIGIENIZAÇÃO/COLETA RESÍDUOS SANITÁRIOS - ANUAL", 2, 0], ["NR 34 - TRABALHOS A QUENTE - 8H - ANUAL", 2, 1], ["MOPP - MOVIMENTACAO OPERACAO PRODUTOS PERIGOSOS-50H -ÚNICO", 2, 0], ["TREINAMENTO INTEGRAÇÃO TERCEIROS - GRUPO BRINOX", 2, 0], ["DISPENSA CT - E - RAMS COM DE ALIMENTOS", 1, 0], ["DEMONSTRATIVOS CONTÁBEIS", 1, 1], ["INCUB - OUTORGA POÇO INCUBATÓRIO", 1, 0], ["CONTRATO SERVMED", 1, 1], ["CHECK LIST VEICULOS - MENSAL", 1, 0], ["DECLARAÇÃO DE INEXISTÊNCIA DE ALOJAMENTO", 1, 0], ["AUTORIZACAO TRANSPORTE FRETAMENTO (CERTIFICADO RECEFITUR)", 1, 0], ["TERMO INDICACAO DESIGNADO CIPA REF A MARCOPOLO (ANUAL)", 1, 0], ["CERTIDÃO CADASTRO/REGISTRO CRN (CONSELHO NUTRICÃO) - ANUAL", 1, 1], ["ATA POSSE CIPA REF A MARCOPOLO (ANUAL)", 1, 0], ["CERTIFICADO REGISTRO EXÉRCITO (LICENÇA QUÍMICOS/EXPLOSIVOS)", 1, 1], ["NR 20 - BÁSICO - CLASSE I - 4H - TRIENAL", 1, 0], ["FICHA EPI COM ENTREGAS DENTRO DE 60 DIAS P/ FINS RESCISÓRIOS", 1, 0], ["TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - DOCILE", 1, 0], ["NR 20 - INTERMEDIÁRIO - CLASSE III - 16H - BIENAL", 1, 0], ["AUTORIZACAO P/MOVIMENTAR VEÍCULOS E EQUIP MARCOPOLO - UNICO", 1, 1], ["RPA - RECIBO DE PAGAMENTO AUTONOMO - INFORMADO", 1, 0], ["TERMO AUTORIZACAO CAMARA FRIA - INFORMADA", 1, 0], ["CARTEIRA NACIONAL DE VIGILANTE - 5 A", 1, 0], ["NR 35 - ACESSO POR CORDAS NIVEL 3 - 48H - TRIENAL", 1, 0], ["NR 35 - ACESSO POR CORDAS NIVEL 1 - 40H - TRIENAL", 1, 0], ["NR 12 - MOTOSSERRA - 8H - ANUAL", 1, 0], ["NR 20 - INTERMEDIARIO - CLASSE II - 14H - BIENAL", 1, 0], ["CERTIFICADO FORMACAO/RECICLAGEM VIGILANTE - 200H - BIENAL", 1, 0]];
+const USERS0=['RODRIGO BALEM','DAIANA ZORZO','MARINA MAGNAGUAGNO ZANELLA','LUCIANE PASTORE','CAMILA POSSAMAI','CAROLINE SCARMIN FANTE','GIANCARLO BISOL','MARCIO ROBERTO ZIM','JOSE R KNAPP','ALEXANDRA OTOBELLI TRENTIN'];
+const MOT=['Interrupção','Documento atípico','Erro de medição','Avaliei mais de um documento'];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=(n,d=0)=>(+n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const brl=n=>(+n).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const brl2=n=>(+n).toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+const mmss=ms=>{const t=Math.max(0,ms)/1000,m=Math.floor(t/60),s=t-m*60;return String(m).padStart(2,'0')+':'+s.toFixed(1).padStart(4,'0').replace('.',',')};
+const mins=ms=>ms/60000;
+const nowIso=()=>new Date().toISOString();
+const dt=iso=>{const d=new Date(iso);return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})};
+function toast(t){const e=$('toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,2200)}
+
+/* ---------- Estado ---------- */
+function seed(){
+  const docs=DOCS0.map(([nome,vol,rep],i)=>({id:'d'+i,nome,vol,rep,cod:'',ign:false}));
+  const byName=n=>docs.find(d=>d.nome===n);
+  const G=[{id:'g-padrao',nome:'Grupo padrão',padrao:true,ctt:[]},{id:'g-bsa',nome:'Grupo BSA',ctt:['81']},{id:'g-jung',nome:'Grupo Jungheinrich',ctt:[]}];
+  const gd={'g-padrao':docs.map(d=>d.id),'g-bsa':[],'g-jung':[]};
+  const ASO='ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL',PGR='PGR - PROGRAMA DE GERENCIAMENTO DE RISCO - BIENAL',OS='ORDEM DE SERVICO SST - CF NR01';
+  [ASO,PGR,OS].forEach(n=>{const d=byName(n);if(d)gd['g-bsa'].push(d.id)});
+  const meas=[];let k=0;
+  const add=(g,n,st,vals,disc)=>{const d=byName(n);if(!d)return;vals.forEach(v=>{const by=USERS0[(k++)%7];const at=new Date(Date.UTC(2026,10,3+(k%3),11+(k%6),(k*7)%60)).toISOString();
+      meas.push({id:uid(),g,d:d.id,ms:Math.round(v*60000),st,sit:'V',by,at,mot:'',ex:true,h:[{at,by,a:'Registrou e validou'}]})});
+    (disc||[]).forEach(([v,m])=>{const by=USERS0[(k++)%7],at=new Date(Date.UTC(2026,10,4,15,(k*5)%60)).toISOString();meas.push({id:uid(),g,d:d.id,ms:Math.round(v*60000),st,sit:'D',by,at,mot:m,ex:true,h:[{at,by,a:'Registrou e descartou: '+m}]})})};
+  add('g-padrao',ASO,'A',[1.8,2.1,1.9,2.4,2.0,1.7],[[3.6,'Documento atípico']]);
+  add('g-padrao',ASO,'R',[3.8,4.2,4.0,3.9,4.4]);
+  add('g-padrao','FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO','A',[1.4,1.6,1.5,1.3,1.7,1.5]);
+  add('g-padrao','INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO','A',[1.5,1.6,1.4,1.5,1.8]);
+  add('g-padrao','RECIBO DCTFWEB - MENSAL','A',[0.8,0.7,0.9,0.8,0.8]);
+  add('g-padrao','CERTIDÃO DE TRIBUTOS MUNICIPAIS','A',[1.0,0.9,1.1,1.0,1.2]);
+  add('g-padrao',PGR,'A',[11.5,12.4,12.0,13.1,11.8]);
+  add('g-padrao',PGR,'R',[19.5,21.0,20.2]);
+  add('g-padrao',OS,'A',[3.1,2.8,3.0,3.3,2.9]);
+  add('g-bsa',ASO,'A',[3.8,4.1,4.0,4.3,3.9],[[1.2,'Erro de medição']]);
+  add('g-bsa',OS,'A',[6.2,5.8,6.0,6.1,5.9]);
+  add('g-bsa',PGR,'A',[19.0,21.5]);
+  const ctt=[['1','MARCOPOLO S/A - ANA RECH'],['9','MARCOPOLO SAO CRISTOVAO'],['17','WEATHERFORD'],['19','MADAL PALFINGER S/A'],['21','SULBRAS UCS - MATRIZ'],['22','SULBRAS USS SAPUCAIA'],['23','SULBRAS USL UNIDADE SALTO'],['24','SULBRAS UJN JOINVILE'],['25','SULBRAS UPE PERNAMBUCO'],['26','RSC RONI CHAVES'],['27','MEINCOL TRANSPORTADORAS'],['28','CONTRATANTE CONSULTA'],['30','SUMIG LTDA'],['81','BSA']].map(([cod,nome])=>({cod,nome,fat:0}));
+  const turnos=[];const T=(a,b,c)=>{for(let t=a;t<=b;t++)turnos.push({t:String(t),c})};
+  T(1,13,'1');T(17,31,'9');T(32,33,'17');T(34,34,'19');T(35,35,'21');T(36,36,'22');T(38,38,'26');T(39,39,'27');T(40,40,'28');T(42,42,'23');T(43,43,'24');T(44,44,'30');T(45,45,'25');
+  return {v:1,nome:'Custo de Servir',users:USERS0.slice(),me:'RODRIGO BALEM',groups:G,gd,docs,meas,ctt,turnos,
+    cfg:{base:'mediana',min:5,custo:60000,pess:8,dias:22,hrs:8,pct:80,mg:30,relDias:7,mesDias:22},rel:sampleRel(docs)};
+}
+function sampleRel(docs){
+  const R=(data,doc,st,ep,cad,raz,vinc,ign,gt,tur)=>({data,cod:'',doc,st,ep,cad,raz,cnpj:'',vinc,ign,gt,tur,usr:''});
+  const A='APROVADO',RP='REPROVADO';
+  const rows=[
+    R('21/10/2026','FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO',A,'EMPRESA ABC LTDA','9001','EMPRESA ABC LTDA',['1','9','81'],[],[],[]),
+    R('22/10/2026','CERTIDÃO DE TRIBUTOS MUNICIPAIS',A,'EMPRESA ABC LTDA','9001','EMPRESA ABC LTDA',['1','9','81'],['9'],[],[]),
+    R('22/10/2026','ORDEM DE SERVICO SST - CF NR01',A,'CARLOS EXEMPLO','9001','EMPRESA ABC LTDA',['1','9','81'],[],['81'],['210']),
+    R('22/10/2026','ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL',A,'CARLOS EXEMPLO','9001','EMPRESA ABC LTDA',['1','9','81'],[],[],['210']),
+    R('22/10/2026','ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL',A,'MARIA EXEMPLO','9001','EMPRESA ABC LTDA',['1','81'],[],[],['2','210']),
+    R('24/10/2026','ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL',A,'ADEMAR MENIN','817','SERVICARGA TRANSPORTES E SERVICOS LTDA',['1','9'],[],[],['1','17']),
+    R('27/10/2026','PGR - PROGRAMA DE GERENCIAMENTO DE RISCO - BIENAL',RP,'ARIS LIMPEZA E CONSERVACAO LTDA','1987','ARIS LIMPEZA E CONSERVACAO LTDA',['1'],[],[],[]),
+    R('22/10/2026','INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO',A,'MOBITEC BRASIL LTDA','2231','MOBITEC BRASIL LTDA',['17','19'],[],[],[]),
+    R('22/10/2026','RECIBO DCTFWEB - MENSAL',A,'MOBITEC BRASIL LTDA','2231','MOBITEC BRASIL LTDA',['17','19'],[],[],[]),
+    R('23/10/2026','PGR - PROGRAMA DE GERENCIAMENTO DE RISCO - BIENAL',A,'EMPRESA ABC LTDA','9001','EMPRESA ABC LTDA',['1','9','81'],[],[],[]),
+    R('23/10/2026','NR 35 - BASICO - TRABALHO EM ALTURA - 8H - BIENAL',RP,'CARLOS EXEMPLO','9001','EMPRESA ABC LTDA',['1','9','81'],[],['81'],['210']),
+    R('24/10/2026','FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO',A,'SULBRAS EXEMPLO LTDA','5500','SULBRAS EXEMPLO LTDA',['21','22'],[],[],[])
+  ];
+  return {nome:'Relatório de exemplo',ex:true,at:nowIso(),rows};
+}
+let S;try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
+if(!S||S.v!==1)S=seed();
+if(!S.turnos.find(t=>t.t==='210'))S.turnos.push({t:'210',c:'81',ex:true});
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Não foi possível salvar neste navegador')}};
+
+let tab=(['cronometrar','tempos','medicoes','contagem','resultado','config','especificacao'].includes(location.hash.slice(1))?location.hash.slice(1):'cronometrar');
+let nav={g:null,d:null,q:''};
+let T={g:null,d:null,run:false,acc:0,t0:0,st:'A',stopped:false};
+let tp={g:'g-padrao',q:'',f:'todos',sel:null};
+let md={g:'',q:'',u:'',sit:'',st:'',open:null};
+let cfgTab='grupos', mvS={from:'g-padrao',to:'g-bsa',q:'',sel:new Set()};
+let ctSel=null;
+
+/* ---------- Cálculos ---------- */
+const G=id=>S.groups.find(g=>g.id===id);
+const D=id=>S.docs.find(d=>d.id===id);
+const padrao=()=>S.groups.find(g=>g.padrao);
+const inGroup=(g,d)=>(S.gd[g]||[]).includes(d);
+function stat(g,d,st){
+  const v=S.meas.filter(m=>m.g===g&&m.d===d&&m.st===st&&m.sit==='V').map(m=>mins(m.ms)).sort((a,b)=>a-b);
+  const n=v.length;if(!n)return {n:0,val:null,mean:null,med:null,min:null,max:null};
+  const mean=v.reduce((a,b)=>a+b,0)/n,med=n%2?v[(n-1)/2]:(v[n/2-1]+v[n/2])/2;
+  return {n,mean,med,min:v[0],max:v[n-1],val:S.cfg.base==='media'?mean:med};
+}
+function tempo(g,d,st){
+  const s=stat(g,d,st);if(s.val!=null)return {val:s.val,est:false,n:s.n};
+  if(st==='R'){const a=stat(g,d,'A');if(a.val!=null)return {val:a.val,est:true,n:a.n}}
+  return {val:null,est:false,n:0};
+}
+function status(g,d){const a=stat(g,d,'A').n;return a>=S.cfg.min?'pronto':a>0?'andamento':'sem'}
+function groupOf(cod){return S.groups.find(g=>!g.padrao&&g.ctt.includes(String(cod)))||padrao()}
+function tempoCtt(cod,did,st){
+  const g=groupOf(cod),p=padrao();
+  if(!g.padrao&&inGroup(g.id,did)){const t=tempo(g.id,did,st);if(t.val!=null)return {...t,g:g.id};const tp2=tempo(p.id,did,st);return tp2.val!=null?{...tp2,est:true,g:p.id,fb:true}:{val:null,g:g.id}}
+  if(inGroup(p.id,did)){const t=tempo(p.id,did,st);return {...t,g:p.id}}
+  return {val:null,g:p.id};
+}
+function cttName(cod){const c=S.ctt.find(x=>x.cod===String(cod));return c?c.nome:'Contratante '+cod+' (sem cadastro)'}
+function compute(){
+  const rel=S.rel;const out={rows:0,ok:0,pend:0,noCtt:0,ign:0,unk:0,by:{},pendList:{},unkList:{},det:[],real:0,items:[]};
+  if(!rel)return out;
+  const byName={};S.docs.forEach(d=>{byName[norm(d.nome)]=d;if(d.cod)byName['#'+d.cod]=d});
+  const tmap={};S.turnos.forEach(t=>tmap[t.t]=t.c);
+  rel.rows.forEach(r=>{
+    out.rows++;
+    const doc=(r.cod&&byName['#'+r.cod])||byName[norm(r.doc)];
+    if(!doc){out.unk++;out.unkList[r.doc]=(out.unkList[r.doc]||0)+1;return}
+    if(doc.ign){out.ign++;return}
+    const st=/REPROV/i.test(r.st)?'R':'A';
+    let valid;
+    if(r.gt.length)valid=[...new Set(r.gt)];
+    else if(r.tur.length){valid=[...new Set(r.tur.map(t=>tmap[t]).filter(Boolean))];if(r.vinc.length)valid=valid.filter(c=>r.vinc.includes(c))}
+    else valid=[...new Set(r.vinc)];
+    valid=valid.filter(c=>!r.ign.includes(c));
+    if(!valid.length){out.noCtt++;return}
+    const ts=valid.map(c=>({c,...tempoCtt(c,doc.id,st)}));
+    const miss=ts.filter(t=>t.val==null);
+    if(miss.length){out.pend++;miss.forEach(t=>{const k=t.g+'|'+doc.id;out.pendList[k]=(out.pendList[k]||0)+1});return}
+    const sorted=[...ts].sort((a,b)=>a.val-b.val);let prev=0;const share={};valid.forEach(c=>share[c]=0);
+    sorted.forEach((t,i)=>{const layer=t.val-prev;if(layer>0){const who=sorted.slice(i);who.forEach(w=>share[w.c]+=layer/who.length)}prev=t.val});
+    out.ok++;const Tt=sorted[sorted.length-1].val;out.real+=Tt;out.items.push({v:ts.map(x=>x.c),t:ts.map(x=>x.val),d:doc.id});
+    ts.forEach(x=>{const c=x.c;const o=out.by[c]||(out.by[c]={min:0,n:0,int:0,ev:0,docs:{},evd:{}});o.min+=share[c];o.n+=1/valid.length;o.docs[doc.id]=(o.docs[doc.id]||0)+share[c];o.int+=x.val;
+      const oth=ts.filter(y=>y.c!==c).map(y=>y.val);const ev=Tt-(oth.length?Math.max(...oth):0);o.ev+=ev;if(ev>0)o.evd[doc.id]=(o.evd[doc.id]||0)+ev});
+  });
+  return out;
+}
+
+function freed(r,set){let f=0;r.items.forEach(it=>{const T=Math.max(...it.t);const rest=it.t.filter((_,i)=>!set.has(it.v[i]));f+=T-(rest.length?Math.max(...rest):0)});return f}
+let simSel=new Set();
+function simBox(r){
+  const cods=Object.keys(r.by).sort((a,b)=>r.by[b].min-r.by[a].min);if(!cods.length)return '';
+  const R=resData(),f=R.f;const sel=[...simSel].filter(c=>r.by[c]);
+  const frM=freed(r,new Set(sel))/60*f,div=sel.reduce((a,c)=>a+r.by[c].min,0)/60*f;
+  const fat=sel.reduce((a,c)=>a+(+(S.ctt.find(x=>x.cod===c)||{}).fat||0),0),val=frM*R.ch,be=frM>0?fat/frM:0;
+  return `<div class="box"><h2>Simular saída de contratantes</h2><p class="note">Marque um ou mais contratantes. O cálculo usa as horas evitáveis: o que some do trabalho da equipe se eles saírem juntos, já que documentos compartilhados continuam para os demais. Valores projetados para o mês (×${fmt(f,2)}).</p>
+  <div class="row">${cods.map(c=>`<button class="btn sm ${simSel.has(c)?'solid':''}" data-sim="${esc(c)}" aria-pressed="${simSel.has(c)}">${esc(c)} · ${esc(cttName(c).slice(0,26))}</button>`).join('')}${sel.length?'<button class="link" data-sim="__none">limpar</button>':''}</div>
+  ${sel.length?`<div class="tiles">
+    <div class="tile"><b>${fmt(frM,1)} h</b><span>liberadas por mês (evitável)</span></div>
+    <div class="tile"><b>${fmt(div,1)} h</b><span>atribuídas hoje (dividido)</span></div>
+    <div class="tile"><b>${brl(fat)}</b><span>faturamento mensal que sai</span></div>
+    <div class="tile"><b>${brl(val)}</b><span>valor da capacidade liberada</span></div>
+    <div class="tile"><b>${frM>0&&fat?brl2(be):'—'}</b><span>receita por hora que o substituto precisa superar</span></div>
+  </div>
+  <p>${frM<=0.001?'Essa saída não libera horas: todos os documentos continuam necessários para outros contratantes.':fat?`Para a troca valer a pena, quem ocupar essas ${fmt(frM,1)} h/mês precisa pagar mais de ${brl(fat)} por mês, ou seja, mais de ${brl2(be)} por hora. ${be<R.hmin?`Isso fica abaixo da hora mínima (${brl2(R.hmin)}): qualquer cliente novo dentro da hora mínima já é um negócio melhor.`:`Isso fica acima da hora mínima (${brl2(R.hmin)}): o substituto precisa ser bem rentável.`}`:`A saída libera ${fmt(frM,1)} h/mês. Informe o faturamento desses contratantes em Resultado para completar a conta.`}</p>
+  ${div-frM>0.05?`<p class="note">A diferença de ${fmt(div-frM,1)} h/mês entre o atribuído e o liberado é trabalho compartilhado, que continua para os outros contratantes.</p>`:''}`:'<p class="note">Nenhum contratante marcado.</p>'}
+  <p class="note">Hora liberada é capacidade, não economia. O custo só cai se essas horas forem ocupadas por outro cliente ou se a equipe for reduzida.</p></div>`;
+}
+
+/* ---------- Abas ---------- */
+const TABS=[['cronometrar','Cronometrar'],['tempos','Tempos-padrão'],['medicoes','Medições'],['contagem','Contagem por contratante'],['resultado','Resultado'],['config','Configurações'],['especificacao','Especificação']];
+function renderTabs(){
+  const nm=S.meas.length;
+  $('tabs').innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" class="${k===tab?'on':''}" role="tab" aria-selected="${k===tab}">${l}${k==='medicoes'?`<span class="cnt">${nm}</span>`:''}</button>`).join('');
+  $('modName').textContent=S.nome;$('navName').textContent=S.nome;
+  $('me').innerHTML=S.users.map(u=>`<option ${u===S.me?'selected':''}>${esc(u)}</option>`).join('');
+}
+function render(){
+  renderTabs();
+  const v={cronometrar:vCron,tempos:vTempos,medicoes:vMed,contagem:vCont,resultado:vRes,config:vCfg,especificacao:vSpec}[tab];
+  $('view').innerHTML=v();
+  if(tab==='resultado')drawChart();
+  floatUpd();
+}
+function setTab(t){tab=t;try{history.replaceState(null,'','#'+t)}catch(e){}render();window.scrollTo({top:0})}
+
+/* ---------- Cronometrar ---------- */
+function vCron(){
+  if(nav.g&&nav.d)return vTimer();
+  if(nav.g)return vDocs();
+  const cards=S.groups.map(g=>{const ds=S.gd[g.id]||[];const pr=ds.filter(d=>status(g.id,d)==='pronto').length;
+    const vol=ds.reduce((a,id)=>a+(D(id)?.vol||0),0),volOk=ds.filter(d=>status(g.id,d)==='pronto').reduce((a,id)=>a+(D(id)?.vol||0),0);
+    return `<button class="gcard" data-g="${g.id}"><span class="eyebrow">${g.padrao?'Grupo padrão':'Grupo específico'}</span><b>${esc(g.nome)}</b>
+    <div class="chips">${g.padrao?'<span class="chip">todos os demais contratantes</span>':g.ctt.length?g.ctt.map(c=>`<span class="chip">${esc(c)} · ${esc(cttName(c).slice(0,22))}</span>`).join(''):'<span class="note">nenhum contratante ainda</span>'}</div>
+    <span class="note">${ds.length} documento${ds.length===1?'':'s'} · ${pr} com tempo pronto</span>
+    <div class="prog" title="Cobertura do volume do relatório"><i style="width:${vol?volOk/vol*100:0}%"></i></div><span class="note">${vol?fmt(volOk/vol*100):0}% do volume coberto</span></button>`}).join('');
+  return `<div class="box"><h2>1. Escolha o grupo de critério</h2><p class="note">Os documentos nascem no grupo padrão. Um grupo específico só tem os documentos em que o critério dele é diferente (copiados ou movidos em Configurações).</p><div class="groups">${cards}</div></div>`;
+}
+function vDocs(){
+  const g=G(nav.g);let ds=(S.gd[g.id]||[]).map(D).filter(Boolean).sort((a,b)=>b.vol-a.vol);
+  if(nav.q)ds=ds.filter(d=>norm(d.nome).includes(norm(nav.q)));
+  return `<div class="crumbs"><button data-back="g">Grupos</button>›<span class="cur">${esc(g.nome)}</span></div>
+  <div class="box"><div class="row" style="justify-content:space-between"><h2>2. Escolha o documento</h2><input type="search" id="dq" placeholder="Buscar documento" value="${esc(nav.q)}" style="width:min(320px,100%)"></div>
+  <p class="note">Ordenados pelo volume no relatório de 19 a 27/10/2026. Os primeiros são os que mais pesam na conta.</p>
+  ${ds.length?`<div class="dlist">${ds.map(d=>{const s=stat(g.id,d.id,'A'),sr=stat(g.id,d.id,'R'),stt=status(g.id,d.id);
+    return `<button class="dcard ${stt==='pronto'?'ready':''}" data-d="${d.id}"><b>${esc(d.nome)}</b><span class="meta"><span class="mono">${fmt(d.vol)} no relatório</span>${stt==='pronto'?'<span class="pill p-good">Pronto</span>':stt==='andamento'?'<span class="pill p-warn">Em andamento</span>':'<span class="pill p-gray">Sem medição</span>'}${d.ign?'<span class="pill p-gray">Não conta</span>':''}</span>
+    <span class="meta"><span>Aprov. <b class="mono">${s.n}/${S.cfg.min}</b>${s.val!=null?` · ${fmt(s.val,1)} min`:''}</span><span>Reprov. <b class="mono">${sr.n}</b>${sr.val!=null?` · ${fmt(sr.val,1)} min`:''}</span></span></button>`}).join('')}</div>`:'<div class="empty">Nenhum documento neste grupo. Copie ou mova documentos em Configurações › Documentos por grupo.</div>'}</div>`;
+}
+function vTimer(){
+  const g=G(nav.g),d=D(nav.d);const same=T.g===g.id&&T.d===d.id;
+  const ms=same?(T.acc+(T.run?performance.now()-T.t0:0)):0;
+  const st=T.st;
+  const cls=same&&T.run?'run':same&&T.stopped?'stop':'';
+  const sA=stat(g.id,d.id,'A'),sR=stat(g.id,d.id,'R');
+  const ms_=S.meas.filter(m=>m.g===g.id&&m.d===d.id).sort((a,b)=>b.at.localeCompare(a.at));
+  const busy=T.g&&!same&&(T.run||T.acc>0);
+  let ctl;
+  if(busy)ctl=`<p class="note">Há um cronômetro em andamento em outro documento.</p><button class="btn solid" data-goT="1">Voltar para ele</button>`;
+  else if(!same||(!T.run&&T.acc===0&&!T.stopped))ctl=`<button class="btn solid" data-t="start">▶ Iniciar</button>`;
+  else if(T.run)ctl=`<button class="btn" data-t="pause">❚❚ Pausar</button><button class="btn solid" data-t="stop">■ Parar</button>`;
+  else if(!T.stopped)ctl=`<button class="btn solid" data-t="resume">▶ Continuar</button><button class="btn" data-t="stop">■ Parar</button>`;
+  else ctl=`<button class="btn good" data-t="val">✓ Validar para média</button><button class="btn" data-t="resume">▶ Retomar</button>`;
+  return `<div class="crumbs"><button data-back="g">Grupos</button>›<button data-back="d">${esc(g.nome)}</button>›<span class="cur">${esc(d.nome)}</span></div>
+  <div class="timer">
+    <div class="clock ${cls}">
+      <span class="eyebrow">${esc(g.nome)}</span><span class="doc">${esc(d.nome)}</span>
+      <div class="seg" role="group" aria-label="Resultado da avaliação"><button class="A ${st==='A'?'on':''}" data-st="A">Aprovado</button><button class="R ${st==='R'?'on':''}" data-st="R">Reprovado</button></div>
+      <div class="disp" id="tDisp">${mmss(ms)}</div>
+      <div class="ctl">${ctl}</div>
+      ${same&&T.stopped?`<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span class="note">Ou descarte, informando o motivo:</span><div class="reasons">${MOT.map(m=>`<button data-disc="${esc(m)}">${esc(m)}</button>`).join('')}</div><button class="link" data-t="zero" style="font-size:12.5px">Zerar sem registrar</button></div>`:''}
+      <span class="keys"><kbd>Espaço</kbd> inicia e pausa · <kbd>Enter</kbd> para e valida · <kbd>Esc</kbd> descarta</span>
+    </div>
+    <div class="box">
+      <h2>Medições deste documento</h2>
+      <div class="stats">
+        <div><b>${sA.n}/${S.cfg.min}</b><span>aprovado validadas</span></div>
+        <div><b>${sA.val!=null?fmt(sA.val,2):'—'}</b><span>tempo-padrão aprov. (${S.cfg.base==='media'?'média':'mediana'}, min)</span></div>
+        <div><b>${sR.val!=null?fmt(sR.val,2):'—'}</b><span>tempo-padrão reprov. (min)</span></div>
+        <div><b>${sA.mean!=null?fmt(sA.mean,2):'—'}</b><span>média aprov.</span></div>
+        <div><b>${sA.med!=null?fmt(sA.med,2):'—'}</b><span>mediana aprov.</span></div>
+        <div><b>${sA.min!=null?fmt(sA.min,1)+'–'+fmt(sA.max,1):'—'}</b><span>mín.–máx. aprov.</span></div>
+      </div>
+      <div class="tbl scroll" style="max-height:330px"><table><thead><tr><th>Data</th><th>Avaliador</th><th>Resultado</th><th class="r">Tempo</th><th>Situação</th><th></th></tr></thead><tbody>
+      ${ms_.length?ms_.map(m=>`<tr><td class="mono">${dt(m.at)}</td><td>${esc(m.by)}${m.ex?'<span class="ex">exemplo</span>':''}</td><td>${m.st==='A'?'<span class="pill p-good">Aprov.</span>':'<span class="pill p-bad">Reprov.</span>'}</td><td class="r mono">${mmss(m.ms)}</td><td>${m.sit==='V'?'<span class="pill p-blue">Na média</span>':`<span class="pill p-gray" title="${esc(m.mot)}">Descartada</span>`}</td><td><button class="btn sm ${m.sit==='V'?'bad':''}" data-tog="${m.id}">${m.sit==='V'?'Descartar':'Restaurar'}</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Nenhuma medição ainda.</td></tr>'}
+      </tbody></table></div>
+      <p class="note">Cada mudança fica registrada com quem fez e quando. O histórico completo está na aba Medições.</p>
+    </div>
+  </div>`;
+}
+function tNow(){return T.acc+(T.run?performance.now()-T.t0:0)}
+function loop(){if(!T.run)return;const e=$('tDisp');if(e&&tab==='cronometrar'&&nav.g===T.g&&nav.d===T.d)e.textContent=mmss(tNow());const f=$('floatT');if(f)f.textContent=mmss(tNow());requestAnimationFrame(loop)}
+function floatUpd(){const show=T.g&&(T.run||T.acc>0)&&!(tab==='cronometrar'&&nav.g===T.g&&nav.d===T.d);$('float').hidden=!show;if(show){$('floatT').textContent=mmss(tNow());$('floatD').textContent=(D(T.d)?.nome||'').slice(0,34)+(T.run?'':' · pausado')}}
+function tAct(a){
+  if(a==='start'){T={g:nav.g,d:nav.d,run:true,acc:0,t0:performance.now(),st:T.st,stopped:false};requestAnimationFrame(loop)}
+  else if(a==='pause'){T.acc=tNow();T.run=false}
+  else if(a==='resume'){T.t0=performance.now();T.run=true;T.stopped=false;requestAnimationFrame(loop)}
+  else if(a==='stop'){T.acc=tNow();T.run=false;T.stopped=true}
+  else if(a==='val'||a==='disc'){const mot=arguments[1]||'';if(T.acc<1000){toast('Medição muito curta. Use Zerar sem registrar.');return}
+    const at=nowIso();S.meas.push({id:uid(),g:T.g,d:T.d,ms:Math.round(T.acc),st:T.st,sit:a==='val'?'V':'D',by:S.me,at,mot,h:[{at,by:S.me,a:a==='val'?'Registrou e validou':'Registrou e descartou: '+mot}]});
+    save();toast(a==='val'?`Validada: ${mmss(T.acc)} · ${T.st==='A'?'aprovado':'reprovado'}`:'Medição descartada e registrada');T={g:null,d:null,run:false,acc:0,t0:0,st:T.st,stopped:false}}
+  else if(a==='zero'){T={g:null,d:null,run:false,acc:0,t0:0,st:T.st,stopped:false}}
+  render();
+}
+function togMeas(id,mot){const m=S.meas.find(x=>x.id===id);if(!m)return;const at=nowIso();
+  if(m.sit==='V'){m.sit='D';m.mot=mot||'Descartada na revisão';m.h.push({at,by:S.me,a:'Descartou: '+m.mot})}else{m.sit='V';m.h.push({at,by:S.me,a:'Restaurou para a média'})}
+  save();render();toast(m.sit==='V'?'Medição restaurada':'Medição descartada')}
+
+/* ---------- Tempos-padrão ---------- */
+function vTempos(){
+  const g=G(tp.g)||padrao();let ds=(S.gd[g.id]||[]).map(D).filter(Boolean).sort((a,b)=>b.vol-a.vol);
+  const all=ds;
+  if(tp.q)ds=ds.filter(d=>norm(d.nome).includes(norm(tp.q)));
+  if(tp.f!=='todos')ds=ds.filter(d=>status(g.id,d.id)===tp.f);
+  const pr=all.filter(d=>status(g.id,d.id)==='pronto'),an=all.filter(d=>status(g.id,d.id)==='andamento');
+  const vol=all.reduce((a,d)=>a+d.vol,0),volOk=pr.reduce((a,d)=>a+d.vol,0);
+  const mm=S.meas.filter(m=>m.g===g.id);
+  const sel=tp.sel&&D(tp.sel);
+  return `<div class="row">${S.groups.map(x=>`<button class="btn ${x.id===g.id?'solid':''}" data-tpg="${x.id}">${esc(x.nome)}</button>`).join('')}</div>
+  <div class="tiles">
+    <div class="tile"><b>${all.length}</b><span>documentos no grupo</span></div>
+    <div class="tile"><b>${pr.length}</b><span>com tempo pronto (≥ ${S.cfg.min} medições)</span></div>
+    <div class="tile"><b>${an.length}</b><span>em andamento</span></div>
+    <div class="tile"><b>${fmt(vol?volOk/vol*100:0)}%</b><span>do volume do relatório coberto</span></div>
+    <div class="tile"><b>${mm.filter(m=>m.sit==='V').length}</b><span>medições na média</span></div>
+    <div class="tile"><b>${mm.filter(m=>m.sit==='D').length}</b><span>descartadas</span></div>
+  </div>
+  <div class="box"><div class="row" style="justify-content:space-between"><h2>${esc(g.nome)}: tempos por requisito</h2>
+    <div class="row"><select id="tpf" aria-label="Filtro"><option value="todos">Todos</option><option value="pronto" ${tp.f==='pronto'?'selected':''}>Prontos</option><option value="andamento" ${tp.f==='andamento'?'selected':''}>Em andamento</option><option value="sem" ${tp.f==='sem'?'selected':''}>Sem medição</option></select><input type="search" id="tpq" placeholder="Buscar documento" value="${esc(tp.q)}"></div></div>
+    <div class="tbl scroll"><table><thead><tr><th>Documento</th><th class="r">Volume</th><th class="r">Aprov. (n)</th><th class="r">Tempo aprov.</th><th class="r">Reprov. (n)</th><th class="r">Tempo reprov.</th><th class="r">Média · mediana</th><th class="r">Mín–máx</th><th>Avaliadores</th><th>Situação</th></tr></thead><tbody>
+    ${ds.map(d=>{const a=stat(g.id,d.id,'A'),r=stat(g.id,d.id,'R'),stt=status(g.id,d.id);const us=[...new Set(S.meas.filter(m=>m.g===g.id&&m.d===d.id).map(m=>m.by))];
+      return `<tr class="click ${tp.sel===d.id?'sel':''}" data-tps="${d.id}"><td style="max-width:340px"><b style="font-weight:600">${esc(d.nome)}</b></td><td class="r mono">${fmt(d.vol)}</td><td class="r mono">${a.n}</td><td class="r mono">${a.val!=null?fmt(a.val,2):'—'}</td><td class="r mono">${r.n}</td><td class="r mono">${r.val!=null?fmt(r.val,2):a.val!=null?`<span title="Sem medição de reprovado: usa o tempo de aprovado">${fmt(a.val,2)}*</span>`:'—'}</td><td class="r mono">${a.n?fmt(a.mean,2)+' · '+fmt(a.med,2):'—'}</td><td class="r mono">${a.n?fmt(a.min,1)+'–'+fmt(a.max,1):'—'}</td><td title="${esc(us.join(', '))}">${us.length?us.length+' pessoa'+(us.length>1?'s':''):'—'}</td><td>${stt==='pronto'?'<span class="pill p-good">Pronto</span>':stt==='andamento'?'<span class="pill p-warn">Em andamento</span>':'<span class="pill p-gray">Sem medição</span>'}</td></tr>`}).join('')||'<tr><td colspan="10" class="empty">Nada encontrado.</td></tr>'}
+    </tbody></table></div>
+    <p class="note">Tempos em minutos. Tempo-padrão = ${S.cfg.base==='media'?'média':'mediana'} das medições na média (altere em Configurações › Parâmetros). * Sem medição de reprovado: usa o tempo de aprovado até haver medições.</p>
+  </div>
+  ${sel?`<div class="box"><div class="row" style="justify-content:space-between"><h2>Rastreio: ${esc(sel.nome)}</h2><div class="row"><button class="btn solid" data-goCron="${g.id}|${sel.id}">Cronometrar este documento</button><button class="btn" data-tps="">Fechar</button></div></div>${measTable(S.meas.filter(m=>m.g===g.id&&m.d===sel.id),true)}</div>`:''}`;
+}
+function measTable(list,compact){
+  list=[...list].sort((a,b)=>b.at.localeCompare(a.at));
+  return `<div class="tbl scroll"><table><thead><tr><th>Data e hora</th>${compact?'':'<th>Grupo</th><th>Documento</th>'}<th>Avaliador</th><th>Resultado</th><th class="r">Tempo</th><th>Situação</th><th>Motivo</th><th>Histórico</th><th></th></tr></thead><tbody>
+  ${list.length?list.map(m=>`<tr><td class="mono">${dt(m.at)}</td>${compact?'':`<td>${esc(G(m.g)?.nome||'—')}</td><td style="max-width:280px">${esc(D(m.d)?.nome||'—')}</td>`}<td>${esc(m.by)}${m.ex?'<span class="ex">exemplo</span>':''}</td><td>${m.st==='A'?'<span class="pill p-good">Aprov.</span>':'<span class="pill p-bad">Reprov.</span>'}</td><td class="r mono">${mmss(m.ms)}</td><td>${m.sit==='V'?'<span class="pill p-blue">Na média</span>':'<span class="pill p-gray">Descartada</span>'}</td><td class="note">${esc(m.mot||'')}</td>
+  <td>${md.open===m.id?`<div class="hist">${m.h.map(h=>`<span><b class="mono">${dt(h.at)}</b> · ${esc(h.by)} · ${esc(h.a)}</span>`).join('')}</div><button class="link" data-hist="">fechar</button>`:`<button class="link" data-hist="${m.id}">${m.h.length} registro${m.h.length>1?'s':''}</button>`}</td>
+  <td><button class="btn sm ${m.sit==='V'?'bad':''}" data-tog="${m.id}">${m.sit==='V'?'Descartar':'Restaurar'}</button></td></tr>`).join(''):'<tr><td colspan="10" class="empty">Nenhuma medição.</td></tr>'}
+  </tbody></table></div>`;
+}
+
+/* ---------- Medições ---------- */
+function vMed(){
+  let L=S.meas;
+  if(md.g)L=L.filter(m=>m.g===md.g);if(md.u)L=L.filter(m=>m.by===md.u);if(md.sit)L=L.filter(m=>m.sit===md.sit);if(md.st)L=L.filter(m=>m.st===md.st);
+  if(md.q)L=L.filter(m=>norm(D(m.d)?.nome).includes(norm(md.q)));
+  const by={};S.meas.forEach(m=>{by[m.by]=(by[m.by]||0)+1});
+  return `<div class="tiles"><div class="tile"><b>${S.meas.length}</b><span>medições registradas</span></div><div class="tile"><b>${S.meas.filter(m=>m.sit==='V').length}</b><span>na média</span></div><div class="tile"><b>${S.meas.filter(m=>m.sit==='D').length}</b><span>descartadas</span></div><div class="tile"><b>${Object.keys(by).length}</b><span>avaliadores</span></div><div class="tile"><b>${new Set(S.meas.map(m=>m.g+m.d)).size}</b><span>requisitos medidos</span></div></div>
+  <div class="box"><div class="row" style="justify-content:space-between"><h2>Todas as medições</h2><button class="btn" data-exp="csv">Exportar CSV</button></div>
+  <div class="row">
+    <select id="mdg" aria-label="Grupo"><option value="">Todos os grupos</option>${S.groups.map(g=>`<option value="${g.id}" ${md.g===g.id?'selected':''}>${esc(g.nome)}</option>`).join('')}</select>
+    <select id="mdu" aria-label="Avaliador"><option value="">Todos os avaliadores</option>${S.users.map(u=>`<option ${md.u===u?'selected':''}>${esc(u)}</option>`).join('')}</select>
+    <select id="mds" aria-label="Situação"><option value="">Qualquer situação</option><option value="V" ${md.sit==='V'?'selected':''}>Na média</option><option value="D" ${md.sit==='D'?'selected':''}>Descartadas</option></select>
+    <select id="mdst" aria-label="Resultado"><option value="">Aprovado e reprovado</option><option value="A" ${md.st==='A'?'selected':''}>Aprovado</option><option value="R" ${md.st==='R'?'selected':''}>Reprovado</option></select>
+    <input type="search" id="mdq" placeholder="Buscar documento" value="${esc(md.q)}">
+    <span class="note">${L.length} de ${S.meas.length}</span>
+  </div>
+  ${measTable(L,false)}
+  <div class="row"><span class="eyebrow">Medições por avaliador</span>${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([u,n])=>`<span class="pill p-blue">${esc(u)} · ${n}</span>`).join('')||'<span class="note">—</span>'}</div></div>`;
+}
+
+/* ---------- Contagem ---------- */
+function vCont(){
+  const r=compute(),rel=S.rel;
+  const list=Object.entries(r.by).map(([c,o])=>({c,...o})).sort((a,b)=>b.min-a.min);
+  const tot=list.reduce((a,x)=>a+x.min,0);
+  const sel=ctSel&&r.by[ctSel];
+  return `<div class="box"><div class="row" style="justify-content:space-between"><div><h2>Relatório</h2><p class="note">${rel?`${esc(rel.nome)} · ${rel.rows.length} linhas${rel.ex?' · <span class="ex">exemplo</span>':''}`:'Nenhum relatório importado.'}</p></div>
+    <div class="row"><label class="btn solid" for="relFile" style="cursor:pointer">Importar relatório (CSV ou Excel)</label><input type="file" id="relFile" accept=".csv,.xlsx,.xls" hidden><button class="btn" data-exp="modelo">Baixar modelo</button><button class="btn" data-relex="1">Usar exemplo</button></div></div>
+    <p class="note">Formato esperado: o relatório EFIDOCEMP-201 com as colunas novas da solicitação de melhoria (Cód. vinculação, Cód. ignorado GT0120, Cód. contratante GT0010, Cód. turno GT0130). Códigos múltiplos separados por vírgula ou ponto e vírgula.</p></div>
+  <div class="tiles">
+    <div class="tile"><b>${r.rows}</b><span>linhas lidas</span></div><div class="tile"><b>${r.ok}</b><span>contabilizadas</span></div>
+    <div class="tile"><b style="color:${r.pend?'var(--warn)':''}">${r.pend}</b><span>sem tempo-padrão</span></div><div class="tile"><b>${r.noCtt}</b><span>sem contratante válido</span></div>
+    <div class="tile"><b>${r.ign}</b><span>não contam (presença)</span></div><div class="tile"><b style="color:${r.unk?'var(--bad)':''}">${r.unk}</b><span>documento desconhecido</span></div>
+  </div>
+  <div class="grid2 wide">
+    <div class="box"><h2>Horas por contratante</h2>
+      <div class="tbl"><table><thead><tr><th>Cód.</th><th>Contratante</th><th>Grupo</th><th class="r">Avaliações</th><th class="r" title="Tempo-padrão inteiro do grupo dele em cada avaliação">Inteiro (h)</th><th class="r" title="Divisão por camadas; soma igual ao tempo real">Dividido (h)</th><th class="r" title="Tempo que some se ele sair">Evitável (h)</th></tr></thead><tbody>
+      ${list.length?list.map(x=>`<tr class="click ${ctSel===x.c?'sel':''}" data-cts="${x.c}"><td class="mono">${esc(x.c)}</td><td>${esc(cttName(x.c))}</td><td>${esc(groupOf(x.c).nome)}</td><td class="r mono">${fmt(x.n,1)}</td><td class="r mono">${fmt(x.int/60,2)}</td><td class="r mono"><b>${fmt(x.min/60,2)}</b></td><td class="r mono">${fmt(x.ev/60,2)}</td></tr>`).join('')+`<tr><td></td><td><b>Total</b></td><td></td><td></td><td class="r mono">${fmt(list.reduce((a,x)=>a+x.int,0)/60,2)}</td><td class="r mono"><b>${fmt(tot/60,2)}</b></td><td class="r mono">${fmt(list.reduce((a,x)=>a+x.ev,0)/60,2)}</td></tr>`:'<tr><td colspan="7" class="empty">Nenhuma linha contabilizada ainda.</td></tr>'}
+      </tbody></table></div>
+      ${list.length?(()=>{const it=list.reduce((a,x)=>a+x.int,0),ev=list.reduce((a,x)=>a+x.ev,0);return `<div class="tiles"><div class="tile"><b>${fmt(r.real/60,2)} h</b><span>tempo real gasto</span></div><div class="tile"><b>${fmt((it-r.real)/60,2)} h</b><span>contagem dupla se usar o inteiro</span></div><div class="tile"><b>${fmt((r.real-ev)/60,2)} h</b><span>custo comum (nenhuma saída isolada libera)</span></div></div>`})():''}
+      <p class="note"><b>Inteiro</b>: quanto custaria atender o contratante sozinho; é a base de preço para cliente novo. <b>Dividido</b>: divisão por camadas (a base é dividida entre todos e o extra de um critério mais rigoroso vai para quem o exige); a soma bate com o tempo real e é o número da margem. <b>Evitável</b>: tempo da avaliação com todos menos o tempo sem ele; é o que uma saída libera. Sempre vale: evitável ≤ dividido ≤ inteiro.</p>
+    </div>
+    <div class="box"><h2>${sel?'Detalhe: '+esc(cttName(ctSel)):'Pendências'}</h2>
+      ${sel?`<div class="tbl scroll" style="max-height:360px"><table><thead><tr><th>Documento</th><th class="r">Dividido (min)</th><th class="r">Evitável (min)</th></tr></thead><tbody>${Object.entries(sel.docs).sort((a,b)=>b[1]-a[1]).map(([d,m])=>`<tr><td>${esc(D(d)?.nome)}</td><td class="r mono">${fmt(m,2)}</td><td class="r mono">${fmt(sel.evd[d]||0,2)}</td></tr>`).join('')}</tbody></table></div><button class="btn" data-cts="" style="align-self:flex-start">Ver pendências</button>`:
+      `${Object.keys(r.pendList).length?`<p class="note">Linhas que ainda não têm tempo-padrão. Cronometre para elas entrarem na conta.</p><div class="tbl scroll" style="max-height:300px"><table><thead><tr><th>Grupo</th><th>Documento</th><th class="r">Linhas</th><th></th></tr></thead><tbody>${Object.entries(r.pendList).sort((a,b)=>b[1]-a[1]).map(([k,n])=>{const [g,d]=k.split('|');return `<tr><td>${esc(G(g)?.nome)}</td><td>${esc(D(d)?.nome)}</td><td class="r mono">${n}</td><td><button class="btn sm solid" data-goCron="${g}|${d}">Cronometrar</button></td></tr>`}).join('')}</tbody></table></div>`:'<p class="note">Nenhuma pendência de tempo-padrão.</p>'}
+      ${Object.keys(r.unkList).length?`<h3 style="margin-top:6px">Documentos que não estão no catálogo</h3><div class="tbl" style="max-height:200px;overflow:auto"><table><tbody>${Object.entries(r.unkList).map(([n,c])=>`<tr><td>${esc(n)}</td><td class="r mono">${c}</td></tr>`).join('')}</tbody></table></div><p class="note">Inclua-os em Configurações › Catálogo de documentos.</p>`:''}`}
+    </div>
+  </div>
+  ${simBox(r)}`;
+}
+function parseRows(aoa){
+  if(!aoa.length)return [];
+  const h=aoa[0].map(x=>norm(x).toLowerCase().replace(/[^a-z0-9]/g,''));
+  const find=f=>h.findIndex(f);
+  const ix={ign:find(x=>x.includes('ignorado')),gt:find(x=>x.includes('gt0010')),tur:find(x=>x.includes('turno')),vinc:find(x=>x.includes('vinculacao')),
+    cad:find(x=>x.includes('cadastro')),raz:find(x=>x.includes('razao')),cnpj:find(x=>x.includes('cnpj')),usr:find(x=>x.includes('usuario')),st:find(x=>x==='status'),
+    ep:find(x=>x.includes('empresapessoa')),cod:find(x=>x.includes('cod')&&x.includes('doc')),doc:find(x=>x==='documento'||x==='descricaodocumento'),data:find(x=>x==='data'||x.startsWith('data'))};
+  if(ix.doc<0)throw new Error('Coluna "Documento" não encontrada no cabeçalho.');
+  const L=v=>String(v??'').split(/[;,\s]+/).map(s=>s.trim()).filter(Boolean);
+  const g=(r,k)=>ix[k]>=0?r[ix[k]]:'';
+  return aoa.slice(1).filter(r=>r&&String(g(r,'doc')||'').trim()).map(r=>({data:String(g(r,'data')||''),cod:String(g(r,'cod')||'').trim(),doc:String(g(r,'doc')).trim(),st:String(g(r,'st')||'APROVADO'),ep:String(g(r,'ep')||''),cad:String(g(r,'cad')||''),raz:String(g(r,'raz')||''),cnpj:String(g(r,'cnpj')||''),vinc:L(g(r,'vinc')),ign:L(g(r,'ign')),gt:L(g(r,'gt')),tur:L(g(r,'tur')),usr:String(g(r,'usr')||'')}));
+}
+async function importFile(f){
+  try{let aoa;
+    if(/\.csv$/i.test(f.name)){const txt=await f.text();const first=txt.split(/\r?\n/)[0];const FS=(first.split(';').length>first.split(',').length)?';':',';
+      if(window.XLSX){const wb=XLSX.read(txt,{type:'string',FS});aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false})}
+      else aoa=txt.split(/\r?\n/).filter(Boolean).map(l=>l.split(FS))}
+    else{if(!window.XLSX)throw new Error('Leitor de Excel não carregou. Salve como CSV e importe de novo.');const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false})}
+    const rows=parseRows(aoa);if(!rows.length)throw new Error('Nenhuma linha com documento encontrada.');
+    S.rel={nome:f.name,at:nowIso(),rows};save();ctSel=null;render();toast(`${rows.length} linhas importadas`);
+  }catch(e){toast(e.message||'Não foi possível ler o arquivo')}
+}
+
+/* ---------- Resultado ---------- */
+function resData(){
+  const r=compute(),c=S.cfg;const cap=c.pess*c.dias*c.hrs*60*c.pct/100/60;const ch=cap>0?c.custo/cap:0;const hmin=ch/(1-Math.min(.95,Math.max(0,c.mg/100)));const f=c.relDias>0?c.mesDias/c.relDias:1;
+  const rows=Object.entries(r.by).map(([cod,o])=>{const h=o.min/60*f;const ct=S.ctt.find(x=>x.cod===cod);const fat=ct?+ct.fat||0:0;const rh=h>0?fat/h:0,cs=h*ch,m=fat-cs;return {cod,h,ev:o.ev/60*f,fat,rh,cs,m,p:fat?m/fat*100:0,has:!!ct}}).sort((a,b)=>b.h-a.h);
+  return {cap,ch,hmin,f,rows};
+}
+function vRes(){
+  const c=S.cfg,R=resData();
+  return `<div class="box"><h2>Parâmetros</h2><div class="kv">
+    <label for="r_custo">Custo mensal da equipe (R$)<input type="number" id="r_custo" data-cfg="custo" value="${c.custo}"></label>
+    <label for="r_pess">Pessoas avaliando<input type="number" id="r_pess" data-cfg="pess" value="${c.pess}"></label>
+    <label for="r_dias">Dias úteis no mês<input type="number" id="r_dias" data-cfg="dias" value="${c.dias}"></label>
+    <label for="r_hrs">Horas por dia<input type="number" id="r_hrs" data-cfg="hrs" value="${c.hrs}"></label>
+    <label for="r_pct">Capacidade prática (%)<input type="number" id="r_pct" data-cfg="pct" value="${c.pct}"></label>
+    <label for="r_mg">Margem desejada (%)<input type="number" id="r_mg" data-cfg="mg" value="${c.mg}"></label>
+    <label for="r_rd">Dias úteis cobertos pelo relatório<input type="number" id="r_rd" data-cfg="relDias" value="${c.relDias}"></label>
+    <label for="r_md">Dias úteis para projetar o mês<input type="number" id="r_md" data-cfg="mesDias" value="${c.mesDias}"></label>
+  </div>
+  <div class="tiles"><div class="tile"><b>${fmt(R.cap)} h</b><span>capacidade prática/mês</span></div><div class="tile"><b>${brl2(R.ch)}</b><span>custo-hora</span></div><div class="tile"><b>${brl2(R.hmin)}</b><span>hora mínima</span></div><div class="tile"><b>×${fmt(R.f,2)}</b><span>projeção do relatório para o mês</span></div></div></div>
+  <div class="box"><h2>Receita por hora e margem</h2>
+  <div class="tbl"><table><thead><tr><th>Contratante</th><th class="r">Horas/mês</th><th class="r">Evitável/mês</th><th class="r">Faturamento/mês (R$)</th><th class="r">Receita/hora</th><th class="r">Custo de servir</th><th class="r">Margem</th><th>Situação</th></tr></thead><tbody>
+  ${R.rows.length?R.rows.map(x=>`<tr><td>${esc(x.cod)} · ${esc(cttName(x.cod))}</td><td class="r mono">${fmt(x.h,1)}</td><td class="r mono">${fmt(x.ev,1)}</td><td class="r">${x.has?`<input type="number" id="fat_${esc(x.cod)}" data-fat="${esc(x.cod)}" value="${x.fat}" style="width:120px;text-align:right">`:'<span class="note">cadastre o contratante</span>'}</td><td class="r mono">${x.fat?brl2(x.rh):'—'}</td><td class="r mono">${brl(x.cs)}</td><td class="r mono" style="color:${x.m<0?'var(--bad)':''}">${x.fat?brl(x.m)+' ('+fmt(x.p)+'%)':'—'}</td><td>${!x.fat?'<span class="pill p-gray">Sem faturamento</span>':x.m<0?'<span class="pill p-bad">Deficitário</span>':x.rh<R.hmin?'<span class="pill p-warn">Reprecificar</span>':'<span class="pill p-good">Proteger</span>'}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">Importe um relatório na aba Contagem.</td></tr>'}
+  </tbody></table></div>
+  <div class="chart"><div class="eyebrow" style="margin-bottom:6px">Receita por hora × custo-hora × hora mínima</div><div id="chart"></div></div>
+  <p class="note">Horas/mês e margem usam o tempo dividido. Evitável/mês é o que sai junto se o contratante sair. Por enquanto só a camada 1 (avaliação de documentos). Cadastro, e-mail e suporte entram depois e só aumentam as horas, ou seja, a receita por hora real é igual ou menor que esta.</p></div>`;
+}
+function drawChart(){
+  const el=$('chart');if(!el)return;const R=resData();const rows=R.rows.filter(x=>x.fat>0);
+  if(!rows.length){el.innerHTML='<p class="note" style="padding:10px">Informe o faturamento dos contratantes para ver o gráfico.</p>';return}
+  const W=760,rowH=32,T0=30,B=26,L=220,Rr=70,H=T0+B+rows.length*rowH;const max=Math.max(...rows.map(r=>r.rh),R.hmin,R.ch)*1.1||1;const x=v=>L+v/max*(W-L-Rr);const step=max>400?100:max>150?50:20;
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Receita por hora por contratante">`;
+  for(let t=0;t<=max;t+=step)g+=`<line x1="${x(t)}" x2="${x(t)}" y1="${T0-6}" y2="${H-B}" stroke="#EEF2F8"/><text x="${x(t)}" y="${H-B+16}" text-anchor="middle" font-size="11" fill="#5B6684" font-family="IBM Plex Mono,monospace">${t}</text>`;
+  rows.forEach((r,i)=>{const y=T0+i*rowH,col=r.rh<R.ch?'#C2412D':r.rh<R.hmin?'#A86A12':'#1F8A5B';g+=`<text x="${L-8}" y="${y+19}" text-anchor="end" font-size="12" font-weight="600" fill="#1A2540">${esc((r.cod+' · '+cttName(r.cod)).slice(0,30))}</text><rect x="${L}" y="${y+6}" width="${Math.max(0,x(r.rh)-L)}" height="19" rx="4" fill="${col}"/><text x="${x(r.rh)+5}" y="${y+20}" font-size="11.5" font-family="IBM Plex Mono,monospace" fill="#1A2540">${fmt(r.rh)}</text>`});
+  g+=`<line x1="${x(R.ch)}" x2="${x(R.ch)}" y1="${T0-8}" y2="${H-B}" stroke="#1A2540" stroke-width="2"/><text x="${x(R.ch)-5}" y="${T0-12}" text-anchor="end" font-size="11" font-weight="700" fill="#1A2540">custo-hora ${fmt(R.ch)}</text>`;
+  g+=`<line x1="${x(R.hmin)}" x2="${x(R.hmin)}" y1="${T0-8}" y2="${H-B}" stroke="#2A4F96" stroke-width="2" stroke-dasharray="5 4"/><text x="${x(R.hmin)+5}" y="${T0-12}" font-size="11" font-weight="700" fill="#2A4F96">hora mínima ${fmt(R.hmin)}</text></svg>`;
+  el.innerHTML=g;
+}
+
+/* ---------- Configurações ---------- */
+function vCfg(){
+  const sub={grupos:'Grupos',docs:'Documentos por grupo',catalogo:'Catálogo de documentos',ctt:'Contratantes',turnos:'Turnos',param:'Parâmetros',users:'Avaliadores',dados:'Dados'};
+  return `<div class="cfgnav">${Object.entries(sub).map(([k,l])=>`<button data-cfgt="${k}" class="${k===cfgTab?'on':''}">${l}</button>`).join('')}</div>${({grupos:cGrupos,docs:cDocs,catalogo:cCat,ctt:cCtt,turnos:cTur,param:cPar,users:cUsers,dados:cDados})[cfgTab]()}`;
+}
+function cGrupos(){
+  return `<div class="box"><h2>Grupos de critério</h2><p class="note">Contratantes que avaliam um documento com o mesmo critério ficam no mesmo grupo. Quem não estiver em nenhum grupo específico usa o grupo padrão.</p>
+  <div class="tbl"><table><thead><tr><th>Grupo</th><th>Contratantes (códigos, separados por vírgula)</th><th class="r">Documentos</th><th class="r">Medições</th><th></th></tr></thead><tbody>
+  ${S.groups.map(g=>`<tr><td><input type="text" id="gn_${g.id}" data-gn="${g.id}" value="${esc(g.nome)}"></td><td>${g.padrao?'<span class="note">todos os demais</span>':`<input type="text" id="gc_${g.id}" data-gc="${g.id}" value="${esc(g.ctt.join(', '))}" placeholder="ex.: 81">`}</td><td class="r mono">${(S.gd[g.id]||[]).length}</td><td class="r mono">${S.meas.filter(m=>m.g===g.id).length}</td><td>${g.padrao?'':`<button class="btn sm bad" data-gdel="${g.id}">Excluir</button>`}</td></tr>`).join('')}
+  </tbody></table></div><div class="row"><input type="text" id="newG" placeholder="Nome do novo grupo, ex.: Grupo Volare"><button class="btn solid" data-gadd="1">Criar grupo</button></div></div>`;
+}
+function cDocs(){
+  const from=G(mvS.from)||padrao(),to=G(mvS.to);
+  let ds=(S.gd[from.id]||[]).map(D).filter(Boolean).sort((a,b)=>b.vol-a.vol);if(mvS.q)ds=ds.filter(d=>norm(d.nome).includes(norm(mvS.q)));
+  const tds=to?(S.gd[to.id]||[]).map(D).filter(Boolean).sort((a,b)=>b.vol-a.vol):[];
+  return `<div class="box"><h2>Copiar ou mover documentos entre grupos</h2><p class="note"><b>Copiar</b>: o documento fica nos dois grupos, e o grupo de destino começa sem medições (critério diferente, tempo diferente). <b>Mover</b>: o documento sai da origem e leva as medições junto.</p>
+  <div class="mv">
+    <div class="col"><header><label class="eyebrow" for="mvFrom">Origem</label><select id="mvFrom">${S.groups.map(g=>`<option value="${g.id}" ${g.id===from.id?'selected':''}>${esc(g.nome)}</option>`).join('')}</select><input type="search" id="mvQ" placeholder="Buscar documento" value="${esc(mvS.q)}"><div class="row"><button class="link" data-mvall="1">Marcar visíveis</button><button class="link" data-mvnone="1">Desmarcar</button><span class="note">${mvS.sel.size} marcado(s)</span></div></header>
+      <div class="list">${ds.map(d=>`<label class="it" for="mv_${d.id}"><input type="checkbox" id="mv_${d.id}" data-mv="${d.id}" ${mvS.sel.has(d.id)?'checked':''}><span>${esc(d.nome)}</span><span class="mono note">${fmt(d.vol)}</span></label>`).join('')||'<div class="empty">Nenhum documento.</div>'}</div></div>
+    <div class="mid"><button class="btn solid" data-mvact="copy" ${!to||to.id===from.id||!mvS.sel.size?'disabled':''}>Copiar →</button><button class="btn" data-mvact="move" ${!to||to.id===from.id||!mvS.sel.size||from.padrao&&false?'disabled':''}>Mover →</button></div>
+    <div class="col"><header><label class="eyebrow" for="mvTo">Destino</label><select id="mvTo">${S.groups.map(g=>`<option value="${g.id}" ${to&&g.id===to.id?'selected':''}>${esc(g.nome)}</option>`).join('')}</select><span class="note">${tds.length} documento(s) neste grupo</span></header>
+      <div class="list">${tds.map(d=>`<div class="it" style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 6px;font-size:13px"><span>${esc(d.nome)}</span>${to.padrao?'':`<button class="btn sm bad" data-rmgd="${to.id}|${d.id}">Remover</button>`}</div>`).join('')||'<div class="empty">Nenhum documento.</div>'}</div></div>
+  </div><p class="note">Remover um documento de um grupo específico faz os contratantes desse grupo voltarem a usar o tempo do grupo padrão. As medições ficam guardadas no histórico.</p></div>`;
+}
+function cCat(){
+  return `<div class="box"><h2>Catálogo de documentos</h2><p class="note">${S.docs.length} documentos, criados a partir do relatório EFIDOCEMP-201 de 19 a 27/10/2026. O código é opcional e ajuda a casar com o relatório. Marque "Não conta" para itens de presença.</p>
+  <div class="row"><input type="text" id="newD" placeholder="Nome de um documento novo" style="flex:1;min-width:220px"><button class="btn solid" data-dadd="1">Adicionar ao catálogo</button></div>
+  <div class="tbl scroll"><table><thead><tr><th>Documento</th><th>Código</th><th class="r">Volume</th><th class="r">Reprov.</th><th class="c">Não conta</th><th>Grupos</th></tr></thead><tbody>
+  ${[...S.docs].sort((a,b)=>b.vol-a.vol).map(d=>`<tr><td style="min-width:300px"><input type="text" id="dn_${d.id}" data-dn="${d.id}" value="${esc(d.nome)}"></td><td><input type="text" id="dc_${d.id}" data-dc="${d.id}" value="${esc(d.cod)}" style="width:80px"></td><td class="r mono">${fmt(d.vol)}</td><td class="r mono">${fmt(d.rep||0)}</td><td class="c"><input type="checkbox" id="di_${d.id}" data-di="${d.id}" ${d.ign?'checked':''} aria-label="Não conta"></td><td class="note">${S.groups.filter(g=>inGroup(g.id,d.id)).map(g=>esc(g.nome)).join(', ')||'—'}</td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+function cCtt(){
+  return `<div class="box"><h2>Contratantes</h2><p class="note">Código igual ao do sistema. O faturamento mensal é usado na aba Resultado.</p>
+  <div class="tbl scroll"><table><thead><tr><th>Código</th><th>Nome</th><th class="r">Faturamento/mês (R$)</th><th>Grupo</th><th></th></tr></thead><tbody>
+  ${S.ctt.map((c,i)=>`<tr><td><input type="text" id="cc_${i}" data-cc="${i}" value="${esc(c.cod)}" style="width:80px"></td><td><input type="text" id="cn_${i}" data-cn="${i}" value="${esc(c.nome)}"></td><td class="r"><input type="number" id="cf_${i}" data-cf="${i}" value="${c.fat}" style="width:130px;text-align:right"></td><td class="note">${esc(groupOf(c.cod).nome)}</td><td><button class="btn sm bad" data-cdel="${i}">Excluir</button></td></tr>`).join('')}
+  </tbody></table></div><div class="row"><input type="text" id="nc_cod" placeholder="Código" style="width:100px"><input type="text" id="nc_nome" placeholder="Nome do contratante" style="flex:1;min-width:200px"><button class="btn solid" data-cadd="1">Adicionar</button></div></div>`;
+}
+function cTur(){
+  return `<div class="box"><h2>Turnos do GT0130</h2><p class="note">Liga cada turno ao contratante. Usado nos documentos de pessoa sem GT0010. Os turnos de 1 a 45 vieram do cadastro real; o 210 é o turno fictício da BSA usado no exemplo.</p>
+  <div class="tbl scroll"><table><thead><tr><th>Turno</th><th>Cód. contratante</th><th>Contratante</th><th></th></tr></thead><tbody>
+  ${S.turnos.map((t,i)=>`<tr><td><input type="text" id="tt_${i}" data-tt="${i}" value="${esc(t.t)}" style="width:80px"></td><td><input type="text" id="tc_${i}" data-tc="${i}" value="${esc(t.c)}" style="width:80px"></td><td class="note">${esc(cttName(t.c))}${t.ex?'<span class="ex">exemplo</span>':''}</td><td><button class="btn sm bad" data-tdel="${i}">Excluir</button></td></tr>`).join('')}
+  </tbody></table></div><div class="row"><input type="text" id="nt_t" placeholder="Turno" style="width:100px"><input type="text" id="nt_c" placeholder="Cód. contratante" style="width:140px"><button class="btn solid" data-tadd="1">Adicionar</button></div></div>`;
+}
+function cPar(){
+  const c=S.cfg;return `<div class="box"><h2>Parâmetros da medição</h2><div class="kv">
+    <label for="p_base">Tempo-padrão calculado pela<select id="p_base" data-cfgs="base"><option value="mediana" ${c.base==='mediana'?'selected':''}>Mediana (recomendado)</option><option value="media" ${c.base==='media'?'selected':''}>Média</option></select></label>
+    <label for="p_min">Medições mínimas para "pronto"<input type="number" id="p_min" data-cfg="min" value="${c.min}" min="1"></label></div>
+    <p class="note">A mediana não é puxada por uma medição atípica. A média aparece ao lado em todas as telas, para comparação.</p></div>
+  <div class="box"><h2>Nome do módulo</h2><div class="row"><input type="text" id="p_nome" value="${esc(S.nome)}" style="width:min(360px,100%)"><button class="btn solid" data-nome="1">Salvar nome</button></div></div>
+  <div class="box"><h2>Acesso por perfil</h2><p class="note">Por enquanto todos os perfis veem todas as abas. No sistema, a ideia é poder esconder abas para o perfil colaborador (por exemplo, deixar só Cronometrar e Tempos-padrão). A especificação já prevê isso.</p></div>`;
+}
+function cUsers(){
+  return `<div class="box"><h2>Avaliadores</h2><p class="note">No protótipo, quem registra é escolhido em "Você é". No sistema, será o usuário logado.</p>
+  <div class="row">${S.users.map((u,i)=>`<span class="pill p-blue" style="font-size:12.5px;padding:3px 10px">${esc(u)} <button class="link" data-udel="${i}" style="color:var(--bad);margin-left:4px" aria-label="Remover ${esc(u)}">×</button></span>`).join('')}</div>
+  <div class="row"><input type="text" id="newU" placeholder="Nome do avaliador"><button class="btn solid" data-uadd="1">Adicionar</button></div></div>`;
+}
+function cDados(){
+  const ex=S.meas.filter(m=>m.ex).length;
+  return `<div class="box"><h2>Dados de exemplo</h2><p class="note">${ex} medições de exemplo e ${S.rel&&S.rel.ex?'o relatório de exemplo':'nenhum relatório de exemplo'}. Remova antes de começar a cronometrar de verdade.</p><div class="row"><button class="btn bad" data-clrex="1" ${ex||(S.rel&&S.rel.ex)?'':'disabled'}>Remover dados de exemplo</button></div></div>
+  <div class="box"><h2>Cópia de segurança</h2><p class="note">No protótipo, os dados ficam neste navegador. Salve uma cópia para não perder e para levar a outro computador.</p><div class="row"><button class="btn solid" data-exp="json">Salvar cópia (JSON)</button><label class="btn" for="bkFile" style="cursor:pointer">Restaurar cópia</label><input type="file" id="bkFile" accept=".json" hidden></div></div>
+  <div class="box"><h2>Recomeçar</h2><p class="note">Apaga tudo e volta ao estado inicial com os exemplos.</p><div class="row"><button class="btn bad" data-reset="1">Recomeçar do zero</button></div></div>`;
+}
+
+/* ---------- Especificação ---------- */
+const SPEC_SQL=`-- Grupos de critério
+create table cs_grupos (id uuid primary key default gen_random_uuid(), nome text not null, padrao boolean default false, ordem int default 0, created_at timestamptz default now());
+create table cs_grupo_contratantes (grupo_id uuid references cs_grupos on delete cascade, contratante_cod text not null, primary key (grupo_id, contratante_cod));
+-- Catálogo de documentos e presença em cada grupo
+create table cs_documentos (id uuid primary key default gen_random_uuid(), nome text not null unique, codigo text, volume_ref int default 0, reprovados_ref int default 0, nao_conta boolean default false, ativo boolean default true);
+create table cs_grupo_documentos (grupo_id uuid references cs_grupos on delete cascade, documento_id uuid references cs_documentos on delete cascade, created_at timestamptz default now(), created_by uuid references auth.users, primary key (grupo_id, documento_id));
+-- Medições (rastreáveis) e histórico de cada mudança
+create table cs_medicoes (id uuid primary key default gen_random_uuid(), grupo_id uuid references cs_grupos, documento_id uuid references cs_documentos, duracao_ms int not null check (duracao_ms > 0), resultado text not null check (resultado in ('aprovado','reprovado')), situacao text not null check (situacao in ('validada','descartada')), motivo text, avaliador_id uuid references auth.users not null, created_at timestamptz default now());
+create table cs_medicoes_hist (id uuid primary key default gen_random_uuid(), medicao_id uuid references cs_medicoes on delete cascade, acao text not null, usuario_id uuid references auth.users not null, created_at timestamptz default now());
+-- Turnos e financeiro
+create table cs_turnos (turno_cod text primary key, contratante_cod text not null);
+create table cs_contratantes_fin (contratante_cod text primary key, faturamento_mensal numeric default 0);
+create table cs_config (id int primary key default 1 check (id = 1), base text default 'mediana' check (base in ('mediana','media')), minimo int default 5, custo_mensal numeric, pessoas int, dias_uteis int, horas_dia numeric, pct_capacidade numeric default 80, margem_desejada numeric default 30, nome_modulo text default 'Custo de Servir');
+-- Relatórios importados
+create table cs_relatorios (id uuid primary key default gen_random_uuid(), nome text, dias_uteis int, created_by uuid references auth.users, created_at timestamptz default now());
+create table cs_relatorio_linhas (id bigint generated always as identity primary key, relatorio_id uuid references cs_relatorios on delete cascade, data date, cod_documento text, documento text, status text, empresa_pessoa text, cod_cadastro text, razao_social text, cnpj text, vinculacao text[], ignorados text[], gt0010 text[], turnos text[], usuario text);
+-- Visão: tempo-padrão por grupo e documento
+create view cs_tempos with (security_invoker = true) as select grupo_id, documento_id, resultado, count(*) n, avg(duracao_ms)/60000.0 media_min, percentile_cont(0.5) within group (order by duracao_ms)/60000.0 mediana_min, min(duracao_ms)/60000.0 min_min, max(duracao_ms)/60000.0 max_min from cs_medicoes where situacao = 'validada' group by 1,2,3;
+-- RLS: por enquanto, qualquer usuário autenticado lê e grava (sem distinção de perfil)
+do $$ declare t text; begin
+  foreach t in array array['cs_grupos','cs_grupo_contratantes','cs_documentos','cs_grupo_documentos','cs_medicoes','cs_medicoes_hist','cs_turnos','cs_contratantes_fin','cs_config','cs_relatorios','cs_relatorio_linhas'] loop
+    execute format('alter table %I enable row level security', t);
+    execute format('create policy %I on %I for all to authenticated using (true) with check (true)', t || '_autenticados', t);
+  end loop;
+end $$;
+-- Medição e histórico sempre gravados em nome de quem está logado
+create policy cs_medicoes_autor on cs_medicoes as restrictive for insert to authenticated with check (avaliador_id = auth.uid());
+create policy cs_medicoes_hist_autor on cs_medicoes_hist as restrictive for insert to authenticated with check (usuario_id = auth.uid());
+-- GRANT explícito, só nas tabelas do módulo (padrão do projeto)
+grant select, insert, update, delete on cs_grupos, cs_grupo_contratantes, cs_documentos, cs_grupo_documentos, cs_medicoes, cs_medicoes_hist, cs_turnos, cs_contratantes_fin, cs_config, cs_relatorios, cs_relatorio_linhas to authenticated;
+grant select on cs_tempos to authenticated;
+grant usage, select on sequence cs_relatorio_linhas_id_seq to authenticated;
+-- Configuração inicial: só parâmetros de método; os da equipe ficam vazios até serem informados
+insert into cs_config (id, base, minimo, pct_capacidade, margem_desejada) values (1, 'mediana', 5, 80, 30);`;
+const SPEC_PROMPT=`REGRA PRINCIPAL: use SOMENTE dados reais. O protótipo HTML anexo serve apenas como referência de telas, regras e comportamento. Todo dado de exemplo do protótipo (medições, relatório, turno 210, documentos copiados para o grupo BSA, parâmetros financeiros e faturamentos) deve ser IGNORADO e não pode ir para o banco nem ficar fixo no código. Na dúvida se um dado é real ou exemplo, não importe e pergunte. A lista exata do que é real está na seção SOMENTE DADOS REAIS, no fim deste prompt.
+
+Crie no GT3 Sistema (Next.js 14 App Router, TypeScript, Tailwind, Supabase) o módulo "Custo de Servir" (nome provisório, editável em cs_config.nome_modulo), seguindo o protótipo HTML anexo e o tema atual (#2A4F96, #D1AE6E, branco com contornos azuis).
+
+BANCO: use o SQL anexo (tabelas cs_*), com RLS e GRANT explícito. Popular cs_documentos com os 143 documentos do protótipo (nome, volume_ref, reprovados_ref) e criar o grupo padrão com todos eles em cs_grupo_documentos. Popular cs_turnos com a tabela de turnos do protótipo.
+
+ABAS (rotas em /custo-servir/...):
+1. Cronometrar: cartões de grupos → lista de documentos do grupo (ordenada por volume_ref, com busca, contagem n/mínimo e situação) → cronômetro. Cronômetro com Iniciar, Pausar, Continuar, Parar; seletor Aprovado/Reprovado; depois de parar: "Validar para média" ou Descartar com motivo (Interrupção, Documento atípico, Erro de medição, Avaliei mais de um documento) ou "Zerar sem registrar". Atalhos: Espaço inicia/pausa, Enter para e valida, Esc descarta. Medição menor que 1 s não é registrada. Se o usuário sair da tela, o cronômetro continua e aparece um botão flutuante para voltar. Ao lado: estatísticas (n, média, mediana, mín–máx) e lista das medições do documento com Descartar/Restaurar. Toda mudança grava em cs_medicoes_hist.
+2. Tempos-padrão: seletor de grupo, cartões de resumo (documentos, prontos, em andamento, % do volume coberto, validadas, descartadas), tabela por documento com n e tempo de aprovado e reprovado, média e mediana, mín–máx, nº de avaliadores e situação. Clique na linha abre o rastreio com todas as medições e histórico.
+3. Medições: lista completa com filtros (grupo, avaliador, situação, resultado, busca), histórico por medição, Descartar/Restaurar e exportar CSV. Contagem por avaliador.
+4. Contagem por contratante: importar relatório (CSV com ; ou , e XLSX via SheetJS) com as colunas da solicitação de melhoria do EFIDOCEMP-201; baixar modelo. Regras: documento casa pelo código ou pelo nome normalizado; "não conta" é ignorado; contratantes válidos = Cód. GT0010 se preenchido; senão, contratantes dos turnos (via cs_turnos) dentro da vinculação; senão, a vinculação; sempre menos os ignorados. Tempo de cada contratante = tempo-padrão do documento no grupo dele (se o documento não estiver no grupo, usa o padrão; reprovado sem medição usa o de aprovado). Divisão por camadas: ordenar os tempos; cada degrau é dividido entre os contratantes com tempo maior ou igual. Mostrar por contratante três números: Inteiro (soma do tempo-padrão do grupo dele em cada avaliação; base de preço para cliente novo), Dividido (camadas; a soma é igual ao tempo real; usado na margem) e Evitável (para cada avaliação: tempo com todos os válidos menos o tempo sem ele, zero se não sobrar ninguém; é o que a saída libera). Cartões: tempo real, contagem dupla do inteiro e custo comum. Simulador de saída: marcar um ou mais contratantes e calcular horas liberadas = Σ (tempo com todos − tempo sem o grupo marcado), projetadas para o mês, faturamento que sai, valor da capacidade liberada (h × custo-hora) e receita por hora que o substituto precisa superar (faturamento que sai ÷ horas liberadas), comparada à hora mínima. Mostrar também o detalhe por documento (dividido e evitável), pendências (sem tempo-padrão, com botão para cronometrar) e documentos fora do catálogo.
+5. Resultado: parâmetros (custo mensal, pessoas, dias, horas, % capacidade, margem desejada, dias do relatório, dias do mês), custo-hora, hora mínima, tabela por contratante com horas/mês, evitável/mês, faturamento editável, receita/hora, custo de servir, margem e situação (Proteger, Reprecificar, Deficitário) e gráfico de barras com as linhas de custo-hora e hora mínima.
+6. Configurações: Grupos (criar, renomear, contratantes, excluir), Documentos por grupo (origem/destino, marcar vários, Copiar = destino começa sem medições; Mover = leva as medições; Remover de grupo específico), Catálogo (nome, código, não conta, adicionar), Contratantes (código, nome, faturamento), Turnos, Parâmetros (mediana ou média, mínimo de medições, nome do módulo), Avaliadores.
+
+PERMISSÕES: por enquanto todos os perfis veem todas as abas. Deixar a estrutura pronta para esconder abas por perfil (ex.: colaborador vê só Cronometrar e Tempos-padrão), com um mapa aba → perfis em cs_config.
+
+SOMENTE DADOS REAIS. O módulo deve nascer limpo, sem nenhuma medição e sem nenhum relatório, pronto para a equipe começar a cronometrar de verdade.
+NÃO migrar (são exemplos):
+- as medições de exemplo (marcadas como "exemplo");
+- o relatório de exemplo (linhas da EMPRESA ABC, CARLOS EXEMPLO, MARIA EXEMPLO etc.);
+- o turno 210 (fictício, da BSA);
+- os documentos copiados para o Grupo BSA (ASO, PGR e OS): o grupo BSA nasce vazio;
+- os parâmetros financeiros do protótipo (custo mensal de R$ 60.000, 8 pessoas, 22 dias, 8 h por dia): em cs_config, custo_mensal, pessoas, dias_uteis e horas_dia nascem vazios (null), e a aba Resultado mostra "Preencha os parâmetros da equipe" em vez de calcular enquanto estiverem vazios;
+- faturamentos: todos nascem em 0.
+MIGRAR (somente estes, que são reais): os 143 documentos com volume_ref e reprovados_ref; o grupo padrão com todos os documentos; os grupos BSA (contratante 81) e Jungheinrich, vazios; os turnos de 1 a 45 com seus contratantes; os contratantes com código e nome; pct_capacidade 80, margem_desejada 30, base mediana e mínimo de 5 medições. Os avaliadores são os usuários do sistema (auth), não a lista do protótipo.
+
+SIDEBAR: item com o nome do módulo para todos os perfis.`;
+function vSpec(){
+  return `<div class="box"><h2>Como este protótipo vira módulo do GT3 Sistema</h2><p>As tabelas abaixo cobrem tudo o que o protótipo guarda. A rastreabilidade fica em <b>cs_medicoes</b> (quem, quando, quanto, resultado, situação) e em <b>cs_medicoes_hist</b> (cada descarte e restauração). O tempo-padrão sai de uma visão, sem tabela própria, para nunca ficar desatualizado.</p></div>
+  <div class="box"><div class="row" style="justify-content:space-between"><h2>SQL para o Supabase</h2><button class="btn" data-copy="sql">Copiar SQL</button></div><pre class="code" id="specSql">${esc(SPEC_SQL)}</pre></div>
+  <div class="box"><div class="row" style="justify-content:space-between"><h2>Prompt para o Claude Code</h2><button class="btn solid" data-copy="prompt">Copiar prompt</button></div><pre class="code" id="specPrompt">${esc(SPEC_PROMPT)}</pre></div>`;
+}
+
+/* ---------- Downloads ---------- */
+async function offer(name,data){
+  try{if(window.claude&&typeof window.claude.use==='function'){const dl=await window.claude.use('downloads');if(dl){try{await dl.save({filename:name,data});toast('Arquivo salvo')}catch(e){if(e&&e.code==='declined')toast('Salvamento cancelado');else showText(name,data)}return}showText(name,data);return}
+    const u=URL.createObjectURL(new Blob([data]));const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);toast('Arquivo salvo')}catch(e){showText(name,data)}
+}
+function showText(name,data){const d=$('dlg');d.innerHTML=`<div class="card"><h2>${esc(name)}</h2><p class="note">O salvamento direto não está disponível aqui. Copie o conteúdo e salve num arquivo com esse nome.</p><textarea id="dlgTxt" readonly>${esc(data)}</textarea><div class="row" style="justify-content:flex-end"><button class="btn" data-close="1">Fechar</button><button class="btn solid" data-dlgcopy="1">Copiar</button></div></div>`;d.hidden=false}
+function copyText(t,el){const fb=()=>{if(el){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r)}toast('Texto selecionado. Use Ctrl+C')};try{navigator.clipboard.writeText(t).then(()=>toast('Copiado'),fb)}catch(e){fb()}}
+const csvCell=v=>{v=String(v??'');return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+
+/* ---------- Eventos ---------- */
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab)});
+$('me').addEventListener('change',e=>{S.me=e.target.value;save();toast('Registrando como '+S.me)});
+$('float').addEventListener('click',()=>{nav.g=T.g;nav.d=T.d;setTab('cronometrar')});
+window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(TABS.some(t=>t[0]===h)&&h!==tab){tab=h;render()}});
+const view=$('view');
+view.addEventListener('click',e=>{
+  const t=e.target.closest('[data-g],[data-d],[data-back],[data-t],[data-st],[data-disc],[data-tog],[data-goT],[data-tpg],[data-tps],[data-goCron],[data-hist],[data-exp],[data-relex],[data-cts],[data-cfgt],[data-gadd],[data-gdel],[data-mvall],[data-mvnone],[data-mvact],[data-rmgd],[data-dadd],[data-cadd],[data-cdel],[data-tadd],[data-tdel],[data-uadd],[data-udel],[data-nome],[data-clrex],[data-reset],[data-copy],[data-sim]');
+  if(!t)return;const ds=t.dataset;
+  if(ds.g!==undefined&&t.classList.contains('gcard')){nav={g:ds.g,d:null,q:''};render();return}
+  if(ds.d!==undefined&&t.classList.contains('dcard')){nav.d=ds.d;render();return}
+  if(ds.back==='g'){nav={g:null,d:null,q:''};render();return}
+  if(ds.back==='d'){nav.d=null;render();return}
+  if(ds.t){tAct(ds.t);return}
+  if(ds.st){if(T.g&&!(T.g===nav.g&&T.d===nav.d)&&(T.run||T.acc>0)){toast('Termine o cronômetro em andamento primeiro');return}T.st=ds.st;render();return}
+  if(ds.disc){tAct('disc',ds.disc);return}
+  if(ds.tog){togMeas(ds.tog);return}
+  if(ds.got){nav.g=T.g;nav.d=T.d;render();return}
+  if(ds.tpg){tp.g=ds.tpg;tp.sel=null;render();return}
+  if(ds.tps!==undefined){tp.sel=ds.tps||null;render();return}
+  if(ds.gocron){const [g,d]=ds.gocron.split('|');nav={g,d,q:''};setTab('cronometrar');return}
+  if(ds.hist!==undefined){md.open=ds.hist||null;render();return}
+  if(ds.exp==='csv'){const rows=[['data_hora','grupo','documento','avaliador','resultado','duracao_seg','situacao','motivo','exemplo']].concat(S.meas.map(m=>[m.at,G(m.g)?.nome,D(m.d)?.nome,m.by,m.st==='A'?'aprovado':'reprovado',(m.ms/1000).toFixed(1).replace('.',','),m.sit==='V'?'validada':'descartada',m.mot,m.ex?'sim':'']));offer('medicoes-custo-de-servir.csv','﻿'+rows.map(r=>r.map(csvCell).join(';')).join('\n'));return}
+  if(ds.exp==='modelo'){const h='Data;Cód. documento;Documento;Status;Empresa/Pessoa;Cód. cadastro;Razão social;CNPJ;Cód. vinculação;Cód. ignorado GT0120;Cód. contratante GT0010;Cód. turno GT0130;Usuário';offer('modelo-relatorio-eficiencia.csv','﻿'+h+'\n22/10/2026;3;ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL;APROVADO;MARIA EXEMPLO;9001;EMPRESA ABC LTDA;00.000.000/0001-00;"1, 81";;;"2; 210";CAMILA POSSAMAI');return}
+  if(ds.exp==='json'){offer('custo-de-servir-copia.json',JSON.stringify(S));return}
+  if(ds.relex){S.rel=sampleRel(S.docs);save();ctSel=null;render();toast('Relatório de exemplo carregado');return}
+  if(ds.cts!==undefined){ctSel=ds.cts||null;render();return}
+  if(ds.sim){if(ds.sim==='__none')simSel.clear();else simSel.has(ds.sim)?simSel.delete(ds.sim):simSel.add(ds.sim);render();return}
+  if(ds.cfgt){cfgTab=ds.cfgt;render();return}
+  if(ds.gadd){const n=$('newG').value.trim();if(!n){toast('Informe o nome do grupo');return}const id='g-'+uid();S.groups.push({id,nome:n,ctt:[]});S.gd[id]=[];save();render();toast('Grupo criado');return}
+  if(ds.gdel){if(t.dataset.armed!=='1'){t.dataset.armed='1';t.textContent='Confirmar';t.classList.add('solid');setTimeout(()=>{if(t.isConnected){t.dataset.armed='';t.textContent='Excluir';t.classList.remove('solid')}},3000);return}
+    S.groups=S.groups.filter(g=>g.id!==ds.gdel);delete S.gd[ds.gdel];save();render();toast('Grupo excluído. As medições continuam no histórico.');return}
+  if(ds.mvall){const from=G(mvS.from);(S.gd[from.id]||[]).map(D).filter(d=>!mvS.q||norm(d.nome).includes(norm(mvS.q))).forEach(d=>mvS.sel.add(d.id));render();return}
+  if(ds.mvnone){mvS.sel.clear();render();return}
+  if(ds.mvact){const from=mvS.from,to=mvS.to;const ids=[...mvS.sel];let n=0;
+    ids.forEach(id=>{if(!S.gd[to].includes(id)){S.gd[to].push(id);n++}if(ds.mvact==='move'){S.gd[from]=S.gd[from].filter(x=>x!==id);S.meas.forEach(m=>{if(m.g===from&&m.d===id){m.g=to;m.h.push({at:nowIso(),by:S.me,a:`Movida de ${G(from).nome} para ${G(to).nome}`})}})}});
+    mvS.sel.clear();save();render();toast(`${ids.length} documento(s) ${ds.mvact==='move'?'movido(s)':'copiado(s)'} para ${G(to).nome}`);return}
+  if(ds.rmgd){const [g,d]=ds.rmgd.split('|');S.gd[g]=S.gd[g].filter(x=>x!==d);save();render();toast('Removido do grupo');return}
+  if(ds.dadd){const n=$('newD').value.trim().toUpperCase();if(!n){toast('Informe o nome');return}if(S.docs.some(d=>norm(d.nome)===norm(n))){toast('Esse documento já existe');return}const id='d'+uid();S.docs.push({id,nome:n,vol:0,rep:0,cod:'',ign:false});padrao()&&S.gd[padrao().id].push(id);save();render();toast('Documento adicionado ao grupo padrão');return}
+  if(ds.cadd){const c=$('nc_cod').value.trim(),n=$('nc_nome').value.trim();if(!c||!n){toast('Informe código e nome');return}S.ctt.push({cod:c,nome:n.toUpperCase(),fat:0});save();render();return}
+  if(ds.cdel){S.ctt.splice(+ds.cdel,1);save();render();return}
+  if(ds.tadd){const a=$('nt_t').value.trim(),b=$('nt_c').value.trim();if(!a||!b){toast('Informe turno e contratante');return}S.turnos.push({t:a,c:b});save();render();return}
+  if(ds.tdel){S.turnos.splice(+ds.tdel,1);save();render();return}
+  if(ds.uadd){const n=$('newU').value.trim().toUpperCase();if(!n)return;if(!S.users.includes(n))S.users.push(n);save();render();return}
+  if(ds.udel){const u=S.users[+ds.udel];if(S.users.length<=1){toast('Mantenha ao menos um avaliador');return}S.users.splice(+ds.udel,1);if(S.me===u)S.me=S.users[0];save();render();return}
+  if(ds.nome){S.nome=$('p_nome').value.trim()||'Custo de Servir';save();render();toast('Nome salvo');return}
+  if(ds.clrex){S.meas=S.meas.filter(m=>!m.ex);S.turnos=S.turnos.filter(t=>!t.ex);if(S.rel&&S.rel.ex)S.rel=null;save();render();toast('Dados de exemplo removidos');return}
+  if(ds.reset){if(t.dataset.armed!=='1'){t.dataset.armed='1';t.textContent='Confirmar: apagar tudo';t.classList.add('solid');setTimeout(()=>{if(t.isConnected){t.dataset.armed='';t.textContent='Recomeçar do zero';t.classList.remove('solid')}},3000);return}
+    S=seed();save();T={g:null,d:null,run:false,acc:0,t0:0,st:'A',stopped:false};nav={g:null,d:null,q:''};render();toast('Recomeçado');return}
+  if(ds.copy){copyText(ds.copy==='sql'?SPEC_SQL:SPEC_PROMPT,$(ds.copy==='sql'?'specSql':'specPrompt'));return}
+});
+view.addEventListener('input',e=>{const t=e.target;
+  if(t.id==='dq'){nav.q=t.value;const p=t.selectionStart;render();const n=$('dq');n.focus();n.setSelectionRange(p,p);return}
+  if(t.id==='tpq'){tp.q=t.value;const p=t.selectionStart;render();const n=$('tpq');n.focus();n.setSelectionRange(p,p);return}
+  if(t.id==='mdq'){md.q=t.value;const p=t.selectionStart;render();const n=$('mdq');n.focus();n.setSelectionRange(p,p);return}
+  if(t.id==='mvQ'){mvS.q=t.value;const p=t.selectionStart;render();const n=$('mvQ');n.focus();n.setSelectionRange(p,p);return}
+});
+view.addEventListener('change',e=>{const t=e.target,ds=t.dataset;
+  if(t.id==='tpf'){tp.f=t.value;render();return}
+  if(t.id==='mdg'){md.g=t.value;render();return} if(t.id==='mdu'){md.u=t.value;render();return} if(t.id==='mds'){md.sit=t.value;render();return} if(t.id==='mdst'){md.st=t.value;render();return}
+  if(t.id==='relFile'&&t.files[0]){importFile(t.files[0]);return}
+  if(t.id==='bkFile'&&t.files[0]){t.files[0].text().then(x=>{try{const d=JSON.parse(x);if(!d||d.v!==1||!Array.isArray(d.meas))throw 0;S=d;save();render();toast('Cópia restaurada')}catch(err){toast('Arquivo inválido')}});return}
+  if(t.id==='mvFrom'){mvS.from=t.value;mvS.sel.clear();render();return} if(t.id==='mvTo'){mvS.to=t.value;render();return}
+  if(ds.mv){t.checked?mvS.sel.add(ds.mv):mvS.sel.delete(ds.mv);render();return}
+  const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n};
+  if(ds.cfg){S.cfg[ds.cfg]=num(t.value);if(ds.cfg==='min')S.cfg.min=Math.max(1,Math.round(S.cfg.min));save();render();return}
+  if(ds.cfgs){S.cfg[ds.cfgs]=t.value;save();render();return}
+  if(ds.fat){const c=S.ctt.find(x=>x.cod===ds.fat);if(c){c.fat=num(t.value);save();render()}return}
+  if(ds.gn){G(ds.gn).nome=t.value.trim()||G(ds.gn).nome;save();render();return}
+  if(ds.gc){const codes=t.value.split(/[;,\s]+/).map(s=>s.trim()).filter(Boolean);const clash=codes.filter(c=>S.groups.some(g=>g.id!==ds.gc&&!g.padrao&&g.ctt.includes(c)));if(clash.length){toast('Contratante já em outro grupo: '+clash.join(', '));render();return}G(ds.gc).ctt=codes;save();render();return}
+  if(ds.dn){const d=D(ds.dn);d.nome=t.value.trim()||d.nome;save();return}
+  if(ds.dc){D(ds.dc).cod=t.value.trim();save();return}
+  if(ds.di){D(ds.di).ign=t.checked;save();render();return}
+  if(ds.cc!==undefined){S.ctt[+ds.cc].cod=t.value.trim();save();render();return}
+  if(ds.cn!==undefined){S.ctt[+ds.cn].nome=t.value.trim();save();return}
+  if(ds.cf!==undefined){S.ctt[+ds.cf].fat=num(t.value);save();return}
+  if(ds.tt!==undefined){S.turnos[+ds.tt].t=t.value.trim();save();return}
+  if(ds.tc!==undefined){S.turnos[+ds.tc].c=t.value.trim();save();render();return}
+});
+$('dlg').addEventListener('click',e=>{if(e.target.id==='dlg'||e.target.dataset.close)$('dlg').hidden=true;if(e.target.dataset.dlgcopy){const ta=$('dlgTxt');copyText(ta.value,null);ta.select()}});
+document.addEventListener('keydown',e=>{
+  if(tab!=='cronometrar'||!nav.g||!nav.d||e.target.closest('input,select,textarea')||e.ctrlKey||e.metaKey||e.altKey)return;
+  const same=T.g===nav.g&&T.d===nav.d,busy=T.g&&!same&&(T.run||T.acc>0);if(busy)return;
+  if(e.code==='Space'){e.preventDefault();if(!same||(!T.run&&T.acc===0&&!T.stopped))tAct('start');else if(T.run)tAct('pause');else tAct('resume')}
+  else if(e.key==='Enter'&&same&&(T.run||T.acc>0)){e.preventDefault();if(!T.stopped)tAct('stop');tAct('val')}
+  else if(e.key==='Escape'&&same&&T.stopped){e.preventDefault();tAct('disc','Descartada pelo avaliador')}
+});
+window.addEventListener('beforeunload',e=>{if(T.run){e.preventDefault();e.returnValue=''}});
+render();
+})();
+</script>

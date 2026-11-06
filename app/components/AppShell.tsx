@@ -6,6 +6,8 @@ import Sidebar from './Sidebar'
 import { TabContentCache } from './TabContentCache'
 import { MODULE_COMPONENT_MAP } from './moduleComponentMap'
 import Tabbar from './Tabbar'
+import CsTimerFloat from '../custo-servir/CsTimerFloat'
+import CsAmostraAviso from '../custo-servir/CsAmostraAviso'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
 import { useModules } from './ModulesContext'
@@ -1013,6 +1015,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             mainStyle={{ flex: 1, overflow: 'auto', backgroundColor: '#F4F6FA', padding: 24, paddingBottom: 80 }}
             componentMap={MODULE_COMPONENT_MAP}
           />
+
+          {/* Cronômetro do Custo de Servir: continua rodando fora do módulo */}
+          <CsTimerFloat />
+          {/* Custo de Servir: aviso da amostragem do trabalho (camada 3), só em amostragem ativa */}
+          <CsAmostraAviso />
 
           {pathname === '/' && (
             <div style={{

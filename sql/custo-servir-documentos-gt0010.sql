@@ -1,0 +1,736 @@
+-- GT3 Sistema - Custo de Servir: documentos do GT0010 por contratante (fonte: Prints/Documentos, 6 relatorios
+-- "Relacao de Documentos" por contratante e por contrato de servico). Execute uma vez no SQL Editor do Supabase.
+--
+-- 1) Cria cs_documento_contratantes: qual documento cada contratante exige pelo GT0010 (origem: por contratante
+--    ou por contrato de servico), com tipo (E/C), periodicidade, bloqueio de acesso e se o vinculo esta ativo.
+-- 2) Documentos que ja estavam no catalogo (mesmo nome): recebem o codigo do sistema e o tipo (E = empresa,
+--    C = colaborador/pessoa) quando o tipo ainda estava vazio.
+-- 3) Documentos que nao existiam: sao criados com codigo e tipo, entram no grupo padrao e ficam vinculados.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.cs_documento_contratantes (
+  documento_id    uuid NOT NULL REFERENCES public.cs_documentos(id) ON DELETE CASCADE,
+  contratante_cod text NOT NULL REFERENCES public.cs_contratantes_fin(contratante_cod) ON UPDATE CASCADE ON DELETE CASCADE,
+  origem          text NOT NULL CHECK (origem IN ('contratante', 'contrato_servico')),
+  tipo_doc        text CHECK (tipo_doc IN ('E', 'C')),
+  periodicidade   text,          -- codigo do sistema (U, A, B, M, T, S, I, O...)
+  bloqueia_acesso boolean NOT NULL DEFAULT false,
+  data_inicio     date,
+  ativo           boolean NOT NULL DEFAULT true,   -- false = todas as configuracoes com data final passada
+  qtd_contratos   int NOT NULL DEFAULT 1,          -- por contrato de servico: quantos contratos (empresas) exigem
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (documento_id, contratante_cod, origem)
+);
+CREATE INDEX IF NOT EXISTS cs_documento_contratantes_ctt ON public.cs_documento_contratantes (contratante_cod);
+ALTER TABLE public.cs_documento_contratantes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS cs_documento_contratantes_autenticados ON public.cs_documento_contratantes;
+CREATE POLICY cs_documento_contratantes_autenticados ON public.cs_documento_contratantes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.cs_documento_contratantes TO authenticated, service_role;
+
+-- Codigo do documento passa a ser unico (e a chave para casar com o relatorio)
+CREATE UNIQUE INDEX IF NOT EXISTS cs_documentos_codigo_unico ON public.cs_documentos (codigo) WHERE codigo IS NOT NULL;
+
+-- ── Documentos que ja existiam: codigo e tipo ──
+UPDATE public.cs_documentos SET codigo = '569', tipo = COALESCE(tipo, 'pessoa') WHERE id = '0397830e-9cf8-4ef1-9588-b9ad9c6d40d4';  -- COMPROVANTE VACINA ANTITETANICA - 10A
+UPDATE public.cs_documentos SET codigo = '578', tipo = COALESCE(tipo, 'empresa') WHERE id = '80893902-1d36-4b62-8cfd-dcaf19655a06';  -- GUIA SIMPLES NACIONAL + COMP PGTO
+UPDATE public.cs_documentos SET codigo = '579', tipo = COALESCE(tipo, 'pessoa') WHERE id = '28a07eba-1630-4153-8b12-92e4d78d6f77';  -- CTPS - DIGITAL
+UPDATE public.cs_documentos SET codigo = '580', tipo = COALESCE(tipo, 'pessoa') WHERE id = '8afb4931-6fff-40fc-bfef-c5e297a2476c';  -- COMPROVANTE DE RESIDÊNCIA
+UPDATE public.cs_documentos SET codigo = '581', tipo = COALESCE(tipo, 'pessoa') WHERE id = '219d58d7-317c-4502-a7c7-a77ce7aeb11d';  -- DOCUMENTO DE IDENTIFICAÇÃO (RG COM CPF OU CNH) - COLORIDO
+UPDATE public.cs_documentos SET codigo = '588', tipo = COALESCE(tipo, 'empresa') WHERE id = '066eabfc-8007-4934-ab4a-9fc901a94ec5';  -- PROPOSTA COMERCIAL
+UPDATE public.cs_documentos SET codigo = '591', tipo = COALESCE(tipo, 'empresa') WHERE id = 'dfa6cdfe-1733-4bb7-bcbe-6ae395075b35';  -- CHECK LIST DE DADOS DA EMPRESA
+UPDATE public.cs_documentos SET codigo = '611', tipo = COALESCE(tipo, 'pessoa') WHERE id = '0bcc0831-5f10-4f24-b3b1-c2af759c4e08';  -- FICHA EPI COM ENTREGAS DENTRO DE 60 DIAS P/ FINS RESCISÓRIOS
+UPDATE public.cs_documentos SET codigo = '642', tipo = COALESCE(tipo, 'empresa') WHERE id = 'a1de5f34-4c4e-44c0-89d1-a726a70b20d7';  -- DECLARAÇÃO CIÊNCIA MANUAL PRESTADORES MADAL PALFINGER
+UPDATE public.cs_documentos SET codigo = '973', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'ae807f5b-0d5b-4725-bd30-287ace5a6043';  -- TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - DOCILE
+UPDATE public.cs_documentos SET codigo = '976', tipo = COALESCE(tipo, 'pessoa') WHERE id = '1b800d95-0e0a-4076-8fcd-04ff0b0b5e62';  -- TREINAMENTO DE TERCEIROS VINICOLA SALTON
+UPDATE public.cs_documentos SET codigo = '978', tipo = COALESCE(tipo, 'pessoa') WHERE id = '9edb15bc-c936-45f3-befb-62a08b4f7a29';  -- TREINAMENTO TERCEIROS TABONE
+UPDATE public.cs_documentos SET codigo = '981', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'e9d90fb2-a850-4567-bfd1-b3463aeeb0e2';  -- CULTURE-SE PARA TERCEIROS - GRUPO IMEC
+UPDATE public.cs_documentos SET codigo = '982', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'dc3ba05f-8495-4647-b760-236399859707';  -- RQ246 - NORMAS E PROCEDIM PARA PRESTADORES SERVIÇO
+UPDATE public.cs_documentos SET codigo = '983', tipo = COALESCE(tipo, 'empresa') WHERE id = 'a133f951-910a-4d19-a09d-9691147ebb21';  -- ITEM C - PACOTE INF AO CONTRATADO - EMPRESA
+UPDATE public.cs_documentos SET codigo = '984', tipo = COALESCE(tipo, 'pessoa') WHERE id = '96a8e90b-dabc-4703-842c-ed1174fb920a';  -- ITEM B - PACOTE INF AO CONTRATADO - EMPREGADO
+UPDATE public.cs_documentos SET codigo = '985', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'b53e2f1b-16b5-4b3f-97dd-000b1ff419d1';  -- TERMO INTEGRACAO - ACEITACAO MANUAL SSO JUNGHEINRICH
+UPDATE public.cs_documentos SET codigo = '988', tipo = COALESCE(tipo, 'pessoa') WHERE id = '2e114a3d-d543-4f79-be54-138d38c8528b';  -- TREINAMENTO INTEGRAÇÃO TERCEIROS - GRUPO BRINOX
+UPDATE public.cs_documentos SET codigo = '989', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'd18ec28d-35a9-4614-a2a2-bc66f92cfafb';  -- TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - MADAL PALFINGER
+UPDATE public.cs_documentos SET codigo = '991', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'da687766-09b2-485c-be5e-9f29807854d2';  -- TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - PETTENATI
+UPDATE public.cs_documentos SET codigo = '992', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'b3531449-7f16-416a-b093-a182aa5453de';  -- TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - MEBRAFE
+UPDATE public.cs_documentos SET codigo = '993', tipo = COALESCE(tipo, 'pessoa') WHERE id = '8aa25650-e007-43ec-9540-6d4f5c456fcf';  -- TREINAMENTO INTEGRAÇÃO TERCEIROS EAD - BRASLUX
+UPDATE public.cs_documentos SET codigo = '260', tipo = COALESCE(tipo, 'empresa') WHERE id = 'ec010742-13a3-46d3-b581-26c800c21b2e';  -- CRF - CERTIFICADO DE REGULARIDADE DE FGTS - TRIMESTRAL
+UPDATE public.cs_documentos SET codigo = '304', tipo = COALESCE(tipo, 'empresa') WHERE id = '55f02398-1b5c-4fb0-a713-4c468785cf6c';  -- LAUDO DE ANÁLISE DA ÁGUA - ANUAL
+UPDATE public.cs_documentos SET codigo = '387', tipo = COALESCE(tipo, 'empresa') WHERE id = '01c45bf1-f2f6-49c2-bca9-55746c483f1e';  -- ACORDO / DISSIDIO COLETIVO CATEGORIA
+UPDATE public.cs_documentos SET codigo = '1', tipo = COALESCE(tipo, 'pessoa') WHERE id = '7ea5a033-e742-4294-84d0-ee4b219a3d3d';  -- FOTO (3 X 4) EM JPEG PARA CONFECÇÃO DO CRACHÁ - UNICO
+UPDATE public.cs_documentos SET codigo = '5', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'b3eede07-f8dc-4629-a6e3-ec7223630450';  -- CNH - CARTEIRA NAC HABILITAÇÃO - FRENTE E VERSO - INFORMADA
+UPDATE public.cs_documentos SET codigo = '9', tipo = COALESCE(tipo, 'pessoa') WHERE id = '28f7c538-51e1-4ee7-85fb-eb5f203cde45';  -- NR 11 - EMPILHADEIRA - ANUAL
+UPDATE public.cs_documentos SET codigo = '10', tipo = COALESCE(tipo, 'pessoa') WHERE id = '99839a1d-3e16-4e86-8135-e47c79d3e145';  -- NR 12 - SEGURANÇA MÁQUINAS E EQUIPAMENTOS - 8H - BIENAL
+UPDATE public.cs_documentos SET codigo = '15', tipo = COALESCE(tipo, 'pessoa') WHERE id = '8cc4116c-ce04-4c1a-a0a1-d188fba19699';  -- NR 35 - BASICO - TRABALHO EM ALTURA - 8H - BIENAL
+UPDATE public.cs_documentos SET codigo = '40', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'ee8d74ea-9460-47c7-8a67-066c66035f01';  -- DECLARACAO TREINAMENTO APR - DTA FINAL CFME APR EMPRESA
+UPDATE public.cs_documentos SET codigo = '41', tipo = COALESCE(tipo, 'pessoa') WHERE id = '37dde509-06a1-4e65-bf43-0180501e2640';  -- CARTEIRA DE VACINACAO
+UPDATE public.cs_documentos SET codigo = '48', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'b507adba-4de3-427d-916f-38035f4079a3';  -- NR 18 - TREIN BÁSICO SEG TRAB (ITEM 2.1 ANEXO 1) -4H BIENAL
+UPDATE public.cs_documentos SET codigo = '52', tipo = COALESCE(tipo, 'pessoa') WHERE id = '4125879e-e1e3-4a38-be8c-6e7c3a782bf7';  -- DOCS PESSOAIS COM FOTO (CTPS - RG OU CNH) - ÚNICO
+UPDATE public.cs_documentos SET codigo = '53', tipo = COALESCE(tipo, 'pessoa') WHERE id = '1ffd7954-72c3-4eba-b51f-9123126dfa5a';  -- CARTAO PONTO
+UPDATE public.cs_documentos SET codigo = '57', tipo = COALESCE(tipo, 'pessoa') WHERE id = '2fdf47e5-e22c-44c9-ba17-3c880551163e';  -- RECIBO DE PAGAMENTO (HOLERITE + COMPROVANTE PGTO)
+UPDATE public.cs_documentos SET codigo = '61', tipo = COALESCE(tipo, 'pessoa') WHERE id = '227b5ecc-0ed5-47dc-8789-02256658beb7';  -- TRCT TERMO RESCISÃO CONTR TRAB + COMPROV PGTO - UNICO
+UPDATE public.cs_documentos SET codigo = '63', tipo = COALESCE(tipo, 'pessoa') WHERE id = '6bb40a0d-3d5c-4610-b8a2-78cba65b27cb';  -- ORDEM DE SERVICO SST - CF NR01
+UPDATE public.cs_documentos SET codigo = '66', tipo = COALESCE(tipo, 'pessoa') WHERE id = '16e010de-f4f9-4063-9d4e-316156d4c436';  -- POLÍTICA DE SEGURANÇA DA INFORMAÇÃO - ÚNICO
+UPDATE public.cs_documentos SET codigo = '73', tipo = COALESCE(tipo, 'pessoa') WHERE id = '326b6e73-6767-49ce-b18c-ffb3ac314239';  -- EPI - FICHA ENTREGA DE EQUIP PROTEÇÃO INDIVIDUAL - 60 DIAS
+UPDATE public.cs_documentos SET codigo = '75', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'c9e68041-e3f6-481a-94ad-5c13c3e13879';  -- TERMO DE RESPONSABILIDADE INTEGRAÇÃO GASTRONOMIA - ÚNICO
+UPDATE public.cs_documentos SET codigo = '76', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'bd783006-1f6e-4d27-8490-01f4cd444922';  -- CONTRATO DE TRABALHO EFETIVO (CLT) - ÚNICO
+UPDATE public.cs_documentos SET codigo = '78', tipo = COALESCE(tipo, 'pessoa') WHERE id = '2e7aaac1-05fc-4a97-a352-9c4b712e1217';  -- CARTA DE DESLIGAMENTO
+UPDATE public.cs_documentos SET codigo = '80', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'ea9a1793-45d0-4868-9555-d71c7baec344';  -- PPP PERFIL PROFISSIOGRAFICO PREVIDENC
+UPDATE public.cs_documentos SET codigo = '81', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'ae961811-0068-4f4f-ba86-770079055d37';  -- FGTS EXTRATO P/FINS RESCISORIOS
+UPDATE public.cs_documentos SET codigo = '82', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'aae6b811-44df-4396-9d17-7a29e4e34d42';  -- ASO - DEMISSIONAL
+UPDATE public.cs_documentos SET codigo = '83', tipo = COALESCE(tipo, 'pessoa') WHERE id = '54c01685-1eee-4b90-87b9-4cd56c48615c';  -- COMPROVANTE FERIAS
+UPDATE public.cs_documentos SET codigo = '84', tipo = COALESCE(tipo, 'pessoa') WHERE id = '5ac1c804-dda5-4565-9a58-ad879ddf046f';  -- DETALHE GUIA EMITIDA DO COLABORADOR - ANTIGO DEMONSTRATIVO
+UPDATE public.cs_documentos SET codigo = '86', tipo = COALESCE(tipo, 'pessoa') WHERE id = '9e695040-c21a-40f4-9b14-12ff5b0e1273';  -- FGTS EXTRATO ANALITICO TRABALHADOR
+UPDATE public.cs_documentos SET codigo = '94', tipo = COALESCE(tipo, 'pessoa') WHERE id = '1400eea3-d9ac-4bbf-92bb-cc627a169cb1';  -- ACORDO INDIVIDUAL DE TRABALHO - INTERVALO REFEIÇÃO
+UPDATE public.cs_documentos SET codigo = '98', tipo = COALESCE(tipo, 'pessoa') WHERE id = '1f896b56-7ae6-456f-8093-feb45cfd4b12';  -- NR 06 - TREINAMENTO/ORIENTAÇÕES SOBRE EPIS ENTREGUES
+UPDATE public.cs_documentos SET codigo = '125', tipo = COALESCE(tipo, 'empresa') WHERE id = 'bd363b06-5f5b-423b-ab79-5a9cc90afdc7';  -- COMPROVANTE DEPOSITO + HOLERITE
+UPDATE public.cs_documentos SET codigo = '130', tipo = COALESCE(tipo, 'empresa') WHERE id = '046713a1-b3f4-4ada-9220-0671690e9633';  -- CONTRATO PRESTAÇÃO SERVIÇOS
+UPDATE public.cs_documentos SET codigo = '133', tipo = COALESCE(tipo, 'empresa') WHERE id = '14f4b894-e2a8-4bea-b662-09afc7398837';  -- APR ANALISE PRELIMINAR DE RISCOS - EMPRESA - INFORMADA
+UPDATE public.cs_documentos SET codigo = '139', tipo = COALESCE(tipo, 'empresa') WHERE id = '149a2ead-5f3c-4357-ba5b-7b1782151eae';  -- ALVARÁ DE VIGILÂNCIA SANITÁRIA - ANUAL
+UPDATE public.cs_documentos SET codigo = '141', tipo = COALESCE(tipo, 'empresa') WHERE id = '3b058023-8878-4d74-94e0-539ab37c57f1';  -- CRF - CERTIFICADO DE REGULARIDADE DE FGTS - INFORMADA
+UPDATE public.cs_documentos SET codigo = '163', tipo = COALESCE(tipo, 'empresa') WHERE id = 'b93471a5-7f3c-4038-86c7-75206e1a8b4c';  -- CERTIDÃO JUDICIAL CIVIL- P JURIDICA
+UPDATE public.cs_documentos SET codigo = '169', tipo = COALESCE(tipo, 'empresa') WHERE id = '387652bd-ae10-4d3a-a84a-1359f3d2ed05';  -- COMPROVANTE DE DEPOSITO BANCARIO REFERENTE AO SALÁRIO
+UPDATE public.cs_documentos SET codigo = '173', tipo = COALESCE(tipo, 'empresa') WHERE id = '54f95138-1776-47b8-923a-d0ef1bd70a43';  -- LTCAT (LAUDO TÉCNICO DAS CONDIÇÕES DO AMBIENTE DE TRABALHO)
+UPDATE public.cs_documentos SET codigo = '202', tipo = COALESCE(tipo, 'empresa') WHERE id = '3e4e4b68-0ade-4994-add3-6008c567203e';  -- APOLICE DE SEGURO - VIDA
+UPDATE public.cs_documentos SET codigo = '204', tipo = COALESCE(tipo, 'empresa') WHERE id = 'a6b590ce-8f3d-4a35-b961-db62f00c9af3';  -- CERTIDÃO CADASTRO/REGISTRO CRN (CONSELHO NUTRICÃO) - ANUAL
+UPDATE public.cs_documentos SET codigo = '207', tipo = COALESCE(tipo, 'empresa') WHERE id = '5f804f2e-33d1-4952-9774-5ed966513439';  -- CERTIFICADO DE CONTROLE INTEGRADO DE PRAGAS - ANUAL
+UPDATE public.cs_documentos SET codigo = '208', tipo = COALESCE(tipo, 'empresa') WHERE id = 'f0f0c8fb-7225-43d5-ba16-4db98a566cc0';  -- CERTIFICADO DE HIGIENIZAÇÃO CAIXA D'ÁGUA - SEMESTRAL
+UPDATE public.cs_documentos SET codigo = '311', tipo = COALESCE(tipo, 'empresa') WHERE id = '7321f0eb-cdaa-44dc-a239-c3bb198f6bf4';  -- CERTIDÃO NEGATIVA DE DÉBITO IBAMA
+UPDATE public.cs_documentos SET codigo = '388', tipo = COALESCE(tipo, 'empresa') WHERE id = '6a927d1a-d3ca-4207-a837-4add22cb2561';  -- COMPROVANTE DE PAGAMENTO - MEI
+UPDATE public.cs_documentos SET codigo = '547', tipo = COALESCE(tipo, 'pessoa') WHERE id = '6c176db3-c6a4-4932-849f-b52cddb049b8';  -- COMPRA VT - RECARGA VALE TRANSPORTE
+UPDATE public.cs_documentos SET codigo = '584', tipo = COALESCE(tipo, 'empresa') WHERE id = '07701bdb-86bb-4856-8eac-53507e47b3c4';  -- CERTIDÃO INIDÔNEA
+UPDATE public.cs_documentos SET codigo = '585', tipo = COALESCE(tipo, 'empresa') WHERE id = 'c8d5a7e4-77ea-452f-8b55-739dd65da0d4';  -- CERTIDÃO NEGATIVA DE FALÊNCIA
+UPDATE public.cs_documentos SET codigo = '586', tipo = COALESCE(tipo, 'empresa') WHERE id = 'e4631697-642d-4482-9ae5-168603f74e15';  -- CERTIDÃO DE FEITOS MPT
+UPDATE public.cs_documentos SET codigo = '587', tipo = COALESCE(tipo, 'empresa') WHERE id = '944377bf-28c2-402c-ac32-d6efa7b312c6';  -- ESPELHO DE NOTA
+UPDATE public.cs_documentos SET codigo = '589', tipo = COALESCE(tipo, 'empresa') WHERE id = '88ce4433-0ba9-44f6-8721-634e839a9f68';  -- COMPROVAÇÃO DE CAPACIDADE TÉCNICA
+UPDATE public.cs_documentos SET codigo = '590', tipo = COALESCE(tipo, 'empresa') WHERE id = 'bea45df9-7e3d-48b1-9fc7-826b3af29f11';  -- DEMONSTRATIVOS CONTÁBEIS
+UPDATE public.cs_documentos SET codigo = '592', tipo = COALESCE(tipo, 'empresa') WHERE id = 'eac4f5a2-9a56-492f-acd4-c2af07ce8cb8';  -- DECLARAÇÃO DE INEXISTÊNCIA DE ALOJAMENTO
+UPDATE public.cs_documentos SET codigo = '593', tipo = COALESCE(tipo, 'empresa') WHERE id = '3fb89c72-f55f-4ce2-9c99-859ca5eff080';  -- CERTIDÃO DÉBITOS TRABALHISTAS (MPT - MIN PÚBLICO TRAB)
+UPDATE public.cs_documentos SET codigo = '597', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'd22ccb5c-376d-4a0f-b74c-af892769e1dc';  -- NR 22 - TREINAMENTO INTRODUTÓRIO GERAL - 16H - BIENAL
+UPDATE public.cs_documentos SET codigo = '610', tipo = COALESCE(tipo, 'pessoa') WHERE id = '0964c135-6b0f-4acb-8d24-ff614e672105';  -- RESTRIÇÃO HIGIENIZAÇÃO/COLETA RESÍDUOS SANITÁRIOS - ANUAL
+UPDATE public.cs_documentos SET codigo = '612', tipo = COALESCE(tipo, 'empresa') WHERE id = 'f6ca04e1-86db-4a79-92fa-84ee6e804807';  -- RECIBO DCTFWEB COMPLETO - DECLARAÇÃO + RELATÓRIOS
+UPDATE public.cs_documentos SET codigo = '614', tipo = COALESCE(tipo, 'empresa') WHERE id = '18f85a89-dd54-4a65-b1df-3b6a9d559aa0';  -- EVENTO S1020 E-SOCIAL(ANALÍTICA + RESUMO DE BASES INSS/FGTS)
+UPDATE public.cs_documentos SET codigo = '6', tipo = COALESCE(tipo, 'pessoa') WHERE id = '1cda0e2f-ce4f-48dd-a7e3-6013de95a030';  -- CERTIFICADO FORMAÇÃO (TÉCNICA / SUPERIOR OU SIMILAR)
+UPDATE public.cs_documentos SET codigo = '7', tipo = COALESCE(tipo, 'pessoa') WHERE id = '07da0b5e-2507-4905-9c03-eab3f778f4ff';  -- NR 10 BÁSICO - SEGURANCA INSTALAÇÕES ELÉTRICAS 40H - BIENAL
+UPDATE public.cs_documentos SET codigo = '8', tipo = COALESCE(tipo, 'pessoa') WHERE id = '6f6d3910-9d45-4292-83d8-bb7bbda4f4ab';  -- NR 11 - PONTE ROLANTE E TALHA - 8H - ANUAL
+UPDATE public.cs_documentos SET codigo = '12', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'b768abad-348b-4b37-9f85-65da0715d668';  -- NR 18 - PEMT (PLATAFORMA ELEVATÓRIA MÓVEL) - 4H - BIENAL
+UPDATE public.cs_documentos SET codigo = '14', tipo = COALESCE(tipo, 'pessoa') WHERE id = '8cbc0b42-7a1b-49bb-84a0-6faac7687c5a';  -- NR 33 - VIGIA / OP ESPAÇO CONFINADO - 16H - ANUAL
+UPDATE public.cs_documentos SET codigo = '16', tipo = COALESCE(tipo, 'pessoa') WHERE id = '52315b3b-05cf-4533-8dcb-7ef676e11867';  -- NR 10 SEP - SISTEMA ELÉTRICO DE POTENCIA - 40H - BIENAL
+UPDATE public.cs_documentos SET codigo = '31', tipo = COALESCE(tipo, 'pessoa') WHERE id = 'a15e1936-c68d-486a-8b35-77acd7f3984a';  -- MOPP - MOVIMENTACAO OPERACAO PRODUTOS PERIGOSOS-50H -ÚNICO
+UPDATE public.cs_documentos SET codigo = '44', tipo = COALESCE(tipo, 'pessoa') WHERE id = '6195c4ac-71c8-4551-a967-f49cc3c23dd8';  -- CURSO DE CONDUTORES TRANSPORTE COLETIVO - 50H - ÚNICO
+UPDATE public.cs_documentos SET codigo = '55', tipo = COALESCE(tipo, 'pessoa') WHERE id = '968a8c77-b6ce-46bf-90a9-37f19543012b';  -- RPA - RECIBO DE PAGAMENTO AUTONOMO - INFORMADO
+UPDATE public.cs_documentos SET codigo = '72', tipo = COALESCE(tipo, 'pessoa') WHERE id = '2b166851-4614-45c1-bc0f-67ae534b9114';  -- TERMO DE PROIBICAO CAMARA FRIA - UNICO
+UPDATE public.cs_documentos SET codigo = '118', tipo = COALESCE(tipo, 'empresa') WHERE id = '2e60a7d7-1e4b-4743-ba57-6883f0ef3d6c';  -- AUTORIZACAO TRANSPORTE FRETAMENTO (CERTIFICADO RECEFITUR)
+UPDATE public.cs_documentos SET codigo = '120', tipo = COALESCE(tipo, 'empresa') WHERE id = 'b8270a55-0cb6-4172-b764-3b0972961309';  -- ATA POSSE CIPA REF A MARCOPOLO (ANUAL)
+UPDATE public.cs_documentos SET codigo = '121', tipo = COALESCE(tipo, 'empresa') WHERE id = 'c2f20a6e-e273-4830-8ef3-6aecba4b2ebd';  -- TERMO INDICACAO DESIGNADO CIPA REF A MARCOPOLO (ANUAL)
+UPDATE public.cs_documentos SET codigo = '134', tipo = COALESCE(tipo, 'empresa') WHERE id = '9afc751c-ad1f-4c88-9c1e-cd2d33acca47';  -- DECLARACAO RECEBIMENTO CONHEC CIPA MP SÃO CRISTOVÃO(MENSAL)
+UPDATE public.cs_documentos SET codigo = '135', tipo = COALESCE(tipo, 'empresa') WHERE id = '7e300ff4-d83b-43d8-920b-98f63c494786';  -- CONTRATO DE PRESTAÇAO DE SERV. ENTRE PRESTADORES PERIODICO
+UPDATE public.cs_documentos SET codigo = '146', tipo = COALESCE(tipo, 'empresa') WHERE id = 'b1fcf955-f47e-47ae-afb1-0bd2cba1a418';  -- CHECK LIST VEICULOS - MENSAL
+
+-- ── Documentos novos (nao existiam no catalogo) ──
+INSERT INTO public.cs_documentos (nome, codigo, tipo) VALUES
+  ('TREINAMENTO LGPD - WOODBRIDGE SBC ESCRITÓRIO', '513', 'pessoa'),
+  ('ANÁLISE ERGONÔMICA DO TRABALHO (AET) - BIENAL', '543', 'empresa'),
+  ('TERMO INDICAÇÃO DESIGNADO CIPA - ANUAL', '544', 'empresa'),
+  ('CERTIDÃO NEGATIVA DE PROTESTOS', '573', 'empresa'),
+  ('NOÇÕES DE DIREÇÃO DEFENSIVA - 4H - BIENAL', '598', 'pessoa'),
+  ('TREINAMENTO INTEGRAÇÃO TERCEIROS - EUROSTEC', '975', 'pessoa'),
+  ('INTEGRACAO DE TERCEIROS EAD FCC - TRIMESTRAL', '987', 'pessoa'),
+  ('TREINAMENTO INTEGRAÇÃO TERCEIROS - RECREIO DA JUVENTUDE', '996', 'pessoa'),
+  ('CARTA DE RESPONSÁVEL DA CIPA E ASSÉDIO - BIENAL', '255', 'empresa'),
+  ('NR 05 - CIPA E ASSÉDIO - BIENAL', '18', 'empresa'),
+  ('DECLARAÇÃO CONHECIMENTO POLÍTICA DE CONSEQUÊNCIAS - ÚNICO', '87', 'pessoa'),
+  ('TERMO DE DESCRICAO DE ATIVIDADES', '154', 'empresa'),
+  ('CERTIDÃO DE REGISTRO RESPONSAVEL TECNICO EMPRESA - INFORMADO', '159', 'empresa'),
+  ('CAGED', '162', 'empresa'),
+  ('APOLICE SEGURO - RESPONSABILIDADE CIVIL / ACIDENTE TRABALHO', '192', 'empresa'),
+  ('NOTA FISCAL', '203', 'empresa'),
+  ('DECLARAÇÃO ADESÃO LGPD LANGUIRU', '213', 'empresa'),
+  ('CONTRATO GT3 - INFORMADO', '219', 'empresa'),
+  ('LTCAT (LAUDO TÉCNICO CONDIÇÕES AMBIENTE DE TRABALHO) - ANUAL', '250', 'empresa'),
+  ('CONTROLE DE CONTROLE DE PRAGAS - CONVIVA - ANUAL', '254', 'empresa'),
+  ('CERTIFICADO CALIBRAÇÃO TERMÔMETRO ESPETO TE 2162', '272', 'empresa'),
+  ('ART CARGO/FUNÇÃO - RESP. TÉCNICO AMBIENTAL', '317', 'empresa'),
+  ('CERTIFICADO CALIBRAÇÃO TERMÔMETRO INFRAVERMELHO 37930', '372', 'empresa'),
+  ('CERTIFICADO VERIFICAÇÃO TERMÔMETRO ESPETO TE 2087', '373', 'empresa'),
+  ('CERTIFICADO VERIFICAÇÃO TERMÔMETRO ESPETO 18-23AL', '376', 'empresa'),
+  ('CERTIFICADO VERIFICAÇÃO TERMÔMETRO ESPETO 19-23AL', '377', 'empresa'),
+  ('CERTIFICADO CALIBRAÇÃO TERMÔMETRO INFRAVERMELHO 15659', '393', 'empresa'),
+  ('CERTIFICADO CALIBRAÇÃO TERMÔMETRO ESPETO AK1373/2024', '394', 'empresa'),
+  ('CERTIFICADO VERIFICAÇÃO TERMÔMETRO ESPETO TE 2158', '396', 'empresa'),
+  ('CERTIFICADO CALIBRAÇÃO TERMÔMETRO INFRAVERMELHO TI-02', '397', 'empresa'),
+  ('LAUDO INSPECAO TECNICA VEICULAR - LITV', '504', 'empresa'),
+  ('CRLV-CERTIFICADO REGISTRO LICENCIAMENTO VEICULO - INFORMADO', '505', 'empresa'),
+  ('TERMO OPÇÃO VALE TRANSPORTE', '546', 'pessoa'),
+  ('NR 17 - CERTIFICADO CURSO TRANSPORTE MANUAL CARGA - ANUAL', '556', 'pessoa'),
+  ('CERTIFICADO CALIBRAÇÃO TERMÔMETRO INFRAVERMELHO AK4129', '557', 'empresa'),
+  ('BSA HOMOL - COMPR PGTO SALARIOS - ULTIMOS 90 DIAS', '562', 'empresa'),
+  ('BSA HOMOL - FGTS + COMPROV PGTO - ULTIMOS 90 DIAS', '563', 'empresa'),
+  ('BSA HOMOL - INSS + COMPROV PGTO - ULTIMOS 90 DIAS', '564', 'empresa'),
+  ('BSA HOMOL - CERTID SIMPL JUNTA COMERCIAL EMITIDO MAX 60 DIAS', '565', 'empresa'),
+  ('BSA HOMOL - CERTIDAO DE PROTESTOS EMISSÃO DENTRO 30 D', '566', 'empresa'),
+  ('BSA HOMOL - CERTIDAO JUDICIAL CÍVEL - PESSOA JURIDICA', '567', 'empresa'),
+  ('BSA HOMOL - CONTA BANCARIA JURIDICA', '568', 'empresa'),
+  ('BSA HOMOL - COMPR INSCR MUNIC OU BIM BOLETIM INF MERCA', '570', 'empresa'),
+  ('BSA HOMOL - COMPR INSCR ESTADUAL OU COMPR DE ISENCAO', '571', 'empresa'),
+  ('BSA HOMOL - COMPR PGTO FERIAS - ULTIMOS 90 DIAS', '572', 'empresa'),
+  ('MEMORIAL MONTAGEM ESTRUTURAS METÁLICAS TENDAS + ART - INFORM', '574', 'empresa'),
+  ('BSA HOMOL - SIMPLES NAC +COMPR PGTO - ULTIMOS 90 DIAS', '577', 'empresa'),
+  ('PLANO DE MANUTENÇÃO DE VEÍCULOS - ANUAL', '595', 'empresa'),
+  ('CERTIFICADO VERIFICAÇÃO TERMÔMETRO ESPETO TE 1109', '596', 'empresa'),
+  ('TERMO LGPD MUTUO CONSENTIMENTO', '600', 'empresa'),
+  ('DECLARAÇÃO RESPONS SUBCONTRATAÇÃO (MEIS).', '601', 'empresa'),
+  ('CONTRATO TRANSPORTE', '602', 'empresa'),
+  ('LICENÇA AMBIENTAL ÚNICA', '603', 'empresa'),
+  ('CERTIFICADO CALIBRACAO TERMOMETRO ESPETO 39542', '604', 'empresa'),
+  ('CERTIFICADO CALIBRACAO TERMOMETRO ESPETO 39543', '605', 'empresa'),
+  ('CERTIFICADO CALIBRACAO TERMOMETRO ESPETO TE 2173', '606', 'empresa'),
+  ('CERTIFICADO CALIBRACAO TERMOMETRO ESPETO TE 2174', '607', 'empresa'),
+  ('CERTIFICADO CALIBRACAO TERMOMETRO ESPETO TE 2177', '608', 'empresa'),
+  ('GUIA SIMPLES NACIONAL + COMP PGTO + PGDAS', '613', 'empresa'),
+  ('LOTO - CONTROLE DE ENERGIA DE RISCO - AUTORIZADOS - BIENAL', '622', 'pessoa'),
+  ('PROCEDIMENTO OPERACIONAL - JUNGHEINRICH', '625', 'empresa'),
+  ('REGISTRO DE INSP DE EQUIP E FERRAMENTAS - JUNGHEINRICH', '626', 'empresa'),
+  ('LAUDOS E RELATÓRIOS AMBIENTAIS - JUNGHEINRICH', '627', 'empresa'),
+  ('PROCEDIMENTOS DE EMERG E PLANO DE CONTINGÊNCIA RISCO QUÍMICO', '628', 'empresa'),
+  ('NR 1 - DISPOSIÇÕES GERAIS', '629', 'pessoa'),
+  ('MANUSEIO DE PRODUTOS QUÍMICOS - JUNGHEINRICH', '630', 'pessoa'),
+  ('CONTRATO PRESTAÇÃO DE SERVIÇO DO FRETADO', '632', 'empresa'),
+  ('CONSULTA QUADRO DE SÓCIOS ADMINISTRADORES - ÚNICO', '636', 'empresa'),
+  ('TERMO CONFIDENCIALIDADE', '637', 'pessoa'),
+  ('CERTIDAO CRIMINAL FEDERAL', '638', 'empresa'),
+  ('CERTIDÃO JUDICIAL NEGATIVA - EXECUÇÃO FISCAL', '639', 'empresa'),
+  ('CERTIDÃO JUDICIAL NEGATIVA - EXECUÇÃO PATRIMONIAS', '640', 'empresa'),
+  ('CERTIDÃO JUDICIAL NEGATIVA - EXECUÇÃO INSOLVENCIA CIVIL', '641', 'empresa'),
+  ('RELAÇÃO SEGURO DE VIDA + GUIA E COMPROVANTE PGTO', '649', 'empresa'),
+  ('NR 20 - INTERMEDIÁRIO - CLASSE I - 12H - TRIENAL', '13', 'pessoa'),
+  ('HOLERITE + CARTAO PONTO', '56', 'pessoa'),
+  ('TERMO DE TREINAMENTO OEA - SEMESTRAL', '79', 'pessoa'),
+  ('TERMO DE ADESÃO AO PLANO DE SAÚDE - ÚNICO', '92', 'pessoa'),
+  ('DECLARAÇÃO TRAB CAPACITADO/AUTORIZADO POR PLH NR 10- ÚNICO', '99', 'pessoa'),
+  ('DECLARACAO RECEBIMENTO E CONHECIMENTO CIPA MARCOPOLO(MENSAL)', '110', 'empresa'),
+  ('CONTRATO PRESTAÇAO SERVIÇOS ENTRE PRESTADORES INDETERMINADO', '111', 'empresa'),
+  ('NOTIFICACAO - NC 1 EMPRESA', '116', 'empresa'),
+  ('CESTO AEREO - MEMORIAL E ART - ANUAL', '122', 'empresa'),
+  ('AVALIAÇÃO MENSAL - BRINOX', '131', 'empresa'),
+  ('NOTIFICACAO - NC 2 EMPRESA', '132', 'empresa'),
+  ('LAUDO DE VISTORIA DA FROTA - SEMESTRAL', '138', 'empresa'),
+  ('CONTRATO DE PRESTACAO DE SERV. 2 ENTRE PRESTADORES PERIODICO', '142', 'empresa'),
+  ('APOLICE DE SEGUROS - BENS MATERIAIS', '145', 'empresa'),
+  ('APOLICE DE SEGURO DE TRANSP DE CARGAS - RCTRC / RCF-DC', '148', 'empresa'),
+  ('DISPENSA CT - E (CONHECIMENTO TRANSPORTE ELETR) - INFORMADO', '150', 'empresa'),
+  ('ATA POSSE CIPA REF A MP SÃO CRISTOVÃO (ANUAL)', '167', 'empresa'),
+  ('TERMO INDICACAO DESIGNADO CIPA REF MP SÃO CRISTOVÃO (ANUAL)', '168', 'empresa'),
+  ('APOLICE DE SEGUROS - ENDOSSO', '180', 'empresa'),
+  ('RELATÓRIO FOLHA DE PAGAMENTO DE EMPREGADOS', '188', 'empresa'),
+  ('APOLICE DE SEGURO DO IMOVEL', '199', 'empresa'),
+  ('APOLICE DE SEGURO - RCTRC - C', '200', 'empresa'),
+  ('APOLICE DE SEGURO - RCF -DC', '201', 'empresa'),
+  ('DECLARAÇÃO DE ATENDIMENTO NR 10 - ÚNICO', '210', 'empresa'),
+  ('CHECK LIST PROCESSO SELETIVO CARGOS SENSIVEIS', '222', 'pessoa')
+ON CONFLICT (nome) DO UPDATE SET codigo = EXCLUDED.codigo, tipo = COALESCE(public.cs_documentos.tipo, EXCLUDED.tipo);
+
+-- Novos entram no grupo padrao
+INSERT INTO public.cs_grupo_documentos (grupo_id, documento_id)
+SELECT g.id, d.id FROM public.cs_grupos g JOIN public.cs_documentos d ON d.codigo IN ('513', '543', '544', '573', '598', '975', '987', '996', '255', '18', '87', '154', '159', '162', '192', '203', '213', '219', '250', '254', '272', '317', '372', '373', '376', '377', '393', '394', '396', '397', '504', '505', '546', '556', '557', '562', '563', '564', '565', '566', '567', '568', '570', '571', '572', '574', '577', '595', '596', '600', '601', '602', '603', '604', '605', '606', '607', '608', '613', '622', '625', '626', '627', '628', '629', '630', '632', '636', '637', '638', '639', '640', '641', '649', '13', '56', '79', '92', '99', '110', '111', '116', '122', '131', '132', '138', '142', '145', '148', '150', '167', '168', '180', '188', '199', '200', '201', '210', '222')
+ WHERE g.padrao
+ON CONFLICT DO NOTHING;
+
+-- ── Vinculos documento x contratante ──
+INSERT INTO public.cs_documento_contratantes (documento_id, contratante_cod, origem, tipo_doc, periodicidade, bloqueia_acesso, data_inicio, ativo, qtd_contratos)
+SELECT d.id, v.ctt, v.origem, v.tipo_doc, v.per, v.bloq, v.ini::date, v.ativo, v.qtd
+  FROM (VALUES
+    ('513', '72', 'contratante', 'C', 'U', false, '2026-10-19', true, 1),
+    ('543', '65', 'contratante', 'E', 'B', true, '2024-06-19', true, 1),
+    ('544', '65', 'contratante', 'E', 'A', true, '2024-06-19', true, 1),
+    ('544', '73', 'contrato_servico', 'E', 'A', true, '2026-02-08', true, 3),
+    ('569', '82', 'contratante', 'C', 'O', false, '2025-01-29', true, 1),
+    ('573', '82', 'contratante', 'E', 'S', true, '2025-01-23', false, 1),
+    ('573', '82', 'contrato_servico', 'E', 'S', true, '2025-02-01', true, 17),
+    ('578', '81', 'contratante', 'E', 'M', true, '2025-01-13', true, 1),
+    ('578', '81', 'contrato_servico', 'E', 'U', true, '2026-07-05', true, 1),
+    ('579', '79', 'contratante', 'C', 'U', false, '2026-02-09', true, 1),
+    ('579', '80', 'contratante', 'C', 'U', false, '2026-02-09', true, 1),
+    ('579', '81', 'contratante', 'C', 'U', true, '2025-01-17', true, 1),
+    ('580', '81', 'contratante', 'C', 'A', false, '2025-01-17', true, 1),
+    ('581', '81', 'contratante', 'C', 'I', true, '2025-01-17', true, 1),
+    ('588', '83', 'contratante', 'E', 'I', true, '2025-03-01', true, 1),
+    ('591', '83', 'contratante', 'E', 'B', true, '2025-04-10', true, 1),
+    ('598', '62', 'contratante', 'C', 'B', true, '2025-08-18', true, 1),
+    ('611', '86', 'contratante', 'C', 'U', true, '2025-10-01', true, 1),
+    ('642', '19', 'contratante', 'E', 'B', true, '2026-09-10', true, 1),
+    ('973', '88', 'contratante', 'C', 'A', true, '2026-07-13', true, 1),
+    ('975', '84', 'contratante', 'C', 'A', false, '2025-06-26', true, 1),
+    ('976', '83', 'contratante', 'C', 'A', false, '2025-03-01', true, 1),
+    ('978', '77', 'contratante', 'C', 'A', true, '2025-02-01', true, 1),
+    ('981', '67', 'contratante', 'C', 'A', true, '2024-09-09', true, 1),
+    ('982', '75', 'contratante', 'C', 'B', true, '2024-08-01', true, 1),
+    ('983', '51', 'contratante', 'E', 'A', true, '2025-02-03', true, 1),
+    ('983', '70', 'contratante', 'E', 'A', false, '2024-07-01', true, 1),
+    ('983', '71', 'contratante', 'E', 'A', false, '2024-07-01', true, 1),
+    ('983', '72', 'contratante', 'E', 'A', true, '2026-09-08', true, 1),
+    ('983', '73', 'contratante', 'E', 'A', false, '2024-07-01', true, 1),
+    ('983', '74', 'contratante', 'E', 'A', false, '2024-07-01', true, 1),
+    ('984', '51', 'contratante', 'C', 'A', true, '2025-02-03', true, 1),
+    ('984', '70', 'contratante', 'C', 'A', false, '2024-07-01', true, 1),
+    ('984', '71', 'contratante', 'C', 'A', false, '2024-07-01', true, 1),
+    ('984', '72', 'contratante', 'C', 'A', false, '2024-07-01', true, 1),
+    ('984', '73', 'contratante', 'C', 'A', false, '2024-07-01', true, 1),
+    ('984', '74', 'contratante', 'C', 'A', false, '2024-07-01', true, 1),
+    ('985', '69', 'contratante', 'C', 'U', true, '2024-07-01', true, 1),
+    ('987', '29', 'contratante', 'C', 'T', true, '2022-11-15', false, 1),
+    ('988', '60', 'contratante', 'C', 'A', true, '2022-10-01', true, 1),
+    ('989', '19', 'contratante', 'C', 'B', true, '2022-10-10', true, 1),
+    ('991', '58', 'contratante', 'C', 'A', true, '2021-09-16', true, 1),
+    ('992', '57', 'contratante', 'C', 'A', true, '2021-08-30', true, 1),
+    ('993', '39', 'contratante', 'C', 'A', false, '2020-03-15', true, 1),
+    ('996', '34', 'contratante', 'C', 'U', true, '2019-01-03', true, 1),
+    ('255', '81', 'contratante', 'E', 'B', true, '2024-12-16', true, 1),
+    ('260', '39', 'contratante', 'E', 'T', true, '2023-08-21', true, 1),
+    ('304', '5', 'contratante', 'E', 'A', true, '2025-01-06', true, 1),
+    ('387', '26', 'contratante', 'E', 'I', false, '2022-04-01', true, 1),
+    ('387', '69', 'contratante', 'E', 'A', true, '2024-08-01', true, 1),
+    ('387', '51', 'contrato_servico', 'E', 'I', true, '2026-07-28', true, 1),
+    ('387', '60', 'contrato_servico', 'E', 'I', true, '2022-10-01', true, 10),
+    ('387', '70', 'contrato_servico', 'E', 'A/I', true, '2024-09-26', true, 16),
+    ('387', '71', 'contrato_servico', 'E', 'A', true, '2024-11-08', true, 5),
+    ('387', '73', 'contrato_servico', 'E', 'A/I', true, '2024-10-21', true, 7),
+    ('387', '74', 'contrato_servico', 'E', 'A', true, '2024-08-01', true, 14),
+    ('387', '83', 'contrato_servico', 'E', 'I', true, '2025-04-16', true, 52),
+    ('1', '81', 'contratante', 'C', 'U', true, '2024-12-16', true, 1),
+    ('5', '81', 'contratante', 'C', 'I', false, '2025-01-17', false, 1),
+    ('5', '9', 'contrato_servico', 'C', 'I', true, '2022-10-26', true, 1),
+    ('5', '70', 'contrato_servico', 'C', 'I', true, '2025-02-17', true, 1),
+    ('5', '81', 'contrato_servico', 'C', 'I', false, '2025-10-20', true, 2),
+    ('9', '62', 'contratante', 'C', 'A', true, '2025-08-19', true, 1),
+    ('9', '69', 'contrato_servico', 'C', 'A', true, '2026-07-23', true, 1),
+    ('9', '80', 'contrato_servico', 'C', 'A', false, '2025-06-10', false, 1),
+    ('9', '81', 'contrato_servico', 'C', 'A', true, '2025-10-20', true, 2),
+    ('10', '81', 'contratante', 'C', 'B', true, '2025-01-24', true, 1),
+    ('10', '29', 'contrato_servico', 'C', 'B', true, '2024-08-13', true, 1),
+    ('10', '38', 'contrato_servico', 'C', 'B', true, '2023-05-09', true, 2),
+    ('10', '57', 'contrato_servico', 'C', 'B', true, '2021-09-01', true, 1),
+    ('10', '69', 'contrato_servico', 'C', 'B', true, '2026-03-24', true, 1),
+    ('10', '86', 'contrato_servico', 'C', 'B', true, '2026-09-27', true, 4),
+    ('15', '84', 'contratante', 'C', 'B', true, '2026-06-17', true, 1),
+    ('15', '29', 'contrato_servico', 'C', 'B', true, '2023-06-14', true, 4),
+    ('15', '31', 'contrato_servico', 'C', 'B', true, '2021-09-01', true, 3),
+    ('15', '35', 'contrato_servico', 'C', 'B', true, '2023-08-07', true, 2),
+    ('15', '37', 'contrato_servico', 'C', 'B', true, '2022-11-07', true, 1),
+    ('15', '38', 'contrato_servico', 'C', 'B', true, '2022-02-15', true, 4),
+    ('15', '57', 'contrato_servico', 'C', 'B', true, '2021-09-01', true, 1),
+    ('15', '58', 'contrato_servico', 'C', 'B', true, '2022-08-01', true, 1),
+    ('15', '69', 'contrato_servico', 'C', 'B', true, '2024-07-21', true, 3),
+    ('15', '80', 'contrato_servico', 'C', 'B', false, '2025-06-10', false, 1),
+    ('15', '81', 'contrato_servico', 'C', 'B', true, '2025-09-28', true, 1),
+    ('15', '82', 'contrato_servico', 'C', 'B', true, '2025-09-22', true, 4),
+    ('15', '86', 'contrato_servico', 'C', 'B', true, '2025-11-02', true, 3),
+    ('18', '81', 'contratante', 'E', 'B', true, '2024-12-16', true, 1),
+    ('40', '69', 'contratante', 'C', 'I', true, '2024-06-17', true, 1),
+    ('40', '1', 'contrato_servico', 'C', 'I', true, '2018-03-23', true, 163),
+    ('40', '9', 'contrato_servico', 'C', 'I/A', true, '2018-06-25', true, 108),
+    ('40', '38', 'contrato_servico', 'C', 'I', true, '2022-07-24', true, 3),
+    ('41', '81', 'contratante', 'C', 'O', false, '2025-01-17', true, 1),
+    ('41', '59', 'contrato_servico', 'C', 'A', true, '2022-08-01', true, 1),
+    ('48', '81', 'contratante', 'C', 'B', true, '2024-12-16', true, 1),
+    ('48', '82', 'contratante', 'C', 'B', true, '2025-01-27', true, 1),
+    ('48', '84', 'contratante', 'C', 'B', true, '2026-06-17', true, 1),
+    ('48', '32', 'contrato_servico', 'C', 'A', true, '2018-09-27', true, 6),
+    ('48', '59', 'contrato_servico', 'C', 'B', true, '2022-08-03', true, 1),
+    ('48', '67', 'contrato_servico', 'C', 'B', true, '2024-10-13', true, 1),
+    ('48', '75', 'contrato_servico', 'C', 'B', true, '2025-10-23', true, 1),
+    ('48', '86', 'contrato_servico', 'C', 'B', true, '2025-08-18', true, 1),
+    ('52', '57', 'contratante', 'C', 'U', true, '2022-10-23', true, 1),
+    ('52', '69', 'contratante', 'C', 'U', true, '2024-07-01', true, 1),
+    ('52', '59', 'contrato_servico', 'C', 'U', true, '2022-08-03', true, 1),
+    ('53', '35', 'contratante', 'C', 'M', true, '2019-03-01', true, 1),
+    ('53', '54', 'contratante', 'C', 'M', true, '2021-08-15', true, 1),
+    ('53', '53', 'contratante', 'C', 'M', true, '2021-08-15', true, 1),
+    ('53', '55', 'contratante', 'C', 'M', true, '2021-08-15', true, 1),
+    ('53', '56', 'contratante', 'C', 'M', true, '2021-08-15', true, 1),
+    ('53', '82', 'contratante', 'C', 'M', false, '2025-01-22', true, 1),
+    ('53', '5', 'contrato_servico', 'C', 'M', true, '2021-08-08', true, 39),
+    ('53', '21', 'contrato_servico', 'C', 'M', true, '2019-07-10', true, 10),
+    ('53', '22', 'contrato_servico', 'C', 'M', true, '2019-08-10', true, 2),
+    ('53', '23', 'contrato_servico', 'C', 'M', true, '2019-08-24', true, 4),
+    ('53', '26', 'contrato_servico', 'C', 'M', true, '2022-05-15', true, 10),
+    ('53', '60', 'contrato_servico', 'C', 'M', true, '2022-10-01', true, 18),
+    ('53', '69', 'contrato_servico', 'C', 'M', true, '2024-07-01', true, 13),
+    ('57', '26', 'contratante', 'C', 'M', true, '2022-07-15', true, 1),
+    ('57', '35', 'contratante', 'C', 'M', true, '2019-08-09', true, 1),
+    ('57', '57', 'contratante', 'C', 'M', true, '2021-07-28', false, 1),
+    ('57', '79', 'contratante', 'C', 'M', false, '2025-09-01', true, 1),
+    ('57', '80', 'contratante', 'C', 'M', false, '2025-09-01', true, 1),
+    ('57', '81', 'contratante', 'C', 'M', true, '2025-09-01', true, 1),
+    ('57', '82', 'contratante', 'C', 'M', false, '2025-01-22', true, 1),
+    ('57', '21', 'contrato_servico', 'C', 'M', true, '2019-07-10', true, 10),
+    ('57', '22', 'contrato_servico', 'C', 'M', true, '2019-08-10', true, 3),
+    ('57', '23', 'contrato_servico', 'C', 'M', true, '2019-08-24', true, 4),
+    ('57', '26', 'contrato_servico', 'C', 'M', true, '2022-05-15', false, 6),
+    ('57', '60', 'contrato_servico', 'C', 'M', true, '2022-10-01', true, 19),
+    ('57', '69', 'contrato_servico', 'C', 'M', true, '2024-07-01', true, 12),
+    ('57', '70', 'contrato_servico', 'C', 'M', true, '2024-10-01', true, 17),
+    ('57', '71', 'contrato_servico', 'C', 'M', true, '2024-11-08', true, 5),
+    ('57', '73', 'contrato_servico', 'C', 'M', true, '2024-10-21', true, 8),
+    ('57', '74', 'contrato_servico', 'C', 'M', true, '2024-08-01', true, 15),
+    ('61', '1', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('61', '5', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('61', '9', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('61', '26', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('61', '38', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('61', '65', 'contratante', 'C', 'U', true, '2024-08-01', true, 1),
+    ('61', '86', 'contratante', 'C', 'U', true, '2025-10-01', true, 1),
+    ('61', '35', 'contrato_servico', 'C', 'U', true, '2021-11-20', true, 3),
+    ('61', '60', 'contrato_servico', 'C', 'U', true, '2023-04-13', true, 2),
+    ('63', '5', 'contratante', 'C', 'B', true, '2022-08-10', true, 1),
+    ('63', '57', 'contratante', 'C', 'A', true, '2023-08-01', true, 1),
+    ('63', '62', 'contratante', 'C', 'U', true, '2025-08-19', true, 1),
+    ('63', '67', 'contratante', 'C', 'B', true, '2024-12-10', true, 1),
+    ('63', '69', 'contratante', 'C', 'U', true, '2024-07-01', true, 1),
+    ('63', '79', 'contratante', 'C', 'U', true, '2025-01-06', true, 1),
+    ('63', '80', 'contratante', 'C', 'U', false, '2025-01-06', true, 1),
+    ('63', '81', 'contratante', 'C', 'A', true, '2024-12-16', true, 1),
+    ('63', '82', 'contratante', 'C', 'U', true, '2025-01-22', true, 1),
+    ('63', '83', 'contratante', 'C', 'U', true, '2025-03-25', true, 1),
+    ('63', '86', 'contratante', 'C', 'B', true, '2025-09-04', true, 1),
+    ('63', '88', 'contratante', 'C', 'A', true, '2026-07-08', true, 1),
+    ('63', '1', 'contrato_servico', 'C', 'A', true, '2020-03-11', false, 2),
+    ('63', '59', 'contrato_servico', 'C', 'A', true, '2022-08-03', true, 1),
+    ('66', '1', 'contratante', 'C', 'U', true, '2022-09-22', true, 1),
+    ('66', '9', 'contratante', 'C', 'U', true, '2022-09-22', true, 1),
+    ('66', '38', 'contratante', 'C', 'U', true, '2022-09-22', true, 1),
+    ('73', '49', 'contratante', 'C', 'O', true, '2021-06-16', true, 1),
+    ('75', '5', 'contratante', 'C', 'U', true, '2022-11-25', true, 1),
+    ('76', '5', 'contratante', 'C', 'U', true, '2022-01-31', true, 1),
+    ('76', '81', 'contratante', 'C', 'U', true, '2025-01-17', true, 1),
+    ('76', '59', 'contrato_servico', 'C', 'U', true, '2022-08-03', true, 1),
+    ('76', '70', 'contrato_servico', 'C', 'U', true, '2024-09-26', true, 18),
+    ('76', '71', 'contrato_servico', 'C', 'U', true, '2024-11-08', true, 4),
+    ('76', '73', 'contrato_servico', 'C', 'U', true, '2024-10-21', true, 8),
+    ('76', '74', 'contrato_servico', 'C', 'U', true, '2024-08-01', true, 13),
+    ('78', '1', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('78', '5', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('78', '9', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('78', '26', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('78', '38', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('78', '35', 'contrato_servico', 'C', 'U', true, '2021-11-20', true, 2),
+    ('78', '60', 'contrato_servico', 'C', 'U', true, '2023-04-13', true, 2),
+    ('80', '5', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('80', '35', 'contrato_servico', 'C', 'U', true, '2021-11-20', true, 2),
+    ('81', '1', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('81', '5', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('81', '9', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('81', '26', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('81', '38', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('81', '86', 'contratante', 'C', 'U', true, '2025-10-01', true, 1),
+    ('81', '35', 'contrato_servico', 'C', 'U', true, '2021-11-20', true, 2),
+    ('81', '60', 'contrato_servico', 'C', 'U', true, '2023-04-13', true, 2),
+    ('82', '1', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('82', '5', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('82', '9', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('82', '26', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('82', '38', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('82', '86', 'contratante', 'C', 'U', true, '2025-10-01', true, 1),
+    ('82', '35', 'contrato_servico', 'C', 'U', true, '2021-11-20', true, 2),
+    ('82', '60', 'contrato_servico', 'C', 'U', true, '2023-04-13', true, 2),
+    ('83', '35', 'contratante', 'C', 'A', true, '2022-02-01', true, 1),
+    ('83', '79', 'contratante', 'C', 'A', false, '2025-09-01', true, 1),
+    ('83', '80', 'contratante', 'C', 'A', false, '2025-09-01', true, 1),
+    ('83', '81', 'contratante', 'C', 'A', false, '2025-09-01', true, 1),
+    ('83', '26', 'contrato_servico', 'C', 'A', true, '2022-04-01', true, 10),
+    ('83', '79', 'contrato_servico', 'C', 'A', true, '2025-08-18', false, 1),
+    ('83', '80', 'contrato_servico', 'C', 'A', false, '2025-08-18', false, 1),
+    ('84', '1', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('84', '5', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('84', '9', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('84', '26', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('84', '38', 'contratante', 'C', 'U', true, '2022-08-20', true, 1),
+    ('84', '35', 'contrato_servico', 'C', 'U', true, '2021-11-20', true, 2),
+    ('84', '60', 'contrato_servico', 'C', 'U', true, '2023-04-13', true, 2),
+    ('86', '86', 'contratante', 'C', 'U', true, '2025-10-01', true, 1),
+    ('86', '35', 'contrato_servico', 'C', 'U', true, '2021-11-20', true, 2),
+    ('87', '1', 'contratante', 'C', 'U', true, '2022-04-04', false, 1),
+    ('94', '5', 'contratante', 'C', 'U', true, '2024-05-31', true, 1),
+    ('98', '62', 'contratante', 'C', 'B', true, '2025-08-19', true, 1),
+    ('98', '81', 'contratante', 'C', 'A', true, '2024-12-16', true, 1),
+    ('98', '82', 'contratante', 'C', 'B', true, '2025-01-27', true, 1),
+    ('98', '86', 'contratante', 'C', 'B', true, '2025-08-18', true, 1),
+    ('98', '87', 'contratante', 'C', 'A', true, '2026-03-25', true, 1),
+    ('98', '69', 'contrato_servico', 'C', 'A', true, '2026-03-01', true, 1),
+    ('125', '54', 'contratante', 'E', 'M', true, '2021-08-15', true, 1),
+    ('125', '53', 'contratante', 'E', 'M', true, '2021-08-15', true, 1),
+    ('125', '55', 'contratante', 'E', 'M', true, '2021-08-15', true, 1),
+    ('125', '56', 'contratante', 'E', 'M', true, '2021-08-15', true, 1),
+    ('125', '5', 'contrato_servico', 'E', 'M', true, '2021-08-13', true, 36),
+    ('125', '26', 'contrato_servico', 'E', 'M', true, '2022-05-15', false, 6),
+    ('125', '60', 'contrato_servico', 'E', 'M', true, '2022-12-10', true, 2),
+    ('130', '5', 'contratante', 'E', 'I', false, '2021-06-09', true, 1),
+    ('130', '26', 'contratante', 'E', 'I', false, '2022-04-01', true, 1),
+    ('130', '72', 'contratante', 'E', 'I', true, '2026-09-25', true, 1),
+    ('130', '79', 'contratante', 'E', 'I', false, '2025-09-01', false, 1),
+    ('130', '80', 'contratante', 'E', 'I', false, '2025-09-01', false, 1),
+    ('130', '81', 'contratante', 'E', 'A', false, '2025-01-22', true, 1),
+    ('130', '21', 'contrato_servico', 'E', 'I', true, '2018-05-09', true, 8),
+    ('130', '22', 'contrato_servico', 'E', 'I', true, '2018-06-11', true, 3),
+    ('130', '35', 'contrato_servico', 'E', 'I', true, '2021-07-08', true, 1),
+    ('130', '38', 'contrato_servico', 'E', 'I', true, '2025-06-27', true, 1),
+    ('130', '54', 'contrato_servico', 'E', 'I', true, '2023-02-23', true, 1),
+    ('130', '78', 'contrato_servico', 'C', 'I', true, '2025-07-22', true, 1),
+    ('130', '81', 'contrato_servico', 'E', 'I', true, '2026-08-25', true, 1),
+    ('130', '83', 'contrato_servico', 'E', 'I', true, '2025-04-15', true, 63),
+    ('133', '69', 'contratante', 'E', 'I', true, '2024-06-17', true, 1),
+    ('133', '1', 'contrato_servico', 'E', 'I', true, '2018-03-08', true, 164),
+    ('133', '9', 'contrato_servico', 'E', 'I/A', true, '2018-06-25', true, 108),
+    ('133', '38', 'contrato_servico', 'E', 'I', true, '2022-07-24', true, 3),
+    ('139', '5', 'contratante', 'E', 'A', true, '2021-09-01', true, 1),
+    ('139', '21', 'contrato_servico', 'E', 'A', true, '2026-06-04', true, 1),
+    ('139', '60', 'contrato_servico', 'E', 'A', true, '2022-11-18', true, 1),
+    ('139', '70', 'contrato_servico', 'E', 'A', true, '2024-12-10', true, 2),
+    ('139', '71', 'contrato_servico', 'E', 'A', true, '2026-06-04', true, 1),
+    ('139', '73', 'contrato_servico', 'E', 'A', true, '2024-12-10', true, 2),
+    ('139', '74', 'contrato_servico', 'E', 'A', true, '2024-12-10', true, 1),
+    ('141', '5', 'contratante', 'E', 'I', true, '2021-10-30', true, 1),
+    ('141', '39', 'contratante', 'E', 'I', true, '2019-08-07', false, 1),
+    ('141', '60', 'contratante', 'E', 'I', true, '2023-03-01', true, 1),
+    ('141', '69', 'contratante', 'E', 'I', true, '2024-07-01', true, 1),
+    ('141', '79', 'contratante', 'E', 'I', false, '2025-09-01', true, 1),
+    ('141', '80', 'contratante', 'E', 'I', false, '2025-09-01', true, 1),
+    ('141', '81', 'contratante', 'E', 'I', true, '2024-12-16', true, 1),
+    ('141', '82', 'contratante', 'E', 'I', true, '2025-01-23', true, 1),
+    ('141', '39', 'contrato_servico', 'E', 'I', true, '2026-07-08', true, 1),
+    ('141', '80', 'contrato_servico', 'E', 'I', true, '2025-06-16', false, 1),
+    ('141', '83', 'contrato_servico', 'E', 'I', true, '2025-03-28', true, 173),
+    ('141', '85', 'contrato_servico', 'E', 'I', false, '2026-05-11', true, 13),
+    ('154', '31', 'contratante', 'E', 'U', false, '2018-01-01', false, 1),
+    ('154', '34', 'contratante', 'E', 'U', true, '2019-01-03', false, 1),
+    ('154', '37', 'contratante', 'E', 'U', false, '2018-01-01', false, 1),
+    ('159', '31', 'contratante', 'E', 'I', true, '2018-06-22', true, 1),
+    ('159', '31', 'contrato_servico', 'E', 'I', true, '2019-08-15', true, 10),
+    ('159', '35', 'contrato_servico', 'E', 'I', true, '2019-11-18', true, 1),
+    ('162', '35', 'contratante', 'E', 'M', true, '2019-03-01', false, 1),
+    ('163', '35', 'contratante', 'E', 'T', true, '2019-03-01', true, 1),
+    ('163', '5', 'contrato_servico', 'E', 'T', true, '2024-12-09', true, 1),
+    ('163', '85', 'contrato_servico', 'E', 'T', false, '2026-05-11', true, 13),
+    ('169', '35', 'contratante', 'E', 'M', true, '2019-08-13', true, 1),
+    ('169', '21', 'contrato_servico', 'E', 'M', true, '2019-07-02', true, 7),
+    ('169', '22', 'contrato_servico', 'E', 'M', false, '2019-07-02', true, 3),
+    ('169', '23', 'contrato_servico', 'E', 'M', false, '2019-07-02', true, 4),
+    ('169', '25', 'contrato_servico', 'E', 'M', false, '2019-07-01', true, 1),
+    ('169', '69', 'contrato_servico', 'E', 'M', true, '2024-07-01', false, 13),
+    ('169', '74', 'contrato_servico', 'E', 'M', true, '2024-08-01', false, 7),
+    ('173', '5', 'contratante', 'E', 'B/A', true, '2022-06-29', true, 1),
+    ('173', '35', 'contratante', 'E', 'B/A', true, '2019-08-09', true, 1),
+    ('173', '81', 'contratante', 'E', 'B', true, '2024-12-15', true, 1),
+    ('192', '87', 'contratante', 'E', 'I', true, '2026-03-24', true, 1),
+    ('192', '35', 'contrato_servico', 'E', 'I', true, '2020-05-12', true, 2),
+    ('202', '79', 'contratante', 'E', 'I', false, '2025-07-15', true, 1),
+    ('202', '80', 'contratante', 'E', 'I', false, '2025-07-15', true, 1),
+    ('202', '81', 'contratante', 'E', 'I', true, '2024-12-01', true, 1),
+    ('202', '82', 'contratante', 'E', 'I', true, '2025-01-23', true, 1),
+    ('202', '35', 'contrato_servico', 'E', 'I', true, '2021-06-14', true, 3),
+    ('202', '55', 'contrato_servico', 'C', 'I', true, '2022-08-10', true, 1),
+    ('202', '56', 'contrato_servico', 'C', 'I', true, '2022-06-30', true, 2),
+    ('202', '60', 'contrato_servico', 'E', 'A', false, '2022-10-01', true, 1),
+    ('203', '49', 'contratante', 'E', 'M', true, '2021-07-07', true, 1),
+    ('203', '68', 'contrato_servico', 'E', 'M', true, '2024-08-01', true, 2),
+    ('204', '5', 'contratante', 'E', 'A', false, '2021-09-01', true, 1),
+    ('207', '5', 'contratante', 'E', 'A', true, '2021-11-30', true, 1),
+    ('207', '60', 'contrato_servico', 'E', 'A', true, '2022-10-01', true, 2),
+    ('208', '5', 'contratante', 'E', 'S', true, '2021-09-01', true, 1),
+    ('208', '60', 'contrato_servico', 'E', 'S', true, '2022-10-01', true, 2),
+    ('213', '31', 'contratante', 'E', 'U', true, '2021-11-10', true, 1),
+    ('219', '4', 'contratante', 'E', 'U', false, '2024-01-18', true, 1),
+    ('250', '5', 'contrato_servico', 'E', 'A', true, '2023-06-18', true, 13),
+    ('254', '5', 'contrato_servico', 'E', 'A', true, '2024-11-28', true, 1),
+    ('272', '5', 'contrato_servico', 'E', 'I', true, '2025-07-21', true, 1),
+    ('311', '83', 'contrato_servico', 'E', 'O', true, '2025-03-01', true, 62),
+    ('317', '58', 'contrato_servico', 'E', 'A', true, '2025-03-25', true, 1),
+    ('372', '5', 'contrato_servico', 'E', 'I', true, '2023-11-28', true, 1),
+    ('373', '5', 'contrato_servico', 'E', 'I', true, '2023-12-12', true, 1),
+    ('376', '5', 'contrato_servico', 'E', 'I', true, '2023-12-12', true, 1),
+    ('377', '5', 'contrato_servico', 'E', 'I', true, '2023-12-12', true, 1),
+    ('388', '26', 'contrato_servico', 'E', 'M', true, '2022-05-15', true, 9),
+    ('393', '5', 'contrato_servico', 'E', 'I', true, '2022-06-07', true, 1),
+    ('394', '5', 'contrato_servico', 'E', 'I', true, '2022-06-07', true, 1),
+    ('396', '5', 'contrato_servico', 'E', 'I', true, '2023-01-01', true, 1),
+    ('397', '5', 'contrato_servico', 'E', 'I', true, '2023-05-30', true, 1),
+    ('504', '58', 'contrato_servico', 'E', 'T', true, '2026-02-03', true, 1),
+    ('505', '58', 'contrato_servico', 'E', 'A', true, '2026-02-03', true, 1),
+    ('546', '69', 'contrato_servico', 'C', 'U', true, '2024-07-01', true, 13),
+    ('547', '69', 'contrato_servico', 'C', 'M', true, '2024-07-01', true, 13),
+    ('556', '51', 'contrato_servico', 'C', 'A', true, '2025-08-19', true, 2),
+    ('557', '5', 'contrato_servico', 'E', 'I', true, '2024-10-04', true, 1),
+    ('562', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('563', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 59),
+    ('564', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('565', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('566', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('567', '81', 'contrato_servico', 'E', 'U', true, '2025-03-28', true, 58),
+    ('568', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('570', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('571', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('572', '81', 'contrato_servico', 'E', 'U', true, '2025-03-01', true, 58),
+    ('574', '1', 'contrato_servico', 'E', 'I', true, '2025-05-22', true, 1),
+    ('574', '9', 'contrato_servico', 'E', 'I', true, '2025-05-28', true, 1),
+    ('577', '81', 'contrato_servico', 'E', 'U', true, '2025-03-28', true, 58),
+    ('584', '83', 'contrato_servico', 'E', 'O', true, '2025-03-01', true, 62),
+    ('585', '83', 'contrato_servico', 'E', 'O', true, '2025-03-01', true, 62),
+    ('585', '85', 'contrato_servico', 'E', 'I', false, '2026-05-11', true, 13),
+    ('586', '83', 'contrato_servico', 'E', 'O', true, '2025-03-01', true, 61),
+    ('587', '83', 'contrato_servico', 'E', 'I', true, '2025-03-01', true, 62),
+    ('589', '83', 'contrato_servico', 'E', 'A', true, '2025-03-01', true, 61),
+    ('590', '83', 'contrato_servico', 'E', 'A', true, '2025-03-31', true, 62),
+    ('592', '83', 'contrato_servico', 'E', 'A', true, '2025-03-01', true, 62),
+    ('593', '83', 'contrato_servico', 'E', 'O/I', true, '2025-03-01', true, 258),
+    ('595', '29', 'contrato_servico', 'E', 'A', true, '2025-06-30', true, 4),
+    ('596', '55', 'contrato_servico', 'E', 'I', true, '2025-10-15', true, 1),
+    ('597', '86', 'contrato_servico', 'C', 'B', true, '2025-08-18', true, 4),
+    ('600', '1', 'contrato_servico', 'E', 'I', true, '2025-08-28', true, 5),
+    ('601', '79', 'contrato_servico', 'E', 'I', false, '2025-09-01', true, 1),
+    ('601', '80', 'contrato_servico', 'E', 'I', false, '2025-09-01', true, 1),
+    ('602', '5', 'contrato_servico', 'E', 'I', true, '2026-09-25', true, 1),
+    ('603', '87', 'contrato_servico', 'E', 'I', true, '2026-09-25', true, 1),
+    ('604', '5', 'contrato_servico', 'E', 'I', true, '2025-10-16', true, 1),
+    ('605', '5', 'contrato_servico', 'E', 'I', true, '2025-10-16', true, 1),
+    ('606', '5', 'contrato_servico', 'E', 'I', true, '2025-10-16', true, 1),
+    ('607', '5', 'contrato_servico', 'E', 'I', true, '2025-10-16', true, 1),
+    ('608', '5', 'contrato_servico', 'E', 'I', true, '2025-10-17', true, 1),
+    ('610', '5', 'contrato_servico', 'C', 'A', true, '2025-10-28', true, 4),
+    ('612', '82', 'contrato_servico', 'E', 'I', true, '2025-12-25', true, 16),
+    ('613', '82', 'contrato_servico', 'E', 'M', true, '2025-12-25', true, 19),
+    ('614', '82', 'contrato_servico', 'E', 'M', true, '2025-12-25', true, 17),
+    ('622', '70', 'contrato_servico', 'C', 'B', true, '2026-06-08', true, 1),
+    ('622', '71', 'contrato_servico', 'C', 'B', true, '2026-06-08', true, 1),
+    ('622', '74', 'contrato_servico', 'C', 'B', true, '2026-06-08', true, 1),
+    ('625', '69', 'contrato_servico', 'E', 'I', true, '2026-02-26', true, 1),
+    ('626', '69', 'contrato_servico', 'E', 'I', true, '2026-02-26', true, 1),
+    ('627', '69', 'contrato_servico', 'E', 'I', true, '2026-02-26', true, 1),
+    ('628', '69', 'contrato_servico', 'E', 'I', true, '2026-02-26', true, 1),
+    ('629', '69', 'contrato_servico', 'C', 'A', true, '2026-03-01', true, 1),
+    ('630', '69', 'contrato_servico', 'C', 'A', true, '2026-03-01', true, 1),
+    ('632', '5', 'contrato_servico', 'E', 'U', true, '2026-06-24', true, 1),
+    ('636', '85', 'contrato_servico', 'E', 'U', false, '2026-05-11', true, 13),
+    ('637', '4', 'contrato_servico', 'C', 'B', true, '2026-05-12', true, 1),
+    ('638', '85', 'contrato_servico', 'E', 'I', false, '2026-05-11', true, 13),
+    ('639', '85', 'contrato_servico', 'E', 'I', false, '2026-05-14', true, 13),
+    ('640', '85', 'contrato_servico', 'E', 'I', false, '2026-05-14', true, 13),
+    ('641', '85', 'contrato_servico', 'E', 'I', false, '2026-05-14', true, 13),
+    ('649', '56', 'contrato_servico', 'E', 'M', true, '2026-10-22', true, 1),
+    ('6', '75', 'contrato_servico', 'C', 'U', true, '2025-05-11', true, 1),
+    ('7', '86', 'contrato_servico', 'C', 'B', true, '2025-11-02', true, 1),
+    ('8', '35', 'contrato_servico', 'C', 'A', true, '2025-12-29', true, 1),
+    ('12', '35', 'contrato_servico', 'C', 'B', true, '2023-08-07', false, 1),
+    ('12', '38', 'contrato_servico', 'C', 'B', true, '2025-02-28', true, 1),
+    ('12', '58', 'contrato_servico', 'C', 'B', true, '2022-08-01', true, 1),
+    ('12', '81', 'contrato_servico', 'C', 'B', true, '2025-10-20', true, 1),
+    ('13', '1', 'contrato_servico', 'C', 'R', true, '2022-10-17', true, 1),
+    ('13', '9', 'contrato_servico', 'C', 'R', true, '2022-10-17', true, 1),
+    ('13', '31', 'contrato_servico', 'C', 'R', true, '2022-11-07', true, 1),
+    ('13', '37', 'contrato_servico', 'C', 'R', true, '2022-11-07', true, 1),
+    ('14', '35', 'contrato_servico', 'C', 'A', true, '2023-08-07', true, 1),
+    ('14', '57', 'contrato_servico', 'C', 'A', true, '2021-09-01', true, 1),
+    ('14', '58', 'contrato_servico', 'C', 'A', true, '2022-08-29', true, 1),
+    ('14', '69', 'contrato_servico', 'C', 'A', true, '2024-07-21', true, 1),
+    ('16', '75', 'contrato_servico', 'C', 'B', true, '2025-01-13', true, 1),
+    ('31', '31', 'contrato_servico', 'C', 'U', true, '2022-11-07', true, 1),
+    ('31', '37', 'contrato_servico', 'C', 'U', true, '2022-11-07', true, 1),
+    ('44', '1', 'contrato_servico', 'C', 'U', true, '2018-05-17', true, 4),
+    ('44', '9', 'contrato_servico', 'C', 'U', true, '2020-10-07', true, 1),
+    ('44', '22', 'contrato_servico', 'C', 'U', true, '2022-08-31', true, 1),
+    ('44', '23', 'contrato_servico', 'C', 'U', true, '2020-06-23', true, 1),
+    ('44', '25', 'contrato_servico', 'C', 'U', true, '2022-08-31', true, 1),
+    ('44', '29', 'contrato_servico', 'C', 'U', true, '2023-06-19', true, 1),
+    ('44', '31', 'contrato_servico', 'C', 'U', true, '2018-12-06', true, 11),
+    ('44', '34', 'contrato_servico', 'C', 'U', true, '2019-02-12', true, 4),
+    ('44', '35', 'contrato_servico', 'C', 'U', true, '2020-06-22', true, 3),
+    ('44', '38', 'contrato_servico', 'C', 'U', true, '2024-11-28', true, 1),
+    ('44', '39', 'contrato_servico', 'C', 'U', true, '2022-08-30', false, 1),
+    ('44', '57', 'contrato_servico', 'C', 'U', true, '2022-08-24', true, 1),
+    ('44', '58', 'contrato_servico', 'C', 'U', true, '2025-04-04', true, 1),
+    ('44', '60', 'contrato_servico', 'C', 'U', true, '2022-10-17', true, 1),
+    ('44', '65', 'contrato_servico', 'C', 'U', true, '2024-06-25', true, 3),
+    ('44', '66', 'contrato_servico', 'C', 'U', true, '2024-07-08', true, 1),
+    ('44', '68', 'contrato_servico', 'C', 'U', true, '2024-07-10', true, 8),
+    ('44', '69', 'contrato_servico', 'C', 'U', true, '2024-07-18', true, 1),
+    ('44', '80', 'contrato_servico', 'C', 'U', true, '2025-01-01', true, 2),
+    ('44', '83', 'contrato_servico', 'C', 'U', true, '2025-03-25', true, 1),
+    ('44', '86', 'contrato_servico', 'C', 'U', true, '2025-10-28', true, 1),
+    ('55', '78', 'contrato_servico', 'C', 'I', false, '2025-07-22', true, 1),
+    ('56', '21', 'contrato_servico', 'C', 'M', false, '2019-07-01', false, 1),
+    ('72', '5', 'contrato_servico', 'C', 'U', true, '2021-06-15', true, 4),
+    ('72', '54', 'contrato_servico', 'C', 'U', true, '2021-06-15', true, 1),
+    ('72', '53', 'contrato_servico', 'C', 'U', true, '2021-06-15', true, 8),
+    ('72', '55', 'contrato_servico', 'C', 'U', true, '2021-06-15', true, 5),
+    ('72', '56', 'contrato_servico', 'C', 'U', true, '2021-06-15', true, 9),
+    ('79', '60', 'contrato_servico', 'C', 'S', true, '2022-11-01', false, 10),
+    ('92', '5', 'contrato_servico', 'C', 'U', true, '2023-09-28', true, 1),
+    ('99', '75', 'contrato_servico', 'C', 'U', true, '2025-01-15', true, 1),
+    ('110', '1', 'contrato_servico', 'E', 'M', true, '2017-07-12', true, 43),
+    ('111', '1', 'contrato_servico', 'E', 'U/I', true, '2022-12-05', true, 2),
+    ('111', '19', 'contrato_servico', 'E', 'I', true, '2024-12-18', true, 3),
+    ('111', '26', 'contrato_servico', 'E', 'I', true, '2025-03-27', true, 2),
+    ('111', '31', 'contrato_servico', 'E', 'I', true, '2020-07-01', true, 1),
+    ('111', '38', 'contrato_servico', 'E', 'I', true, '2024-10-28', true, 1),
+    ('111', '39', 'contrato_servico', 'E', 'I', true, '2024-04-12', true, 1),
+    ('111', '58', 'contrato_servico', 'E', 'I', true, '2022-11-30', true, 1),
+    ('111', '60', 'contrato_servico', 'E', 'I', true, '2023-06-05', true, 1),
+    ('111', '66', 'contrato_servico', 'E', 'I', true, '2024-05-23', true, 2),
+    ('116', '1', 'contrato_servico', 'E', 'U', true, '2019-09-24', true, 3),
+    ('118', '80', 'contrato_servico', 'E', 'A', true, '2025-02-06', true, 1),
+    ('120', '1', 'contrato_servico', 'E', 'A', true, '2016-06-09', true, 22),
+    ('121', '1', 'contrato_servico', 'E', 'A', true, '2016-06-14', true, 26),
+    ('122', '1', 'contrato_servico', 'E', 'A', true, '2024-08-14', true, 1),
+    ('131', '60', 'contrato_servico', 'E', 'M', false, '2023-06-25', false, 7),
+    ('132', '9', 'contrato_servico', 'E', 'U', true, '2018-09-24', true, 1),
+    ('134', '9', 'contrato_servico', 'E', 'M', true, '2023-01-28', true, 15),
+    ('135', '1', 'contrato_servico', 'E', 'I', true, '2019-08-01', true, 13),
+    ('135', '9', 'contrato_servico', 'E', 'I', true, '2025-04-01', true, 2),
+    ('135', '19', 'contrato_servico', 'E', 'I', true, '2025-11-01', true, 2),
+    ('135', '29', 'contrato_servico', 'E', 'I', true, '2025-06-25', true, 3),
+    ('135', '31', 'contrato_servico', 'E', 'I', true, '2020-04-01', true, 1),
+    ('135', '35', 'contrato_servico', 'E', 'I', true, '2026-01-21', true, 5),
+    ('135', '38', 'contrato_servico', 'E', 'I', true, '2021-12-15', true, 6),
+    ('135', '39', 'contrato_servico', 'E', 'I', true, '2022-10-22', true, 1),
+    ('135', '57', 'contrato_servico', 'E', 'I', true, '2025-03-01', true, 1),
+    ('135', '58', 'contrato_servico', 'E', 'I', true, '2023-07-11', true, 9),
+    ('135', '66', 'contrato_servico', 'E', 'I', true, '2026-03-17', true, 2),
+    ('135', '67', 'contrato_servico', 'E', 'I', true, '2025-05-16', true, 4),
+    ('135', '69', 'contrato_servico', 'E', 'I', true, '2024-01-01', true, 2),
+    ('135', '75', 'contrato_servico', 'E', 'I', true, '2025-01-10', true, 3),
+    ('135', '77', 'contrato_servico', 'E', 'I', true, '2025-12-01', true, 4),
+    ('135', '79', 'contrato_servico', 'E', 'I', true, '2026-05-14', true, 2),
+    ('135', '80', 'contrato_servico', 'C', 'I', true, '2025-06-10', false, 1),
+    ('135', '82', 'contrato_servico', 'E', 'I', true, '2025-08-18', true, 14),
+    ('135', '83', 'contrato_servico', 'E', 'I', true, '2026-02-09', true, 2),
+    ('135', '85', 'contrato_servico', 'C', 'I', true, '2025-06-05', true, 1),
+    ('135', '86', 'contrato_servico', 'E', 'I', true, '2025-11-24', true, 1),
+    ('138', '1', 'contrato_servico', 'E', 'S', true, '2021-12-01', true, 1),
+    ('142', '86', 'contrato_servico', 'E', 'I', true, '2025-11-24', true, 1),
+    ('145', '35', 'contrato_servico', 'E', 'A', true, '2019-11-19', true, 1),
+    ('146', '1', 'contrato_servico', 'E', 'M', true, '2018-09-27', true, 5),
+    ('146', '19', 'contrato_servico', 'E', 'M', true, '2026-07-01', true, 1),
+    ('146', '58', 'contrato_servico', 'E', 'M', false, '2025-09-01', true, 1),
+    ('148', '62', 'contrato_servico', 'E', 'I', true, '2025-12-22', true, 2),
+    ('150', '35', 'contrato_servico', 'E', 'I', true, '2023-01-10', true, 1),
+    ('167', '9', 'contrato_servico', 'E', 'A', true, '2023-01-18', false, 1),
+    ('168', '9', 'contrato_servico', 'E', 'A', true, '2023-01-18', true, 14),
+    ('180', '35', 'contrato_servico', 'E', 'I', true, '2019-12-30', true, 1),
+    ('188', '35', 'contrato_servico', 'E', 'M', false, '2020-03-09', true, 1),
+    ('199', '62', 'contrato_servico', 'E', 'I', true, '2025-12-22', true, 1),
+    ('200', '35', 'contrato_servico', 'E', 'I', true, '2021-06-14', true, 2),
+    ('201', '35', 'contrato_servico', 'E', 'I', true, '2021-06-14', true, 2),
+    ('210', '1', 'contrato_servico', 'E', 'U', true, '2021-10-31', true, 34),
+    ('222', '60', 'contrato_servico', 'C', 'U', false, '2023-03-01', false, 6)
+  ) AS v(codigo, ctt, origem, tipo_doc, per, bloq, ini, ativo, qtd)
+  JOIN public.cs_documentos d ON d.codigo = v.codigo
+ON CONFLICT (documento_id, contratante_cod, origem) DO UPDATE
+  SET tipo_doc = EXCLUDED.tipo_doc, periodicidade = EXCLUDED.periodicidade, bloqueia_acesso = EXCLUDED.bloqueia_acesso,
+      data_inicio = EXCLUDED.data_inicio, ativo = EXCLUDED.ativo, qtd_contratos = EXCLUDED.qtd_contratos;
+
+COMMIT;
+
+-- Conferencia (esperado: 193 documentos com codigo | 481 vinculos | 451 ativos | 52 contratantes)
+SELECT (SELECT count(*) FROM public.cs_documentos WHERE codigo IS NOT NULL) AS documentos_com_codigo,
+       (SELECT count(*) FROM public.cs_documento_contratantes) AS vinculos,
+       (SELECT count(*) FROM public.cs_documento_contratantes WHERE ativo) AS vinculos_ativos,
+       (SELECT count(DISTINCT contratante_cod) FROM public.cs_documento_contratantes) AS contratantes;
