@@ -13,6 +13,8 @@ import Contagem from './abas/Contagem'
 import Resultado from './abas/Resultado'
 import Configuracoes from './abas/Configuracoes'
 import Suporte from './abas/Suporte'
+import Bases from './abas/Bases'
+import Fechamento from './abas/Fechamento'
 import { displayName, useUser } from '../components/UserContext'
 import './custo-servir.css'
 
@@ -129,8 +131,9 @@ function Modulo({ aba, setAba, nav, setNav }: {
           <div className="tabsbar">
             <div className="tabs" role="tablist">
               {abas.map(a => (
-                <button key={a.id} type="button" role="tab" aria-selected={a.id === abaAtual} className={a.id === abaAtual ? 'on' : ''} onClick={() => trocarAba(a.id)}
-                  title={a.id === 'cronometrar' ? 'Volta para a escolha do grupo' : undefined}>
+                <button key={a.id} type="button" role="tab" aria-selected={a.id === abaAtual} className={(a.id === abaAtual ? 'on' : '') + (a.id === 'fechamento' ? ' destaque' : '')} onClick={() => trocarAba(a.id)}
+                  title={a.id === 'cronometrar' ? 'Volta para a escolha do grupo' : a.id === 'fechamento' ? 'A conta inteira: avaliação + suporte contra a capacidade' : undefined}>
+                  {a.id === 'fechamento' && '★ '}
                   {a.label}{a.id === 'medicoes' && <span className="cnt">{d.meds.length}</span>}
                 </button>
               ))}
@@ -145,7 +148,9 @@ function Modulo({ aba, setAba, nav, setNav }: {
           {abaAtual === 'contagem' && <Contagem />}
           {abaAtual === 'resultado' && <Resultado />}
           {abaAtual === 'suporte' && <Suporte />}
+          {abaAtual === 'bases' && <Bases />}
           {abaAtual === 'configuracoes' && <Configuracoes />}
+          {abaAtual === 'fechamento' && <Fechamento />}
         </>
       )}
     </div>

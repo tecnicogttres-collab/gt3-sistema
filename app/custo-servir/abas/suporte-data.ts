@@ -16,7 +16,10 @@ async function todas<T>(q: (a: number, b: number) => PageRes<T>): Promise<T[]> {
     if (!data || data.length < 1000) return out
   }
 }
-function ok<T>(r: { data: T; error: { message: string } | null }): T { if (r.error) throw new Error(r.error.message); return r.data }
+function ok<T>(r: { data: T; error: { message: string } | null }): T {
+  if (r.error) throw new Error(/janelas/.test(r.error.message) ? 'Rode a migração sql/custo-servir-amostragem-janelas.sql no Supabase para usar faixas de horário.' : r.error.message)
+  return r.data
+}
 
 export function useSuporte(meuId: string) {
   const supabase = useMemo(() => createClient(), [])
@@ -103,6 +106,18 @@ export function useSuporte(meuId: string) {
     setMeds(p => p.map(x => (x.id === m.id ? { ...x, ...patch } : x)))
   }, [supabase])
 
+  /** Exclui a atividade; as medicoes e as linhas de volume dela saem junto (ON DELETE CASCADE). */
+  const excluirAtividade = useCallback(async (id: string) => {
+    ok(await supabase.from('cs_atividades').delete().eq('id', id))
+    setAtivs(p => p.filter(a => a.id !== id))
+    setMeds(p => p.filter(m => m.atividade_id !== id))
+    setLinhasDe(p => (p ? { ...p, linhas: p.linhas.filter(l => l.atividade_id !== id) } : p))
+  }, [supabase])
+  const excluirMedAtiv = useCallback(async (id: string) => {
+    ok(await supabase.from('cs_atividade_medicoes').delete().eq('id', id))
+    setMeds(p => p.filter(m => m.id !== id))
+  }, [supabase])
+
   // ── Volumes ─────────────────────────────────────────────────────────────────
   const importarLote = useCallback(async (nome: string, dias: number | null, ls: VolumeLinha[]) => {
     const lote = ok(await supabase.from('cs_volume_lotes').insert({ nome, dias_uteis: dias, created_by: meuId }).select('*').single()) as VolumeLote
@@ -140,7 +155,7 @@ export function useSuporte(meuId: string) {
 
   return {
     carregando, faltaSql, recarregar: carregar, ativs, meds, lotes, loteSel, setLoteId, linhas, amostragens, amSel, setAmId, amostras,
-    recarregarAmostras, salvarAtividade, adicionarAtividade, registrarMedAtiv, alternarMedAtiv,
+    recarregarAmostras, salvarAtividade, adicionarAtividade, excluirAtividade, registrarMedAtiv, alternarMedAtiv, excluirMedAtiv,
     importarLote, adicionarLinhas, atualizarLote, excluirLote, criarAmostragem, salvarAmostragem, excluirAmostragem,
   }
 }

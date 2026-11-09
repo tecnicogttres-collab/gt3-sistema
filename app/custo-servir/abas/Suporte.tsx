@@ -6,29 +6,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCs } from '../cs-data'
 import {
-  baixar, brl, brl2, contar, csvCell, dt, fatorMes, financeiro, fmt, mmss, nomeCtt, nomeUsuario, norm, principalDe, unidadesDe,
+  baixar, contar, csvCell, dt, fatorMes, financeiro, fmt, mmss, nomeCtt, nomeUsuario, norm, unidadesDe,
   type Ctx,
 } from '../cs-lib'
 import {
-  avisosPrevistosAte, calcCamada2, calcCamada3, CLASSES, hojeIso, horariosDoDia, margemErro, margemPiorCaso,
-  OPCOES_AMOSTRA, participa, tempoAtividade, tempoPara, type AtivMedicao, type Atividade, type Classe, type VolumeLinha,
+  avisosEfetivos, avisosPrevistosAte, calcCamada2, calcCamada3, CLASSES, diasUteisEntre, diaUtil, faixasMin, hojeIso, horariosDoDia,
+  margemErro, margemPiorCaso, minutosDia, OPCOES_AMOSTRA, participa, tempoAtividade, tempoC2,
+  type Amostragem, type AtivMedicao, type Atividade, type Classe, type Janela, type VolumeLinha,
 } from '../cs-suporte-lib'
 import { BotaoConfirmar, useOrdem } from '../cs-ui'
 import { lerArquivo } from './Contagem'
 import { NumCampo } from './Resultado'
 import { useSuporte, type SuporteApi } from './suporte-data'
 
-/** Tempo da atividade para o contratante (especifico do contratante/grupo, senao geral). */
-const tempoC2 = (ctx: Ctx, meds: AtivMedicao[]) => (id: string, cod: string | null) =>
-  tempoPara(meds, id, cod, ctx.cfg.base, ctx.cfg.minimo, c => principalDe(ctx, c))
-
-const SUBS = [['c2', 'Camada 2 · Com rastro'], ['c3', 'Camada 3 · Amostragem'], ['fech', 'Fechamento'], ['metodo', 'Como funciona']] as const
+const SUBS = [['cron', '⏱ Cronometrar atividade'], ['c2', 'Atividades e volumes'], ['c3', 'Amostragem (camada 3)'], ['metodo', 'Como funciona']] as const
 type Sub = typeof SUBS[number][0]
 
 export default function Suporte() {
   const { ctx, meuId } = useCs()
   const s = useSuporte(meuId)
-  const [sub, setSub] = useState<Sub>('c2')
+  const [sub, setSub] = useState<Sub>('cron')
   if (!ctx) return null
   if (s.carregando) return <div className="empty">Carregando…</div>
   if (s.faltaSql) {
@@ -47,7 +44,7 @@ export default function Suporte() {
       </div>
       {sub === 'c2' && <Camada2 ctx={ctx} s={s} />}
       {sub === 'c3' && <Camada3 ctx={ctx} s={s} />}
-      {sub === 'fech' && <Fechamento ctx={ctx} s={s} />}
+      {sub === 'cron' && <CronometroSimples ctx={ctx} s={s} />}
       {sub === 'metodo' && <Metodo />}
     </>
   )
@@ -69,23 +66,9 @@ function Camada2({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
         <p className="note">Mesma lógica da avaliação: volume da atividade × tempo-padrão. Cronometre 5 a 10 de cada para ter o tempo; associe a medição a um contratante ou grupo quando o tempo dele for diferente (ex.: faturamento da SEDE / MATRIZ). Ligação usa os minutos que a central já registra (não precisa de tempo-padrão).</p>
         <div className="tbl">
           <table>
-            <thead><tr><th>Atividade</th><th>Unidade</th><th>Fonte do volume</th><th>Liga ao contratante por</th><th className="r">Medições</th><th className="r">Tempo-padrão (min)</th><th title="Contratantes ou grupos com o mínimo de medições próprias">Tempos específicos</th><th className="c">Ativa</th></tr></thead>
+            <thead><tr><th>Atividade</th><th>Unidade</th><th>Fonte do volume</th><th>Liga ao contratante por</th><th className="r">Medições</th><th className="r">Tempo-padrão (min)</th><th title="Contratantes ou grupos com o mínimo de medições próprias">Tempos específicos</th><th className="c">Ativa</th><th /></tr></thead>
             <tbody>
-              {s.ativs.map(a => {
-                const t = tempo(a.id)
-                return (
-                  <tr key={a.id}>
-                    <td><b style={{ fontWeight: 600 }}>{a.nome}</b></td>
-                    <td className="note">{a.unidade === 'minutos' ? 'minutos' : 'quantidade'}</td>
-                    <td className="note">{a.fonte ?? '—'}</td>
-                    <td className="note">{a.liga_por ?? '—'}</td>
-                    <td className="r mono">{a.unidade === 'minutos' ? '—' : t.n}</td>
-                    <td className="r mono">{a.unidade === 'minutos' ? <span className="note">duração da central</span> : t.val != null ? fmt(t.val, 2) : <span className="pill p-warn">cronometrar</span>}</td>
-                    <td className="note">{a.unidade === 'minutos' ? '—' : especificos(ctx, s.meds, a.id) || '—'}</td>
-                    <td className="c"><input type="checkbox" checked={a.ativo} aria-label="Ativa" onChange={e => tentar(() => s.salvarAtividade(a.id, { ativo: e.target.checked }))} /></td>
-                  </tr>
-                )
-              })}
+              {s.ativs.map(a => <LinhaAtividade key={a.id} ctx={ctx} s={s} a={a} t={tempo(a.id)} />)}
             </tbody>
           </table>
         </div>
@@ -101,6 +84,59 @@ function Camada2({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
       <CronometroAtividade ctx={ctx} s={s} />
       <Volumes ctx={ctx} s={s} />
     </>
+  )
+}
+
+/** Linha da atividade: ver, editar (nome, unidade, fonte, ligacao) e excluir. */
+function LinhaAtividade({ ctx, s, a, t }: { ctx: Ctx; s: SuporteApi; a: Atividade; t: ReturnType<typeof tempoAtividade> }) {
+  const { tentar } = useCs()
+  const [ed, setEd] = useState<{ nome: string; unidade: Atividade['unidade']; fonte: string; liga_por: string } | null>(null)
+  const nMed = s.meds.filter(m => m.atividade_id === a.id).length
+  const nVol = s.linhas.filter(l => l.atividade_id === a.id).length
+  if (ed) {
+    return (
+      <tr className="sel">
+        <td><input type="text" value={ed.nome} onChange={e => setEd({ ...ed, nome: e.target.value })} aria-label="Nome" style={{ width: '100%', minWidth: 160 }} /></td>
+        <td>
+          <select value={ed.unidade} onChange={e => setEd({ ...ed, unidade: e.target.value as Atividade['unidade'] })} aria-label="Unidade">
+            <option value="quantidade">quantidade</option>
+            <option value="minutos">minutos</option>
+          </select>
+        </td>
+        <td><input type="text" value={ed.fonte} onChange={e => setEd({ ...ed, fonte: e.target.value })} aria-label="Fonte do volume" placeholder="opcional" style={{ width: '100%', minWidth: 140 }} /></td>
+        <td><input type="text" value={ed.liga_por} onChange={e => setEd({ ...ed, liga_por: e.target.value })} aria-label="Liga ao contratante por" placeholder="opcional" style={{ width: '100%', minWidth: 140 }} /></td>
+        <td colSpan={4} className="note">{ed.unidade !== a.unidade ? (ed.unidade === 'minutos' ? 'Passa a usar o volume como minutos (as medições ficam guardadas, mas não entram).' : 'Passa a usar volume × tempo-padrão cronometrado.') : ''}</td>
+        <td>
+          <span className="pills">
+            <button type="button" className="btn sm solid" disabled={!ed.nome.trim()} onClick={async () => {
+              const patch = { nome: ed.nome.trim(), unidade: ed.unidade, fonte: ed.fonte.trim() || null, liga_por: ed.liga_por.trim() || null }
+              if (await tentar(() => s.salvarAtividade(a.id, patch), 'Atividade salva')) setEd(null)
+            }}>Salvar</button>
+            <button type="button" className="btn sm" onClick={() => setEd(null)}>Cancelar</button>
+          </span>
+        </td>
+      </tr>
+    )
+  }
+  return (
+    <tr>
+      <td><b style={{ fontWeight: 600 }}>{a.nome}</b></td>
+      <td className="note">{a.unidade === 'minutos' ? 'minutos' : 'quantidade'}</td>
+      <td className="note">{a.fonte ?? '—'}</td>
+      <td className="note">{a.liga_por ?? '—'}</td>
+      <td className="r mono">{a.unidade === 'minutos' ? '—' : t.n}</td>
+      <td className="r mono">{a.unidade === 'minutos' ? <span className="note">duração informada</span> : t.val != null ? fmt(t.val, 2) : <span className="pill p-warn">cronometrar</span>}</td>
+      <td className="note">{a.unidade === 'minutos' ? '—' : especificos(ctx, s.meds, a.id) || '—'}</td>
+      <td className="c"><input type="checkbox" checked={a.ativo} aria-label="Ativa" onChange={e => tentar(() => s.salvarAtividade(a.id, { ativo: e.target.checked }))} /></td>
+      <td>
+        <span className="pills">
+          <button type="button" className="btn sm" onClick={() => setEd({ nome: a.nome, unidade: a.unidade, fonte: a.fonte ?? '', liga_por: a.liga_por ?? '' })}>Editar</button>
+          <span title={nMed || nVol ? `Exclui também ${nMed} medição(ões) e as linhas de volume dela em todos os lotes${nVol ? ` (${nVol} no lote aberto)` : ''}` : 'Excluir atividade'}>
+            <BotaoConfirmar onConfirm={() => void tentar(() => s.excluirAtividade(a.id), 'Atividade excluída')}>Excluir</BotaoConfirmar>
+          </span>
+        </span>
+      </td>
+    </tr>
   )
 }
 
@@ -120,6 +156,123 @@ function especificos(ctx: Ctx, meds: AtivMedicao[], ativId: string) {
 
 const rotuloAssoc = (ctx: Ctx, m: AtivMedicao) =>
   !m.contratante_cod ? '—' : (m.grupo ? 'Σ grupo ' : '') + m.contratante_cod + ' · ' + nomeCtt(ctx, m.contratante_cod)
+
+/** Cronometro simples, para quem nao lida bem com sistema: escolhe a atividade, Comecar, Terminei. */
+function CronometroSimples({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
+  const { tentar, toast, meuId } = useCs()
+  const ativs = s.ativs.filter(a => a.ativo && a.unidade === 'quantidade')
+  const emMinutos = s.ativs.filter(a => a.ativo && a.unidade === 'minutos')
+  const [sel, setSel] = useState<string | null>(null)
+  const [cod, setCod] = useState('')
+  const [t, setT] = useState<{ run: boolean; acc: number; t0: number }>({ run: false, acc: 0, t0: 0 })
+  const [salvo, setSalvo] = useState<string | null>(null)
+  const [salvando, setSalvando] = useState(false)
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!t.run) return
+    let raf = 0
+    const loop = () => { setTick(x => x + 1); raf = requestAnimationFrame(loop) }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [t.run])
+  const a = ativs.find(x => x.id === sel)
+  const ms = decorrido(t)
+  const zerar = () => setT({ run: false, acc: 0, t0: 0 })
+  const ctts = [...ctx.ctts.values()].sort((x, y) => (+x.contratante_cod || 0) - (+y.contratante_cod || 0))
+  const minhas = s.meds.filter(m => m.avaliador_id === meuId).slice(0, 8)
+
+  async function terminar() {
+    if (!a || salvando) return
+    const total = decorrido(t)
+    setT({ run: false, acc: total, t0: 0 })
+    if (total < 1000) { toast('Foi muito rápido (menos de 1 segundo). Clique em Começar de novo.'); zerar(); return }
+    setSalvando(true)
+    const okk = await tentar(() => s.registrarMedAtiv(a.id, total, 'validada', null, cod || null, false))
+    setSalvando(false)
+    if (okk) { setSalvo(`Salvo: ${a.nome} levou ${mmss(total)}.`); zerar() }
+  }
+
+  if (!a) {
+    return (
+      <>
+        <div className="box">
+          <h2>O que você vai cronometrar agora?</h2>
+          <div className="passos">
+            <span><b>1</b> Clique na atividade</span><span><b>2</b> Clique em <b>Começar</b></span><span><b>3</b> Quando terminar, clique em <b>Terminei</b></span>
+          </div>
+          <div className="atv-grid">
+            {ativs.map(x => {
+              const tp = tempoAtividade(s.meds, x.id, ctx.cfg.base)
+              const falta = Math.max(0, ctx.cfg.minimo - tp.n)
+              return (
+                <button key={x.id} type="button" className="atv-card" onClick={() => { setSel(x.id); setCod(''); setSalvo(null); zerar() }}>
+                  <b>{x.nome}</b>
+                  <span className="note">{tp.val != null ? `Leva em média ${fmt(tp.val, 1)} min` : 'Ainda não cronometrado'}</span>
+                  {falta ? <span className="pill p-warn">faltam {falta} medição{falta > 1 ? 'ões' : ''}</span> : <span className="pill p-good">✓ tempo pronto · {tp.n} medições</span>}
+                </button>
+              )
+            })}
+          </div>
+          {emMinutos.length > 0 && <p className="note">{emMinutos.map(x => x.nome).join(', ')}: não precisam de cronômetro, porque o tempo já vem em minutos no volume (ex.: a central de ligações).</p>}
+        </div>
+        {minhas.length > 0 && (
+          <div className="box">
+            <h2>Minhas últimas medições</h2>
+            <div className="tbl">
+              <table>
+                <thead><tr><th>Quando</th><th>Atividade</th><th>Cliente</th><th className="r">Tempo</th><th /></tr></thead>
+                <tbody>
+                  {minhas.map(m => (
+                    <tr key={m.id}>
+                      <td className="mono">{dt(m.created_at)}</td>
+                      <td>{s.ativs.find(x => x.id === m.atividade_id)?.nome ?? '—'}{m.situacao === 'descartada' && <> <span className="pill p-gray">descartada</span></>}</td>
+                      <td className="note">{rotuloAssoc(ctx, m)}</td>
+                      <td className="r mono">{mmss(m.duracao_ms)}</td>
+                      <td><BotaoConfirmar onConfirm={() => void tentar(() => s.excluirMedAtiv(m.id), 'Medição excluída')}>Excluir</BotaoConfirmar></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="note">Errou? Exclua a medição e cronometre de novo.</p>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  const rodando = t.run, pausado = !t.run && t.acc > 0
+  return (
+    <div className="box simples">
+      <button type="button" className="link" style={{ alignSelf: 'flex-start' }} disabled={rodando || pausado}
+        onClick={() => { setSel(null); setSalvo(null) }} title={rodando || pausado ? 'Termine ou cancele antes' : undefined}>← Escolher outra atividade</button>
+      <span className="eyebrow">Cronometrando</span>
+      <h2 className="grande">{a.nome}</h2>
+      {salvo && <div className="okbox">✓ {salvo} Quer cronometrar outra vez? É só clicar em Começar.</div>}
+      <label className="note" style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%', maxWidth: 420 }}>
+        É de algum cliente específico? (opcional)
+        <select value={cod} onChange={e => setCod(e.target.value)} disabled={rodando || pausado} aria-label="Cliente">
+          <option value="">Não, é geral</option>
+          {ctts.map(c => <option key={c.contratante_cod} value={c.contratante_cod}>{c.contratante_cod} · {c.nome}</option>)}
+        </select>
+      </label>
+      <div className={'disp xl' + (rodando ? ' run' : '')}>{mmss(ms)}</div>
+      <div className="row" style={{ justifyContent: 'center' }}>
+        {!rodando && !pausado && <button type="button" className="btn solid xl" onClick={() => { setSalvo(null); setT({ run: true, acc: 0, t0: performance.now() }) }}>▶ Começar</button>}
+        {rodando && <>
+          <button type="button" className="btn good xl" disabled={salvando} onClick={() => void terminar()}>■ Terminei</button>
+          <button type="button" className="btn xl" onClick={() => setT(p => ({ run: false, acc: p.acc + performance.now() - p.t0, t0: 0 }))}>❚❚ Pausar</button>
+        </>}
+        {pausado && <>
+          <button type="button" className="btn good xl" disabled={salvando} onClick={() => void terminar()}>■ Terminei</button>
+          <button type="button" className="btn xl" onClick={() => setT(p => ({ ...p, run: true, t0: performance.now() }))}>▶ Continuar</button>
+        </>}
+      </div>
+      {(rodando || pausado) && <button type="button" className="link" onClick={zerar}>Cancelar (não salvar)</button>}
+      <p className="note">Foi interrompido no meio (telefone, alguém chamou)? Use <b>Pausar</b> e depois <b>Continuar</b>.</p>
+    </div>
+  )
+}
 
 function CronometroAtividade({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const { d, tentar, toast } = useCs()
@@ -213,7 +366,12 @@ function CronometroAtividade({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
                   <td className="note">{rotuloAssoc(ctx, m)}</td>
                   <td className="r mono">{mmss(m.duracao_ms)}</td>
                   <td>{m.situacao === 'validada' ? <span className="pill p-blue">Na média</span> : <span className="pill p-gray" title={m.motivo ?? ''}>Descartada</span>}</td>
-                  <td><button type="button" className={'btn sm' + (m.situacao === 'validada' ? ' bad' : '')} onClick={() => tentar(() => s.alternarMedAtiv(m))}>{m.situacao === 'validada' ? 'Descartar' : 'Restaurar'}</button></td>
+                  <td>
+                    <span className="pills">
+                      <button type="button" className={'btn sm' + (m.situacao === 'validada' ? ' bad' : '')} onClick={() => tentar(() => s.alternarMedAtiv(m))}>{m.situacao === 'validada' ? 'Descartar' : 'Restaurar'}</button>
+                      <BotaoConfirmar onConfirm={() => void tentar(() => s.excluirMedAtiv(m.id), 'Medição excluída')}>Excluir</BotaoConfirmar>
+                    </span>
+                  </td>
                 </tr>
               )) : <tr><td colSpan={6} className="empty">Nenhuma medição ainda.</td></tr>}
             </tbody>
@@ -367,7 +525,33 @@ function Camada3({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const { d, tentar, meuId, papel } = useCs()
   const gerencia = papel === 'admin' || papel === 'gestor'
   const ativos = d.usuarios.filter(u => !u.desativado)
-  const [f, setF] = useState({ nome: '', inicio: hojeIso(), fim: '', avisos: 6, ini: '08:00', fim_h: '18:00', todos: true, pessoas: [] as string[] })
+  const vazio = { id: null as string | null, nome: '', inicio: hojeIso(), fim: '', avisos: 6, janelas: JANELAS_PADRAO, todos: true, pessoas: [] as string[] }
+  const [f, setF] = useState(vazio)
+  const editar = (x: Amostragem) => setF({
+    id: x.id, nome: x.nome, inicio: x.inicio, fim: x.fim, avisos: x.avisos_dia,
+    janelas: x.janelas?.length ? x.janelas : [{ ini: x.hora_ini.slice(0, 5), fim: x.hora_fim.slice(0, 5) }],
+    todos: !x.participantes, pessoas: x.participantes ?? [],
+  })
+  const fx = faixasMin({ hora_ini: '00:00', hora_fim: '00:00', janelas: f.janelas })
+  const janelasOk = f.janelas.length > 0 && f.janelas.every(j => j.ini && j.fim && j.fim > j.ini)
+  const podeSalvar = !!f.nome.trim() && !!f.inicio && !!f.fim && f.fim >= f.inicio && janelasOk && (f.todos || f.pessoas.length > 0)
+  const somarSemanas = (n: number) => {
+    const d = new Date((f.inicio || hojeIso()) + 'T12:00:00'); d.setDate(d.getDate() + n * 7 - 1)
+    while (!diaUtil(hojeIso(d))) d.setDate(d.getDate() - 1)
+    setF({ ...f, fim: hojeIso(d) })
+  }
+  async function salvarForm() {
+    const ordenadas = [...f.janelas].sort((x, y) => x.ini.localeCompare(y.ini))
+    const dados = {
+      nome: f.nome.trim(), inicio: f.inicio, fim: f.fim, avisos_dia: f.avisos,
+      hora_ini: (fx[0] ? minParaHora(fx[0].ini) : ordenadas[0].ini), hora_fim: (fx.length ? minParaHora(fx[fx.length - 1].fim) : ordenadas[ordenadas.length - 1].fim),
+      janelas: ordenadas, participantes: f.todos ? null : f.pessoas,
+    }
+    const okk = f.id
+      ? await tentar(() => s.salvarAmostragem(f.id!, dados), 'Amostragem salva')
+      : await tentar(() => s.criarAmostragem({ ...dados, ativa: true }), 'Amostragem criada')
+    if (okk) setF(vazio)
+  }
   const a = s.amSel
   const c3 = calcCamada3(s.amostras)
   const fin = financeiro(ctx.cfg)
@@ -381,61 +565,92 @@ function Camada3({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
         <h2>Amostragens do trabalho</h2>
         <p className="note">Em horários sorteados de dias úteis, cada participante recebe no GT3 Sistema o aviso &quot;O que você está fazendo agora?&quot; e responde em 2 cliques (atividade + contratante). Aviso não respondido em 20 min expira. Mede contratante, não pessoa: os resultados não mostram quem respondeu o quê.</p>
         {gerencia ? (
-          <div className="kv">
-            <label>Nome<input type="text" value={f.nome} onChange={e => setF({ ...f, nome: e.target.value })} placeholder="ex.: Amostragem nov/2026" /></label>
-            <label>Início<input type="date" value={f.inicio} onChange={e => setF({ ...f, inicio: e.target.value })} /></label>
-            <label>Fim<input type="date" value={f.fim} onChange={e => setF({ ...f, fim: e.target.value })} /></label>
-            <label>Avisos por dia<input type="number" min={1} max={20} value={f.avisos} onChange={e => setF({ ...f, avisos: +e.target.value || 6 })} /></label>
-            <label>Das<input type="time" value={f.ini} onChange={e => setF({ ...f, ini: e.target.value })} /></label>
-            <label>Até<input type="time" value={f.fim_h} onChange={e => setF({ ...f, fim_h: e.target.value })} /></label>
+          <div className={'tp-bloco' + (f.id ? ' padrao' : '')}>
+            <b>{f.id ? 'Editando amostragem' : 'Nova amostragem'}</b>
+            <div className="kv">
+              <label>Nome<input type="text" value={f.nome} onChange={e => setF({ ...f, nome: e.target.value })} placeholder="ex.: Amostragem nov/2026" /></label>
+              <label>Início<input type="date" value={f.inicio} onChange={e => setF({ ...f, inicio: e.target.value })} /></label>
+              <label>Fim<input type="date" value={f.fim} onChange={e => setF({ ...f, fim: e.target.value })} /></label>
+              <label>Avisos por dia (por pessoa)<input type="number" min={1} max={20} value={f.avisos} onChange={e => setF({ ...f, avisos: Math.min(20, Math.max(1, +e.target.value || 1)) })} /></label>
+            </div>
+            <div className="row">
+              <span className="note">Duração:</span>
+              {[1, 2, 3, 4].map(n => <button key={n} type="button" className="btn sm" onClick={() => somarSemanas(n)}>{n} semana{n > 1 ? 's' : ''}</button>)}
+            </div>
+
+            <div className="row"><span className="eyebrow">Faixas do dia em que os avisos podem sair</span></div>
+            <div className="row">
+              {f.janelas.map((j, i) => (
+                <span key={i} className="selbar" style={{ padding: '4px 8px' }}>
+                  <input type="time" value={j.ini} aria-label={`Faixa ${i + 1}: início`} onChange={e => setF({ ...f, janelas: f.janelas.map((x, k) => (k === i ? { ...x, ini: e.target.value } : x)) })} />
+                  <span>–</span>
+                  <input type="time" value={j.fim} aria-label={`Faixa ${i + 1}: fim`} onChange={e => setF({ ...f, janelas: f.janelas.map((x, k) => (k === i ? { ...x, fim: e.target.value } : x)) })} />
+                  {f.janelas.length > 1 && <button type="button" className="link" aria-label="Remover faixa" onClick={() => setF({ ...f, janelas: f.janelas.filter((_, k) => k !== i) })}>✕</button>}
+                </span>
+              ))}
+              <button type="button" className="btn sm" onClick={() => setF({ ...f, janelas: [...f.janelas, { ini: '', fim: '' }] })}>+ Faixa</button>
+              <button type="button" className="btn sm" onClick={() => setF({ ...f, janelas: JANELAS_PADRAO })}>Comercial sem almoço</button>
+              <button type="button" className="btn sm" onClick={() => setF({ ...f, janelas: [{ ini: '08:00', fim: '18:00' }] })}>Dia inteiro</button>
+            </div>
+            {!janelasOk && <p className="note" style={{ color: 'var(--cs-bad)' }}>Cada faixa precisa de início e fim, com o fim depois do início.</p>}
+
+            <div className="row">
+              <span className="eyebrow">Quem participa</span>
+              <label className="row note" style={{ gap: 6 }}><input type="checkbox" checked={f.todos} onChange={e => setF({ ...f, todos: e.target.checked })} /> Todos os usuários ativos ({ativos.length})</label>
+              {!f.todos && <>
+                <span className="note">{f.pessoas.length} selecionado(s)</span>
+                <button type="button" className="btn sm" onClick={() => setF({ ...f, pessoas: ativos.map(u => u.id) })}>Marcar todos</button>
+                <button type="button" className="btn sm" onClick={() => setF({ ...f, pessoas: [] })}>Limpar</button>
+              </>}
+            </div>
+            {!f.todos && (
+              <div className="row">
+                {ativos.map(u => (
+                  <label key={u.id} className={'pill ' + (f.pessoas.includes(u.id) ? 'p-blue' : 'p-gray')} style={{ cursor: 'pointer', padding: '3px 10px', fontSize: 12.5 }}>
+                    <input type="checkbox" style={{ display: 'none' }} checked={f.pessoas.includes(u.id)}
+                      onChange={e => setF({ ...f, pessoas: e.target.checked ? [...f.pessoas, u.id] : f.pessoas.filter(x => x !== u.id) })} />
+                    {f.pessoas.includes(u.id) ? '✓ ' : ''}{nomeUsuario(u)}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <ResumoAmostragem a={{ id: f.id ?? 'novo', inicio: f.inicio, fim: f.fim, avisos_dia: f.avisos, hora_ini: '00:00', hora_fim: '00:00', janelas: f.janelas }} pessoas={f.todos ? ativos.length : f.pessoas.length} />
+
+            <div className="row">
+              <button type="button" className="btn solid" disabled={!podeSalvar} onClick={() => void salvarForm()}>{f.id ? 'Salvar alterações' : 'Criar amostragem'}</button>
+              {f.id && <button type="button" className="btn" onClick={() => setF(vazio)}>Cancelar edição</button>}
+              <span className="note">Referência do material: 2 semanas (≈480 observações com 8 pessoas) decidem; 4 semanas permitem abrir por contratante.{f.id ? ' Mudar faixas ou avisos muda os sorteios a partir de agora; as respostas já dadas ficam.' : ''}</span>
+            </div>
           </div>
         ) : <p className="note">Só gestor ou admin cria amostragens.</p>}
-        {gerencia && <>
-          <div className="row">
-            <label className="row note" style={{ gap: 6 }}><input type="checkbox" checked={f.todos} onChange={e => setF({ ...f, todos: e.target.checked })} /> Todos os usuários ativos</label>
-            {!f.todos && <span className="note">{f.pessoas.length} selecionado(s)</span>}
-          </div>
-          {!f.todos && (
-            <div className="row">
-              {ativos.map(u => (
-                <label key={u.id} className={'pill ' + (f.pessoas.includes(u.id) ? 'p-blue' : 'p-gray')} style={{ cursor: 'pointer' }}>
-                  <input type="checkbox" style={{ display: 'none' }} checked={f.pessoas.includes(u.id)}
-                    onChange={e => setF({ ...f, pessoas: e.target.checked ? [...f.pessoas, u.id] : f.pessoas.filter(x => x !== u.id) })} />
-                  {nomeUsuario(u)}
-                </label>
-              ))}
-            </div>
-          )}
-          <div className="row">
-            <button type="button" className="btn solid" disabled={!f.nome.trim() || !f.inicio || !f.fim || f.fim < f.inicio || f.fim_h <= f.ini || (!f.todos && !f.pessoas.length)}
-              onClick={async () => {
-                const ok = await tentar(() => s.criarAmostragem({
-                  nome: f.nome.trim(), inicio: f.inicio, fim: f.fim, avisos_dia: f.avisos, hora_ini: f.ini, hora_fim: f.fim_h,
-                  participantes: f.todos ? null : f.pessoas, ativa: true,
-                }), 'Amostragem criada')
-                if (ok) setF({ ...f, nome: '' })
-              }}>Criar amostragem</button>
-            <span className="note">Referência do material: 2 semanas (≈480 observações com 8 pessoas) decidem; 4 semanas permitem abrir por contratante.</span>
-          </div>
-        </>}
         {s.amostragens.length > 0 && (
           <div className="tbl">
             <table>
-              <thead><tr><th>Amostragem</th><th>Período</th><th className="r">Avisos/dia</th><th>Horário</th><th>Participantes</th><th className="c">Ativa</th><th /></tr></thead>
+              <thead><tr><th>Amostragem</th><th>Período</th><th className="r">Dias úteis</th><th className="r">Avisos/dia</th><th>Faixas</th><th>Participantes</th><th className="c">Ativa</th><th /></tr></thead>
               <tbody>
-                {s.amostragens.map(x => (
-                  <tr key={x.id} className={'click' + (a?.id === x.id ? ' sel' : '')} onClick={() => s.setAmId(x.id)}>
-                    <td><b style={{ fontWeight: 600 }}>{x.nome}</b></td>
-                    <td className="mono">{x.inicio.split('-').reverse().join('/')} a {x.fim.split('-').reverse().join('/')}</td>
-                    <td className="r mono">{x.avisos_dia}</td>
-                    <td className="mono">{x.hora_ini.slice(0, 5)}–{x.hora_fim.slice(0, 5)}</td>
-                    <td className="note">{x.participantes ? `${x.participantes.length} pessoa(s)` : 'todos'}</td>
-                    <td className="c" onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={x.ativa} disabled={!gerencia} aria-label="Ativa" onChange={e => tentar(() => s.salvarAmostragem(x.id, { ativa: e.target.checked }))} />
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>{gerencia && <BotaoConfirmar onConfirm={() => tentar(() => s.excluirAmostragem(x.id), 'Amostragem excluída')}>Excluir</BotaoConfirmar>}</td>
-                  </tr>
-                ))}
+                {s.amostragens.map(x => {
+                  const nomes = x.participantes?.map(id => nomeUsuario(d.usuarios.find(u => u.id === id))) ?? []
+                  return (
+                    <tr key={x.id} className={'click' + (a?.id === x.id ? ' sel' : '')} onClick={() => s.setAmId(x.id)}>
+                      <td><b style={{ fontWeight: 600 }}>{x.nome}</b></td>
+                      <td className="mono">{x.inicio.split('-').reverse().join('/')} a {x.fim.split('-').reverse().join('/')}</td>
+                      <td className="r mono">{diasUteisEntre(x.inicio, x.fim)}</td>
+                      <td className="r mono">{avisosEfetivos(x)}</td>
+                      <td className="mono">{faixasMin(x).map(j => minParaHora(j.ini) + '–' + minParaHora(j.fim)).join(' · ')}</td>
+                      <td className="note" title={nomes.join(', ')}>{x.participantes ? (nomes.length <= 3 ? nomes.join(', ') : `${nomes.slice(0, 2).join(', ')} e mais ${nomes.length - 2}`) : 'todos'}</td>
+                      <td className="c" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={x.ativa} disabled={!gerencia} aria-label="Ativa" onChange={e => tentar(() => s.salvarAmostragem(x.id, { ativa: e.target.checked }))} />
+                      </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {gerencia && <span className="pills">
+                          <button type="button" className="btn sm" onClick={() => { editar(x); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>Editar</button>
+                          <BotaoConfirmar onConfirm={() => tentar(() => s.excluirAmostragem(x.id), 'Amostragem excluída')}>Excluir</BotaoConfirmar>
+                        </span>}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -449,6 +664,7 @@ function Camada3({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
             <button type="button" className="btn sm" onClick={() => s.recarregarAmostras(a.id)}>Atualizar</button>
           </div>
           {meusHoje.length > 0 && <p className="note">Seus avisos de hoje: {meusHoje.map(h => h.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })).join(' · ')}</p>}
+          <ResumoAmostragem a={a} pessoas={a.participantes ? a.participantes.length : ativos.length} />
           <div className="tiles">
             <div className="tile"><b>{c3.n}</b><span>observações</span></div>
             <div className="tile"><b>±{fmt(margemPiorCaso(c3.n), 1)} p.p.</b><span>margem de erro (95%, pior caso)</span></div>
@@ -486,6 +702,29 @@ function Camada3({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
         </div>
       )}
     </>
+  )
+}
+
+const JANELAS_PADRAO: Janela[] = [{ ini: '08:00', fim: '12:00' }, { ini: '13:30', fim: '18:00' }]
+const minParaHora = (m: number) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')
+
+/** Duracao total da amostragem: dias uteis, horas cobertas por dia e observacoes esperadas. */
+function ResumoAmostragem({ a, pessoas }: { a: Pick<Amostragem, 'id' | 'inicio' | 'fim' | 'avisos_dia' | 'hora_ini' | 'hora_fim' | 'janelas'>; pessoas: number }) {
+  const dias = diasUteisEntre(a.inicio, a.fim)
+  const minDia = minutosDia(a)
+  const n = avisosEfetivos(a)
+  const total = dias * n * pessoas
+  const esperado = Math.round(total * 0.8)
+  const semanas = a.inicio && a.fim && a.fim >= a.inicio ? (new Date(a.fim + 'T12:00:00').getTime() - new Date(a.inicio + 'T12:00:00').getTime()) / 86_400_000 / 7 + 1 / 7 : 0
+  return (
+    <div className="tiles">
+      <div className="tile"><b>{dias}</b><span>dias úteis{semanas ? ` · ${fmt(semanas, 1)} semana(s)` : ''}</span></div>
+      <div className="tile"><b>{fmt(minDia / 60, 1)} h</b><span>cobertas por dia (faixas)</span></div>
+      <div className="tile"><b>{fmt(dias * minDia / 60, 0)} h</b><span>duração total da camada por pessoa</span></div>
+      <div className="tile"><b>{n}{n < a.avisos_dia ? '*' : ''}</b><span>avisos/dia por pessoa{n < a.avisos_dia ? ' (*limitado: 20 min entre avisos)' : ''}</span></div>
+      <div className="tile"><b>{fmt(total)}</b><span>avisos no período · {pessoas} pessoa(s)</span></div>
+      <div className="tile"><b>±{esperado ? fmt(margemPiorCaso(esperado), 1) : '—'} p.p.</b><span>margem esperada (80% de resposta ≈ {fmt(esperado)} obs.)</span></div>
+    </div>
   )
 }
 
@@ -554,115 +793,6 @@ function ConferenciaCamadas({ ctx, s, pctClasse }: { ctx: Ctx; s: SuporteApi; pc
     </div>
     <p className="note">Se a amostragem e a medição ficam perto (até ±15%), os tempos-padrão estão bem calibrados.</p>
   </>
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Fechamento
-// ═════════════════════════════════════════════════════════════════════════════
-type LinhaF = { c: string; h1: number; h2: number; h3: number; tot: number; fat: number; rh: number | null; rh1: number | null }
-
-function Fechamento({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
-  const { linhas, relSel } = useCs()
-  const fin = financeiro(ctx.cfg)
-  const r = useMemo(() => contar(ctx, linhas), [ctx, linhas])
-  const f1 = fatorMes(ctx.cfg, relSel)
-  const diasMes = ctx.cfg.dias_mes ?? ctx.cfg.dias_uteis
-  const f2 = s.loteSel?.dias_uteis && diasMes ? diasMes / s.loteSel.dias_uteis : null
-  const c2 = calcCamada2(s.linhas, s.ativs, tempoC2(ctx, s.meds))
-  const c3 = calcCamada3(s.amostras)
-  const cap = fin.ok ? fin.cap : null
-
-  const cods = [...new Set([...Object.keys(r.by), ...Object.keys(c2.porCtt), ...Object.keys(c3.porCttCamada3)])]
-  const rows: LinhaF[] = cods.map(c => {
-    const h1 = f1 ? ((r.by[c]?.min ?? 0) / 60) * f1 : 0
-    const h2 = f2 ? ((c2.porCtt[c] ?? 0) / 60) * f2 : 0
-    const h3 = cap && c3.n ? ((c3.porCttCamada3[c] ?? 0) / c3.n) * cap : 0
-    const tot = h1 + h2 + h3
-    const fat = ctx.ctts.get(c)?.faturamento_mensal || 0
-    return { c, h1, h2, h3, tot, fat, rh: tot > 0 && fat ? fat / tot : null, rh1: h1 > 0 && fat ? fat / h1 : null }
-  })
-  const { sorted, th } = useOrdem(rows, {
-    c: x => +x.c || x.c, nome: x => nomeCtt(ctx, x.c), h1: x => x.h1, h2: x => x.h2, h3: x => x.h3, tot: x => x.tot, fat: x => x.fat, rh: x => x.rh, rh1: x => x.rh1,
-  }, { col: 'tot', dir: 'desc' })
-
-  const T1 = rows.reduce((a, x) => a + x.h1, 0), T2 = rows.reduce((a, x) => a + x.h2, 0)
-  const T3 = cap && c3.n ? (c3.porClasse.camada3 / c3.n) * cap : 0
-  const Ti = cap && c3.n ? (c3.porClasse.interno / c3.n) * cap : 0
-  const To = cap && c3.n ? (c3.porClasse.ociosa / c3.n) * cap : 0
-  const soma = T1 + T2 + T3 + Ti + To
-  const maxTot = Math.max(1, ...rows.map(x => x.tot))
-
-  const faltas: string[] = []
-  if (!fin.ok) faltas.push('Parâmetros da equipe (aba Resultado) para a capacidade prática e o custo-hora.')
-  if (!relSel) faltas.push('Relatório EFIDOCEMP-201 importado (aba Contagem) para a camada 1.')
-  else if (!f1) faltas.push('Dias úteis do relatório (aba Resultado) para projetar a camada 1.')
-  if (!s.loteSel) faltas.push('Volumes da camada 2 (Suporte › Camada 2).')
-  else if (!f2) faltas.push('Dias úteis do lote de volumes da camada 2.')
-  if (!c3.n) faltas.push('Respostas de uma amostragem (Suporte › Camada 3).')
-
-  return (
-    <>
-      {faltas.length > 0 && (
-        <div className="warnbox">
-          <div>Para fechar a conta inteira ainda falta:</div>
-          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{faltas.map(x => <li key={x}>{x}</li>)}</ul>
-        </div>
-      )}
-      <div className="box">
-        <h2>A conta inteira da capacidade</h2>
-        <p className="note">Capacidade prática = avaliação + com rastro + difuso + interno + ociosa. Se a soma não bater com a capacidade, algum tempo-padrão está errado.</p>
-        <div className="tiles">
-          <div className="tile"><b>{fmt(T1, 0)} h</b><span>Camada 1 · Avaliação{cap ? ` · ${fmt((T1 / cap) * 100)}%` : ''}</span></div>
-          <div className="tile"><b>{fmt(T2, 0)} h</b><span>Camada 2 · Com rastro{cap ? ` · ${fmt((T2 / cap) * 100)}%` : ''}</span></div>
-          <div className="tile"><b>{fmt(T3, 0)} h</b><span>Camada 3 · Difuso{cap ? ` · ${fmt((T3 / cap) * 100)}%` : ''}</span></div>
-          <div className="tile"><b>{fmt(Ti, 0)} h</b><span>Interno (entra no custo-hora)</span></div>
-          <div className="tile"><b>{fmt(To, 0)} h</b><span>Ociosa (cabe mais cliente)</span></div>
-          <div className="tile"><b>{cap ? fmt(cap, 0) + ' h' : '—'}</b><span>capacidade prática/mês</span></div>
-        </div>
-        {cap != null && c3.n > 0 && (
-          <p>{Math.abs(soma - cap) / cap <= 0.1
-            ? <span className="pill p-good">Fecha: soma {fmt(soma, 0)} h × capacidade {fmt(cap, 0)} h</span>
-            : <span className="pill p-warn">Não fecha: soma {fmt(soma, 0)} h × capacidade {fmt(cap, 0)} h ({soma > cap ? '+' : ''}{fmt(((soma - cap) / cap) * 100)}%). Revise os tempos-padrão.</span>}</p>
-        )}
-      </div>
-
-      <div className="box">
-        <h2>Por contratante: as três camadas</h2>
-        <div className="tbl scroll" style={{ maxHeight: 560 }}>
-          <table>
-            <thead><tr>
-              {th('c', 'Cód.')}{th('nome', 'Contratante')}{th('h1', 'Avaliação h/mês', 'r')}{th('h2', 'Com rastro h/mês', 'r')}{th('h3', 'Difuso h/mês', 'r')}
-              {th('tot', 'Total h/mês', 'r')}<th style={{ width: 160 }} />{th('fat', 'Faturamento', 'r')}{th('rh1', 'Receita/h só avaliação', 'r')}{th('rh', 'Receita/h total', 'r')}<th>Situação</th>
-            </tr></thead>
-            <tbody>
-              {sorted.length ? sorted.map(x => (
-                <tr key={x.c}>
-                  <td className="mono">{x.c}</td>
-                  <td>{nomeCtt(ctx, x.c)}</td>
-                  <td className="r mono">{fmt(x.h1, 1)}</td>
-                  <td className="r mono">{fmt(x.h2, 1)}</td>
-                  <td className="r mono">{fmt(x.h3, 1)}</td>
-                  <td className="r mono"><b>{fmt(x.tot, 1)}</b></td>
-                  <td>
-                    <div style={{ display: 'flex', height: 10, borderRadius: 3, overflow: 'hidden', background: 'var(--cs-tint)', width: `${(x.tot / maxTot) * 100}%`, minWidth: 2 }} title="Avaliação · com rastro · difuso">
-                      <div style={{ width: `${x.tot ? (x.h1 / x.tot) * 100 : 0}%`, background: '#2A4F96' }} />
-                      <div style={{ width: `${x.tot ? (x.h2 / x.tot) * 100 : 0}%`, background: '#D1AE6E' }} />
-                      <div style={{ width: `${x.tot ? (x.h3 / x.tot) * 100 : 0}%`, background: '#A86A12' }} />
-                    </div>
-                  </td>
-                  <td className="r mono">{x.fat ? brl(x.fat) : '—'}</td>
-                  <td className="r mono">{x.rh1 != null ? brl2(x.rh1) : '—'}</td>
-                  <td className="r mono">{x.rh != null ? brl2(x.rh) : '—'}</td>
-                  <td>{x.rh == null || !fin.ok ? <span className="pill p-gray">—</span> : x.rh < fin.ch ? <span className="pill p-bad">Deficitário</span> : x.rh < fin.hmin ? <span className="pill p-warn">Reprecificar</span> : <span className="pill p-good">Proteger</span>}</td>
-                </tr>
-              )) : <tr><td colSpan={11} className="empty">Sem dados das camadas ainda.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <p className="note">Barra: <span style={{ color: '#2A4F96' }}>■</span> avaliação · <span style={{ color: '#D1AE6E' }}>■</span> com rastro · <span style={{ color: '#A86A12' }}>■</span> difuso. Quem mais demanda suporte é quem mais perde receita por hora quando o suporte entra na conta.</p>
-      </div>
-    </>
-  )
 }
 
 function Metodo() {

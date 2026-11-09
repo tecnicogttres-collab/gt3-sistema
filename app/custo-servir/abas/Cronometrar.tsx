@@ -12,6 +12,7 @@ import { dt, nomeUsuario } from '../cs-lib'
 import type { Medicao, Usuario } from '../cs-lib'
 import QuadroDocumentos from './QuadroDocumentos'
 import TransportarTempo, { type ModoTransporte } from './TransportarTempo'
+import { EditorDocsContratante } from './Bases'
 
 export type NavCron = { g: string | null; d: string | null; q: string }
 
@@ -89,6 +90,7 @@ function Grupos({ ctx, setNav }: { ctx: Ctx; setNav: (n: NavCron) => void }) {
 
 function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron; setNav: (n: NavCron) => void }) {
   const { d } = useCs()
+  const [cttDocs, setCttDocs] = useState<string | null>(null)
   const [ord, setOrd] = useState<Ordem>({ col: 'nome', dir: 'asc' })
   let ds = [...(ctx.gd.get(g.id) ?? [])].map(id => ctx.docs.get(id)!).filter(Boolean)
   if (nav.q) ds = ds.filter(x => norm(x.nome).includes(norm(nav.q)))
@@ -105,6 +107,24 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
         <button type="button" className="voltar" onClick={() => setNav({ g: null, d: null, q: '' })}>← Voltar aos grupos</button>
         <button type="button" onClick={() => setNav({ g: null, d: null, q: '' })}>Grupos</button>›<span>{g.nome}</span>
       </div>
+      {cttDocs && (
+        <div className="cs-modal" onClick={e => { if (e.target === e.currentTarget) setCttDocs(null) }}>
+          <div className="cs">
+            <div className="row" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn" onClick={() => setCttDocs(null)}>Fechar</button></div>
+            <EditorDocsContratante key={cttDocs} ctx={ctx} cod={cttDocs} />
+          </div>
+        </div>
+      )}
+      {!g.padrao && g.contratantes.length > 0 && (
+        <div className="selbar">
+          <b>Documentos de cada contratante:</b>
+          {g.contratantes.map(c => (
+            <button key={c} type="button" className="btn sm" onClick={() => setCttDocs(c)} title="Indicar, importar e exportar os documentos deste contratante">
+              {c} · {nomeCtt(ctx, c).slice(0, 26)} <span className="pill p-blue">{new Set(d.exig.filter(x => x.contratante_cod === c && x.ativo).map(x => x.documento_id)).size}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="box">
         <div className="row between">
           <h2>2. Escolha o documento</h2>

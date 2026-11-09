@@ -7,6 +7,8 @@ export type Grupo = { id: string; nome: string; padrao: boolean; ordem: number; 
 export type Documento = {
   id: string; nome: string; codigo: string | null; volume_ref: number; reprovados_ref: number
   nao_conta: boolean; ativo: boolean
+  /** Validade em dias (mensal 30, anual 365...). null = nao definida; 0 = unico (nao vence). */
+  validade_dias: number | null
   /** empresa | pessoa: define a regra do requisito comum (vinculacao x turno). null = ainda nao classificado. */
   tipo: 'empresa' | 'pessoa' | null
 }
@@ -49,7 +51,9 @@ export const ABAS = [
   { id: 'contagem', label: 'Contagem por contratante' },
   { id: 'resultado', label: 'Resultado' },
   { id: 'suporte', label: 'Suporte' },
+  { id: 'bases', label: 'Bases prontas' },
   { id: 'configuracoes', label: 'Configurações' },
+  { id: 'fechamento', label: 'Fechamento' },
 ] as const
 export type AbaId = typeof ABAS[number]['id']
 export const PERFIS = ['admin', 'gestor', 'colaborador'] as const
@@ -424,4 +428,40 @@ export function baixar(nome: string, conteudo: string, tipo = 'text/csv;charset=
   const a = document.createElement('a')
   a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// ── Validade do documento ─────────────────────────────────────────────────────
+export const VALIDADES: { dias: number; label: string }[] = [
+  { dias: 0, label: 'Único (não vence)' }, { dias: 30, label: 'Mensal' }, { dias: 60, label: '60 dias' }, { dias: 90, label: 'Trimestral' },
+  { dias: 120, label: '120 dias' }, { dias: 180, label: 'Semestral' }, { dias: 365, label: 'Anual' }, { dias: 730, label: 'Bienal' },
+  { dias: 1095, label: '3 anos' }, { dias: 1825, label: '5 anos' }, { dias: 3650, label: '10 anos' },
+]
+export const rotuloValidade = (dias: number | null | undefined) =>
+  dias == null ? '—' : VALIDADES.find(v => v.dias === dias)?.label ?? `${dias} dias`
+/** Avaliacoes por mes de um documento com essa validade (unico ou sem validade = 0). */
+export const porMes = (dias: number | null | undefined) => (dias && dias > 0 ? 365 / 12 / dias : 0)
+const PER_GT0010: Record<string, number> = { U: 0, M: 30, T: 90, S: 180, A: 365, B: 730 }
+/** Validade lida do nome (ex.: "ASO - ANUAL" = 365, "EPI - 60 DIAS" = 60, "VACINA - 10A" = 3650) ou,
+ *  sem pista no nome, da periodicidade do GT0010. null = sem pista (ex.: "INFORMADA": vale a data do documento). */
+export function validadePeloNome(nome: string, periodicidadeGt0010?: string | null): number | null {
+  const n = norm(nome)
+  if (/\bUNICO\b/.test(n)) return 0
+  if (/\bINFORMAD[OA]\b/.test(n)) return null
+  const dias = n.match(/-\s*(\d+)\s*DIAS\s*$/); if (dias) return +dias[1]
+  const anos = n.match(/-\s*(\d+)\s*A(NOS?)?\s*$/); if (anos) return +anos[1] * 365
+  const pal: [RegExp, number][] = [[/\bBIMESTRAL\b/, 60], [/\bQUADRIMESTRAL\b/, 120], [/\bTRIMESTRAL\b/, 90], [/\bSEMESTRAL\b/, 180],
+    [/\bMENSAL\b/, 30], [/\bANUAL\b/, 365], [/\bBIENAL\b/, 730], [/\bTRIENAL\b/, 1095]]
+  for (const [re, d] of pal) if (re.test(n)) return d
+  const p = periodicidadeGt0010?.split('/')[0]?.trim()
+  return p && p in PER_GT0010 ? PER_GT0010[p] : null
+}
+
+// ── Bases prontas (conjuntos de documentos) ───────────────────────────────────
+export type Conjunto = { id: string; nome: string; descricao: string | null; created_by: string | null; created_at: string; docs: string[] }
+/** Tempo do documento num grupo de criterio; sem tempo no grupo, usa o do padrao. */
+export function tempoNoGrupo(ctx: Ctx, g: string, d: string, r: Resultado): { val: number | null; est: boolean; g: string | null } {
+  const p = grupoPadrao(ctx)
+  if (g && noGrupo(ctx, g, d)) { const t = tempo(ctx, g, d, r); if (t.val != null) return { ...t, g } }
+  if (p) { const t = tempo(ctx, p.id, d, r); if (t.val != null) return { ...t, g: p.id } }
+  return { val: null, est: false, g: null }
 }

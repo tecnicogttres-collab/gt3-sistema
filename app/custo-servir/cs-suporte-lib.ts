@@ -1,5 +1,7 @@
 // Custo de Servir — camadas 2 e 3 (material "Medindo o Suporte GT3"). Calculos puros.
 
+import { principalDe, type Ctx } from './cs-lib'
+
 export type Atividade = {
   id: string; chave: string; nome: string; unidade: 'quantidade' | 'minutos'
   fonte: string | null; liga_por: string | null; ordem: number; ativo: boolean
@@ -15,20 +17,24 @@ export type VolumeLinha = { atividade_id: string; contratantes: string[]; quanti
 export type Amostragem = {
   id: string; nome: string; inicio: string; fim: string; avisos_dia: number; hora_ini: string; hora_fim: string
   participantes: string[] | null; ativa: boolean; created_by: string | null; created_at: string
+  /** Faixas do dia em que os avisos podem sair. null = faixa unica hora_ini..hora_fim. */
+  janelas?: Janela[] | null
 }
+export type Janela = { ini: string; fim: string }
 export type Amostra = {
   id: string; amostragem_id: string; usuario_id: string; previsto_em: string; respondido_em: string
   atividade: ChaveAmostra; contratante_cod: string | null
 }
 
 // ── Opcoes do aviso (lista 3.3 do material) ──────────────────────────────────
-export type ChaveAmostra = 'avaliacao' | 'cadastro' | 'email' | 'ligacao' | 'whatsapp' | 'orientacao' | 'interno' | 'sem_demanda'
+export type ChaveAmostra = 'avaliacao' | 'cadastro' | 'email' | 'ligacao' | 'faturamento' | 'whatsapp' | 'orientacao' | 'interno' | 'sem_demanda'
 export type Classe = 'camada1' | 'camada2' | 'camada3' | 'interno' | 'ociosa'
 export const OPCOES_AMOSTRA: { chave: ChaveAmostra; label: string; inclui: string; classe: Classe; pedeContratante: boolean }[] = [
   { chave: 'avaliacao', label: 'Avaliação', inclui: 'Avaliar documento no sistema', classe: 'camada1', pedeContratante: true },
   { chave: 'cadastro', label: 'Cadastro', inclui: 'Empresa, pessoa, turno, vinculação', classe: 'camada2', pedeContratante: true },
   { chave: 'email', label: 'E-mail', inclui: 'Ler, responder, cobrar por e-mail', classe: 'camada2', pedeContratante: true },
   { chave: 'ligacao', label: 'Ligação', inclui: 'Atender ou fazer ligação', classe: 'camada2', pedeContratante: true },
+  { chave: 'faturamento', label: 'Faturamento', inclui: 'Emitir, conferir ou cobrar faturamento', classe: 'camada2', pedeContratante: true },
   { chave: 'whatsapp', label: 'WhatsApp', inclui: 'Conversas com prestador ou contratante', classe: 'camada3', pedeContratante: true },
   { chave: 'orientacao', label: 'Orientação', inclui: 'Explicar requisito, ajudar a montar documento', classe: 'camada3', pedeContratante: true },
   { chave: 'interno', label: 'Interno', inclui: 'Reunião, treinamento, tarefas da GT3', classe: 'interno', pedeContratante: false },
@@ -50,18 +56,45 @@ function semente(s: string) {
 const minutos = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + (m || 0) }
 /** Dia util (seg a sex). */
 export const diaUtil = (iso: string) => { const d = new Date(iso + 'T12:00:00'); const w = d.getDay(); return w !== 0 && w !== 6 }
-/** Horarios (Date local) dos avisos de uma pessoa num dia. Espacamento minimo de 20 min entre avisos. */
-export function horariosDoDia(a: Pick<Amostragem, 'id' | 'avisos_dia' | 'hora_ini' | 'hora_fim'>, usuarioId: string, diaIso: string): Date[] {
+/** Faixas validas da amostragem, em minutos do dia, ordenadas e sem sobreposicao. */
+export function faixasMin(a: Pick<Amostragem, 'hora_ini' | 'hora_fim' | 'janelas'>): { ini: number; fim: number }[] {
+  const js = a.janelas?.length ? a.janelas : [{ ini: a.hora_ini, fim: a.hora_fim }]
+  const fx = js.map(j => ({ ini: minutos(j.ini), fim: minutos(j.fim) })).filter(j => j.fim > j.ini).sort((x, y) => x.ini - y.ini)
+  const out: { ini: number; fim: number }[] = []
+  for (const j of fx) {
+    const ult = out[out.length - 1]
+    if (ult && j.ini <= ult.fim) ult.fim = Math.max(ult.fim, j.fim); else out.push({ ...j })
+  }
+  return out
+}
+/** Minutos por dia cobertos pelas faixas. */
+export const minutosDia = (a: Pick<Amostragem, 'hora_ini' | 'hora_fim' | 'janelas'>) => faixasMin(a).reduce((s, j) => s + j.fim - j.ini, 0)
+/** Avisos que de fato saem por dia (respeita o espacamento minimo de 20 min). */
+export const avisosEfetivos = (a: Pick<Amostragem, 'avisos_dia' | 'hora_ini' | 'hora_fim' | 'janelas'>) => Math.max(0, Math.min(a.avisos_dia, Math.floor(minutosDia(a) / 20)))
+/** Dias uteis (seg a sex) entre inicio e fim, inclusive. */
+export function diasUteisEntre(inicio: string, fim: string) {
+  if (!inicio || !fim || fim < inicio) return 0
+  let n = 0
+  for (let d = new Date(inicio + 'T12:00:00'); hojeIso(d) <= fim; d.setDate(d.getDate() + 1)) if (diaUtil(hojeIso(d))) n++
+  return n
+}
+
+/** Horarios (Date local) dos avisos de uma pessoa num dia. Espacamento minimo de 20 min entre avisos.
+ *  Com varias faixas, elas sao emendadas numa linha do tempo e os avisos se distribuem por ela. */
+export function horariosDoDia(a: Pick<Amostragem, 'id' | 'avisos_dia' | 'hora_ini' | 'hora_fim' | 'janelas'>, usuarioId: string, diaIso: string): Date[] {
   if (!diaUtil(diaIso)) return []
-  const ini = minutos(a.hora_ini), fim = minutos(a.hora_fim)
-  const n = Math.min(a.avisos_dia, Math.floor((fim - ini) / 20))
+  const fx = faixasMin(a)
+  const total = fx.reduce((s, j) => s + j.fim - j.ini, 0)
+  const n = avisosEfetivos(a)
   if (n <= 0) return []
   const rnd = semente(a.id + '|' + usuarioId + '|' + diaIso)
-  // Divide a janela em n faixas iguais e sorteia um minuto em cada (com folga de 10 min nas bordas)
-  const faixa = (fim - ini) / n
+  // Divide a linha do tempo em n trechos iguais e sorteia um minuto em cada (com folga de 10 min nas bordas)
+  const faixa = total / n
   const out: Date[] = []
   for (let i = 0; i < n; i++) {
-    const m = Math.round(ini + i * faixa + 10 + rnd() * Math.max(0, faixa - 20))
+    let t = Math.round(i * faixa + 10 + rnd() * Math.max(0, faixa - 20))
+    let m = fx[fx.length - 1].fim
+    for (const j of fx) { const len = j.fim - j.ini; if (t < len) { m = j.ini + t; break } t -= len }
     const d = new Date(diaIso + 'T00:00:00')
     d.setHours(Math.floor(m / 60), m % 60, 0, 0)
     out.push(d)
@@ -176,3 +209,7 @@ export function calcCamada3(amostras: Amostra[]): Camada3 {
   }
   return out
 }
+
+/** Tempo da atividade para o contratante (especifico do contratante/grupo, senao geral). */
+export const tempoC2 = (ctx: Ctx, meds: AtivMedicao[]) => (id: string, cod: string | null) =>
+  tempoPara(meds, id, cod, ctx.cfg.base, ctx.cfg.minimo, c => principalDe(ctx, c))

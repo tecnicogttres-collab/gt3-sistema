@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useCs } from '../cs-data'
 import { useModules } from '../../components/ModulesContext'
-import { ABAS, docsComTurno, fmt, grupoDe, nomeCtt, nomeUsuario, norm, PERFIS, temCatraca, unidadesDe, type Ctx } from '../cs-lib'
+import { ABAS, docsComTurno, fmt, grupoDe, nomeCtt, nomeUsuario, norm, PERFIS, rotuloValidade, temCatraca, unidadesDe, validadePeloNome, VALIDADES, type Ctx } from '../cs-lib'
 import { BotaoConfirmar, IconeCatraca, SeloCatraca, useOrdem } from '../cs-ui'
 import { NumCampo } from './Resultado'
 import QuadroDocumentos from './QuadroDocumentos'
@@ -187,16 +187,26 @@ function Catalogo({ ctx }: { ctx: Ctx }) {
   const [novo, setNovo] = useState('')
   const [q, setQ] = useState('')
   const [fTipo, setFTipo] = useState<'' | 'empresa' | 'pessoa' | 'sem'>('')
+  const [semVal, setSemVal] = useState(false)
   const filtrados = d.docs
     .filter(x => !q || norm(x.nome).includes(norm(q)) || (x.codigo ?? '').includes(q.trim()))
     .filter(x => !fTipo || (fTipo === 'sem' ? !x.tipo : x.tipo === fTipo))
+    .filter(x => !semVal || x.validade_dias == null)
   const semTipo = d.docs.filter(x => !x.tipo && !x.nao_conta).length
   // Documento que aparece com turno no relatorio e de pessoa (turno so existe em documento de pessoa)
   const sugeridosPessoa = [...docsComTurno(ctx, linhas)].filter(id => !d.docs.find(x => x.id === id)?.tipo)
+  const perGt = (id: string) => d.exig.find(v => v.documento_id === id && v.periodicidade)?.periodicidade ?? null
+  const sugestoes = d.docs.filter(x => x.validade_dias == null).map(x => ({ id: x.id, v: validadePeloNome(x.nome, perGt(x.id)) })).filter((x): x is { id: string; v: number } => x.v != null)
+  const nSemValidade = d.docs.filter(x => x.validade_dias == null && !x.nao_conta).length
+  async function preencherValidades() {
+    const porValor = new Map<number, string[]>()
+    for (const x of sugestoes) porValor.set(x.v, [...(porValor.get(x.v) ?? []), x.id])
+    for (const [v, ids] of porValor) await atualizarDocs(ids, { validade_dias: v })
+  }
   const gruposDe = (id: string) => ctx.grupos.filter(g => ctx.gd.get(g.id)?.has(id)).map(g => g.nome).join(', ')
   const { sorted: docs, th } = useOrdem(filtrados, {
     nome: x => x.nome, cod: x => x.codigo, vol: x => x.volume_ref, rep: x => x.reprovados_ref,
-    nc: x => (x.nao_conta ? 0 : 1), grupos: x => gruposDe(x.id), tipo: x => x.tipo, exig: x => ctx.exige.get(x.id)?.size ?? 0,
+    nc: x => (x.nao_conta ? 0 : 1), val: x => x.validade_dias ?? -1, grupos: x => gruposDe(x.id), tipo: x => x.tipo, exig: x => ctx.exige.get(x.id)?.size ?? 0,
   }, { col: 'nome', dir: 'asc' })
   return (
     <div className="box">
@@ -215,6 +225,18 @@ function Catalogo({ ctx }: { ctx: Ctx }) {
           <button type="button" className="link" onClick={() => setFTipo('sem')}>ver os sem tipo</button>
         </div>
       )}
+      {nSemValidade > 0 && (
+        <div className="selbar">
+          <b>{nSemValidade} documento(s) sem validade.</b>
+          {sugestoes.length > 0
+            ? <>
+              <span className="note">Pelo nome (ex.: &quot;ASO - ANUAL&quot;, &quot;EPI - 60 DIAS&quot;, &quot;ÚNICO&quot;) ou pela periodicidade do GT0010, dá para preencher {sugestoes.length} deles.</span>
+              <button type="button" className="btn sm solid" onClick={() => tentar(preencherValidades, `Validade preenchida em ${sugestoes.length} documento(s)`)}>Preencher pelo nome</button>
+            </>
+            : <span className="note">Os que faltam não têm pista no nome (ex.: &quot;INFORMADA&quot; vale a data do próprio documento): escolha na coluna Validade.</span>}
+          <label className="row note" style={{ gap: 6 }}><input type="checkbox" checked={semVal} onChange={e => setSemVal(e.target.checked)} /> ver só os sem validade</label>
+        </div>
+      )}
       <div className="row">
         <input type="text" value={novo} onChange={e => setNovo(e.target.value)} placeholder="Nome de um documento novo" style={{ flex: 1, minWidth: 220 }} />
         <button type="button" className="btn solid" disabled={!novo.trim()}
@@ -229,7 +251,7 @@ function Catalogo({ ctx }: { ctx: Ctx }) {
       </div>
       <div className="tbl scroll">
         <table>
-          <thead><tr>{th('nome', 'Documento')}{th('cod', 'Código')}{th('tipo', 'Tipo')}{th('vol', 'Volume', 'r')}{th('rep', 'Reprov.', 'r')}{th('nc', 'Não conta', 'c')}{th('exig', 'Exigido por (GT0010)', 'r', 'Contratantes com vínculo ativo no GT0010')}{th('grupos', 'Grupos')}</tr></thead>
+          <thead><tr>{th('nome', 'Documento')}{th('cod', 'Código')}{th('tipo', 'Tipo')}{th('val', 'Validade', '', 'Validade do documento: base da frequência nas Bases prontas')}{th('vol', 'Volume', 'r')}{th('rep', 'Reprov.', 'r')}{th('nc', 'Não conta', 'c')}{th('exig', 'Exigido por (GT0010)', 'r', 'Contratantes com vínculo ativo no GT0010')}{th('grupos', 'Grupos')}</tr></thead>
           <tbody>
             {docs.map(x => (
               <tr key={x.id}>
@@ -242,6 +264,14 @@ function Catalogo({ ctx }: { ctx: Ctx }) {
                     <option value="">—</option>
                     <option value="empresa">Empresa</option>
                     <option value="pessoa">Pessoa</option>
+                  </select>
+                </td>
+                <td>
+                  <select value={x.validade_dias ?? ''} aria-label="Validade" onChange={e => tentar(() => atualizarDoc(x.id, { validade_dias: e.target.value === '' ? null : +e.target.value }))}
+                    title={x.validade_dias == null ? (validadePeloNome(x.nome, perGt(x.id)) != null ? 'Sugestão pelo nome: ' + rotuloValidade(validadePeloNome(x.nome, perGt(x.id))) : 'Sem pista no nome') : undefined}>
+                    <option value="">—</option>
+                    {VALIDADES.map(v => <option key={v.dias} value={v.dias}>{v.label}</option>)}
+                    {x.validade_dias != null && !VALIDADES.some(v => v.dias === x.validade_dias) && <option value={x.validade_dias}>{rotuloValidade(x.validade_dias)}</option>}
                   </select>
                 </td>
                 <td className="r mono">{fmt(x.volume_ref)}</td>

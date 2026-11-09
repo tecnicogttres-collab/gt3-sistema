@@ -206,3 +206,30 @@
 .cs .tabsbar .home{margin-bottom:6px;flex:none}
 .cs .crumbs .voltar{border:1.5px solid var(--cs-edge);border-radius:8px;padding:3px 10px;text-decoration:none;margin-right:6px;background:var(--cs-bg)}
 .cs .crumbs .voltar:hover{background:var(--cs-tint)}
+
+/* Suporte: cronometro simples */
+.cs .passos{display:flex;flex-wrap:wrap;gap:10px}
+.cs .passos span{background:var(--cs-tint);border-radius:99px;padding:4px 12px;font-size:13.5px}
+.cs .passos span > b:first-child{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--cs-edge);color:#FFFFFF;font-size:12px;margin-right:6px}
+.cs .atv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.cs .atv-card{border:2px solid var(--cs-edge);border-radius:14px;padding:18px 16px;background:var(--cs-bg);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:8px;align-items:flex-start;transition:transform .15s,box-shadow .15s}
+.cs .atv-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgb(42 79 150 / .15)}
+.cs .atv-card b{font-size:17px;color:var(--cs-edge-2)}
+.cs .box.simples{align-items:center;text-align:center;gap:16px;padding:28px 18px}
+.cs .box.simples h2.grande{font-size:26px;font-weight:900;color:var(--cs-edge-2)}
+.cs .disp.xl{font-family:var(--cs-num);font-size:clamp(48px,12vw,84px);font-weight:800;color:var(--cs-edge-2);line-height:1}
+.cs .disp.xl.run{color:var(--cs-good)}
+.cs .btn.xl{font-size:19px;padding:14px 30px;border-radius:14px}
+.cs .okbox{border:1.5px solid var(--cs-good);background:var(--cs-good-bg);color:var(--cs-good);border-radius:10px;padding:10px 14px;font-weight:700}
+
+/* Aba Fechamento em destaque */
+.cs .tabs button.destaque{color:var(--cs-gold-ink);background:#FBF6EC;border-radius:9px 9px 0 0;margin-left:6px;border:1.5px solid var(--cs-gold);border-bottom:3px solid transparent}
+.cs .tabs button.destaque.on{background:var(--cs-gold);color:#FFFFFF;border-bottom-color:var(--cs-gold)}
+
+/* Bases prontas */
+.cs .bases{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.cs .bases{grid-template-columns:minmax(0,1fr)}}
+.cs .cj-lista{display:flex;flex-direction:column;gap:6px}
+.cs .cj-lista button{border:1.5px solid var(--cs-line);border-radius:10px;padding:10px 12px;background:var(--cs-bg);text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.cs .cj-lista button.on{border-color:var(--cs-edge);background:var(--cs-tint)}
+.cs .cj-lista button b{color:var(--cs-edge-2)}

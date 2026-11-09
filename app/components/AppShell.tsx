@@ -442,7 +442,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const { data: avisos } = await supabase
           .from('prioridades_avisos')
-          .select('id, empresa')
+          .select('id, empresa, created_at')
           .order('created_at', { ascending: true })
         if (!mounted || !avisos) return
         const { data: vistas } = await supabase
@@ -450,7 +450,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .select('aviso_id')
           .eq('user_id', userId)
         const seenSet = new Set((vistas ?? []).map(r => r.aviso_id))
-        const unseen = avisos.filter(r => !seenSet.has(r.id))
+        // Usuário novo não recebe as prioridades criadas antes da conta dele
+        const unseen = avisos.filter(r => !seenSet.has(r.id) && criadoAposConta(r.created_at, profile?.created_at))
         if (unseen.length > 0) setPrioQueue(unseen)
       } catch { /* tabela não existe */ }
     }

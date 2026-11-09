@@ -7,7 +7,7 @@ import { createClient } from '../lib/supabase'
 import { useUser } from '../components/UserContext'
 import {
   indexarMedicoes,
-  type Config, type Contratante, type Ctx, type DocCtt, type Documento, type Grupo, type LinhaRel, type Medicao,
+  type Config, type Conjunto, type Contratante, type Ctx, type DocCtt, type Documento, type Grupo, type LinhaRel, type Medicao,
   type Relatorio, type Resultado, type Situacao, type Turno, type Usuario,
 } from './cs-lib'
 
@@ -33,9 +33,10 @@ type Dados = {
   rels: Relatorio[]
   usuarios: Usuario[]
   exig: DocCtt[]
+  conjuntos: Conjunto[]
 }
 
-const VAZIO: Dados = { cfg: null, grupos: [], docs: [], gd: [], meds: [], turnos: [], ctts: [], rels: [], usuarios: [], exig: [] }
+const VAZIO: Dados = { cfg: null, grupos: [], docs: [], gd: [], meds: [], turnos: [], ctts: [], rels: [], usuarios: [], exig: [], conjuntos: [] }
 
 type PageRes<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>
 /** Le todas as linhas, de 1000 em 1000 (limite padrao do PostgREST). */
@@ -84,6 +85,12 @@ function useCsDataInterno() {
     try {
       // Vinculos GT0010 (tabela opcional: se ainda nao existir, segue sem)
       const exig = await todas<DocCtt>((a, b) => supabase.from('cs_documento_contratantes').select('*').range(a, b)).catch(() => [] as DocCtt[])
+      // Bases prontas (tabelas opcionais ate rodar sql/custo-servir-bases-prontas.sql)
+      const [cjs, cjd] = await Promise.all([
+        todas<Omit<Conjunto, 'docs'>>((a, b) => supabase.from('cs_conjuntos').select('*').order('nome').range(a, b)).catch(() => [] as Omit<Conjunto, 'docs'>[]),
+        todas<{ conjunto_id: string; documento_id: string }>((a, b) => supabase.from('cs_conjunto_documentos').select('*').range(a, b)).catch(() => []),
+      ])
+      const conjuntos = cjs.map(c => ({ ...c, docs: cjd.filter(x => x.conjunto_id === c.id).map(x => x.documento_id) }))
       const [cfg, grupos, gc, docs, gd, meds, turnos, ctts, rels, usuarios] = await Promise.all([
         supabase.from('cs_config').select('*').eq('id', 1).maybeSingle().then(ok),
         supabase.from('cs_grupos').select('*').order('ordem').order('created_at').then(ok),
@@ -103,13 +110,14 @@ function useCsDataInterno() {
         grupos: ((grupos ?? []) as Omit<Grupo, 'contratantes'>[]).map(g => ({
           ...g, contratantes: contr.filter(c => c.grupo_id === g.id).map(c => c.contratante_cod),
         })),
-        docs: docs.map(x => ({ ...x, tipo: x.tipo ?? null })), gd, meds,
+        docs: docs.map(x => ({ ...x, tipo: x.tipo ?? null, validade_dias: x.validade_dias ?? null })), gd, meds,
         turnos: ((turnos ?? []) as Turno[]).map(t => ({ ...t, descricao: t.descricao ?? null, codigo_integracao: t.codigo_integracao ?? null })).sort((a, b) => (+a.turno_cod || 0) - (+b.turno_cod || 0) || a.turno_cod.localeCompare(b.turno_cod)),
         ctts: ((ctts ?? []) as Contratante[]).map(c => ({ ...c, faturamento_mensal: +c.faturamento_mensal || 0, contratante_pai: c.contratante_pai ?? null }))
           .sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)),
         rels: (rels ?? []) as Relatorio[],
         usuarios: usuarios as Usuario[],
         exig,
+        conjuntos,
       })
       setErro(null)
     } catch (e) {
@@ -446,6 +454,76 @@ function useCsDataInterno() {
     return ativo ? garantirGrupoDoc(v.documento_id, v.contratante_cod) : null
   }, [supabase, garantirGrupoDoc])
 
+  /** Vincula varios documentos ao contratante de uma vez (por contratante) e coloca no grupo dele. */
+  const vincularDocs = useCallback(async (ids: string[], contratante_cod: string): Promise<{ novos: number; grupo: string | null }> => {
+    const novos = [...new Set(ids)].filter(id => !d.exig.some(x => x.documento_id === id && x.contratante_cod === contratante_cod && x.origem === 'contratante'))
+    if (novos.length) {
+      const rows: DocCtt[] = novos.map(id => {
+        const doc = d.docs.find(x => x.id === id)
+        return { documento_id: id, contratante_cod, origem: 'contratante', tipo_doc: doc?.tipo === 'pessoa' ? 'C' : doc?.tipo === 'empresa' ? 'E' : null, periodicidade: null, bloqueia_acesso: false, data_inicio: null, ativo: true, qtd_contratos: 1 }
+      })
+      ok(await supabase.from('cs_documento_contratantes').insert(rows))
+      setD(prev => ({ ...prev, exig: [...prev.exig, ...rows] }))
+    }
+    // Reativa vinculos encerrados desses documentos
+    const encerrados = d.exig.filter(x => !x.ativo && x.contratante_cod === contratante_cod && ids.includes(x.documento_id))
+    for (const v of encerrados) ok(await supabase.from('cs_documento_contratantes').update({ ativo: true }).eq('documento_id', v.documento_id).eq('contratante_cod', contratante_cod).eq('origem', v.origem))
+    if (encerrados.length) setD(prev => ({ ...prev, exig: prev.exig.map(x => (encerrados.includes(x) ? { ...x, ativo: true } : x)) }))
+    // Grupo de criterio do contratante (cria se precisar) e documentos dentro dele
+    let grupo = d.grupos.find(g => !g.padrao && g.contratantes.includes(contratante_cod))
+    let criado: string | null = null
+    if (!grupo && ids.length) {
+      const nomeC = d.ctts.find(c => c.contratante_cod === contratante_cod)?.nome ?? contratante_cod
+      let nome = 'Grupo ' + nomeC
+      if (d.grupos.some(g => g.nome === nome)) nome += ' (' + contratante_cod + ')'
+      const ordem = Math.max(0, ...d.grupos.map(g => g.ordem)) + 1
+      const g = ok(await supabase.from('cs_grupos').insert({ nome, ordem }).select('*').single()) as Omit<Grupo, 'contratantes'>
+      ok(await supabase.from('cs_grupo_contratantes').insert({ grupo_id: g.id, contratante_cod }))
+      grupo = { ...g, contratantes: [contratante_cod] }
+      const novo = grupo
+      setD(prev => ({ ...prev, grupos: [...prev.grupos, novo] }))
+      criado = nome
+    }
+    if (grupo) {
+      const gid = grupo.id
+      const faltam = [...new Set(ids)].filter(id => !d.gd.some(x => x.grupo_id === gid && x.documento_id === id))
+      if (faltam.length) {
+        ok(await supabase.from('cs_grupo_documentos').upsert(faltam.map(documento_id => ({ grupo_id: gid, documento_id, created_by: meuId })), { onConflict: 'grupo_id,documento_id', ignoreDuplicates: true }))
+        setD(prev => ({ ...prev, gd: [...prev.gd, ...faltam.filter(id => !prev.gd.some(x => x.grupo_id === gid && x.documento_id === id)).map(documento_id => ({ grupo_id: gid, documento_id }))] }))
+      }
+    }
+    return { novos: novos.length, grupo: criado }
+  }, [supabase, d.exig, d.docs, d.grupos, d.ctts, d.gd, meuId])
+
+  // ── Bases prontas (conjuntos) ───────────────────────────────────────────────
+  const erroConj = (e: { message: string }) => new Error(/cs_conjunto/.test(e.message) ? 'Rode a migração sql/custo-servir-bases-prontas.sql no Supabase.' : e.message)
+  const criarConjunto = useCallback(async (nome: string, docs: string[] = [], descricao: string | null = null) => {
+    const r = await supabase.from('cs_conjuntos').insert({ nome, descricao, created_by: meuId }).select('*').single()
+    if (r.error) throw erroConj(r.error)
+    const c = r.data as Omit<Conjunto, 'docs'>
+    const ds = [...new Set(docs)]
+    if (ds.length) ok(await supabase.from('cs_conjunto_documentos').insert(ds.map(documento_id => ({ conjunto_id: c.id, documento_id }))))
+    setD(prev => ({ ...prev, conjuntos: [...prev.conjuntos, { ...c, docs: ds }].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
+    return c.id
+  }, [supabase, meuId])
+  const salvarConjunto = useCallback(async (id: string, patch: { nome?: string; descricao?: string | null }) => {
+    ok(await supabase.from('cs_conjuntos').update(patch).eq('id', id))
+    setD(prev => ({ ...prev, conjuntos: prev.conjuntos.map(c => (c.id === id ? { ...c, ...patch } : c)) }))
+  }, [supabase])
+  const excluirConjunto = useCallback(async (id: string) => {
+    ok(await supabase.from('cs_conjuntos').delete().eq('id', id))
+    setD(prev => ({ ...prev, conjuntos: prev.conjuntos.filter(c => c.id !== id) }))
+  }, [supabase])
+  /** Inclui e/ou tira documentos do conjunto. */
+  const docsConjunto = useCallback(async (id: string, incluir: string[], tirar: string[] = []) => {
+    const atual = d.conjuntos.find(c => c.id === id)?.docs ?? []
+    const add = [...new Set(incluir)].filter(x => !atual.includes(x))
+    if (add.length) ok(await supabase.from('cs_conjunto_documentos').insert(add.map(documento_id => ({ conjunto_id: id, documento_id }))))
+    if (tirar.length) ok(await supabase.from('cs_conjunto_documentos').delete().eq('conjunto_id', id).in('documento_id', tirar))
+    setD(prev => ({ ...prev, conjuntos: prev.conjuntos.map(c => (c.id === id ? { ...c, docs: [...c.docs.filter(x => !tirar.includes(x)), ...add] } : c)) }))
+    return add.length
+  }, [supabase, d.conjuntos])
+
   // ── Relatorios ──────────────────────────────────────────────────────────────
   const importarRelatorio = useCallback(async (nome: string, dias: number | null, ls: LinhaRel[]) => {
     const rel = ok(await supabase.from('cs_relatorios').insert({ nome, dias_uteis: dias, created_by: meuId }).select('*').single()) as Relatorio
@@ -480,7 +558,7 @@ function useCsDataInterno() {
     criarGrupo, renomearGrupo, setContratantesGrupo, excluirGrupo,
     copiarDocs, moverDocs, removerDoGrupo, atualizarDoc, atualizarDocs, adicionarDoc,
     salvarCtt, adicionarCtt, excluirCtt, salvarTurno, adicionarTurno, adicionarTurnos, excluirTurno,
-    vincularDoc, desvincularDoc, ativarVinculo, salvarConfig, importarRelatorio, atualizarRelatorio, excluirRelatorio,
+    vincularDoc, vincularDocs, desvincularDoc, ativarVinculo, criarConjunto, salvarConjunto, excluirConjunto, docsConjunto, salvarConfig, importarRelatorio, atualizarRelatorio, excluirRelatorio,
   }
 }
 
