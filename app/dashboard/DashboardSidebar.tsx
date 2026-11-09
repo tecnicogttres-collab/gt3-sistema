@@ -509,8 +509,14 @@ export default function DashboardSidebar({ role }: { role?: string }) {
       const acting = lembreteActingId === item.key
       const popoverOpen = adiarPopoverId === item.key
       const adiadoHa = item.adiadoDesde ? Math.max(0, diasEntre(item.adiadoDesde, todayStrLembretes)) : null
+      // Dia do lembrete: destaque simples (faixa lateral, fundo claro, selo "Hoje")
+      const ehHoje = !item.vencido && item.daysLeft === 0
       return (
-        <div key={item.key} style={{ padding: '7px 0', borderBottom: i < list.length - 1 ? `1px solid ${item.vencido ? '#FBD5D5' : '#FDDFC4'}` : 'none' }}>
+        <div key={item.key} style={{
+          padding: ehHoje ? '7px 8px' : '7px 0',
+          borderBottom: i < list.length - 1 ? `1px solid ${item.vencido ? '#FBD5D5' : '#FDDFC4'}` : 'none',
+          ...(ehHoje ? { background: '#FFF3D9', borderLeft: '3px solid #E8833A', borderRadius: 6, margin: '2px 0' } : {}),
+        }}>
           <button
             onClick={() => abrirLembreteNaPagina(item)}
             title="Ver este lembrete em Lembretes ativos"
@@ -519,8 +525,13 @@ export default function DashboardSidebar({ role }: { role?: string }) {
               cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.5,
             }}
           >
-            <span style={{ fontWeight: 500, fontSize: 13, color: '#1E293B', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.titulo}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {ehHoje && (
+                <span style={{ flex: 'none', background: '#E8833A', color: '#fff', borderRadius: 99, padding: '0 7px', fontSize: 10, fontWeight: 800, letterSpacing: 0.3 }}>HOJE</span>
+              )}
+              <span style={{ fontWeight: ehHoje ? 700 : 500, fontSize: 13, color: '#1E293B', display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {item.titulo}
+              </span>
             </span>
             <span style={{ color: item.vencido ? '#D64545' : item.daysLeft === 0 ? '#B85C1A' : '#6B7280', fontSize: 11, fontWeight: item.vencido ? 700 : 400 }}>
               {item.vencido
