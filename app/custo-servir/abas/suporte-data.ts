@@ -21,33 +21,65 @@ function ok<T>(r: { data: T; error: { message: string } | null }): T {
   return r.data
 }
 
+// ── Cache em memoria ──────────────────────────────────────────────────────────
+// A aba Suporte (e o Fechamento) desmontam ao trocar de aba; sem cache, cada entrada
+// buscava tudo de novo e travava em "Carregando…". Agora a 1a busca e feita em segundo
+// plano quando o modulo abre (prefetchSuporte) e as entradas seguintes sao instantaneas,
+// com atualizacao silenciosa por tras.
+type Base = { ativs: Atividade[]; meds: AtivMedicao[]; lotes: VolumeLote[]; amostragens: Amostragem[] }
+type Cache = Partial<Base> & { linhasDe?: { id: string; linhas: VolumeLinha[] } | null; amostrasDe?: { id: string; amostras: Amostra[] } | null }
+const cache: Cache = {}
+let emVoo: Promise<Base> | null = null
+
+function buscarBase(): Promise<Base> {
+  if (emVoo) return emVoo
+  const supabase = createClient()
+  emVoo = Promise.all([
+    todas<Atividade>((x, y) => supabase.from('cs_atividades').select('*').order('ordem').range(x, y)),
+    todas<AtivMedicao>((x, y) => supabase.from('cs_atividade_medicoes').select('*').order('created_at', { ascending: false }).range(x, y)),
+    todas<VolumeLote>((x, y) => supabase.from('cs_volume_lotes').select('*').order('created_at', { ascending: false }).range(x, y)),
+    todas<Amostragem>((x, y) => supabase.from('cs_amostragens').select('*').order('inicio', { ascending: false }).range(x, y)),
+  ]).then(([ativs, m, lotes, amostragens]) => {
+    const b: Base = { ativs, meds: m.map(x => ({ ...x, contratante_cod: x.contratante_cod ?? null, grupo: !!x.grupo })), lotes, amostragens }
+    Object.assign(cache, b)
+    return b
+  }).finally(() => { emVoo = null })
+  return emVoo
+}
+
+/** Comeca a carregar o suporte em segundo plano (chamado quando o modulo abre). */
+export function prefetchSuporte() {
+  if (cache.ativs || emVoo) return
+  buscarBase().catch(() => { /* a aba mostra o erro ao abrir */ })
+}
+
 export function useSuporte(meuId: string) {
   const supabase = useMemo(() => createClient(), [])
-  const [ativs, setAtivs] = useState<Atividade[]>([])
-  const [meds, setMeds] = useState<AtivMedicao[]>([])
-  const [lotes, setLotes] = useState<VolumeLote[]>([])
-  const [amostragens, setAmostragens] = useState<Amostragem[]>([])
-  const [carregando, setCarregando] = useState(true)
+  const [ativs, setAtivs] = useState<Atividade[]>(() => cache.ativs ?? [])
+  const [meds, setMeds] = useState<AtivMedicao[]>(() => cache.meds ?? [])
+  const [lotes, setLotes] = useState<VolumeLote[]>(() => cache.lotes ?? [])
+  const [amostragens, setAmostragens] = useState<Amostragem[]>(() => cache.amostragens ?? [])
+  const [carregando, setCarregando] = useState(() => !cache.ativs)
   const [faltaSql, setFaltaSql] = useState(false)
   const [loteId, setLoteId] = useState<string | null>(null)
   const [amId, setAmId] = useState<string | null>(null)
-  const [linhasDe, setLinhasDe] = useState<{ id: string; linhas: VolumeLinha[] } | null>(null)
-  const [amostrasDe, setAmostrasDe] = useState<{ id: string; amostras: Amostra[] } | null>(null)
+  const [linhasDe, setLinhasDe] = useState<{ id: string; linhas: VolumeLinha[] } | null>(() => cache.linhasDe ?? null)
+  const [amostrasDe, setAmostrasDe] = useState<{ id: string; amostras: Amostra[] } | null>(() => cache.amostrasDe ?? null)
+
+  // Mantem o cache igual ao estado (inclui o que as acoes de salvar/excluir mudam)
+  useEffect(() => { if (!carregando) Object.assign(cache, { ativs, meds, lotes, amostragens }) }, [carregando, ativs, meds, lotes, amostragens])
+  useEffect(() => { cache.linhasDe = linhasDe }, [linhasDe])
+  useEffect(() => { cache.amostrasDe = amostrasDe }, [amostrasDe])
 
   const carregar = useCallback(async () => {
     try {
-      const [a, m, l, s] = await Promise.all([
-        todas<Atividade>((x, y) => supabase.from('cs_atividades').select('*').order('ordem').range(x, y)),
-        todas<AtivMedicao>((x, y) => supabase.from('cs_atividade_medicoes').select('*').order('created_at', { ascending: false }).range(x, y)),
-        todas<VolumeLote>((x, y) => supabase.from('cs_volume_lotes').select('*').order('created_at', { ascending: false }).range(x, y)),
-        todas<Amostragem>((x, y) => supabase.from('cs_amostragens').select('*').order('inicio', { ascending: false }).range(x, y)),
-      ])
-      setAtivs(a); setMeds(m.map(x => ({ ...x, contratante_cod: x.contratante_cod ?? null, grupo: !!x.grupo }))); setLotes(l); setAmostragens(s); setFaltaSql(false)
+      const b = await buscarBase()
+      setAtivs(b.ativs); setMeds(b.meds); setLotes(b.lotes); setAmostragens(b.amostragens); setFaltaSql(false)
     } catch (e) {
       const code = (e as { code?: string }).code
       if (code === '42P01' || code === 'PGRST205') setFaltaSql(true)
     } finally { setCarregando(false) }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     if (!meuId) return

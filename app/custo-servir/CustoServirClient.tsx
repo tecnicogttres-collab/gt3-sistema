@@ -15,6 +15,7 @@ import Configuracoes from './abas/Configuracoes'
 import Suporte from './abas/Suporte'
 import Bases from './abas/Bases'
 import Fechamento from './abas/Fechamento'
+import { prefetchSuporte } from './abas/suporte-data'
 import { displayName, useUser } from '../components/UserContext'
 import './custo-servir.css'
 
@@ -87,6 +88,10 @@ function Modulo({ aba, setAba, nav, setNav }: {
     if (ultimaAba.current !== abaAtual && abaAtual !== 'configuracoes') void carregarMedicoes().catch(() => {})
     ultimaAba.current = abaAtual
   }, [abaAtual, telaVisivel, carregando, carregarMedicoes])
+
+  // Suporte/Fechamento: comeca a carregar em segundo plano para a aba abrir na hora
+  const veSuporte = abas.some(a => a.id === 'suporte' || a.id === 'fechamento')
+  useEffect(() => { if (telaVisivel && !carregando && veSuporte) prefetchSuporte() }, [telaVisivel, carregando, veSuporte])
 
   // Esconde o botao flutuante quando a tela do cronometro em andamento esta aberta
   useEffect(() => {
