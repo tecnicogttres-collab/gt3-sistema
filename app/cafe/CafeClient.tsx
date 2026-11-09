@@ -36,6 +36,7 @@ const BROKEN_TEXT = '#92400E'
 const CONFLITO_BG = '#FEF2F2'
 const CONFLITO_BORDER = '#FCA5A5'
 const CONFLITO_TEXT = '#B91C1C'
+const ATUAL_BG = '#FBF4EA'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,9 @@ function WeekTable({
     fontFamily: 'inherit', outline: 'none',
   }
 
+  // Semana em que estamos (no fim de semana, a que acabou de passar)
+  const semanaAtual = isoDate(mondayOf(new Date()))
+
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13 }}>
@@ -230,15 +234,19 @@ function WeekTable({
           {sheet.weeks.map(week => {
             const dateStr = `${pad(week.diaInicio)}–${pad(week.diaFim)}/${MONTHS_SHORT[sheet.monthIdx]}`
             const isBroken = week.brokenStart || week.brokenEnd
-            const bg = isBroken ? BROKEN_BG : '#fff'
+            const atual = week.weekKey === semanaAtual
+            const bg = atual ? ATUAL_BG : isBroken ? BROKEN_BG : '#fff'
 
             const dateTd = (
               <td style={{
                 background: bg, borderBottom: `1px solid ${BORDER}`,
-                borderLeft: `1px solid ${BORDER}`, padding: '8px 14px',
+                borderLeft: atual ? `4px solid ${PRIMARY}` : `1px solid ${BORDER}`, padding: '8px 14px',
                 textAlign: 'center', verticalAlign: 'middle',
               }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: isBroken ? BROKEN_TEXT : MUTED }}>{dateStr}</span>
+                <span style={{ fontSize: 13, fontWeight: atual ? 700 : 500, color: atual ? PRIMARY_DARK : isBroken ? BROKEN_TEXT : MUTED }}>{dateStr}</span>
+                {atual && (
+                  <div style={{ display: 'inline-block', marginLeft: 8, fontSize: 10, fontWeight: 700, color: '#fff', background: PRIMARY, borderRadius: 999, padding: '1px 8px', verticalAlign: 'middle' }}>esta semana</div>
+                )}
                 {week.brokenStart && (
                   <div style={{ fontSize: 10, color: BROKEN_TEXT, marginTop: 2 }}>continua do mês anterior</div>
                 )}
@@ -296,7 +304,7 @@ function WeekTable({
             }
 
             return (
-              <tr key={week.weekKey}>
+              <tr key={week.weekKey} aria-current={atual ? 'date' : undefined}>
                 {dateTd}
                 {shiftTd('manha')}
                 {shiftTd('tarde')}
