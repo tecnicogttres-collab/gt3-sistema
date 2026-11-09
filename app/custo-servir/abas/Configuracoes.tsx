@@ -519,7 +519,7 @@ function Parametros({ ctx }: { ctx: Ctx }) {
 function Avaliadores() {
   const { d } = useCs()
   const n = new Map<string, number>()
-  for (const m of d.meds) n.set(m.avaliador_id, (n.get(m.avaliador_id) ?? 0) + 1)
+  for (const m of d.meds) if (!m.origem_id) n.set(m.avaliador_id, (n.get(m.avaliador_id) ?? 0) + 1)
   const { sorted: lista, th } = useOrdem(d.usuarios.filter(u => !u.desativado || n.has(u.id)), {
     nome: u => nomeUsuario(u), papel: u => u.papel, n: u => n.get(u.id) ?? 0,
   }, { col: 'nome', dir: 'asc' })

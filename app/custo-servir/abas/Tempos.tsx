@@ -34,6 +34,7 @@ export default function Tempos() {
   const andamento = todos.filter(x => situacaoDoc(ctx, g.id, x.id) === 'andamento')
   const vol = todos.reduce((a, x) => a + x.volume_ref, 0), volOk = prontos.reduce((a, x) => a + x.volume_ref, 0)
   const mm = d.meds.filter(m => m.grupo_id === g.id)
+  const tp = new Set(mm.filter(m => m.origem_id && m.situacao === 'validada').map(m => m.documento_id))
   const docSel = sel ? ctx.docs.get(sel) : null
   const base = ctx.cfg.base === 'media' ? 'média' : 'mediana'
 
@@ -84,7 +85,7 @@ export default function Tempos() {
                 const nomes = us.map(id => nomeUsuario(d.usuarios.find(u => u.id === id)))
                 return (
                   <tr key={x.id} className={'click' + (sel === x.id ? ' sel' : '')} onClick={() => setSel(sel === x.id ? null : x.id)}>
-                    <td style={{ maxWidth: 340 }}><b style={{ fontWeight: 600 }}>{x.nome}</b></td>
+                    <td style={{ maxWidth: 340 }}><b style={{ fontWeight: 600 }}>{x.nome}</b>{tp.has(x.id) && <> <span className="pill p-tp" title="Tem medições transportadas de outro grupo">Tempo padrão</span></>}</td>
                     <td className="r mono">{fmt(x.volume_ref)}</td>
                     <td className="r mono">{a.n}</td>
                     <td className="r mono">{a.val != null ? fmt(a.val, 2) : '—'}</td>

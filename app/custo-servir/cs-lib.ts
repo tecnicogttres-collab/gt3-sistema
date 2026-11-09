@@ -13,6 +13,8 @@ export type Documento = {
 export type Medicao = {
   id: string; grupo_id: string | null; documento_id: string; duracao_ms: number
   resultado: Resultado; situacao: Situacao; motivo: string | null; avaliador_id: string; created_at: string
+  /** Copia ("tempo padrao") de outra medicao do mesmo documento, feita em outro grupo. null = medicao propria. */
+  origem_id?: string | null
 }
 /** codigo_integracao preenchido ("Código Perfil Integração" do GT0130) = turno com catraca de acesso. */
 export type Turno = { turno_cod: string; contratante_cod: string; descricao: string | null; codigo_integracao: string | null }

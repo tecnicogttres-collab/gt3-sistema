@@ -11,6 +11,7 @@ export default function Medicoes() {
   const [u, setU] = useState('')
   const [sit, setSit] = useState('')
   const [res, setRes] = useState('')
+  const [orig, setOrig] = useState('')
   const [q, setQ] = useState('')
 
   const nomeDoc = useMemo(() => new Map(d.docs.map(x => [x.id, x.nome])), [d.docs])
@@ -22,14 +23,15 @@ export default function Medicoes() {
   if (u) L = L.filter(m => m.avaliador_id === u)
   if (sit) L = L.filter(m => m.situacao === sit)
   if (res) L = L.filter(m => m.resultado === res)
+  if (orig === 'propria') L = L.filter(m => !m.origem_id); else if (orig === 'padrao') L = L.filter(m => !!m.origem_id)
   if (q) L = L.filter(m => norm(nomeDoc.get(m.documento_id)).includes(norm(q)))
 
   const porAvaliador = new Map<string, number>()
-  for (const m of d.meds) porAvaliador.set(m.avaliador_id, (porAvaliador.get(m.avaliador_id) ?? 0) + 1)
+  for (const m of d.meds) if (!m.origem_id) porAvaliador.set(m.avaliador_id, (porAvaliador.get(m.avaliador_id) ?? 0) + 1)
   const avaliadoresComMedicao = [...porAvaliador.keys()]
 
   function exportar() {
-    const linhas = [['data_hora', 'grupo', 'documento', 'avaliador', 'resultado', 'duracao_seg', 'situacao', 'motivo']]
+    const linhas = [['data_hora', 'grupo', 'documento', 'avaliador', 'resultado', 'duracao_seg', 'situacao', 'motivo', 'origem']]
       .concat(L.map(m => [
         new Date(m.created_at).toLocaleString('pt-BR'),
         m.grupo_id ? nomeGrupo.get(m.grupo_id) ?? '' : '(grupo excluído)',
@@ -39,6 +41,7 @@ export default function Medicoes() {
         (m.duracao_ms / 1000).toFixed(1).replace('.', ','),
         m.situacao,
         m.motivo ?? '',
+        m.origem_id ? 'tempo padrão (de ' + (nomeGrupo.get(d.meds.find(x => x.id === m.origem_id)?.grupo_id ?? '') ?? 'outro grupo') + ')' : 'própria',
       ]))
     baixar('medicoes-custo-de-servir.csv', '﻿' + linhas.map(r => r.map(csvCell).join(';')).join('\n'))
   }
@@ -49,6 +52,7 @@ export default function Medicoes() {
         <div className="tile"><b>{d.meds.length}</b><span>medições registradas</span></div>
         <div className="tile"><b>{d.meds.filter(m => m.situacao === 'validada').length}</b><span>validadas</span></div>
         <div className="tile"><b>{d.meds.filter(m => m.situacao === 'descartada').length}</b><span>descartadas</span></div>
+        <div className="tile"><b>{d.meds.filter(m => m.origem_id).length}</b><span>como tempo padrão (transportadas)</span></div>
         <div className="tile"><b>{porAvaliador.size}</b><span>avaliadores</span></div>
         <div className="tile"><b>{new Set(d.meds.map(m => m.grupo_id + '|' + m.documento_id)).size}</b><span>documentos medidos (por grupo)</span></div>
       </div>
@@ -78,6 +82,11 @@ export default function Medicoes() {
             <option value="">Aprovado e reprovado</option>
             <option value="aprovado">Aprovado</option>
             <option value="reprovado">Reprovado</option>
+          </select>
+          <select aria-label="Origem" value={orig} onChange={e => setOrig(e.target.value)}>
+            <option value="">Próprias e tempo padrão</option>
+            <option value="propria">Medidas no grupo</option>
+            <option value="padrao">Tempo padrão (transportadas)</option>
           </select>
           <input type="search" placeholder="Buscar documento" value={q} onChange={e => setQ(e.target.value)} />
           <span className="note">{L.length} de {d.meds.length}</span>

@@ -70,9 +70,13 @@ function Modulo({ aba, setAba, nav, setNav }: {
   const abaAtual: AbaId = abas.some(a => a.id === aba) ? aba : (abas[0]?.id ?? 'cronometrar')
 
   const trocarAba = (a: AbaId) => {
+    // Clicar em Cronometrar (mesmo ja estando nela) volta para a tela inicial de grupos
+    if (a === 'cronometrar') setNav({ g: null, d: null, q: '' })
     setAba(a)
     try { history.replaceState(null, '', '#' + a) } catch { /* ignore */ }
+    window.scrollTo({ top: 0 })
   }
+  const naTelaGrupos = abaAtual === 'cronometrar' && !nav.g
 
   // Medicoes de outros avaliadores: rele ao entrar nas abas que dependem delas
   const ultimaAba = useRef(abaAtual)
@@ -122,12 +126,18 @@ function Modulo({ aba, setAba, nav, setNav }: {
         </div>
       ) : (
         <>
-          <div className="tabs" role="tablist">
-            {abas.map(a => (
-              <button key={a.id} type="button" role="tab" aria-selected={a.id === abaAtual} className={a.id === abaAtual ? 'on' : ''} onClick={() => trocarAba(a.id)}>
-                {a.label}{a.id === 'medicoes' && <span className="cnt">{d.meds.length}</span>}
-              </button>
-            ))}
+          <div className="tabsbar">
+            <div className="tabs" role="tablist">
+              {abas.map(a => (
+                <button key={a.id} type="button" role="tab" aria-selected={a.id === abaAtual} className={a.id === abaAtual ? 'on' : ''} onClick={() => trocarAba(a.id)}
+                  title={a.id === 'cronometrar' ? 'Volta para a escolha do grupo' : undefined}>
+                  {a.label}{a.id === 'medicoes' && <span className="cnt">{d.meds.length}</span>}
+                </button>
+              ))}
+            </div>
+            {!naTelaGrupos && abas.some(a => a.id === 'cronometrar') && (
+              <button type="button" className="btn sm home" onClick={() => trocarAba('cronometrar')} title="Voltar para a tela inicial de grupos">⌂ Grupos</button>
+            )}
           </div>
           {abaAtual === 'cronometrar' && <Cronometrar nav={nav} setNav={setNav} telaVisivel={telaVisivel} />}
           {abaAtual === 'tempos' && <Tempos />}

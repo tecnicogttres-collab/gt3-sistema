@@ -114,6 +114,28 @@ export const PillMedicao = ({ m }: { m: Medicao }) =>
     ? <span className="pill p-blue">Na média</span>
     : <span className="pill p-gray" title={m.motivo ?? ''}>Descartada</span>
 
+/** Etiqueta das medicoes transportadas de outro grupo ("tempo padrao"). */
+export function PillOrigem({ m }: { m: Medicao }) {
+  const { d } = useCs()
+  if (!m.origem_id) return null
+  const raiz = d.meds.find(x => x.id === m.origem_id)
+  const g = d.grupos.find(x => x.id === raiz?.grupo_id)
+  return <span className="pill p-tp" title={'Medição transportada de ' + (g?.nome ?? 'outro grupo')}>Tempo padrão</span>
+}
+
+/** Excluir medicao (duas etapas). Avisa quando ha copias de tempo padrao que saem junto. */
+export function BotaoExcluirMedicao({ m }: { m: Medicao }) {
+  const { d, excluirMedicao, tentar } = useCs()
+  const copias = d.meds.filter(x => x.origem_id === m.id).length
+  return (
+    <span title={copias ? `Exclui também ${copias} cópia${copias > 1 ? 's' : ''} de tempo padrão em outros grupos` : 'Excluir medição'}>
+      <BotaoConfirmar onConfirm={() => void tentar(() => excluirMedicao(m), copias ? `Medição e ${copias} cópia(s) excluídas` : 'Medição excluída')}>
+        Excluir{copias ? ` (+${copias})` : ''}
+      </BotaoConfirmar>
+    </span>
+  )
+}
+
 /** Botao de duas etapas (clica, vira "Confirmar" por 3 s). */
 export function BotaoConfirmar({ children, onConfirm, className = 'btn sm bad', disabled }: {
   children: React.ReactNode; onConfirm: () => void; className?: string; disabled?: boolean
@@ -186,15 +208,18 @@ export function TabelaMedicoes({ lista, compacta, maxH }: { lista: Medicao[]; co
               <td>{nomeUsuario(d.usuarios.find(u => u.id === m.avaliador_id))}</td>
               <td><PillResultado r={m.resultado} /></td>
               <td className="r mono">{mmss(m.duracao_ms)}</td>
-              <td><PillMedicao m={m} /></td>
+              <td><span className="pills"><PillMedicao m={m} /><PillOrigem m={m} /></span></td>
               <td className="note">{m.motivo ?? ''}</td>
               <td><Historico key={m.id + m.situacao + (m.grupo_id ?? '')} medicaoId={m.id} /></td>
               <td>
-                <button
-                  type="button"
-                  className={'btn sm' + (m.situacao === 'validada' ? ' bad' : '')}
-                  onClick={() => tentar(() => alternarMedicao(m), m.situacao === 'validada' ? 'Medição descartada' : 'Medição restaurada')}
-                >{m.situacao === 'validada' ? 'Descartar' : 'Restaurar'}</button>
+                <span className="pills">
+                  <button
+                    type="button"
+                    className={'btn sm' + (m.situacao === 'validada' ? ' bad' : '')}
+                    onClick={() => tentar(() => alternarMedicao(m), m.situacao === 'validada' ? 'Medição descartada' : 'Medição restaurada')}
+                  >{m.situacao === 'validada' ? 'Descartar' : 'Restaurar'}</button>
+                  <BotaoExcluirMedicao m={m} />
+                </span>
               </td>
             </tr>
           )) : (

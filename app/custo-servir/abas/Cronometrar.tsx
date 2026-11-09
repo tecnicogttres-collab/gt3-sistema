@@ -7,10 +7,11 @@ import {
   type Ctx, type Grupo, type Situacao,
 } from '../cs-lib'
 import { ativo, elapsed, resetTimer, setTimer, useTimer } from '../cs-timer'
-import { OrdemControle, ordenar, PillMedicao, PillResultado, PillSituacao, useOrdem, type Ordem } from '../cs-ui'
+import { BotaoExcluirMedicao, OrdemControle, ordenar, PillMedicao, PillOrigem, PillResultado, PillSituacao, useOrdem, type Ordem } from '../cs-ui'
 import { dt, nomeUsuario } from '../cs-lib'
 import type { Medicao, Usuario } from '../cs-lib'
 import QuadroDocumentos from './QuadroDocumentos'
+import TransportarTempo, { type ModoTransporte } from './TransportarTempo'
 
 export type NavCron = { g: string | null; d: string | null; q: string }
 
@@ -51,8 +52,8 @@ function Grupos({ ctx, setNav }: { ctx: Ctx; setNav: (n: NavCron) => void }) {
       )}
       <div className="row between">
         <h2>1. Escolha o grupo de critério</h2>
-        <div className="row">
-          <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Buscar grupo ou contratante (${ctx.grupos.length} grupos)`} style={{ width: 'min(300px,100%)' }} />
+        <div className="row" style={{ flex: '1 1 480px', justifyContent: 'flex-end' }}>
+          <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Buscar grupo ou contratante (${ctx.grupos.length} grupos)`} style={{ flex: '0 1 320px' }} />
           <button type="button" className="btn" onClick={() => setOrganizar(true)}>⠿ Organizar documentos nos grupos</button>
         </div>
       </div>
@@ -87,6 +88,7 @@ function Grupos({ ctx, setNav }: { ctx: Ctx; setNav: (n: NavCron) => void }) {
 }
 
 function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron; setNav: (n: NavCron) => void }) {
+  const { d } = useCs()
   const [ord, setOrd] = useState<Ordem>({ col: 'nome', dir: 'asc' })
   let ds = [...(ctx.gd.get(g.id) ?? [])].map(id => ctx.docs.get(id)!).filter(Boolean)
   if (nav.q) ds = ds.filter(x => norm(x.nome).includes(norm(nav.q)))
@@ -96,9 +98,13 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
     tempo: x => stat(ctx, g.id, x.id, 'aprovado').val, sit: x => ordemSit[situacaoDoc(ctx, g.id, x.id)],
   }, ord)
   const min = ctx.cfg.minimo
+  const tp = new Set(d.meds.filter(m => m.grupo_id === g.id && m.origem_id && m.situacao === 'validada').map(m => m.documento_id))
   return (
     <>
-      <div className="crumbs"><button type="button" onClick={() => setNav({ g: null, d: null, q: '' })}>Grupos</button>›<span>{g.nome}</span></div>
+      <div className="crumbs">
+        <button type="button" className="voltar" onClick={() => setNav({ g: null, d: null, q: '' })}>← Voltar aos grupos</button>
+        <button type="button" onClick={() => setNav({ g: null, d: null, q: '' })}>Grupos</button>›<span>{g.nome}</span>
+      </div>
       <div className="box">
         <div className="row between">
           <h2>2. Escolha o documento</h2>
@@ -122,6 +128,7 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
                     <span className="mono">{fmt(x.volume_ref)} no volume de ref.</span>
                     <PillSituacao s={s} />
                     {x.nao_conta && <span className="pill p-gray">Não conta</span>}
+                    {tp.has(x.id) && <span className="pill p-tp" title="Tem medições transportadas de outro grupo">Tempo padrão</span>}
                   </span>
                   <span className="meta">
                     <span>Aprov. <b className="mono">{a.n}/{min}</b>{a.val != null ? ` · ${fmt(a.val, 1)} min` : ''}</span>
@@ -146,6 +153,7 @@ function Timer({ ctx, g, docId, docNome, nav, setNav, telaVisivel }: {
   const T = useTimer()
   const [, setTick] = useState(0)
   const [salvando, setSalvando] = useState(false)
+  const [transp, setTransp] = useState<ModoTransporte | null>(null)
   const salvandoRef = useRef(false)
 
   const same = T.g === g.id && T.d === docId
@@ -206,6 +214,7 @@ function Timer({ ctx, g, docId, docNome, nav, setNav, telaVisivel }: {
 
   const sA = stat(ctx, g.id, docId, 'aprovado'), sR = stat(ctx, g.id, docId, 'reprovado')
   const meds = d.meds.filter(m => m.grupo_id === g.id && m.documento_id === docId)
+  const nTp = meds.filter(m => m.origem_id && m.situacao === 'validada').length
   const base = ctx.cfg.base === 'media' ? 'média' : 'mediana'
   const cls = same && T.run ? 'run' : same && T.stopped ? 'stop' : ''
   const res = T.res
@@ -232,6 +241,7 @@ function Timer({ ctx, g, docId, docNome, nav, setNav, telaVisivel }: {
   return (
     <>
       <div className="crumbs">
+        <button type="button" className="voltar" onClick={() => setNav({ g: null, d: null, q: '' })}>← Voltar aos grupos</button>
         <button type="button" onClick={() => setNav({ g: null, d: null, q: '' })}>Grupos</button>›
         <button type="button" onClick={() => setNav({ ...nav, d: null })}>{g.nome}</button>›
         <span>{docNome}</span>
@@ -258,7 +268,19 @@ function Timer({ ctx, g, docId, docNome, nav, setNav, telaVisivel }: {
           <span className="keys"><kbd>Espaço</kbd> inicia e pausa · <kbd>Enter</kbd> para e valida · <kbd>Esc</kbd> descarta</span>
         </div>
         <div className="box">
-          <h2>Medições deste documento</h2>
+          <div className="row between">
+            <h2>Medições deste documento</h2>
+            <div className="row">
+              {g.padrao ? <>
+                <button type="button" className="btn sm solid" disabled={!sA.n && !sR.n} onClick={() => setTransp('enviar')} title="Usar as medições do padrão como tempo padrão em outros grupos">Usar em outros grupos</button>
+                <button type="button" className="btn sm" onClick={() => setTransp('trazer')}>Trazer de outro grupo</button>
+              </> : <>
+                <button type="button" className="btn sm solid" onClick={() => setTransp('trazer')} title="Trazer as medições do grupo padrão (ou de outro grupo) como tempo padrão">Trazer do padrão</button>
+                <button type="button" className="btn sm" disabled={!sA.n && !sR.n} onClick={() => setTransp('enviar')}>Usar em outros grupos</button>
+              </>}
+            </div>
+          </div>
+          {nTp > 0 && <p className="note"><span className="pill p-tp">Tempo padrão</span> {nTp} de {sA.n + sR.n} medição(ões) validada(s) vieram de outro grupo; as demais foram medidas aqui.</p>}
           <div className="stats">
             <div><b>{sA.n}/{ctx.cfg.minimo}</b><span>aprovado validadas</span></div>
             <div><b>{sA.val != null ? fmt(sA.val, 2) : '—'}</b><span>tempo-padrão aprov. ({base}, min)</span></div>
@@ -268,9 +290,10 @@ function Timer({ ctx, g, docId, docNome, nav, setNav, telaVisivel }: {
             <div><b>{sA.min != null ? fmt(sA.min, 1) + '–' + fmt(sA.max!, 1) : '—'}</b><span>mín.–máx. aprov.</span></div>
           </div>
           <MedicoesDoc meds={meds} usuarios={d.usuarios} />
-          <p className="note">Cada mudança fica registrada com quem fez e quando. O histórico completo está na aba Medições.</p>
+          <p className="note">Cada mudança fica registrada com quem fez e quando. Excluir tira a medição do cálculo na hora. O histórico completo está na aba Medições.</p>
         </div>
       </div>
+      {transp && <TransportarTempo ctx={ctx} g={g} docId={docId} docNome={docNome} modo={transp} fechar={() => setTransp(null)} />}
     </>
   )
 }
@@ -292,12 +315,15 @@ function MedicoesDoc({ meds, usuarios }: { meds: Medicao[]; usuarios: Usuario[] 
               <td>{nomeUsuario(usuarios.find(u => u.id === m.avaliador_id))}</td>
               <td><PillResultado r={m.resultado} /></td>
               <td className="r mono">{mmss(m.duracao_ms)}</td>
-              <td><PillMedicao m={m} /></td>
+              <td><span className="pills"><PillMedicao m={m} /><PillOrigem m={m} /></span></td>
               <td>
-                <button type="button" className={'btn sm' + (m.situacao === 'validada' ? ' bad' : '')}
-                  onClick={() => tentar(() => alternarMedicao(m), m.situacao === 'validada' ? 'Medição descartada' : 'Medição restaurada')}>
-                  {m.situacao === 'validada' ? 'Descartar' : 'Restaurar'}
-                </button>
+                <span className="pills">
+                  <button type="button" className={'btn sm' + (m.situacao === 'validada' ? ' bad' : '')}
+                    onClick={() => tentar(() => alternarMedicao(m), m.situacao === 'validada' ? 'Medição descartada' : 'Medição restaurada')}>
+                    {m.situacao === 'validada' ? 'Descartar' : 'Restaurar'}
+                  </button>
+                  <BotaoExcluirMedicao m={m} />
+                </span>
               </td>
             </tr>
           )) : <tr><td colSpan={6} className="empty">Nenhuma medição ainda.</td></tr>}

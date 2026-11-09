@@ -188,3 +188,21 @@
 .cs .selo-cat{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:800;color:var(--cs-edge);background:#FBF6EC;border:1px solid var(--cs-gold);border-radius:99px;padding:0 6px 0 4px;margin-left:6px;white-space:nowrap;vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 .cs .badge-int{font-family:var(--cs-num);font-size:10.5px;color:var(--cs-gold-ink);background:#FBF6EC;border:1px solid var(--cs-gold);border-radius:99px;padding:0 6px;flex:none;display:inline-flex;align-items:center;gap:3px}
 .cs .tile.cat{border-color:var(--cs-gold);background:#FFFCF6}
+
+/* Tempo padrao transportado entre grupos */
+.cs .p-tp{color:var(--cs-gold-ink);background:#FBF6EC;border-color:var(--cs-gold)}
+.cs .pills{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
+.cs .tp-bloco{border:1.5px solid var(--cs-line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.cs .tp-bloco.padrao{border:2px solid var(--cs-gold);background:#FFFCF6}
+.cs .tp-lista{display:flex;flex-direction:column;gap:2px;max-height:300px;overflow:auto}
+.cs .tp-lista label{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:6px;font-size:13px;cursor:pointer}
+.cs .tp-lista label:hover{background:var(--cs-tint2)}
+.cs .tp-lista label.off{opacity:.55;cursor:default}
+.cs .tp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px}
+
+/* Atalho para voltar aos grupos */
+.cs .tabsbar{display:flex;align-items:flex-end;gap:8px;border-bottom:2px solid var(--cs-edge)}
+.cs .tabsbar .tabs{border-bottom:0;flex:1;min-width:0}
+.cs .tabsbar .home{margin-bottom:6px;flex:none}
+.cs .crumbs .voltar{border:1.5px solid var(--cs-edge);border-radius:8px;padding:3px 10px;text-decoration:none;margin-right:6px;background:var(--cs-bg)}
+.cs .crumbs .voltar:hover{background:var(--cs-tint)}

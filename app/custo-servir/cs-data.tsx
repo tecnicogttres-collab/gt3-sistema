@@ -19,6 +19,7 @@ export const ACOES: Record<string, string> = {
   descartou: 'Descartou',
   restaurou: 'Restaurou para a média',
   moveu: 'Moveu de grupo',
+  transportou: 'Recebeu como tempo padrão',
 }
 
 type Dados = {
@@ -234,7 +235,20 @@ function useCsDataInterno() {
   const moverDocs = useCallback(async (from: string, to: string, ids: string[]) => {
     await copiarDocs(to, ids)
     ok(await supabase.from('cs_grupo_documentos').delete().eq('grupo_id', from).in('documento_id', ids))
-    const levar = d.meds.filter(m => m.grupo_id === from && ids.includes(m.documento_id))
+    let levar = d.meds.filter(m => m.grupo_id === from && ids.includes(m.documento_id))
+    // Copias de tempo padrao que ficariam repetidas no destino (mesma medicao original) saem antes
+    const noDestino = d.meds.filter(m => m.grupo_id === to)
+    const raizesDestino = new Set(noDestino.map(m => m.origem_id ?? m.id))
+    const levarRaizes = new Set(levar.map(m => m.origem_id ?? m.id))
+    const repetidas = [
+      ...levar.filter(m => m.origem_id && raizesDestino.has(m.origem_id)),
+      ...noDestino.filter(m => m.origem_id && levarRaizes.has(m.origem_id)),
+    ].map(m => m.id)
+    if (repetidas.length) {
+      ok(await supabase.from('cs_medicoes').delete().in('id', repetidas))
+      setD(prev => ({ ...prev, meds: prev.meds.filter(m => !repetidas.includes(m.id)) }))
+      levar = levar.filter(m => !repetidas.includes(m.id))
+    }
     if (levar.length) {
       ok(await supabase.from('cs_medicoes').update({ grupo_id: to }).eq('grupo_id', from).in('documento_id', ids))
       const nf = d.grupos.find(g => g.id === from)?.nome ?? '', nt = d.grupos.find(g => g.id === to)?.nome ?? ''
@@ -248,6 +262,50 @@ function useCsDataInterno() {
       meds: prev.meds.map(m => (m.grupo_id === from && ids.includes(m.documento_id) ? { ...m, grupo_id: to } : m)),
     }))
   }, [supabase, copiarDocs, d.meds, d.grupos, meuId])
+
+  /** Exclui a medicao (e as copias de tempo padrao feitas a partir dela). Sai do calculo na hora. */
+  const excluirMedicao = useCallback(async (m: Medicao) => {
+    ok(await supabase.from('cs_medicoes').delete().eq('id', m.id))
+    setD(prev => ({ ...prev, meds: prev.meds.filter(x => x.id !== m.id && x.origem_id !== m.id) }))
+  }, [supabase])
+
+  /** Usa medicoes validadas como "tempo padrao" em outros grupos (copias ligadas a medicao original).
+   *  O documento entra no grupo de destino se ainda nao estiver. Devolve quantas copias criou. */
+  const transportarMedicoes = useCallback(async (meds: Medicao[], destinos: string[]) => {
+    const rows: Record<string, unknown>[] = []
+    const docsPorGrupo = new Map<string, Set<string>>()
+    for (const m of meds) {
+      if (m.situacao !== 'validada') continue
+      const raiz = d.meds.find(x => x.id === (m.origem_id ?? m.id)) ?? m
+      for (const g of destinos) {
+        if (!g || g === raiz.grupo_id) continue
+        const jaTem = d.meds.some(x => x.grupo_id === g && (x.id === raiz.id || x.origem_id === raiz.id))
+          || rows.some(r => r.grupo_id === g && r.origem_id === raiz.id)
+        if (jaTem) continue
+        rows.push({
+          grupo_id: g, documento_id: raiz.documento_id, duracao_ms: raiz.duracao_ms, resultado: raiz.resultado,
+          situacao: 'validada', motivo: null, avaliador_id: raiz.avaliador_id, origem_id: raiz.id,
+        })
+        const s = docsPorGrupo.get(g)
+        if (s) s.add(raiz.documento_id); else docsPorGrupo.set(g, new Set([raiz.documento_id]))
+      }
+    }
+    if (!rows.length) return 0
+    for (const [g, ds] of docsPorGrupo) await copiarDocs(g, [...ds])
+    const r = await supabase.from('cs_medicoes').insert(rows).select('*')
+    if (r.error) {
+      if (/origem_id/.test(r.error.message)) throw new Error('Rode a migração sql/custo-servir-tempo-padrao.sql no Supabase antes de transportar medições.')
+      throw new Error(r.error.code === '23505' ? 'Alguma dessas medições já está nesse grupo.' : r.error.message)
+    }
+    const novas = (r.data ?? []) as Medicao[]
+    setD(prev => ({ ...prev, meds: [...novas, ...prev.meds] }))
+    const grupoDaMed = new Map(d.meds.map(x => [x.id, x.grupo_id]))
+    const nomeG = (id: string | null | undefined) => d.grupos.find(g => g.id === id)?.nome ?? 'outro grupo'
+    ok(await supabase.from('cs_medicoes_hist').insert(novas.map(n => ({
+      medicao_id: n.id, acao: 'transportou', detalhe: 'De ' + nomeG(grupoDaMed.get(n.origem_id ?? '')), usuario_id: meuId,
+    }))))
+    return novas.length
+  }, [supabase, d.meds, d.grupos, copiarDocs, meuId])
 
   const removerDoGrupo = useCallback(async (g: string, doc: string) => {
     ok(await supabase.from('cs_grupo_documentos').delete().eq('grupo_id', g).eq('documento_id', doc))
@@ -418,7 +476,7 @@ function useCsDataInterno() {
   return {
     d, ctx, carregando, erro, meuId, papel, recarregar: carregar, carregarMedicoes,
     relSel, linhas, carregandoLinhas, selecionarRelatorio: setRelId,
-    registrarMedicao, alternarMedicao, historico,
+    registrarMedicao, alternarMedicao, excluirMedicao, transportarMedicoes, historico,
     criarGrupo, renomearGrupo, setContratantesGrupo, excluirGrupo,
     copiarDocs, moverDocs, removerDoGrupo, atualizarDoc, atualizarDocs, adicionarDoc,
     salvarCtt, adicionarCtt, excluirCtt, salvarTurno, adicionarTurno, adicionarTurnos, excluirTurno,
