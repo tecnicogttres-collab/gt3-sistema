@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../lib/supabase'
 import { useUser } from '../components/UserContext'
-import { hojeIso, horariosDoDia, opcoesDe, participa, type Amostragem, type ChaveAmostra } from './cs-suporte-lib'
+import { colunasContratantes, hojeIso, horariosDoDia, opcoesDe, participa, type Amostragem, type ChaveAmostra } from './cs-suporte-lib'
 import './custo-servir.css'
 
 const JANELA_MS = 20 * 60_000
@@ -19,21 +19,29 @@ type Ctt = { contratante_cod: string; nome: string }
 const lerPulados = (): string[] => { try { return JSON.parse(sessionStorage.getItem(CHAVE_PULADOS) || '[]') } catch { return [] } }
 const pular = (k: string) => { try { sessionStorage.setItem(CHAVE_PULADOS, JSON.stringify([...lerPulados(), k].slice(-50))) } catch { /* ignore */ } }
 
-/** Escolha da resposta: 1o clique na atividade, 2o no contratante (quando a atividade pede). */
+/** Escolha da resposta: 1o clique na atividade, depois marca um ou mais contratantes (quando a atividade pede). */
 export function EscolherResposta({ amostragem, ctts, salvando, onRegistrar }: {
   amostragem: Amostragem; ctts: Ctt[]; salvando: boolean
-  onRegistrar: (atividade: ChaveAmostra, contratante: string | null) => Promise<boolean>
+  /** contratantes vazio = nao e de um contratante; varios = a resposta divide igual entre eles. */
+  onRegistrar: (atividade: ChaveAmostra, contratantes: string[]) => Promise<boolean>
 }) {
   const [ativ, setAtiv] = useState<ChaveAmostra | null>(null)
   const [busca, setBusca] = useState('')
+  const [marcados, setMarcados] = useState<string[]>([])
   const opcoes = opcoesDe(amostragem)
   const opc = opcoes.find(o => o.chave === ativ)
-  const registrar = async (c: string | null) => {
+  const limpar = () => { setAtiv(null); setBusca(''); setMarcados([]) }
+  const registrar = async (cs: string[]) => {
     if (!ativ) return
-    if (await onRegistrar(ativ, c)) { setAtiv(null); setBusca('') }
+    if (await onRegistrar(ativ, cs)) limpar()
   }
+  const alternar = (c: string) => setMarcados(p => (p.includes(c) ? p.filter(x => x !== c) : [...p, c]))
   const q = busca.trim().toLowerCase()
-  const lista = q ? ctts.filter(c => (c.contratante_cod + ' ' + c.nome).toLowerCase().includes(q)) : ctts
+  // Marcados ficam sempre no topo, mesmo fora da busca
+  const lista = [
+    ...ctts.filter(c => marcados.includes(c.contratante_cod)),
+    ...(q ? ctts.filter(c => (c.contratante_cod + ' ' + c.nome).toLowerCase().includes(q)) : ctts).filter(c => !marcados.includes(c.contratante_cod)),
+  ]
 
   if (!opc) {
     return (
@@ -51,8 +59,8 @@ export function EscolherResposta({ amostragem, ctts, salvando, onRegistrar }: {
       <div className="box">
         <p><b>{opc.label}</b>: {opc.inclui}.</p>
         <div className="row">
-          <button type="button" className="btn solid" disabled={salvando} onClick={() => void registrar(null)}>Registrar</button>
-          <button type="button" className="link" onClick={() => setAtiv(null)}>voltar</button>
+          <button type="button" className="btn solid" disabled={salvando} onClick={() => void registrar([])}>Registrar</button>
+          <button type="button" className="link" onClick={limpar}>voltar</button>
         </div>
       </div>
     )
@@ -60,18 +68,24 @@ export function EscolherResposta({ amostragem, ctts, salvando, onRegistrar }: {
   return (
     <div className="box">
       <div className="row between">
-        <b>{opc.label} · para qual contratante?</b>
-        <button type="button" className="link" onClick={() => { setAtiv(null); setBusca('') }}>voltar</button>
+        <b>{opc.label} · para qual(is) contratante(s)?</b>
+        <button type="button" className="link" onClick={limpar}>voltar</button>
       </div>
       <input type="search" autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar contratante (código ou nome)" />
-      <div style={{ maxHeight: 280, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <button type="button" className="btn sm" style={{ textAlign: 'left' }} disabled={salvando} onClick={() => void registrar(null)}>Não é de um contratante</button>
+      <div style={{ maxHeight: 280, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {lista.map(c => (
-          <button key={c.contratante_cod} type="button" className="btn sm" style={{ textAlign: 'left', whiteSpace: 'normal' }} disabled={salvando}
-            onClick={() => void registrar(c.contratante_cod)}>
-            <span className="mono">{c.contratante_cod}</span> · {c.nome}
-          </button>
+          <label key={c.contratante_cod} className="row" style={{ gap: 8, cursor: 'pointer', padding: '3px 6px', borderRadius: 6, background: marcados.includes(c.contratante_cod) ? 'var(--cs-tint)' : undefined }}>
+            <input type="checkbox" checked={marcados.includes(c.contratante_cod)} disabled={salvando} onChange={() => alternar(c.contratante_cod)} />
+            <span><span className="mono">{c.contratante_cod}</span> · {c.nome}</span>
+          </label>
         ))}
+      </div>
+      <div className="row">
+        <button type="button" className="btn solid" disabled={salvando || !marcados.length} onClick={() => void registrar(marcados)}>
+          Registrar{marcados.length ? ` para ${marcados.length} contratante${marcados.length > 1 ? 's' : ''}` : ''}
+        </button>
+        <button type="button" className="btn sm" disabled={salvando} onClick={() => void registrar([])}>Não é de um contratante</button>
+        {marcados.length > 1 && <span className="note">A resposta divide igual entre eles.</span>}
       </div>
     </div>
   )
@@ -132,15 +146,18 @@ export default function CsAmostraAviso() {
   if (!pendente) return null
   const k = pendente.amostragem.id + '|' + pendente.previsto.toISOString()
 
-  async function registrar(atividade: ChaveAmostra, contratante: string | null) {
+  async function registrar(atividade: ChaveAmostra, contratantes: string[]) {
     if (salvando) return false
     setSalvando(true)
     const { error } = await supabase.from('cs_amostras').insert({
       amostragem_id: pendente!.amostragem.id, usuario_id: uid, previsto_em: pendente!.previsto.toISOString(),
-      atividade, contratante_cod: contratante,
+      atividade, ...colunasContratantes(contratantes),
     })
     setSalvando(false)
-    if (error && error.code !== '23505') { alert('Não foi possível registrar: ' + error.message); return false }
+    if (error && error.code !== '23505') {
+      alert('Não foi possível registrar: ' + (/contratantes/.test(error.message) ? 'vários contratantes ainda não estão liberados (falta rodar sql/custo-servir-base-perks.sql). Marque só um.' : error.message))
+      return false
+    }
     setRespondidos(prev => new Set(prev).add(k))
     return true
   }

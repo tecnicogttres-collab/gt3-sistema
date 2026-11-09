@@ -1,0 +1,16 @@
+# Deploy pela CLI da Vercel: envia SO o necessario para o build do Next.js.
+# A pasta do projeto tambem guarda e-mails, prints, planilhas, backups e dados de clientes,
+# que nao podem ir para a Vercel. Tudo fica de fora, exceto a lista abaixo.
+/*
+!/app
+!/public
+# dados dos PDIs importados pelo modulo PDI (app/pdi)
+!/data
+!/proxy.ts
+!/next.config.ts
+!/next-env.d.ts
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/postcss.config.mjs
+!/eslint.config.mjs

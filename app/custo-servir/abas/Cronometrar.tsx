@@ -13,6 +13,7 @@ import type { Medicao, Usuario } from '../cs-lib'
 import QuadroDocumentos from './QuadroDocumentos'
 import TransportarTempo, { type ModoTransporte } from './TransportarTempo'
 import { EditorDocsContratante } from './Bases'
+import { useTempo } from '../cs-tempo'
 
 export type NavCron = { g: string | null; d: string | null; q: string }
 
@@ -91,6 +92,7 @@ function Grupos({ ctx, setNav }: { ctx: Ctx; setNav: (n: NavCron) => void }) {
 function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron; setNav: (n: NavCron) => void }) {
   const { d } = useCs()
   const [cttDocs, setCttDocs] = useState<string | null>(null)
+  const tm = useTempo()
   const [ord, setOrd] = useState<Ordem>({ col: 'nome', dir: 'asc' })
   let ds = [...(ctx.gd.get(g.id) ?? [])].map(id => ctx.docs.get(id)!).filter(Boolean)
   if (nav.q) ds = ds.filter(x => norm(x.nome).includes(norm(nav.q)))
@@ -151,8 +153,8 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
                     {tp.has(x.id) && <span className="pill p-tp" title="Tem medições transportadas de outro grupo">Tempo padrão</span>}
                   </span>
                   <span className="meta">
-                    <span>Aprov. <b className="mono">{a.n}/{min}</b>{a.val != null ? ` · ${fmt(a.val, 1)} min` : ''}</span>
-                    <span>Reprov. <b className="mono">{r.n}</b>{r.val != null ? ` · ${fmt(r.val, 1)} min` : ''}</span>
+                    <span>Aprov. <b className="mono">{a.n}/{min}</b>{a.val != null ? ` · ${tm.min(a.val, 1)}${tm.modo === 'decimal' ? ' min' : ''}` : ''}</span>
+                    <span>Reprov. <b className="mono">{r.n}</b>{r.val != null ? ` · ${tm.min(r.val, 1)}${tm.modo === 'decimal' ? ' min' : ''}` : ''}</span>
                   </span>
                 </button>
               )
@@ -171,6 +173,7 @@ function Timer({ ctx, g, docId, docNome, nav, setNav, telaVisivel }: {
 }) {
   const { d, registrarMedicao, toast } = useCs()
   const T = useTimer()
+  const tm = useTempo()
   const [, setTick] = useState(0)
   const [salvando, setSalvando] = useState(false)
   const [transp, setTransp] = useState<ModoTransporte | null>(null)
@@ -303,11 +306,11 @@ function Timer({ ctx, g, docId, docNome, nav, setNav, telaVisivel }: {
           {nTp > 0 && <p className="note"><span className="pill p-tp">Tempo padrão</span> {nTp} de {sA.n + sR.n} medição(ões) validada(s) vieram de outro grupo; as demais foram medidas aqui.</p>}
           <div className="stats">
             <div><b>{sA.n}/{ctx.cfg.minimo}</b><span>aprovado validadas</span></div>
-            <div><b>{sA.val != null ? fmt(sA.val, 2) : '—'}</b><span>tempo-padrão aprov. ({base}, min)</span></div>
-            <div><b>{sR.val != null ? fmt(sR.val, 2) : '—'}</b><span>tempo-padrão reprov. (min)</span></div>
-            <div><b>{sA.mean != null ? fmt(sA.mean, 2) : '—'}</b><span>média aprov.</span></div>
-            <div><b>{sA.med != null ? fmt(sA.med, 2) : '—'}</b><span>mediana aprov.</span></div>
-            <div><b>{sA.min != null ? fmt(sA.min, 1) + '–' + fmt(sA.max!, 1) : '—'}</b><span>mín.–máx. aprov.</span></div>
+            <div><b>{sA.val != null ? tm.min(sA.val, 2) : '—'}</b><span>tempo-padrão aprov. ({base}, min)</span></div>
+            <div><b>{sR.val != null ? tm.min(sR.val, 2) : '—'}</b><span>tempo-padrão reprov. (min)</span></div>
+            <div><b>{sA.mean != null ? tm.min(sA.mean, 2) : '—'}</b><span>média aprov.</span></div>
+            <div><b>{sA.med != null ? tm.min(sA.med, 2) : '—'}</b><span>mediana aprov.</span></div>
+            <div><b>{sA.min != null ? tm.min(sA.min, 1) + '–' + tm.min(sA.max!, 1) : '—'}</b><span>mín.–máx. aprov.</span></div>
           </div>
           <MedicoesDoc meds={meds} usuarios={d.usuarios} />
           <p className="note">Cada mudança fica registrada com quem fez e quando. Excluir tira a medição do cálculo na hora. O histórico completo está na aba Medições.</p>

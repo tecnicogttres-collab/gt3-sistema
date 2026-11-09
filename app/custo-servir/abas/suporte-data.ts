@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '../../lib/supabase'
-import type { Amostra, Amostragem, AtivMedicao, Atividade, VolumeLinha, VolumeLote } from '../cs-suporte-lib'
+import { colunasContratantes, type Amostra, type Amostragem, type AtivMedicao, type Atividade, type VolumeLinha, type VolumeLote } from '../cs-suporte-lib'
 
 type PageRes<T> = PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null }>
 async function todas<T>(q: (a: number, b: number) => PageRes<T>): Promise<T[]> {
@@ -186,10 +186,12 @@ export function useSuporte(meuId: string) {
     setAmostragens(p => p.map(a => (a.id === id ? { ...a, ...patch } : a)))
   }, [supabase])
   /** Registro por conta propria no Extra portal (sem pop-up): horario = agora. */
-  const registrarAmostra = useCallback(async (amostragem_id: string, atividade: Amostra['atividade'], contratante_cod: string | null) => {
-    const r = ok(await supabase.from('cs_amostras').insert({
-      amostragem_id, usuario_id: meuId, previsto_em: new Date().toISOString(), atividade, contratante_cod, espontanea: true,
-    }).select('*').single()) as Amostra
+  const registrarAmostra = useCallback(async (amostragem_id: string, atividade: Amostra['atividade'], contratantes: string[]) => {
+    const res = await supabase.from('cs_amostras').insert({
+      amostragem_id, usuario_id: meuId, previsto_em: new Date().toISOString(), atividade, ...colunasContratantes(contratantes), espontanea: true,
+    }).select('*').single()
+    if (res.error && /contratantes/.test(res.error.message)) throw new Error('Vários contratantes ainda não estão liberados: rode sql/custo-servir-base-perks.sql no Supabase. Por enquanto marque só um.')
+    const r = ok(res) as Amostra
     setAmostrasDe(p => (p && p.id === amostragem_id ? { id: p.id, amostras: [...p.amostras, r] } : p))
     return r
   }, [supabase, meuId])

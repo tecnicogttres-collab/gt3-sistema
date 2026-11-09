@@ -182,7 +182,7 @@ function QuadroContratantes({ ctx }: { ctx: Ctx }) {
   )
 }
 
-function Catalogo({ ctx }: { ctx: Ctx }) {
+export function Catalogo({ ctx }: { ctx: Ctx }) {
   const { d, atualizarDoc, atualizarDocs, adicionarDoc, tentar, linhas, relSel } = useCs()
   const [novo, setNovo] = useState('')
   const [q, setQ] = useState('')

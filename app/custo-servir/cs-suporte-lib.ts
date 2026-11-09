@@ -28,6 +28,8 @@ export type Janela = { ini: string; fim: string }
 export type Amostra = {
   id: string; amostragem_id: string; usuario_id: string; previsto_em: string; respondido_em: string
   atividade: ChaveAmostra; contratante_cod: string | null
+  /** Varios contratantes na mesma resposta (divide igual). null = so contratante_cod (respostas antigas). */
+  contratantes?: string[] | null
   /** Registrado por conta propria (nao veio de um pop-up sorteado). */
   espontanea?: boolean
 }
@@ -212,14 +214,27 @@ export function calcCamada3(amostras: Amostra[]): Camada3 {
     out.porOpcao[a.atividade]++
     const cl = classeDe(a.atividade)
     out.porClasse[cl]++
-    if (a.contratante_cod) {
-      const m = (out.porCttOpcao[a.contratante_cod] ||= {})
-      m[a.atividade] = (m[a.atividade] || 0) + 1
-      if (cl === 'camada3') out.porCttCamada3[a.contratante_cod] = (out.porCttCamada3[a.contratante_cod] || 0) + 1
+    const cs = cttsDaAmostra(a)
+    if (cs.length) {
+      // Varios contratantes na mesma resposta: a observacao divide igual entre eles
+      const parte = 1 / cs.length
+      for (const c of cs) {
+        const m = (out.porCttOpcao[c] ||= {})
+        m[a.atividade] = (m[a.atividade] || 0) + parte
+        if (cl === 'camada3') out.porCttCamada3[c] = (out.porCttCamada3[c] || 0) + parte
+      }
     } else if (cl === 'camada3') out.camada3SemCtt++
   }
   return out
 }
+
+/** Contratantes da resposta (novas: lista; antigas: so contratante_cod). */
+export const cttsDaAmostra = (a: Pick<Amostra, 'contratante_cod' | 'contratantes'>): string[] =>
+  a.contratantes?.length ? [...new Set(a.contratantes)] : a.contratante_cod ? [a.contratante_cod] : []
+
+/** Linha para gravar em cs_amostras com um ou varios contratantes. */
+export const colunasContratantes = (cs: string[]) =>
+  cs.length > 1 ? { contratante_cod: cs[0], contratantes: cs } : { contratante_cod: cs[0] ?? null }
 
 /** Tempo da atividade para o contratante (especifico do contratante/grupo, senao geral). */
 export const tempoC2 = (ctx: Ctx, meds: AtivMedicao[]) => (id: string, cod: string | null) =>

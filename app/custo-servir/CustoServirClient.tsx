@@ -17,6 +17,7 @@ import Bases from './abas/Bases'
 import Fechamento from './abas/Fechamento'
 import ExtraPortal from './abas/ExtraPortal'
 import { prefetchSuporte } from './abas/suporte-data'
+import { ModoTempoToggle } from './cs-ui'
 import { displayName, useUser } from '../components/UserContext'
 import './custo-servir.css'
 
@@ -144,6 +145,7 @@ function Modulo({ aba, setAba, nav, setNav }: {
                 </button>
               ))}
             </div>
+            <ModoTempoToggle />
             {!naTelaGrupos && abas.some(a => a.id === 'cronometrar') && (
               <button type="button" className="btn sm home" onClick={() => trocarAba('cronometrar')} title="Voltar para a tela inicial de grupos">⌂ Grupos</button>
             )}

@@ -13,7 +13,8 @@ import {
   calcCamada2, tempoAtividade, tempoC2,
   type AtivMedicao, type Atividade, type VolumeLinha,
 } from '../cs-suporte-lib'
-import { BotaoConfirmar, useOrdem } from '../cs-ui'
+import { BotaoConfirmar, CampoTempo, useOrdem } from '../cs-ui'
+import { lerMinutos, useTempo } from '../cs-tempo'
 import { lerArquivo } from './Contagem'
 import { NumCampo } from './Resultado'
 import { useSuporte, type SuporteApi } from './suporte-data'
@@ -88,6 +89,7 @@ function Camada2({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
 /** Linha da atividade: ver, editar (nome, unidade, fonte, ligacao) e excluir. */
 function LinhaAtividade({ ctx, s, a, t }: { ctx: Ctx; s: SuporteApi; a: Atividade; t: ReturnType<typeof tempoAtividade> }) {
   const { tentar } = useCs()
+  const tm = useTempo()
   const [ed, setEd] = useState<{ nome: string; unidade: Atividade['unidade']; fonte: string; liga_por: string } | null>(null)
   const nMed = s.meds.filter(m => m.atividade_id === a.id).length
   const nVol = s.linhas.filter(l => l.atividade_id === a.id).length
@@ -123,7 +125,7 @@ function LinhaAtividade({ ctx, s, a, t }: { ctx: Ctx; s: SuporteApi; a: Atividad
       <td className="note">{a.fonte ?? '—'}</td>
       <td className="note">{a.liga_por ?? '—'}</td>
       <td className="r mono">{a.unidade === 'minutos' ? '—' : t.n}</td>
-      <td className="r mono">{a.unidade === 'minutos' ? <span className="note">duração informada</span> : t.val != null ? fmt(t.val, 2) : <span className="pill p-warn">cronometrar</span>}</td>
+      <td className="r mono">{a.unidade === 'minutos' ? <span className="note">duração informada</span> : t.val != null ? tm.min(t.val, 2) : <span className="pill p-warn">cronometrar</span>}</td>
       <td className="note">{a.unidade === 'minutos' ? '—' : especificos(ctx, s.meds, a.id) || '—'}</td>
       <td className="c"><input type="checkbox" checked={a.ativo} aria-label="Ativa" onChange={e => tentar(() => s.salvarAtividade(a.id, { ativo: e.target.checked }))} /></td>
       <td>
@@ -158,6 +160,7 @@ const rotuloAssoc = (ctx: Ctx, m: AtivMedicao) =>
 /** Cronometro simples, para quem nao lida bem com sistema: escolhe a atividade, Comecar, Terminei. */
 function CronometroSimples({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const { tentar, toast, meuId } = useCs()
+  const tm = useTempo()
   const ativs = s.ativs.filter(a => a.ativo && a.unidade === 'quantidade')
   const emMinutos = s.ativs.filter(a => a.ativo && a.unidade === 'minutos')
   const [sel, setSel] = useState<string | null>(null)
@@ -205,7 +208,7 @@ function CronometroSimples({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
               return (
                 <button key={x.id} type="button" className="atv-card" onClick={() => { setSel(x.id); setCod(''); setSalvo(null); zerar() }}>
                   <b>{x.nome}</b>
-                  <span className="note">{tp.val != null ? `Leva em média ${fmt(tp.val, 1)} min` : 'Ainda não cronometrado'}</span>
+                  <span className="note">{tp.val != null ? `Leva em média ${tm.mu(tp.val, 1)}` : 'Ainda não cronometrado'}</span>
                   {falta ? <span className="pill p-warn">faltam {falta} medição{falta > 1 ? 'ões' : ''}</span> : <span className="pill p-good">✓ tempo pronto · {tp.n} medições</span>}
                 </button>
               )
@@ -274,6 +277,7 @@ function CronometroSimples({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
 
 function CronometroAtividade({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const { d, tentar, toast } = useCs()
+  const tm = useTempo()
   const cronometraveis = s.ativs.filter(a => a.ativo && a.unidade === 'quantidade')
   const [ativId, setAtivId] = useState('')
   // '' = sem associacao | 'c:<cod>' contratante | 'g:<cod>' grupo do principal
@@ -344,11 +348,11 @@ function CronometroAtividade({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
         <h2>{sel ? sel.nome : 'Medições'}</h2>
         {tp && <div className="stats">
           <div><b>{tp.n}</b><span>validadas</span></div>
-          <div><b>{tp.val != null ? fmt(tp.val, 2) : '—'}</b><span>tempo-padrão ({ctx.cfg.base === 'media' ? 'média' : 'mediana'}, min)</span></div>
-          <div><b>{tp.mean != null ? fmt(tp.mean, 2) : '—'}</b><span>média</span></div>
+          <div><b>{tp.val != null ? tm.min(tp.val, 2) : '—'}</b><span>tempo-padrão ({ctx.cfg.base === 'media' ? 'média' : 'mediana'}, min)</span></div>
+          <div><b>{tp.mean != null ? tm.min(tp.mean, 2) : '—'}</b><span>média</span></div>
           {tpAssoc && <>
             <div><b>{tpAssoc.n}/{ctx.cfg.minimo}</b><span>{grupoAssoc ? 'do grupo ' : 'de '}{codAssoc}</span></div>
-            <div><b>{tpAssoc.val != null ? fmt(tpAssoc.val, 2) : '—'}</b><span>tempo {grupoAssoc ? 'do grupo' : 'do contratante'} (min)</span></div>
+            <div><b>{tpAssoc.val != null ? tm.min(tpAssoc.val, 2) : '—'}</b><span>tempo {grupoAssoc ? 'do grupo' : 'do contratante'} (min)</span></div>
             <div><b>{tpAssoc.n >= ctx.cfg.minimo ? 'próprio' : 'geral'}</b><span>tempo usado na camada 2</span></div>
           </>}
         </div>}
@@ -410,10 +414,14 @@ function parseVolumes(aoa: unknown[][], ativs: Atividade[]): { linhas: VolumeLin
 
 function Volumes({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const { tentar, toast } = useCs()
+  const tm = useTempo()
   const [dias, setDias] = useState('')
   const [importando, setImportando] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [m, setM] = useState({ at: '', cts: '', q: '', ref: '' })
+  // Atividade em minutos (ex.: ligacao): aceita 90 ou 1:30; senao, quantidade inteira
+  const emMin = s.ativs.find(a => a.id === m.at)?.unidade === 'minutos'
+  const qtdMao = m.q.trim() === '' ? null : emMin ? lerMinutos(m.q) : Number.isFinite(Number(m.q)) ? Number(m.q) : null
   const c2 = calcCamada2(s.linhas, s.ativs, tempoC2(ctx, s.meds))
   const diasMes = ctx.cfg.dias_mes ?? ctx.cfg.dias_uteis
   const fator = s.loteSel?.dias_uteis && diasMes ? diasMes / s.loteSel.dias_uteis : null
@@ -468,10 +476,12 @@ function Volumes({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
             {s.ativs.filter(a => a.ativo).map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
           </select>
           <input type="text" value={m.cts} onChange={e => setM({ ...m, cts: e.target.value })} placeholder="Contratantes (ex.: 1, 9)" style={{ width: 160 }} />
-          <input type="number" value={m.q} onChange={e => setM({ ...m, q: e.target.value })} placeholder="Quantidade" style={{ width: 110 }} />
+          {emMin
+            ? <CampoTempo valor={m.q} onChange={t => setM({ ...m, q: t })} ariaLabel="Minutos" placeholder="Minutos: 90 ou 1:30" />
+            : <input type="number" value={m.q} onChange={e => setM({ ...m, q: e.target.value })} placeholder="Quantidade" style={{ width: 110 }} />}
           <input type="text" value={m.ref} onChange={e => setM({ ...m, ref: e.target.value })} placeholder="Referência (opcional)" style={{ width: 170 }} />
-          <button type="button" className="btn sm solid" disabled={!m.at || !(Number(m.q) >= 0) || m.q === ''} onClick={async () => {
-            const linha: VolumeLinha = { atividade_id: m.at, contratantes: m.cts.split(/[;,\s]+/).filter(Boolean), quantidade: Number(m.q), prestador: null, referencia: m.ref.trim() || null }
+          <button type="button" className="btn sm solid" disabled={!m.at || qtdMao == null || qtdMao < 0} onClick={async () => {
+            const linha: VolumeLinha = { atividade_id: m.at, contratantes: m.cts.split(/[;,\s]+/).filter(Boolean), quantidade: qtdMao!, prestador: null, referencia: m.ref.trim() || null }
             if (await tentar(() => s.adicionarLinhas(s.loteSel!.id, [linha]), 'Volume incluído')) setM({ at: m.at, cts: '', q: '', ref: '' })
           }}>Incluir</button>
         </div>
@@ -479,8 +489,8 @@ function Volumes({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
 
       {s.linhas.length > 0 && <>
         <div className="tiles">
-          <div className="tile"><b>{fmt(c2.total / 60, 1)} h</b><span>no período do lote</span></div>
-          <div className="tile"><b>{fator ? fmt((c2.total / 60) * fator, 1) + ' h' : '—'}</b><span>projetado para o mês{fator ? ` (×${fmt(fator, 2)})` : ': informe os dias do lote'}</span></div>
+          <div className="tile"><b>{tm.hu(c2.total / 60, 1)}</b><span>no período do lote</span></div>
+          <div className="tile"><b>{fator ? tm.hu((c2.total / 60) * fator, 1) : '—'}</b><span>projetado para o mês{fator ? ` (×${fmt(fator, 2)})` : ': informe os dias do lote'}</span></div>
           <div className="tile"><b style={{ color: Object.keys(c2.semTempo).length ? 'var(--cs-warn)' : undefined }}>{Object.keys(c2.semTempo).length}</b><span>atividades sem tempo-padrão</span></div>
           <div className="tile"><b>{c2.semContratante}</b><span>linhas sem contratante</span></div>
           <div className="tile"><b>{c2.especificos}</b><span>partes com tempo próprio do contratante/grupo</span></div>
@@ -497,7 +507,7 @@ function Volumes({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
               <thead><tr>{th('c', 'Cód.')}{th('nome', 'Contratante')}{th('min', 'Horas no período', 'r')}<th className="r">Horas/mês</th></tr></thead>
               <tbody>
                 {sorted.map(x => (
-                  <tr key={x.c}><td className="mono">{x.c}</td><td>{nomeCtt(ctx, x.c)}</td><td className="r mono">{fmt(x.min / 60, 2)}</td><td className="r mono">{fator ? fmt((x.min / 60) * fator, 2) : '—'}</td></tr>
+                  <tr key={x.c}><td className="mono">{x.c}</td><td>{nomeCtt(ctx, x.c)}</td><td className="r mono">{tm.h(x.min / 60)}</td><td className="r mono">{fator ? tm.h((x.min / 60) * fator) : '—'}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -506,7 +516,7 @@ function Volumes({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
             <table>
               <thead><tr><th>Atividade</th><th className="r">Horas no período</th></tr></thead>
               <tbody>
-                {s.ativs.filter(a => c2.porAtiv[a.id]).map(a => <tr key={a.id}><td>{a.nome}</td><td className="r mono">{fmt(c2.porAtiv[a.id] / 60, 2)}</td></tr>)}
+                {s.ativs.filter(a => c2.porAtiv[a.id]).map(a => <tr key={a.id}><td>{a.nome}</td><td className="r mono">{tm.h(c2.porAtiv[a.id] / 60)}</td></tr>)}
               </tbody>
             </table>
           </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useCs } from '../cs-data'
 import { fmt, grupoPadrao, nomeUsuario, norm, situacaoDoc, stat, type SituacaoDoc } from '../cs-lib'
+import { useTempo } from '../cs-tempo'
 import { ordenar, PillSituacao, TabelaMedicoes, thOrdem, type Ordem } from '../cs-ui'
 
 export default function Tempos() {
@@ -12,6 +13,7 @@ export default function Tempos() {
   const [filtro, setFiltro] = useState<'todos' | SituacaoDoc>('todos')
   const [sel, setSel] = useState<string | null>(null)
   const [ord, setOrd] = useState<Ordem>({ col: 'doc', dir: 'asc' })
+  const tm = useTempo()
   if (!ctx) return null
 
   const g = ctx.grupos.find(x => x.id === gSel) ?? grupoPadrao(ctx)
@@ -88,14 +90,14 @@ export default function Tempos() {
                     <td style={{ maxWidth: 340 }}><b style={{ fontWeight: 600 }}>{x.nome}</b>{tp.has(x.id) && <> <span className="pill p-tp" title="Tem medições transportadas de outro grupo">Tempo padrão</span></>}</td>
                     <td className="r mono">{fmt(x.volume_ref)}</td>
                     <td className="r mono">{a.n}</td>
-                    <td className="r mono">{a.val != null ? fmt(a.val, 2) : '—'}</td>
+                    <td className="r mono">{a.val != null ? tm.min(a.val, 2) : '—'}</td>
                     <td className="r mono">{r.n}</td>
                     <td className="r mono">
-                      {r.val != null ? fmt(r.val, 2)
-                        : a.val != null ? <span title="Sem medição de reprovado: usa o tempo de aprovado">{fmt(a.val, 2)}*</span> : '—'}
+                      {r.val != null ? tm.min(r.val, 2)
+                        : a.val != null ? <span title="Sem medição de reprovado: usa o tempo de aprovado">{tm.min(a.val, 2)}*</span> : '—'}
                     </td>
-                    <td className="r mono">{a.n ? fmt(a.mean!, 2) + ' · ' + fmt(a.med!, 2) : '—'}</td>
-                    <td className="r mono">{a.n ? fmt(a.min!, 1) + '–' + fmt(a.max!, 1) : '—'}</td>
+                    <td className="r mono">{a.n ? tm.min(a.mean!, 2) + ' · ' + tm.min(a.med!, 2) : '—'}</td>
+                    <td className="r mono">{a.n ? tm.min(a.min!, 1) + '–' + tm.min(a.max!, 1) : '—'}</td>
                     <td title={nomes.join(', ')}>{us.length ? `${us.length} pessoa${us.length > 1 ? 's' : ''}` : '—'}</td>
                     <td><PillSituacao s={situacaoDoc(ctx, g.id, x.id)} /></td>
                   </tr>
@@ -104,7 +106,7 @@ export default function Tempos() {
             </tbody>
           </table>
         </div>
-        <p className="note">Tempos em minutos. Tempo-padrão = {base} das medições validadas (altere em Configurações › Parâmetros). * Sem medição de reprovado: usa o tempo de aprovado até haver medições.</p>
+        <p className="note">Tempos em minutos (troque para hora/minuto no seletor ao lado das abas). Tempo-padrão = {base} das medições validadas (altere em Configurações › Parâmetros). * Sem medição de reprovado: usa o tempo de aprovado até haver medições.</p>
       </div>
       {docSel && (
         <div className="box">

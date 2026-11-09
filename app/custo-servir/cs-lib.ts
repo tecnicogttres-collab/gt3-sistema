@@ -52,7 +52,7 @@ export const ABAS = [
   { id: 'resultado', label: 'Resultado' },
   { id: 'suporte', label: 'Suporte' },
   { id: 'extra', label: 'Extra portal' },
-  { id: 'bases', label: 'Bases prontas' },
+  { id: 'bases', label: 'Documentos e bases' },
   { id: 'configuracoes', label: 'Configurações' },
   { id: 'fechamento', label: 'Fechamento' },
 ] as const
@@ -458,7 +458,8 @@ export function validadePeloNome(nome: string, periodicidadeGt0010?: string | nu
 }
 
 // ── Bases prontas (conjuntos de documentos) ───────────────────────────────────
-export type Conjunto = { id: string; nome: string; descricao: string | null; created_by: string | null; created_at: string; docs: string[] }
+/** perk = nivel de venda (Base...); os demais sao grupos de contratantes (so o que difere da Base). */
+export type Conjunto = { id: string; nome: string; descricao: string | null; created_by: string | null; created_at: string; docs: string[]; perk: boolean; ordem: number }
 /** Tempo do documento num grupo de criterio; sem tempo no grupo, usa o do padrao. */
 export function tempoNoGrupo(ctx: Ctx, g: string, d: string, r: Resultado): { val: number | null; est: boolean; g: string | null } {
   const p = grupoPadrao(ctx)

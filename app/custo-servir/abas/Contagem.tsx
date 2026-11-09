@@ -7,6 +7,7 @@ import {
   type Contagem as TContagem, type Ctx,
 } from '../cs-lib'
 import ContagemDetalhes from './ContagemDetalhes'
+import { useTempo } from '../cs-tempo'
 import { BotaoConfirmar, IconeCatraca, ordenar, SeloCatraca, thOrdem, type Ordem } from '../cs-ui'
 
 /** Le texto em UTF-8; se nao for UTF-8 valido (CSV salvo pelo Excel em ANSI), usa Windows-1252. */
@@ -41,6 +42,7 @@ export default function Contagem() {
   const [oUnk, setOUnk] = useState<Ordem>({ col: 'n', dir: 'desc' })
   const [agrupar, setAgrupar] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const tm = useTempo()
 
   const r = useMemo(() => (ctx ? contar(ctx, linhas) : null), [ctx, linhas])
   if (!ctx || !r) return null
@@ -161,9 +163,9 @@ export default function Contagem() {
                       <td>Σ {nomeCtt(ctx, x.c)} <span className="note">(principal + unidades)</span></td>
                       <td /><td />
                       <td className="r mono">{fmt(x.n, 1)}</td>
-                      <td className="r mono">{fmt(x.int / 60, 2)}</td>
-                      <td className="r mono"><b>{fmt(x.min / 60, 2)}</b></td>
-                      <td className="r mono" title="Saída conjunta de todo o grupo">{fmt(x.ev / 60, 2)}</td>
+                      <td className="r mono">{tm.h(x.int / 60)}</td>
+                      <td className="r mono"><b>{tm.h(x.min / 60)}</b></td>
+                      <td className="r mono" title="Saída conjunta de todo o grupo">{tm.h(x.ev / 60)}</td>
                     </tr>
                   ) : (
                     <tr key={x.c} className={'click' + (ctSel === x.c ? ' sel' : '')} onClick={() => setCtSel(ctSel === x.c ? null : x.c)}>
@@ -172,16 +174,16 @@ export default function Contagem() {
                       <td className="c">{temCatraca(ctx, x.c) && <SeloCatraca n={ctx.catraca.get(x.c)} compacto />}</td>
                       <td>{grupoDe(ctx, x.c)?.nome}</td>
                       <td className="r mono">{fmt(x.n, 1)}</td>
-                      <td className="r mono">{fmt(x.int / 60, 2)}</td>
-                      <td className="r mono"><b>{fmt(x.min / 60, 2)}</b></td>
-                      <td className="r mono">{fmt(x.ev / 60, 2)}</td>
+                      <td className="r mono">{tm.h(x.int / 60)}</td>
+                      <td className="r mono"><b>{tm.h(x.min / 60)}</b></td>
+                      <td className="r mono">{tm.h(x.ev / 60)}</td>
                     </tr>
                   ))}
                   <tr className="total">
                     <td /><td>Total</td><td /><td /><td />
-                    <td className="r mono">{fmt(somaInt / 60, 2)}</td>
-                    <td className="r mono">{fmt(somaMin / 60, 2)}</td>
-                    <td className="r mono">{fmt(somaEv / 60, 2)}</td>
+                    <td className="r mono">{tm.h(somaInt / 60)}</td>
+                    <td className="r mono">{tm.h(somaMin / 60)}</td>
+                    <td className="r mono">{tm.h(somaEv / 60)}</td>
                   </tr>
                 </> : <tr><td colSpan={8} className="empty">Nenhuma linha contabilizada ainda.</td></tr>}
               </tbody>
@@ -189,9 +191,9 @@ export default function Contagem() {
           </div>
           {lista.length > 0 && (
             <div className="tiles">
-              <div className="tile"><b>{fmt(r.real / 60, 2)} h</b><span>tempo real gasto</span></div>
-              <div className="tile"><b>{fmt((somaInt - r.real) / 60, 2)} h</b><span>contagem dupla se usar o inteiro</span></div>
-              <div className="tile"><b>{fmt((r.real - somaEv) / 60, 2)} h</b><span>custo comum (nenhuma saída isolada libera)</span></div>
+              <div className="tile"><b>{tm.hu(r.real / 60)}</b><span>tempo real gasto</span></div>
+              <div className="tile"><b>{tm.hu((somaInt - r.real) / 60)}</b><span>contagem dupla se usar o inteiro</span></div>
+              <div className="tile"><b>{tm.hu((r.real - somaEv) / 60)}</b><span>custo comum (nenhuma saída isolada libera)</span></div>
             </div>
           )}
           {lista.length > 0 && (() => {
@@ -201,8 +203,8 @@ export default function Contagem() {
             const pct = somaMin ? (h(com) / somaMin) * 100 : 0
             return (
               <div className="tiles">
-                <div className="tile cat"><b><IconeCatraca size={18} /> {fmt(h(com) / 60, 2)} h</b><span>com catraca · {fmt(pct)}% do dividido · {com.length} contratante(s) · {fmt(n(com), 1)} avaliações</span></div>
-                <div className="tile"><b>{fmt(h(sem) / 60, 2)} h</b><span>sem catraca · {fmt(100 - pct)}% do dividido · {sem.length} contratante(s) · {fmt(n(sem), 1)} avaliações</span></div>
+                <div className="tile cat"><b><IconeCatraca size={18} /> {tm.hu(h(com) / 60)}</b><span>com catraca · {fmt(pct)}% do dividido · {com.length} contratante(s) · {fmt(n(com), 1)} avaliações</span></div>
+                <div className="tile"><b>{tm.hu(h(sem) / 60)}</b><span>sem catraca · {fmt(100 - pct)}% do dividido · {sem.length} contratante(s) · {fmt(n(sem), 1)} avaliações</span></div>
                 <div className="tile cat"><b>{com.length && sem.length && n(com) && n(sem) ? fmt((h(com) / n(com)) / (h(sem) / n(sem)), 2) + '×' : '—'}</b><span>minutos por avaliação: com catraca ÷ sem catraca</span></div>
               </div>
             )
@@ -218,7 +220,7 @@ export default function Contagem() {
                 <thead><tr>{thD('doc', 'Documento')}{thD('div', 'Dividido (min)', 'r')}{thD('ev', 'Evitável (min)', 'r')}</tr></thead>
                 <tbody>
                   {ordenar(Object.entries(sel.docs), { doc: ([id]) => ctx.docs.get(id)?.nome, div: ([, m]) => m, ev: ([id]) => sel.evd[id] || 0 }, oDet).map(([id, m]) => (
-                    <tr key={id}><td>{ctx.docs.get(id)?.nome}</td><td className="r mono">{fmt(m, 2)}</td><td className="r mono">{fmt(sel.evd[id] || 0, 2)}</td></tr>
+                    <tr key={id}><td>{ctx.docs.get(id)?.nome}</td><td className="r mono">{tm.min(m, 2)}</td><td className="r mono">{tm.min(sel.evd[id] || 0, 2)}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -271,6 +273,7 @@ export default function Contagem() {
 function Simulador({ ctx, r }: { ctx: Ctx; r: TContagem }) {
   const { relSel } = useCs()
   const [simSel, setSimSel] = useState<Set<string>>(new Set())
+  const tm = useTempo()
   const cods = Object.keys(r.by).sort((a, b) => r.by[b].min - r.by[a].min)
   if (!cods.length) return null
 
@@ -318,8 +321,8 @@ function Simulador({ ctx, r }: { ctx: Ctx; r: TContagem }) {
       )}
       {sel.length ? <>
         <div className="tiles">
-          <div className="tile"><b>{fmt(lib, 1)} h</b><span>liberadas {per} (evitável)</span></div>
-          <div className="tile"><b>{fmt(div, 1)} h</b><span>atribuídas hoje (dividido)</span></div>
+          <div className="tile"><b>{tm.hu(lib, 1)}</b><span>liberadas {per} (evitável)</span></div>
+          <div className="tile"><b>{tm.hu(div, 1)}</b><span>atribuídas hoje (dividido)</span></div>
           <div className="tile"><b>{brl(fat)}</b><span>faturamento mensal que sai</span></div>
           <div className="tile"><b>{fin.ok && fator ? brl(valor) : '—'}</b><span>valor da capacidade liberada</span></div>
           <div className="tile"><b>{be > 0 ? brl2(be) : '—'}</b><span>receita por hora que o substituto precisa superar</span></div>

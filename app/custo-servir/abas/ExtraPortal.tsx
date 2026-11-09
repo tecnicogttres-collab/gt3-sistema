@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useCs } from '../cs-data'
 import { contar, fatorMes, financeiro, fmt, nomeCtt, nomeUsuario, type Ctx } from '../cs-lib'
 import {
-  avisosEfetivos, avisosPrevistosAte, calcCamada2, calcCamada3, CLASSES, diasUteisEntre, diaUtil, faixasMin, hojeIso,
+  avisosEfetivos, avisosPrevistosAte, calcCamada2, calcCamada3, CLASSES, cttsDaAmostra, diasUteisEntre, diaUtil, faixasMin, hojeIso,
   margemErro, margemPiorCaso, minutosDia, OPCOES_AMOSTRA, opcoesDe, participa, podeRegistrar, tempoC2,
   type Amostra, type Amostragem, type ChaveAmostra, type Classe, type Janela,
 } from '../cs-suporte-lib'
@@ -84,10 +84,10 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
             </p>
             {abrir === a.id ? (
               <>
-                <EscolherResposta amostragem={a} ctts={ctts} salvando={salvando} onRegistrar={async (atv, c) => {
+                <EscolherResposta amostragem={a} ctts={ctts} salvando={salvando} onRegistrar={async (atv, cs) => {
                   setSalvando(true)
                   let r: Amostra | null = null
-                  const okk = await tentar(async () => { r = await s.registrarAmostra(a.id, atv, c) }, 'Registrado. Obrigado!')
+                  const okk = await tentar(async () => { r = await s.registrarAmostra(a.id, atv, cs) }, 'Registrado. Obrigado!')
                   setSalvando(false)
                   const novo = r as Amostra | null
                   if (okk && novo) { setMinhas(p => [novo, ...p]); setAbrir(null) }
@@ -111,7 +111,7 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
                 <tr key={m.id}>
                   <td className="mono">{new Date(m.respondido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
                   <td>{OPCOES_AMOSTRA.find(o => o.chave === m.atividade)?.label ?? m.atividade}</td>
-                  <td className="note">{m.contratante_cod ? `${m.contratante_cod} · ${nomeCtt(ctx, m.contratante_cod)}` : '—'}</td>
+                  <td className="note">{cttsDaAmostra(m).map(c => `${c} · ${nomeCtt(ctx, c)}`).join('; ') || '—'}</td>
                   <td className="note">{m.espontanea ? 'por conta própria' : 'pop-up'}</td>
                 </tr>
               ))}
@@ -444,7 +444,7 @@ function PorContratanteC3({ ctx, porCtt, n, semCtt, cap }: { ctx: Ctx; porCtt: R
         <tbody>
           {sorted.map(x => {
             const p = x.k / n
-            return <tr key={x.c}><td className="mono">{x.c}</td><td>{nomeCtt(ctx, x.c)}</td><td className="r mono">{x.k}</td><td className="r mono">{fmt(p * 100, 1)}%</td><td className="r mono">±{fmt(margemErro(p, n), 1)}</td><td className="r mono">{cap ? fmt(p * cap, 1) : '—'}</td></tr>
+            return <tr key={x.c}><td className="mono">{x.c}</td><td>{nomeCtt(ctx, x.c)}</td><td className="r mono">{fmt(x.k, x.k % 1 ? 1 : 0)}</td><td className="r mono">{fmt(p * 100, 1)}%</td><td className="r mono">±{fmt(margemErro(p, n), 1)}</td><td className="r mono">{cap ? fmt(p * cap, 1) : '—'}</td></tr>
           })}
           {semCtt > 0 && <tr><td /><td className="note">Sem contratante</td><td className="r mono">{semCtt}</td><td className="r mono">{fmt((semCtt / n) * 100, 1)}%</td><td /><td className="r mono">{cap ? fmt((semCtt / n) * cap, 1) : '—'}</td></tr>}
         </tbody>

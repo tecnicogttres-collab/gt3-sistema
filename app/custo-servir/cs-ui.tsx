@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ACOES, useCs, type Hist } from './cs-data'
 import { dt, mmss, nomeUsuario, type Medicao, type SituacaoDoc } from './cs-lib'
+import { lerMinutos, setModoTempo, txtMin, useModoTempo } from './cs-tempo'
 
 // ── Ordenacao com setas crescente/decrescente ────────────────────────────────
 export type Dir = 'asc' | 'desc'
@@ -228,5 +229,33 @@ export function TabelaMedicoes({ lista, compacta, maxH }: { lista: Medicao[]; co
         </tbody>
       </table>
     </div>
+  )
+}
+
+// ── Tempo: alternar exibicao e campo que aceita "90" ou "1:30" ───────────────
+/** Alterna como os tempos aparecem no modulo: decimal (12,5) ou hora/minuto (12min30s · 2h30). */
+export function ModoTempoToggle() {
+  const m = useModoTempo()
+  return (
+    <span className="seg tempo" role="group" aria-label="Como mostrar os tempos" title="Como os tempos aparecem nas telas">
+      <button type="button" className={m === 'decimal' ? 'on' : ''} onClick={() => setModoTempo('decimal')}>12,5</button>
+      <button type="button" className={m === 'hm' ? 'on' : ''} onClick={() => setModoTempo('hm')}>12min30s</button>
+    </span>
+  )
+}
+
+/** Campo de tempo em MINUTOS: aceita numero inteiro (90) ou hora:minuto (1:30, 1h30). Mostra a leitura ao lado. */
+export function CampoTempo({ valor, onChange, placeholder = 'ex.: 90 ou 1:30', style, ariaLabel }: {
+  valor: string; onChange: (txt: string, minutos: number | null) => void; placeholder?: string; style?: React.CSSProperties; ariaLabel?: string
+}) {
+  const min = lerMinutos(valor)
+  const invalido = valor.trim() !== '' && min == null
+  return (
+    <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+      <input type="text" inputMode="numeric" value={valor} placeholder={placeholder} aria-label={ariaLabel} style={{ width: 120, ...style, ...(invalido ? { borderColor: 'var(--cs-bad)' } : {}) }}
+        onChange={e => onChange(e.target.value, lerMinutos(e.target.value))} />
+      {min != null && <span className="note mono" title="Leitura do tempo digitado">= {txtMin(min, 'hm')}{min >= 1 && min % 1 === 0 ? ` (${min} min)` : ''}</span>}
+      {invalido && <span className="note" style={{ color: 'var(--cs-bad)' }}>use 90 ou 1:30</span>}
+    </span>
   )
 }

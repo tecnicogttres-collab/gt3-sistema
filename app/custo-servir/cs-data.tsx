@@ -90,7 +90,7 @@ function useCsDataInterno() {
         todas<Omit<Conjunto, 'docs'>>((a, b) => supabase.from('cs_conjuntos').select('*').order('nome').range(a, b)).catch(() => [] as Omit<Conjunto, 'docs'>[]),
         todas<{ conjunto_id: string; documento_id: string }>((a, b) => supabase.from('cs_conjunto_documentos').select('*').range(a, b)).catch(() => []),
       ])
-      const conjuntos = cjs.map(c => ({ ...c, docs: cjd.filter(x => x.conjunto_id === c.id).map(x => x.documento_id) }))
+      const conjuntos = cjs.map(c => ({ ...c, perk: !!c.perk, ordem: c.ordem ?? 0, docs: cjd.filter(x => x.conjunto_id === c.id).map(x => x.documento_id) }))
       const [cfg, grupos, gc, docs, gd, meds, turnos, ctts, rels, usuarios] = await Promise.all([
         supabase.from('cs_config').select('*').eq('id', 1).maybeSingle().then(ok),
         supabase.from('cs_grupos').select('*').order('ordem').order('created_at').then(ok),
@@ -399,30 +399,19 @@ function useCsDataInterno() {
   }, [supabase])
 
   // ── Documentos exigidos por contratante (GT0010) ───────────────────────────
-  /** Garante o grupo de criterio do contratante (cria "Grupo <nome>" se ele nao estiver em nenhum) e poe o
-   *  documento nele. Devolve o nome do grupo quando precisou criar. */
+  /** Poe o documento no grupo de criterio do contratante. Grupo de criterio so existe para o que e DIFERENTE do
+   *  padrao: contratante sem grupo especifico usa o padrao e nenhum grupo e criado automaticamente.
+   *  (Mantem a assinatura: devolve o nome do grupo criado, hoje sempre null.) */
   const garantirGrupoDoc = useCallback(async (documento_id: string, contratante_cod: string): Promise<string | null> => {
-    let grupo = d.grupos.find(g => !g.padrao && g.contratantes.includes(contratante_cod))
-    let criado: string | null = null
-    if (!grupo) {
-      const nomeC = d.ctts.find(c => c.contratante_cod === contratante_cod)?.nome ?? contratante_cod
-      let nome = 'Grupo ' + nomeC
-      if (d.grupos.some(g => g.nome === nome)) nome += ' (' + contratante_cod + ')'
-      const ordem = Math.max(0, ...d.grupos.map(g => g.ordem)) + 1
-      const g = ok(await supabase.from('cs_grupos').insert({ nome, ordem }).select('*').single()) as Omit<Grupo, 'contratantes'>
-      ok(await supabase.from('cs_grupo_contratantes').insert({ grupo_id: g.id, contratante_cod }))
-      grupo = { ...g, contratantes: [contratante_cod] }
-      const novo = grupo
-      setD(prev => ({ ...prev, grupos: [...prev.grupos, novo] }))
-      criado = nome
-    }
+    const grupo = d.grupos.find(g => !g.padrao && g.contratantes.includes(contratante_cod)) ?? d.grupos.find(g => g.padrao)
+    if (!grupo) return null
     const gid = grupo.id
     if (!d.gd.some(x => x.grupo_id === gid && x.documento_id === documento_id)) {
       ok(await supabase.from('cs_grupo_documentos').upsert({ grupo_id: gid, documento_id, created_by: meuId }, { onConflict: 'grupo_id,documento_id', ignoreDuplicates: true }))
       setD(prev => (prev.gd.some(x => x.grupo_id === gid && x.documento_id === documento_id) ? prev : { ...prev, gd: [...prev.gd, { grupo_id: gid, documento_id }] }))
     }
-    return criado
-  }, [supabase, d.grupos, d.ctts, d.gd, meuId])
+    return null
+  }, [supabase, d.grupos, d.gd, meuId])
 
   /** Vincula o documento ao contratante (GT0010) e ja coloca no grupo de criterio dele. */
   const vincularDoc = useCallback(async (documento_id: string, contratante_cod: string, origem: DocCtt['origem'] = 'contratante'): Promise<string | null> => {
@@ -469,22 +458,10 @@ function useCsDataInterno() {
     const encerrados = d.exig.filter(x => !x.ativo && x.contratante_cod === contratante_cod && ids.includes(x.documento_id))
     for (const v of encerrados) ok(await supabase.from('cs_documento_contratantes').update({ ativo: true }).eq('documento_id', v.documento_id).eq('contratante_cod', contratante_cod).eq('origem', v.origem))
     if (encerrados.length) setD(prev => ({ ...prev, exig: prev.exig.map(x => (encerrados.includes(x) ? { ...x, ativo: true } : x)) }))
-    // Grupo de criterio do contratante (cria se precisar) e documentos dentro dele
-    let grupo = d.grupos.find(g => !g.padrao && g.contratantes.includes(contratante_cod))
-    let criado: string | null = null
-    if (!grupo && ids.length) {
-      const nomeC = d.ctts.find(c => c.contratante_cod === contratante_cod)?.nome ?? contratante_cod
-      let nome = 'Grupo ' + nomeC
-      if (d.grupos.some(g => g.nome === nome)) nome += ' (' + contratante_cod + ')'
-      const ordem = Math.max(0, ...d.grupos.map(g => g.ordem)) + 1
-      const g = ok(await supabase.from('cs_grupos').insert({ nome, ordem }).select('*').single()) as Omit<Grupo, 'contratantes'>
-      ok(await supabase.from('cs_grupo_contratantes').insert({ grupo_id: g.id, contratante_cod }))
-      grupo = { ...g, contratantes: [contratante_cod] }
-      const novo = grupo
-      setD(prev => ({ ...prev, grupos: [...prev.grupos, novo] }))
-      criado = nome
-    }
-    if (grupo) {
+    // Documentos no grupo de criterio do contratante; sem grupo especifico, no padrao (nenhum grupo e criado:
+    // grupo de criterio so existe para o que e diferente do padrao)
+    const grupo = d.grupos.find(g => !g.padrao && g.contratantes.includes(contratante_cod)) ?? d.grupos.find(g => g.padrao)
+    if (grupo && ids.length) {
       const gid = grupo.id
       const faltam = [...new Set(ids)].filter(id => !d.gd.some(x => x.grupo_id === gid && x.documento_id === id))
       if (faltam.length) {
@@ -492,8 +469,8 @@ function useCsDataInterno() {
         setD(prev => ({ ...prev, gd: [...prev.gd, ...faltam.filter(id => !prev.gd.some(x => x.grupo_id === gid && x.documento_id === id)).map(documento_id => ({ grupo_id: gid, documento_id }))] }))
       }
     }
-    return { novos: novos.length, grupo: criado }
-  }, [supabase, d.exig, d.docs, d.grupos, d.ctts, d.gd, meuId])
+    return { novos: novos.length, grupo: null as string | null }
+  }, [supabase, d.exig, d.docs, d.grupos, d.gd, meuId])
 
   // ── Bases prontas (conjuntos) ───────────────────────────────────────────────
   const erroConj = (e: { message: string }) => new Error(/cs_conjunto/.test(e.message) ? 'Rode a migração sql/custo-servir-bases-prontas.sql no Supabase.' : e.message)
@@ -503,7 +480,7 @@ function useCsDataInterno() {
     const c = r.data as Omit<Conjunto, 'docs'>
     const ds = [...new Set(docs)]
     if (ds.length) ok(await supabase.from('cs_conjunto_documentos').insert(ds.map(documento_id => ({ conjunto_id: c.id, documento_id }))))
-    setD(prev => ({ ...prev, conjuntos: [...prev.conjuntos, { ...c, docs: ds }].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
+    setD(prev => ({ ...prev, conjuntos: [...prev.conjuntos, { ...c, perk: !!c.perk, ordem: c.ordem ?? 0, docs: ds }].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
     return c.id
   }, [supabase, meuId])
   const salvarConjunto = useCallback(async (id: string, patch: { nome?: string; descricao?: string | null }) => {
