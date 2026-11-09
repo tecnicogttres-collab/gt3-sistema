@@ -51,6 +51,7 @@ export const ABAS = [
   { id: 'contagem', label: 'Contagem por contratante' },
   { id: 'resultado', label: 'Resultado' },
   { id: 'suporte', label: 'Suporte' },
+  { id: 'extra', label: 'Extra portal' },
   { id: 'bases', label: 'Bases prontas' },
   { id: 'configuracoes', label: 'Configurações' },
   { id: 'fechamento', label: 'Fechamento' },

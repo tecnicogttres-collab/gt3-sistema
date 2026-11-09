@@ -1,25 +1,24 @@
 'use client'
 
-// Suporte (material "Medindo o Suporte GT3"): camada 2 (com rastro), camada 3 (amostragem do
-// trabalho) e o fechamento das tres camadas contra a capacidade pratica.
+// Suporte (material "Medindo o Suporte GT3"): camada 2 (com rastro). A camada 3 (amostragem do
+// trabalho) virou a aba Extra portal; o fechamento das tres camadas, a aba Fechamento.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCs } from '../cs-data'
 import {
-  baixar, contar, csvCell, dt, fatorMes, financeiro, fmt, mmss, nomeCtt, nomeUsuario, norm, unidadesDe,
+  baixar, csvCell, dt, fmt, mmss, nomeCtt, nomeUsuario, norm, unidadesDe,
   type Ctx,
 } from '../cs-lib'
 import {
-  avisosEfetivos, avisosPrevistosAte, calcCamada2, calcCamada3, CLASSES, diasUteisEntre, diaUtil, faixasMin, hojeIso, horariosDoDia,
-  margemErro, margemPiorCaso, minutosDia, OPCOES_AMOSTRA, participa, tempoAtividade, tempoC2,
-  type Amostragem, type AtivMedicao, type Atividade, type Classe, type Janela, type VolumeLinha,
+  calcCamada2, tempoAtividade, tempoC2,
+  type AtivMedicao, type Atividade, type VolumeLinha,
 } from '../cs-suporte-lib'
 import { BotaoConfirmar, useOrdem } from '../cs-ui'
 import { lerArquivo } from './Contagem'
 import { NumCampo } from './Resultado'
 import { useSuporte, type SuporteApi } from './suporte-data'
 
-const SUBS = [['cron', '⏱ Cronometrar atividade'], ['c2', 'Atividades e volumes'], ['c3', 'Amostragem (camada 3)'], ['metodo', 'Como funciona']] as const
+const SUBS = [['cron', '⏱ Cronometrar atividade'], ['c2', 'Atividades e volumes'], ['metodo', 'Como funciona']] as const
 type Sub = typeof SUBS[number][0]
 
 export default function Suporte() {
@@ -43,7 +42,6 @@ export default function Suporte() {
         {SUBS.map(([k, l]) => <button key={k} type="button" className={k === sub ? 'on' : ''} onClick={() => setSub(k)}>{l}</button>)}
       </div>
       {sub === 'c2' && <Camada2 ctx={ctx} s={s} />}
-      {sub === 'c3' && <Camada3 ctx={ctx} s={s} />}
       {sub === 'cron' && <CronometroSimples ctx={ctx} s={s} />}
       {sub === 'metodo' && <Metodo />}
     </>
@@ -518,282 +516,6 @@ function Volumes({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   )
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Camada 3
-// ═════════════════════════════════════════════════════════════════════════════
-function Camada3({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
-  const { d, tentar, meuId, papel } = useCs()
-  const gerencia = papel === 'admin' || papel === 'gestor'
-  const ativos = d.usuarios.filter(u => !u.desativado)
-  const vazio = { id: null as string | null, nome: '', inicio: hojeIso(), fim: '', avisos: 6, janelas: JANELAS_PADRAO, todos: true, pessoas: [] as string[] }
-  const [f, setF] = useState(vazio)
-  const editar = (x: Amostragem) => setF({
-    id: x.id, nome: x.nome, inicio: x.inicio, fim: x.fim, avisos: x.avisos_dia,
-    janelas: x.janelas?.length ? x.janelas : [{ ini: x.hora_ini.slice(0, 5), fim: x.hora_fim.slice(0, 5) }],
-    todos: !x.participantes, pessoas: x.participantes ?? [],
-  })
-  const fx = faixasMin({ hora_ini: '00:00', hora_fim: '00:00', janelas: f.janelas })
-  const janelasOk = f.janelas.length > 0 && f.janelas.every(j => j.ini && j.fim && j.fim > j.ini)
-  const podeSalvar = !!f.nome.trim() && !!f.inicio && !!f.fim && f.fim >= f.inicio && janelasOk && (f.todos || f.pessoas.length > 0)
-  const somarSemanas = (n: number) => {
-    const d = new Date((f.inicio || hojeIso()) + 'T12:00:00'); d.setDate(d.getDate() + n * 7 - 1)
-    while (!diaUtil(hojeIso(d))) d.setDate(d.getDate() - 1)
-    setF({ ...f, fim: hojeIso(d) })
-  }
-  async function salvarForm() {
-    const ordenadas = [...f.janelas].sort((x, y) => x.ini.localeCompare(y.ini))
-    const dados = {
-      nome: f.nome.trim(), inicio: f.inicio, fim: f.fim, avisos_dia: f.avisos,
-      hora_ini: (fx[0] ? minParaHora(fx[0].ini) : ordenadas[0].ini), hora_fim: (fx.length ? minParaHora(fx[fx.length - 1].fim) : ordenadas[ordenadas.length - 1].fim),
-      janelas: ordenadas, participantes: f.todos ? null : f.pessoas,
-    }
-    const okk = f.id
-      ? await tentar(() => s.salvarAmostragem(f.id!, dados), 'Amostragem salva')
-      : await tentar(() => s.criarAmostragem({ ...dados, ativa: true }), 'Amostragem criada')
-    if (okk) setF(vazio)
-  }
-  const a = s.amSel
-  const c3 = calcCamada3(s.amostras)
-  const fin = financeiro(ctx.cfg)
-  const previstas = a ? avisosPrevistosAte(a, ativos.map(u => u.id)) : 0
-  const meusHoje = a && participa(a, meuId) && hojeIso() >= a.inicio && hojeIso() <= a.fim ? horariosDoDia(a, meuId, hojeIso()) : []
-  const pct = (n: number) => (c3.n ? n / c3.n : 0)
-
-  return (
-    <>
-      <div className="box">
-        <h2>Amostragens do trabalho</h2>
-        <p className="note">Em horários sorteados de dias úteis, cada participante recebe no GT3 Sistema o aviso &quot;O que você está fazendo agora?&quot; e responde em 2 cliques (atividade + contratante). Aviso não respondido em 20 min expira. Mede contratante, não pessoa: os resultados não mostram quem respondeu o quê.</p>
-        {gerencia ? (
-          <div className={'tp-bloco' + (f.id ? ' padrao' : '')}>
-            <b>{f.id ? 'Editando amostragem' : 'Nova amostragem'}</b>
-            <div className="kv">
-              <label>Nome<input type="text" value={f.nome} onChange={e => setF({ ...f, nome: e.target.value })} placeholder="ex.: Amostragem nov/2026" /></label>
-              <label>Início<input type="date" value={f.inicio} onChange={e => setF({ ...f, inicio: e.target.value })} /></label>
-              <label>Fim<input type="date" value={f.fim} onChange={e => setF({ ...f, fim: e.target.value })} /></label>
-              <label>Avisos por dia (por pessoa)<input type="number" min={1} max={20} value={f.avisos} onChange={e => setF({ ...f, avisos: Math.min(20, Math.max(1, +e.target.value || 1)) })} /></label>
-            </div>
-            <div className="row">
-              <span className="note">Duração:</span>
-              {[1, 2, 3, 4].map(n => <button key={n} type="button" className="btn sm" onClick={() => somarSemanas(n)}>{n} semana{n > 1 ? 's' : ''}</button>)}
-            </div>
-
-            <div className="row"><span className="eyebrow">Faixas do dia em que os avisos podem sair</span></div>
-            <div className="row">
-              {f.janelas.map((j, i) => (
-                <span key={i} className="selbar" style={{ padding: '4px 8px' }}>
-                  <input type="time" value={j.ini} aria-label={`Faixa ${i + 1}: início`} onChange={e => setF({ ...f, janelas: f.janelas.map((x, k) => (k === i ? { ...x, ini: e.target.value } : x)) })} />
-                  <span>–</span>
-                  <input type="time" value={j.fim} aria-label={`Faixa ${i + 1}: fim`} onChange={e => setF({ ...f, janelas: f.janelas.map((x, k) => (k === i ? { ...x, fim: e.target.value } : x)) })} />
-                  {f.janelas.length > 1 && <button type="button" className="link" aria-label="Remover faixa" onClick={() => setF({ ...f, janelas: f.janelas.filter((_, k) => k !== i) })}>✕</button>}
-                </span>
-              ))}
-              <button type="button" className="btn sm" onClick={() => setF({ ...f, janelas: [...f.janelas, { ini: '', fim: '' }] })}>+ Faixa</button>
-              <button type="button" className="btn sm" onClick={() => setF({ ...f, janelas: JANELAS_PADRAO })}>Comercial sem almoço</button>
-              <button type="button" className="btn sm" onClick={() => setF({ ...f, janelas: [{ ini: '08:00', fim: '18:00' }] })}>Dia inteiro</button>
-            </div>
-            {!janelasOk && <p className="note" style={{ color: 'var(--cs-bad)' }}>Cada faixa precisa de início e fim, com o fim depois do início.</p>}
-
-            <div className="row">
-              <span className="eyebrow">Quem participa</span>
-              <label className="row note" style={{ gap: 6 }}><input type="checkbox" checked={f.todos} onChange={e => setF({ ...f, todos: e.target.checked })} /> Todos os usuários ativos ({ativos.length})</label>
-              {!f.todos && <>
-                <span className="note">{f.pessoas.length} selecionado(s)</span>
-                <button type="button" className="btn sm" onClick={() => setF({ ...f, pessoas: ativos.map(u => u.id) })}>Marcar todos</button>
-                <button type="button" className="btn sm" onClick={() => setF({ ...f, pessoas: [] })}>Limpar</button>
-              </>}
-            </div>
-            {!f.todos && (
-              <div className="row">
-                {ativos.map(u => (
-                  <label key={u.id} className={'pill ' + (f.pessoas.includes(u.id) ? 'p-blue' : 'p-gray')} style={{ cursor: 'pointer', padding: '3px 10px', fontSize: 12.5 }}>
-                    <input type="checkbox" style={{ display: 'none' }} checked={f.pessoas.includes(u.id)}
-                      onChange={e => setF({ ...f, pessoas: e.target.checked ? [...f.pessoas, u.id] : f.pessoas.filter(x => x !== u.id) })} />
-                    {f.pessoas.includes(u.id) ? '✓ ' : ''}{nomeUsuario(u)}
-                  </label>
-                ))}
-              </div>
-            )}
-
-            <ResumoAmostragem a={{ id: f.id ?? 'novo', inicio: f.inicio, fim: f.fim, avisos_dia: f.avisos, hora_ini: '00:00', hora_fim: '00:00', janelas: f.janelas }} pessoas={f.todos ? ativos.length : f.pessoas.length} />
-
-            <div className="row">
-              <button type="button" className="btn solid" disabled={!podeSalvar} onClick={() => void salvarForm()}>{f.id ? 'Salvar alterações' : 'Criar amostragem'}</button>
-              {f.id && <button type="button" className="btn" onClick={() => setF(vazio)}>Cancelar edição</button>}
-              <span className="note">Referência do material: 2 semanas (≈480 observações com 8 pessoas) decidem; 4 semanas permitem abrir por contratante.{f.id ? ' Mudar faixas ou avisos muda os sorteios a partir de agora; as respostas já dadas ficam.' : ''}</span>
-            </div>
-          </div>
-        ) : <p className="note">Só gestor ou admin cria amostragens.</p>}
-        {s.amostragens.length > 0 && (
-          <div className="tbl">
-            <table>
-              <thead><tr><th>Amostragem</th><th>Período</th><th className="r">Dias úteis</th><th className="r">Avisos/dia</th><th>Faixas</th><th>Participantes</th><th className="c">Ativa</th><th /></tr></thead>
-              <tbody>
-                {s.amostragens.map(x => {
-                  const nomes = x.participantes?.map(id => nomeUsuario(d.usuarios.find(u => u.id === id))) ?? []
-                  return (
-                    <tr key={x.id} className={'click' + (a?.id === x.id ? ' sel' : '')} onClick={() => s.setAmId(x.id)}>
-                      <td><b style={{ fontWeight: 600 }}>{x.nome}</b></td>
-                      <td className="mono">{x.inicio.split('-').reverse().join('/')} a {x.fim.split('-').reverse().join('/')}</td>
-                      <td className="r mono">{diasUteisEntre(x.inicio, x.fim)}</td>
-                      <td className="r mono">{avisosEfetivos(x)}</td>
-                      <td className="mono">{faixasMin(x).map(j => minParaHora(j.ini) + '–' + minParaHora(j.fim)).join(' · ')}</td>
-                      <td className="note" title={nomes.join(', ')}>{x.participantes ? (nomes.length <= 3 ? nomes.join(', ') : `${nomes.slice(0, 2).join(', ')} e mais ${nomes.length - 2}`) : 'todos'}</td>
-                      <td className="c" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={x.ativa} disabled={!gerencia} aria-label="Ativa" onChange={e => tentar(() => s.salvarAmostragem(x.id, { ativa: e.target.checked }))} />
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        {gerencia && <span className="pills">
-                          <button type="button" className="btn sm" onClick={() => { editar(x); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>Editar</button>
-                          <BotaoConfirmar onConfirm={() => tentar(() => s.excluirAmostragem(x.id), 'Amostragem excluída')}>Excluir</BotaoConfirmar>
-                        </span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {a && (
-        <div className="box">
-          <div className="row between">
-            <h2>Resultado: {a.nome}</h2>
-            <button type="button" className="btn sm" onClick={() => s.recarregarAmostras(a.id)}>Atualizar</button>
-          </div>
-          {meusHoje.length > 0 && <p className="note">Seus avisos de hoje: {meusHoje.map(h => h.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })).join(' · ')}</p>}
-          <ResumoAmostragem a={a} pessoas={a.participantes ? a.participantes.length : ativos.length} />
-          <div className="tiles">
-            <div className="tile"><b>{c3.n}</b><span>observações</span></div>
-            <div className="tile"><b>±{fmt(margemPiorCaso(c3.n), 1)} p.p.</b><span>margem de erro (95%, pior caso)</span></div>
-            <div className="tile"><b>{previstas ? fmt((c3.n / previstas) * 100) + '%' : '—'}</b><span>taxa de resposta ({previstas} avisos até agora)</span></div>
-            <div className="tile"><b>{fin.ok ? fmt(fin.cap) + ' h' : '—'}</b><span>capacidade prática/mês (para converter % em horas)</span></div>
-          </div>
-          {c3.n === 0 ? <p className="note">Nenhuma resposta ainda.</p> : <>
-            <h3>Para onde vai o tempo</h3>
-            <div className="tbl">
-              <table>
-                <thead><tr><th>Atividade</th><th>Classe</th><th className="r">Obs.</th><th className="r">%</th><th className="r">± p.p.</th><th style={{ width: '30%' }} /><th className="r">h/mês</th></tr></thead>
-                <tbody>
-                  {OPCOES_AMOSTRA.map(o => {
-                    const p = pct(c3.porOpcao[o.chave])
-                    const me = margemErro(p, c3.n)
-                    return (
-                      <tr key={o.chave}>
-                        <td>{o.label}</td>
-                        <td className="note">{CLASSES[o.classe]}</td>
-                        <td className="r mono">{c3.porOpcao[o.chave]}</td>
-                        <td className="r mono">{fmt(p * 100, 1)}%</td>
-                        <td className="r mono">±{fmt(me, 1)}</td>
-                        <td><Barra p={p} me={me / 100} /></td>
-                        <td className="r mono">{fin.ok ? fmt(p * fin.cap, 0) : '—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <ConferenciaCamadas ctx={ctx} s={s} pctClasse={k => pct(c3.porClasse[k])} />
-            <h3>Camada 3 (WhatsApp e orientação) por contratante</h3>
-            <PorContratanteC3 ctx={ctx} porCtt={c3.porCttCamada3} n={c3.n} semCtt={c3.camada3SemCtt} cap={fin.ok ? fin.cap : null} />
-          </>}
-        </div>
-      )}
-    </>
-  )
-}
-
-const JANELAS_PADRAO: Janela[] = [{ ini: '08:00', fim: '12:00' }, { ini: '13:30', fim: '18:00' }]
-const minParaHora = (m: number) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')
-
-/** Duracao total da amostragem: dias uteis, horas cobertas por dia e observacoes esperadas. */
-function ResumoAmostragem({ a, pessoas }: { a: Pick<Amostragem, 'id' | 'inicio' | 'fim' | 'avisos_dia' | 'hora_ini' | 'hora_fim' | 'janelas'>; pessoas: number }) {
-  const dias = diasUteisEntre(a.inicio, a.fim)
-  const minDia = minutosDia(a)
-  const n = avisosEfetivos(a)
-  const total = dias * n * pessoas
-  const esperado = Math.round(total * 0.8)
-  const semanas = a.inicio && a.fim && a.fim >= a.inicio ? (new Date(a.fim + 'T12:00:00').getTime() - new Date(a.inicio + 'T12:00:00').getTime()) / 86_400_000 / 7 + 1 / 7 : 0
-  return (
-    <div className="tiles">
-      <div className="tile"><b>{dias}</b><span>dias úteis{semanas ? ` · ${fmt(semanas, 1)} semana(s)` : ''}</span></div>
-      <div className="tile"><b>{fmt(minDia / 60, 1)} h</b><span>cobertas por dia (faixas)</span></div>
-      <div className="tile"><b>{fmt(dias * minDia / 60, 0)} h</b><span>duração total da camada por pessoa</span></div>
-      <div className="tile"><b>{n}{n < a.avisos_dia ? '*' : ''}</b><span>avisos/dia por pessoa{n < a.avisos_dia ? ' (*limitado: 20 min entre avisos)' : ''}</span></div>
-      <div className="tile"><b>{fmt(total)}</b><span>avisos no período · {pessoas} pessoa(s)</span></div>
-      <div className="tile"><b>±{esperado ? fmt(margemPiorCaso(esperado), 1) : '—'} p.p.</b><span>margem esperada (80% de resposta ≈ {fmt(esperado)} obs.)</span></div>
-    </div>
-  )
-}
-
-function Barra({ p, me }: { p: number; me: number }) {
-  return (
-    <div style={{ position: 'relative', height: 12, background: 'var(--cs-tint)', borderRadius: 4 }}>
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min(100, p * 100)}%`, background: 'var(--cs-edge)', borderRadius: 4 }} />
-      <div title="margem de erro" style={{ position: 'absolute', top: 5, height: 2, left: `${Math.max(0, (p - me) * 100)}%`, width: `${Math.min(100, (p + me) * 100) - Math.max(0, (p - me) * 100)}%`, background: 'var(--cs-gold)' }} />
-    </div>
-  )
-}
-
-function PorContratanteC3({ ctx, porCtt, n, semCtt, cap }: { ctx: Ctx; porCtt: Record<string, number>; n: number; semCtt: number; cap: number | null }) {
-  const lista = Object.entries(porCtt).map(([c, k]) => ({ c, k }))
-  const { sorted, th } = useOrdem(lista, { c: x => +x.c || x.c, nome: x => nomeCtt(ctx, x.c), k: x => x.k }, { col: 'k', dir: 'desc' })
-  if (!lista.length) return <p className="note">Nenhuma observação de camada 3 com contratante ainda.</p>
-  return (
-    <div className="tbl scroll" style={{ maxHeight: 340 }}>
-      <table>
-        <thead><tr>{th('c', 'Cód.')}{th('nome', 'Contratante')}{th('k', 'Obs.', 'r')}<th className="r">% do tempo</th><th className="r">± p.p.</th><th className="r">h/mês</th></tr></thead>
-        <tbody>
-          {sorted.map(x => {
-            const p = x.k / n
-            return <tr key={x.c}><td className="mono">{x.c}</td><td>{nomeCtt(ctx, x.c)}</td><td className="r mono">{x.k}</td><td className="r mono">{fmt(p * 100, 1)}%</td><td className="r mono">±{fmt(margemErro(p, n), 1)}</td><td className="r mono">{cap ? fmt(p * cap, 1) : '—'}</td></tr>
-          })}
-          {semCtt > 0 && <tr><td /><td className="note">Sem contratante</td><td className="r mono">{semCtt}</td><td className="r mono">{fmt((semCtt / n) * 100, 1)}%</td><td /><td className="r mono">{cap ? fmt((semCtt / n) * cap, 1) : '—'}</td></tr>}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-/** Conferencia: a amostragem confere as camadas 1 e 2 (se os % batem com as horas medidas). */
-function ConferenciaCamadas({ ctx, s, pctClasse }: { ctx: Ctx; s: SuporteApi; pctClasse: (k: Classe) => number }) {
-  const { linhas, relSel } = useCs()
-  const fin = financeiro(ctx.cfg)
-  const r = useMemo(() => contar(ctx, linhas), [ctx, linhas])
-  if (!fin.ok) return <div className="warnbox">Preencha os parâmetros da equipe (aba Resultado) para comparar a amostragem com as camadas 1 e 2.</div>
-  const f1 = fatorMes(ctx.cfg, relSel)
-  const h1 = f1 ? (r.real / 60) * f1 : null
-  const diasMes = ctx.cfg.dias_mes ?? ctx.cfg.dias_uteis
-  const f2 = s.loteSel?.dias_uteis && diasMes ? diasMes / s.loteSel.dias_uteis : null
-  const c2 = calcCamada2(s.linhas, s.ativs, tempoC2(ctx, s.meds))
-  const h2 = f2 && s.linhas.length ? (c2.total / 60) * f2 : null
-  const linha = (titulo: string, amostra: number, medido: number | null) => {
-    const dif = medido != null && amostra ? (medido - amostra) / amostra : null
-    return (
-      <tr>
-        <td>{titulo}</td>
-        <td className="r mono">{fmt(amostra, 0)} h</td>
-        <td className="r mono">{medido != null ? fmt(medido, 0) + ' h' : '—'}</td>
-        <td>{dif == null ? <span className="note">sem dado medido</span> : Math.abs(dif) <= 0.15 ? <span className="pill p-good">bate ({fmt(dif * 100)}%)</span> : <span className="pill p-warn">revisar tempos ({dif > 0 ? '+' : ''}{fmt(dif * 100)}%)</span>}</td>
-      </tr>
-    )
-  }
-  return <>
-    <h3>Conferência com as camadas medidas</h3>
-    <div className="tbl">
-      <table>
-        <thead><tr><th>Camada</th><th className="r">Pela amostragem (h/mês)</th><th className="r">Pela medição (h/mês)</th><th>Leitura</th></tr></thead>
-        <tbody>
-          {linha('Camada 1 · Avaliação (relatório × tempo-padrão)', pctClasse('camada1') * fin.cap, h1)}
-          {linha('Camada 2 · Com rastro (volumes × tempo-padrão)', pctClasse('camada2') * fin.cap, h2)}
-        </tbody>
-      </table>
-    </div>
-    <p className="note">Se a amostragem e a medição ficam perto (até ±15%), os tempos-padrão estão bem calibrados.</p>
-  </>
-}
 
 function Metodo() {
   return (

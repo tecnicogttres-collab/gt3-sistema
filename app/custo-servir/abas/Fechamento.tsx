@@ -56,7 +56,7 @@ function FechamentoConta({ ctx, s, linhas, relSel }: { ctx: Ctx; s: SuporteApi; 
   else if (!f1) faltas.push('Dias úteis do relatório (aba Resultado) para projetar a camada 1.')
   if (!s.loteSel) faltas.push('Volumes da camada 2 (Suporte › Camada 2).')
   else if (!f2) faltas.push('Dias úteis do lote de volumes da camada 2.')
-  if (!c3.n) faltas.push('Respostas de uma amostragem (Suporte › Camada 3).')
+  if (!c3.n) faltas.push('Respostas de uma amostragem (aba Extra portal).')
 
   return (
     <>

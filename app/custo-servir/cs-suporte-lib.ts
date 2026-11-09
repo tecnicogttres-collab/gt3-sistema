@@ -19,11 +19,17 @@ export type Amostragem = {
   participantes: string[] | null; ativa: boolean; created_by: string | null; created_at: string
   /** Faixas do dia em que os avisos podem sair. null = faixa unica hora_ini..hora_fim. */
   janelas?: Janela[] | null
+  /** O que conta nesta amostragem (chaves de OPCOES_AMOSTRA). null = todas. */
+  opcoes?: ChaveAmostra[] | null
+  /** Qualquer usuario pode registrar por conta propria, alem de quem recebe o pop-up. */
+  aberta_todos?: boolean
 }
 export type Janela = { ini: string; fim: string }
 export type Amostra = {
   id: string; amostragem_id: string; usuario_id: string; previsto_em: string; respondido_em: string
   atividade: ChaveAmostra; contratante_cod: string | null
+  /** Registrado por conta propria (nao veio de um pop-up sorteado). */
+  espontanea?: boolean
 }
 
 // ── Opcoes do aviso (lista 3.3 do material) ──────────────────────────────────
@@ -44,6 +50,8 @@ export const CLASSES: Record<Classe, string> = {
   camada1: 'Camada 1 · Avaliação', camada2: 'Camada 2 · Com rastro', camada3: 'Camada 3 · Difuso',
   interno: 'Interno (estrutura)', ociosa: 'Capacidade ociosa',
 }
+/** Opcoes que contam nesta amostragem (todas, se nao foi escolhido). */
+export const opcoesDe = (a: Pick<Amostragem, 'opcoes'>) => (a.opcoes?.length ? OPCOES_AMOSTRA.filter(o => a.opcoes!.includes(o.chave)) : OPCOES_AMOSTRA)
 export const classeDe = (k: ChaveAmostra) => OPCOES_AMOSTRA.find(o => o.chave === k)!.classe
 
 // ── Horarios sorteados (deterministicos por amostragem + pessoa + dia) ───────
@@ -102,7 +110,10 @@ export function horariosDoDia(a: Pick<Amostragem, 'id' | 'avisos_dia' | 'hora_in
   return out
 }
 export const hojeIso = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+/** Recebe o pop-up obrigatorio. */
 export const participa = (a: Amostragem, usuarioId: string) => !a.participantes || a.participantes.includes(usuarioId)
+/** Pode registrar por conta propria: quem recebe o pop-up ou, se aberta a todos, qualquer um. */
+export const podeRegistrar = (a: Amostragem, usuarioId: string) => !!a.aberta_todos || participa(a, usuarioId)
 /** Quantos avisos ja deveriam ter saido ate agora (para a taxa de resposta). */
 export function avisosPrevistosAte(a: Amostragem, usuarios: string[], agora = new Date()): number {
   let n = 0

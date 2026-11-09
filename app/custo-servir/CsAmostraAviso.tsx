@@ -1,13 +1,13 @@
 'use client'
 
-// Aviso da amostragem do trabalho (camada 3). Montado no AppShell: nos horarios sorteados de uma
+// Pop-up do Extra portal (amostragem do trabalho). Montado no AppShell: nos horarios sorteados de uma
 // amostragem ativa, pergunta "O que voce esta fazendo agora?" (atividade + contratante, 2 cliques).
 // Aviso nao respondido em 20 min expira sem registro (o horario sorteado ja passou).
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../lib/supabase'
 import { useUser } from '../components/UserContext'
-import { hojeIso, horariosDoDia, OPCOES_AMOSTRA, participa, type Amostragem, type ChaveAmostra } from './cs-suporte-lib'
+import { hojeIso, horariosDoDia, opcoesDe, participa, type Amostragem, type ChaveAmostra } from './cs-suporte-lib'
 import './custo-servir.css'
 
 const JANELA_MS = 20 * 60_000
@@ -19,6 +19,64 @@ type Ctt = { contratante_cod: string; nome: string }
 const lerPulados = (): string[] => { try { return JSON.parse(sessionStorage.getItem(CHAVE_PULADOS) || '[]') } catch { return [] } }
 const pular = (k: string) => { try { sessionStorage.setItem(CHAVE_PULADOS, JSON.stringify([...lerPulados(), k].slice(-50))) } catch { /* ignore */ } }
 
+/** Escolha da resposta: 1o clique na atividade, 2o no contratante (quando a atividade pede). */
+export function EscolherResposta({ amostragem, ctts, salvando, onRegistrar }: {
+  amostragem: Amostragem; ctts: Ctt[]; salvando: boolean
+  onRegistrar: (atividade: ChaveAmostra, contratante: string | null) => Promise<boolean>
+}) {
+  const [ativ, setAtiv] = useState<ChaveAmostra | null>(null)
+  const [busca, setBusca] = useState('')
+  const opcoes = opcoesDe(amostragem)
+  const opc = opcoes.find(o => o.chave === ativ)
+  const registrar = async (c: string | null) => {
+    if (!ativ) return
+    if (await onRegistrar(ativ, c)) { setAtiv(null); setBusca('') }
+  }
+  const q = busca.trim().toLowerCase()
+  const lista = q ? ctts.filter(c => (c.contratante_cod + ' ' + c.nome).toLowerCase().includes(q)) : ctts
+
+  if (!opc) {
+    return (
+      <div className="grid2" style={{ gap: 8 }}>
+        {opcoes.map(o => (
+          <button key={o.chave} type="button" className="dcard" disabled={salvando} onClick={() => setAtiv(o.chave)}>
+            <b>{o.label}</b><span className="note">{o.inclui}</span>
+          </button>
+        ))}
+      </div>
+    )
+  }
+  if (!opc.pedeContratante) {
+    return (
+      <div className="box">
+        <p><b>{opc.label}</b>: {opc.inclui}.</p>
+        <div className="row">
+          <button type="button" className="btn solid" disabled={salvando} onClick={() => void registrar(null)}>Registrar</button>
+          <button type="button" className="link" onClick={() => setAtiv(null)}>voltar</button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="box">
+      <div className="row between">
+        <b>{opc.label} · para qual contratante?</b>
+        <button type="button" className="link" onClick={() => { setAtiv(null); setBusca('') }}>voltar</button>
+      </div>
+      <input type="search" autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar contratante (código ou nome)" />
+      <div style={{ maxHeight: 280, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <button type="button" className="btn sm" style={{ textAlign: 'left' }} disabled={salvando} onClick={() => void registrar(null)}>Não é de um contratante</button>
+        {lista.map(c => (
+          <button key={c.contratante_cod} type="button" className="btn sm" style={{ textAlign: 'left', whiteSpace: 'normal' }} disabled={salvando}
+            onClick={() => void registrar(c.contratante_cod)}>
+            <span className="mono">{c.contratante_cod}</span> · {c.nome}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function CsAmostraAviso() {
   const { profile } = useUser()
   const uid = profile?.id ?? ''
@@ -27,8 +85,6 @@ export default function CsAmostraAviso() {
   const [respondidos, setRespondidos] = useState<Set<string>>(new Set())
   const [ctts, setCtts] = useState<Ctt[]>([])
   const [agora, setAgora] = useState(() => Date.now())
-  const [ativ, setAtiv] = useState<ChaveAmostra | null>(null)
-  const [busca, setBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [, setPuladosVer] = useState(0)
 
@@ -75,71 +131,32 @@ export default function CsAmostraAviso() {
 
   if (!pendente) return null
   const k = pendente.amostragem.id + '|' + pendente.previsto.toISOString()
-  const opc = OPCOES_AMOSTRA.find(o => o.chave === ativ)
 
-  async function registrar(contratante: string | null) {
-    if (!ativ || salvando) return
+  async function registrar(atividade: ChaveAmostra, contratante: string | null) {
+    if (salvando) return false
     setSalvando(true)
     const { error } = await supabase.from('cs_amostras').insert({
       amostragem_id: pendente!.amostragem.id, usuario_id: uid, previsto_em: pendente!.previsto.toISOString(),
-      atividade: ativ, contratante_cod: contratante,
+      atividade, contratante_cod: contratante,
     })
     setSalvando(false)
-    if (error && error.code !== '23505') { alert('Não foi possível registrar: ' + error.message); return }
+    if (error && error.code !== '23505') { alert('Não foi possível registrar: ' + error.message); return false }
     setRespondidos(prev => new Set(prev).add(k))
-    setAtiv(null); setBusca('')
+    return true
   }
-
-  const lista = busca.trim()
-    ? ctts.filter(c => (c.contratante_cod + ' ' + c.nome).toLowerCase().includes(busca.trim().toLowerCase()))
-    : ctts
 
   return (
     <div className="cs-modal" style={{ alignItems: 'center' }}>
-      <div className="cs" style={{ maxWidth: 560 }} role="dialog" aria-label="Amostragem do trabalho">
+      <div className="cs" style={{ maxWidth: 560 }} role="dialog" aria-label="Extra portal">
         <div className="row between">
           <div>
-            <div className="eyebrow">GT3 · amostragem do trabalho</div>
+            <div className="eyebrow">GT3 · extra portal</div>
             <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--cs-edge-2)' }}>O que você está fazendo agora?</h2>
             <p className="note">{pendente.previsto.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · responda em 2 cliques. Mede o contratante, não a pessoa.</p>
           </div>
-          <button type="button" className="link" onClick={() => { pular(k); setPuladosVer(x => x + 1); setAtiv(null) }}>agora não</button>
+          <button type="button" className="link" onClick={() => { pular(k); setPuladosVer(x => x + 1) }}>agora não</button>
         </div>
-        {!ativ ? (
-          <div className="grid2" style={{ gap: 8 }}>
-            {OPCOES_AMOSTRA.map(o => (
-              <button key={o.chave} type="button" className="dcard" disabled={salvando}
-                onClick={() => setAtiv(o.chave)}>
-                <b>{o.label}</b><span className="note">{o.inclui}</span>
-              </button>
-            ))}
-          </div>
-        ) : opc && !opc.pedeContratante ? (
-          <div className="box">
-            <p><b>{opc.label}</b>: {opc.inclui}.</p>
-            <div className="row">
-              <button type="button" className="btn solid" disabled={salvando} onClick={() => registrar(null)}>Registrar</button>
-              <button type="button" className="link" onClick={() => setAtiv(null)}>voltar</button>
-            </div>
-          </div>
-        ) : (
-          <div className="box">
-            <div className="row between">
-              <b>{opc?.label} · para qual contratante?</b>
-              <button type="button" className="link" onClick={() => { setAtiv(null); setBusca('') }}>voltar</button>
-            </div>
-            <input type="search" autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar contratante (código ou nome)" />
-            <div style={{ maxHeight: 280, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <button type="button" className="btn sm" style={{ textAlign: 'left' }} disabled={salvando} onClick={() => registrar(null)}>Não é de um contratante</button>
-              {lista.map(c => (
-                <button key={c.contratante_cod} type="button" className="btn sm" style={{ textAlign: 'left', whiteSpace: 'normal' }} disabled={salvando}
-                  onClick={() => registrar(c.contratante_cod)}>
-                  <span className="mono">{c.contratante_cod}</span> · {c.nome}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <EscolherResposta key={k} amostragem={pendente.amostragem} ctts={ctts} salvando={salvando} onRegistrar={registrar} />
       </div>
     </div>
   )

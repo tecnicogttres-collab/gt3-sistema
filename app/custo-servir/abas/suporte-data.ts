@@ -17,7 +17,12 @@ async function todas<T>(q: (a: number, b: number) => PageRes<T>): Promise<T[]> {
   }
 }
 function ok<T>(r: { data: T; error: { message: string } | null }): T {
-  if (r.error) throw new Error(/janelas/.test(r.error.message) ? 'Rode a migração sql/custo-servir-amostragem-janelas.sql no Supabase para usar faixas de horário.' : r.error.message)
+  if (r.error) {
+    const m = r.error.message
+    if (/janelas/.test(m)) throw new Error('Rode a migração sql/custo-servir-amostragem-janelas.sql no Supabase para usar faixas de horário.')
+    if (/espontanea|aberta_todos|opcoes/.test(m)) throw new Error('Rode a migração sql/custo-servir-extra-portal.sql no Supabase para usar o Extra portal.')
+    throw new Error(m)
+  }
   return r.data
 }
 
@@ -180,6 +185,14 @@ export function useSuporte(meuId: string) {
     ok(await supabase.from('cs_amostragens').update(patch).eq('id', id))
     setAmostragens(p => p.map(a => (a.id === id ? { ...a, ...patch } : a)))
   }, [supabase])
+  /** Registro por conta propria no Extra portal (sem pop-up): horario = agora. */
+  const registrarAmostra = useCallback(async (amostragem_id: string, atividade: Amostra['atividade'], contratante_cod: string | null) => {
+    const r = ok(await supabase.from('cs_amostras').insert({
+      amostragem_id, usuario_id: meuId, previsto_em: new Date().toISOString(), atividade, contratante_cod, espontanea: true,
+    }).select('*').single()) as Amostra
+    setAmostrasDe(p => (p && p.id === amostragem_id ? { id: p.id, amostras: [...p.amostras, r] } : p))
+    return r
+  }, [supabase, meuId])
   const excluirAmostragem = useCallback(async (id: string) => {
     ok(await supabase.from('cs_amostragens').delete().eq('id', id))
     setAmId(null); setAmostragens(p => p.filter(a => a.id !== id))
@@ -188,7 +201,7 @@ export function useSuporte(meuId: string) {
   return {
     carregando, faltaSql, recarregar: carregar, ativs, meds, lotes, loteSel, setLoteId, linhas, amostragens, amSel, setAmId, amostras,
     recarregarAmostras, salvarAtividade, adicionarAtividade, excluirAtividade, registrarMedAtiv, alternarMedAtiv, excluirMedAtiv,
-    importarLote, adicionarLinhas, atualizarLote, excluirLote, criarAmostragem, salvarAmostragem, excluirAmostragem,
+    importarLote, adicionarLinhas, atualizarLote, excluirLote, criarAmostragem, salvarAmostragem, excluirAmostragem, registrarAmostra,
   }
 }
 export type SuporteApi = ReturnType<typeof useSuporte>

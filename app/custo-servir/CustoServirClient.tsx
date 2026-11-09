@@ -15,6 +15,7 @@ import Configuracoes from './abas/Configuracoes'
 import Suporte from './abas/Suporte'
 import Bases from './abas/Bases'
 import Fechamento from './abas/Fechamento'
+import ExtraPortal from './abas/ExtraPortal'
 import { prefetchSuporte } from './abas/suporte-data'
 import { displayName, useUser } from '../components/UserContext'
 import './custo-servir.css'
@@ -90,7 +91,7 @@ function Modulo({ aba, setAba, nav, setNav }: {
   }, [abaAtual, telaVisivel, carregando, carregarMedicoes])
 
   // Suporte/Fechamento: comeca a carregar em segundo plano para a aba abrir na hora
-  const veSuporte = abas.some(a => a.id === 'suporte' || a.id === 'fechamento')
+  const veSuporte = abas.some(a => a.id === 'suporte' || a.id === 'extra' || a.id === 'fechamento')
   useEffect(() => { if (telaVisivel && !carregando && veSuporte) prefetchSuporte() }, [telaVisivel, carregando, veSuporte])
 
   // Esconde o botao flutuante quando a tela do cronometro em andamento esta aberta
@@ -153,6 +154,7 @@ function Modulo({ aba, setAba, nav, setNav }: {
           {abaAtual === 'contagem' && <Contagem />}
           {abaAtual === 'resultado' && <Resultado />}
           {abaAtual === 'suporte' && <Suporte />}
+          {abaAtual === 'extra' && <ExtraPortal />}
           {abaAtual === 'bases' && <Bases />}
           {abaAtual === 'configuracoes' && <Configuracoes />}
           {abaAtual === 'fechamento' && <Fechamento />}
