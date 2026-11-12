@@ -9,8 +9,8 @@ import { useCs } from '../cs-data'
 import { contar, fatorMes, financeiro, fmt, nomeCtt, nomeUsuario, type Ctx } from '../cs-lib'
 import {
   avisosEfetivos, avisosPrevistosAte, calcCamada2, calcCamada3, CLASSES, cttsDaAmostra, diasUteisEntre, diaUtil, faixasMin, hojeIso,
-  margemErro, margemPiorCaso, minutosDia, OPCOES_AMOSTRA, opcoesDe, participa, podeRegistrar, tempoC2,
-  type Amostra, type Amostragem, type ChaveAmostra, type Classe, type Janela,
+  labelOpcao, margemErro, margemPiorCaso, minutosDia, montarOpcoes, opcoesDe, participa, podeRegistrar, tempoC2,
+  type Amostra, type Amostragem, type AtividadeC3, type ChaveAmostra, type Classe, type Janela,
 } from '../cs-suporte-lib'
 import { BotaoConfirmar, useOrdem } from '../cs-ui'
 import { EscolherResposta } from '../CsAmostraAviso'
@@ -27,6 +27,7 @@ export default function ExtraPortal() {
   return (
     <>
       <MinhaParticipacao ctx={ctx} s={s} />
+      {gerencia && <AtividadesC3 s={s} />}
       {gerencia && <Configurar s={s} />}
       {gerencia && <ResultadoPesquisa ctx={ctx} s={s} />}
     </>
@@ -84,7 +85,7 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
             </p>
             {abrir === a.id ? (
               <>
-                <EscolherResposta amostragem={a} ctts={ctts} salvando={salvando} onRegistrar={async (atv, cs) => {
+                <EscolherResposta amostragem={a} todas={montarOpcoes(s.c3)} ctts={ctts} salvando={salvando} onRegistrar={async (atv, cs) => {
                   setSalvando(true)
                   let r: Amostra | null = null
                   const okk = await tentar(async () => { r = await s.registrarAmostra(a.id, atv, cs) }, 'Registrado. Obrigado!')
@@ -110,7 +111,7 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
               {minhas.map(m => (
                 <tr key={m.id}>
                   <td className="mono">{new Date(m.respondido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
-                  <td>{OPCOES_AMOSTRA.find(o => o.chave === m.atividade)?.label ?? m.atividade}</td>
+                  <td>{labelOpcao(m.atividade, montarOpcoes(s.c3, true))}</td>
                   <td className="note">{cttsDaAmostra(m).map(c => `${c} · ${nomeCtt(ctx, c)}`).join('; ') || '—'}</td>
                   <td className="note">{m.espontanea ? 'por conta própria' : 'pop-up'}</td>
                 </tr>
@@ -124,14 +125,121 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Gestor/admin: atividades da camada 3 (opcoes do pop-up fora do portal)
+// ═════════════════════════════════════════════════════════════════════════════
+function AtividadesC3({ s }: { s: SuporteApi }) {
+  const { toast, tentar } = useCs()
+  const [novo, setNovo] = useState({ label: '', inclui: '' })
+  const [edit, setEdit] = useState<{ chave: string; label: string; inclui: string } | null>(null)
+  const [verInativas, setVerInativas] = useState(false)
+  const ativas = s.c3.filter(a => a.ativo).sort((a, b) => a.ordem - b.ordem)
+  const inativas = s.c3.filter(a => !a.ativo)
+  const nomeRepetido = (label: string, chave?: string) =>
+    s.c3.some(a => a.chave !== chave && a.ativo && a.label.trim().toLowerCase() === label.trim().toLowerCase())
+
+  async function incluir() {
+    if (await tentar(() => s.adicionarC3(novo.label.trim(), novo.inclui.trim()), 'Atividade incluída')) setNovo({ label: '', inclui: '' })
+  }
+  async function salvarEdicao() {
+    if (!edit) return
+    if (await tentar(() => s.salvarC3(edit.chave, { label: edit.label.trim(), inclui: edit.inclui.trim() || null }), 'Atividade salva')) setEdit(null)
+  }
+  async function remover(a: AtividadeC3) {
+    let r: 'excluida' | 'desativada' | null = null
+    await tentar(async () => { r = await s.removerC3(a.chave) })
+    if (r === 'excluida') toast(`"${a.label}" excluída`)
+    if (r === 'desativada') toast(`"${a.label}" removida do pop-up; as respostas já dadas continuam no resultado`)
+  }
+  async function mover(a: AtividadeC3, dir: -1 | 1) {
+    const i = ativas.findIndex(x => x.chave === a.chave)
+    const b = ativas[i + dir]
+    if (!b) return
+    await tentar(async () => { await s.salvarC3(a.chave, { ordem: b.ordem }); await s.salvarC3(b.chave, { ordem: a.ordem }) })
+  }
+
+  return (
+    <div className="box">
+      <h2>Atividades da camada 3 (gestor e admin)</h2>
+      <p className="note">Trabalho fora do portal sem rastro, medido pela amostragem. Estas atividades aparecem como botões no pop-up, entre as fixas (Avaliação, Cadastro, E-mail, Ligação, Faturamento, Interno e Sem demanda), e sempre pedem o contratante.</p>
+      {!s.c3Tabela && <div className="warnbox">Para editar, rode <b>sql/custo-servir-camada3-atividades.sql</b> no SQL Editor do Supabase. Até lá valem WhatsApp e Orientação.</div>}
+
+      <div className="tbl">
+        <table>
+          <thead><tr><th style={{ width: 70 }}>Ordem</th><th>Atividade</th><th>O que inclui (texto do botão)</th><th /></tr></thead>
+          <tbody>
+            {ativas.map((a, i) => edit?.chave === a.chave ? (
+              <tr key={a.chave}>
+                <td />
+                <td><input type="text" value={edit.label} aria-label="Nome da atividade" onChange={e => setEdit({ ...edit, label: e.target.value })} /></td>
+                <td><input type="text" value={edit.inclui} aria-label="O que inclui" onChange={e => setEdit({ ...edit, inclui: e.target.value })} /></td>
+                <td>
+                  <span className="pills">
+                    <button type="button" className="btn sm solid" disabled={!edit.label.trim() || nomeRepetido(edit.label, a.chave)} onClick={() => void salvarEdicao()}>Salvar</button>
+                    <button type="button" className="btn sm" onClick={() => setEdit(null)}>Cancelar</button>
+                  </span>
+                </td>
+              </tr>
+            ) : (
+              <tr key={a.chave}>
+                <td>
+                  <span className="pills">
+                    <button type="button" className="link" aria-label="Subir" disabled={i === 0 || !s.c3Tabela} onClick={() => void mover(a, -1)}>▲</button>
+                    <button type="button" className="link" aria-label="Descer" disabled={i === ativas.length - 1 || !s.c3Tabela} onClick={() => void mover(a, 1)}>▼</button>
+                  </span>
+                </td>
+                <td><b style={{ fontWeight: 600 }}>{a.label}</b></td>
+                <td className="note">{a.inclui || '—'}</td>
+                <td>
+                  <span className="pills">
+                    <button type="button" className="btn sm" disabled={!s.c3Tabela} onClick={() => setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' })}>Editar</button>
+                    <BotaoConfirmar disabled={!s.c3Tabela} onConfirm={() => void remover(a)}>Remover</BotaoConfirmar>
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {!ativas.length && <tr><td colSpan={4} className="empty">Nenhuma atividade de camada 3 ativa. O pop-up mostra só as opções fixas.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="kv">
+        <label>Nova atividade<input type="text" value={novo.label} disabled={!s.c3Tabela} onChange={e => setNovo({ ...novo, label: e.target.value })} placeholder="ex.: Teams" /></label>
+        <label>O que inclui<input type="text" value={novo.inclui} disabled={!s.c3Tabela} onChange={e => setNovo({ ...novo, inclui: e.target.value })} placeholder="ex.: Mensagens e chamadas pelo Teams" /></label>
+      </div>
+      <div className="row">
+        <button type="button" className="btn solid" disabled={!s.c3Tabela || !novo.label.trim() || nomeRepetido(novo.label)} onClick={() => void incluir()}>+ Incluir atividade</button>
+        {novo.label.trim() && nomeRepetido(novo.label) && <span className="note">Já existe uma atividade com esse nome.</span>}
+      </div>
+      <p className="note">Pesquisas com &quot;O que conta: todas&quot; passam a mostrar a nova atividade no pop-up na hora. Nas que têm opções escolhidas, marque-a em Editar. Remover uma atividade que já tem respostas só a tira do pop-up: as respostas continuam no resultado.</p>
+
+      {inativas.length > 0 && (
+        <>
+          <button type="button" className="link" onClick={() => setVerInativas(v => !v)}>{verInativas ? 'ocultar' : 'ver'} removidas com histórico ({inativas.length})</button>
+          {verInativas && (
+            <div className="row">
+              {inativas.map(a => (
+                <span key={a.chave} className="selbar" style={{ padding: '4px 10px' }}>
+                  {a.label}
+                  <button type="button" className="link" disabled={!s.c3Tabela} onClick={() => void tentar(() => s.salvarC3(a.chave, { ativo: true, ordem: Math.max(0, ...s.c3.map(x => x.ordem)) + 1 }), `"${a.label}" voltou ao pop-up`)}>reativar</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Gestor/admin: configuracao em passos
 // ═════════════════════════════════════════════════════════════════════════════
 type Quem = 'todos' | 'escolher' | 'ninguem'
-const TODAS: ChaveAmostra[] = OPCOES_AMOSTRA.map(o => o.chave)
-
 function Configurar({ s }: { s: SuporteApi }) {
   const { d, tentar } = useCs()
   const ativos = d.usuarios.filter(u => !u.desativado)
+  const todasOp = montarOpcoes(s.c3)
+  const TODAS: ChaveAmostra[] = todasOp.map(o => o.chave)
   const vazio = {
     id: null as string | null, nome: '', inicio: hojeIso(), fim: '', avisos: 6, janelas: JANELAS_PADRAO,
     quem: 'todos' as Quem, pessoas: [] as string[], aberta: true, opcoes: TODAS,
@@ -143,7 +251,7 @@ function Configurar({ s }: { s: SuporteApi }) {
       id: x.id, nome: x.nome, inicio: x.inicio, fim: x.fim, avisos: x.avisos_dia,
       janelas: x.janelas?.length ? x.janelas : [{ ini: x.hora_ini.slice(0, 5), fim: x.hora_fim.slice(0, 5) }],
       quem: !x.participantes ? 'todos' : x.participantes.length ? 'escolher' : 'ninguem', pessoas: x.participantes ?? [],
-      aberta: !!x.aberta_todos, opcoes: opcoesDe(x).map(o => o.chave),
+      aberta: !!x.aberta_todos, opcoes: opcoesDe(x, todasOp).map(o => o.chave),
     })
     setAberto(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -178,7 +286,7 @@ function Configurar({ s }: { s: SuporteApi }) {
   }
   const nPopup = f.quem === 'todos' ? ativos.length : f.quem === 'ninguem' ? 0 : f.pessoas.length
   const alternarPessoa = (id: string) => setF({ ...f, pessoas: f.pessoas.includes(id) ? f.pessoas.filter(x => x !== id) : [...f.pessoas, id] })
-  // Mantem a ordem de OPCOES_AMOSTRA (e a ordem em que aparecem no pop-up)
+  // Mantem a ordem da lista de opcoes (e a ordem em que aparecem no pop-up)
   const alternarOpcao = (k: ChaveAmostra) => setF({ ...f, opcoes: TODAS.filter(x => (x === k ? !f.opcoes.includes(x) : f.opcoes.includes(x))) })
 
   return (
@@ -254,7 +362,7 @@ function Configurar({ s }: { s: SuporteApi }) {
             <div>
               <b>O que conta</b>
               <div className="row">
-                {OPCOES_AMOSTRA.map(o => (
+                {todasOp.map(o => (
                   <button key={o.chave} type="button" title={o.inclui} className={'pill ' + (f.opcoes.includes(o.chave) ? 'p-blue' : 'p-gray')} style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 13, border: 0 }}
                     onClick={() => alternarOpcao(o.chave)}>
                     {f.opcoes.includes(o.chave) ? '✓ ' : ''}{o.label}
@@ -263,7 +371,7 @@ function Configurar({ s }: { s: SuporteApi }) {
               </div>
               <div className="row">
                 <button type="button" className="btn sm" onClick={() => setF({ ...f, opcoes: TODAS })}>Todas</button>
-                <button type="button" className="btn sm" onClick={() => setF({ ...f, opcoes: ['email', 'ligacao', 'whatsapp', 'orientacao', 'sem_demanda'] })}>Só fora do portal</button>
+                <button type="button" className="btn sm" onClick={() => setF({ ...f, opcoes: TODAS.filter(k => k === 'email' || k === 'ligacao' || k === 'sem_demanda' || todasOp.find(o => o.chave === k)?.classe === 'camada3') })}>Só fora do portal</button>
               </div>
               <p className="note">São os botões que aparecem no pop-up. Deixe &quot;Interno&quot; e &quot;Sem demanda&quot; marcados para a conta fechar 100% do tempo.</p>
             </div>
@@ -310,7 +418,7 @@ function Configurar({ s }: { s: SuporteApi }) {
             <tbody>
               {s.amostragens.map(x => {
                 const nomes = x.participantes?.map(id => nomeUsuario(d.usuarios.find(u => u.id === id))) ?? []
-                const ops = opcoesDe(x)
+                const ops = opcoesDe(x, todasOp)
                 return (
                   <tr key={x.id} className={'click' + (s.amSel?.id === x.id ? ' sel' : '')} onClick={() => s.setAmId(x.id)}>
                     <td><b style={{ fontWeight: 600 }}>{x.nome}</b></td>
@@ -320,7 +428,7 @@ function Configurar({ s }: { s: SuporteApi }) {
                       {x.participantes?.length !== 0 && <> · {avisosEfetivos(x)}/dia</>}
                     </td>
                     <td className="note">{x.aberta_todos ? 'qualquer um' : 'não'}</td>
-                    <td className="note">{ops.length === OPCOES_AMOSTRA.length ? 'todas' : ops.map(o => o.label).join(', ')}</td>
+                    <td className="note">{!x.opcoes?.length ? 'todas' : ops.map(o => o.label).join(', ')}</td>
                     <td className="c" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={x.ativa} aria-label="Ativa" onChange={e => tentar(() => s.salvarAmostragem(x.id, { ativa: e.target.checked }))} />
                     </td>
@@ -355,6 +463,7 @@ function ResultadoPesquisa({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const nPopup = s.amostras.filter(x => !x.espontanea).length
   const nProprio = c3.n - nPopup
   const pct = (n: number) => (c3.n ? n / c3.n : 0)
+  const nomesC3 = s.c3.filter(x => x.ativo).map(x => x.label).join(', ')
   return (
     <div className="box">
       <div className="row between">
@@ -375,14 +484,14 @@ function ResultadoPesquisa({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
           <table>
             <thead><tr><th>Atividade</th><th>Classe</th><th className="r">Obs.</th><th className="r">%</th><th className="r">± p.p.</th><th style={{ width: '30%' }} /><th className="r">h/mês</th></tr></thead>
             <tbody>
-              {opcoesDe(a).map(o => {
-                const p = pct(c3.porOpcao[o.chave])
+              {opcoesDe(a, montarOpcoes(s.c3, true)).filter(o => o.ativo || c3.porOpcao[o.chave]).map(o => {
+                const p = pct(c3.porOpcao[o.chave] ?? 0)
                 const me = margemErro(p, c3.n)
                 return (
                   <tr key={o.chave}>
-                    <td>{o.label}</td>
+                    <td>{o.label}{!o.ativo && <span className="note"> (removida)</span>}</td>
                     <td className="note">{CLASSES[o.classe]}</td>
-                    <td className="r mono">{c3.porOpcao[o.chave]}</td>
+                    <td className="r mono">{c3.porOpcao[o.chave] ?? 0}</td>
                     <td className="r mono">{fmt(p * 100, 1)}%</td>
                     <td className="r mono">±{fmt(me, 1)}</td>
                     <td><Barra p={p} me={me / 100} /></td>
@@ -394,7 +503,7 @@ function ResultadoPesquisa({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
           </table>
         </div>
         <ConferenciaCamadas ctx={ctx} s={s} pctClasse={k => pct(c3.porClasse[k])} />
-        <h3>Camada 3 (WhatsApp e orientação) por contratante</h3>
+        <h3>Camada 3{nomesC3 ? ` (${nomesC3})` : ''} por contratante</h3>
         <PorContratanteC3 ctx={ctx} porCtt={c3.porCttCamada3} n={c3.n} semCtt={c3.camada3SemCtt} cap={fin.ok ? fin.cap : null} />
       </>}
     </div>

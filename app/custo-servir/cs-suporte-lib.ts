@@ -19,7 +19,7 @@ export type Amostragem = {
   participantes: string[] | null; ativa: boolean; created_by: string | null; created_at: string
   /** Faixas do dia em que os avisos podem sair. null = faixa unica hora_ini..hora_fim. */
   janelas?: Janela[] | null
-  /** O que conta nesta amostragem (chaves de OPCOES_AMOSTRA). null = todas. */
+  /** O que conta nesta amostragem (chaves de montarOpcoes). null = todas. */
   opcoes?: ChaveAmostra[] | null
   /** Qualquer usuario pode registrar por conta propria, alem de quem recebe o pop-up. */
   aberta_todos?: boolean
@@ -35,26 +35,48 @@ export type Amostra = {
 }
 
 // ── Opcoes do aviso (lista 3.3 do material) ──────────────────────────────────
-export type ChaveAmostra = 'avaliacao' | 'cadastro' | 'email' | 'ligacao' | 'faturamento' | 'whatsapp' | 'orientacao' | 'interno' | 'sem_demanda'
+// As opcoes das camadas 1 e 2, interno e ociosa sao fixas; as da camada 3 vem de cs_camada3_atividades
+// (gestor/admin incluem, editam e removem na aba Extra portal). Qualquer chave fora das fixas e camada 3.
+export type ChaveAmostra = string
 export type Classe = 'camada1' | 'camada2' | 'camada3' | 'interno' | 'ociosa'
-export const OPCOES_AMOSTRA: { chave: ChaveAmostra; label: string; inclui: string; classe: Classe; pedeContratante: boolean }[] = [
-  { chave: 'avaliacao', label: 'Avaliação', inclui: 'Avaliar documento no sistema', classe: 'camada1', pedeContratante: true },
-  { chave: 'cadastro', label: 'Cadastro', inclui: 'Empresa, pessoa, turno, vinculação', classe: 'camada2', pedeContratante: true },
-  { chave: 'email', label: 'E-mail', inclui: 'Ler, responder, cobrar por e-mail', classe: 'camada2', pedeContratante: true },
-  { chave: 'ligacao', label: 'Ligação', inclui: 'Atender ou fazer ligação', classe: 'camada2', pedeContratante: true },
-  { chave: 'faturamento', label: 'Faturamento', inclui: 'Emitir, conferir ou cobrar faturamento', classe: 'camada2', pedeContratante: true },
-  { chave: 'whatsapp', label: 'WhatsApp', inclui: 'Conversas com prestador ou contratante', classe: 'camada3', pedeContratante: true },
-  { chave: 'orientacao', label: 'Orientação', inclui: 'Explicar requisito, ajudar a montar documento', classe: 'camada3', pedeContratante: true },
-  { chave: 'interno', label: 'Interno', inclui: 'Reunião, treinamento, tarefas da GT3', classe: 'interno', pedeContratante: false },
-  { chave: 'sem_demanda', label: 'Sem demanda', inclui: 'Nada pendente naquele momento', classe: 'ociosa', pedeContratante: false },
+export type OpcaoAmostra = { chave: ChaveAmostra; label: string; inclui: string; classe: Classe; pedeContratante: boolean; ativo: boolean }
+export type AtividadeC3 = { chave: string; label: string; inclui: string | null; ordem: number; ativo: boolean }
+
+const ANTES_C3: OpcaoAmostra[] = [
+  { chave: 'avaliacao', label: 'Avaliação', inclui: 'Avaliar documento no sistema', classe: 'camada1', pedeContratante: true, ativo: true },
+  { chave: 'cadastro', label: 'Cadastro', inclui: 'Empresa, pessoa, turno, vinculação', classe: 'camada2', pedeContratante: true, ativo: true },
+  { chave: 'email', label: 'E-mail', inclui: 'Ler, responder, cobrar por e-mail', classe: 'camada2', pedeContratante: true, ativo: true },
+  { chave: 'ligacao', label: 'Ligação', inclui: 'Atender ou fazer ligação', classe: 'camada2', pedeContratante: true, ativo: true },
+  { chave: 'faturamento', label: 'Faturamento', inclui: 'Emitir, conferir ou cobrar faturamento', classe: 'camada2', pedeContratante: true, ativo: true },
 ]
+const DEPOIS_C3: OpcaoAmostra[] = [
+  { chave: 'interno', label: 'Interno', inclui: 'Reunião, treinamento, tarefas da GT3', classe: 'interno', pedeContratante: false, ativo: true },
+  { chave: 'sem_demanda', label: 'Sem demanda', inclui: 'Nada pendente naquele momento', classe: 'ociosa', pedeContratante: false, ativo: true },
+]
+/** Chaves fixas (nao podem ser usadas por uma atividade da camada 3). */
+export const CHAVES_FIXAS = [...ANTES_C3, ...DEPOIS_C3].map(o => o.chave)
+/** Camada 3 padrao: vale enquanto a migracao sql/custo-servir-camada3-atividades.sql nao rodou. */
+export const C3_PADRAO: AtividadeC3[] = [
+  { chave: 'whatsapp', label: 'WhatsApp', inclui: 'Conversas com prestador ou contratante', ordem: 1, ativo: true },
+  { chave: 'orientacao', label: 'Orientação', inclui: 'Explicar requisito, ajudar a montar documento', ordem: 2, ativo: true },
+]
+
+/** Lista completa do aviso, na ordem do pop-up. Inativas da camada 3 so entram com `inativas` (resultados e historico). */
+export function montarOpcoes(c3: AtividadeC3[], inativas = false): OpcaoAmostra[] {
+  const meio = [...c3].filter(a => inativas || a.ativo).sort((a, b) => a.ordem - b.ordem || a.label.localeCompare(b.label, 'pt-BR'))
+    .map(a => ({ chave: a.chave, label: a.label, inclui: a.inclui ?? '', classe: 'camada3' as const, pedeContratante: true, ativo: a.ativo }))
+  return [...ANTES_C3, ...meio, ...DEPOIS_C3]
+}
 export const CLASSES: Record<Classe, string> = {
   camada1: 'Camada 1 · Avaliação', camada2: 'Camada 2 · Com rastro', camada3: 'Camada 3 · Difuso',
   interno: 'Interno (estrutura)', ociosa: 'Capacidade ociosa',
 }
-/** Opcoes que contam nesta amostragem (todas, se nao foi escolhido). */
-export const opcoesDe = (a: Pick<Amostragem, 'opcoes'>) => (a.opcoes?.length ? OPCOES_AMOSTRA.filter(o => a.opcoes!.includes(o.chave)) : OPCOES_AMOSTRA)
-export const classeDe = (k: ChaveAmostra) => OPCOES_AMOSTRA.find(o => o.chave === k)!.classe
+/** Opcoes que contam nesta amostragem (todas da lista, se nao foi escolhido). */
+export const opcoesDe = (a: Pick<Amostragem, 'opcoes'>, todas: OpcaoAmostra[]) => (a.opcoes?.length ? todas.filter(o => a.opcoes!.includes(o.chave)) : todas)
+/** Classe da resposta. Chave que nao e fixa (inclusive de atividade ja excluida) conta como camada 3. */
+export const classeDe = (k: ChaveAmostra): Classe => [...ANTES_C3, ...DEPOIS_C3].find(o => o.chave === k)?.classe ?? 'camada3'
+/** Nome para exibir uma resposta (atividade excluida mostra a propria chave). */
+export const labelOpcao = (k: ChaveAmostra, todas: OpcaoAmostra[]) => todas.find(o => o.chave === k)?.label ?? k
 
 // ── Horarios sorteados (deterministicos por amostragem + pessoa + dia) ───────
 // Sem servidor de agendamento: cada navegador calcula os mesmos horarios a partir de uma semente.
@@ -208,10 +230,9 @@ export function calcCamada3(amostras: Amostra[]): Camada3 {
     n: amostras.length, porOpcao: {} as Record<ChaveAmostra, number>, porClasse: {} as Record<Classe, number>,
     porCttCamada3: {}, porCttOpcao: {}, camada3SemCtt: 0,
   }
-  for (const o of OPCOES_AMOSTRA) out.porOpcao[o.chave] = 0
   for (const k of Object.keys(CLASSES) as Classe[]) out.porClasse[k] = 0
   for (const a of amostras) {
-    out.porOpcao[a.atividade]++
+    out.porOpcao[a.atividade] = (out.porOpcao[a.atividade] || 0) + 1
     const cl = classeDe(a.atividade)
     out.porClasse[cl]++
     const cs = cttsDaAmostra(a)

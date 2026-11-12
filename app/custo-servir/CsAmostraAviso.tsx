@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../lib/supabase'
 import { useUser } from '../components/UserContext'
-import { colunasContratantes, hojeIso, horariosDoDia, opcoesDe, participa, type Amostragem, type ChaveAmostra } from './cs-suporte-lib'
+import { C3_PADRAO, colunasContratantes, hojeIso, horariosDoDia, montarOpcoes, opcoesDe, participa, type Amostragem, type AtividadeC3, type ChaveAmostra, type OpcaoAmostra } from './cs-suporte-lib'
+import { carregarC3 } from './abas/suporte-data'
 import './custo-servir.css'
 
 const JANELA_MS = 20 * 60_000
@@ -20,15 +21,18 @@ const lerPulados = (): string[] => { try { return JSON.parse(sessionStorage.getI
 const pular = (k: string) => { try { sessionStorage.setItem(CHAVE_PULADOS, JSON.stringify([...lerPulados(), k].slice(-50))) } catch { /* ignore */ } }
 
 /** Escolha da resposta: 1o clique na atividade, depois marca um ou mais contratantes (quando a atividade pede). */
-export function EscolherResposta({ amostragem, ctts, salvando, onRegistrar }: {
-  amostragem: Amostragem; ctts: Ctt[]; salvando: boolean
+export function EscolherResposta({ amostragem, todas, ctts, salvando, onRegistrar }: {
+  amostragem: Amostragem
+  /** Opcoes ativas do aviso (fixas + camada 3), de montarOpcoes */
+  todas: OpcaoAmostra[]
+  ctts: Ctt[]; salvando: boolean
   /** contratantes vazio = nao e de um contratante; varios = a resposta divide igual entre eles. */
   onRegistrar: (atividade: ChaveAmostra, contratantes: string[]) => Promise<boolean>
 }) {
   const [ativ, setAtiv] = useState<ChaveAmostra | null>(null)
   const [busca, setBusca] = useState('')
   const [marcados, setMarcados] = useState<string[]>([])
-  const opcoes = opcoesDe(amostragem)
+  const opcoes = opcoesDe(amostragem, todas)
   const opc = opcoes.find(o => o.chave === ativ)
   const limpar = () => { setAtiv(null); setBusca(''); setMarcados([]) }
   const registrar = async (cs: string[]) => {
@@ -98,6 +102,7 @@ export default function CsAmostraAviso() {
   const [amostragens, setAmostragens] = useState<Amostragem[]>([])
   const [respondidos, setRespondidos] = useState<Set<string>>(new Set())
   const [ctts, setCtts] = useState<Ctt[]>([])
+  const [c3, setC3] = useState<AtividadeC3[]>(C3_PADRAO)
   const [agora, setAgora] = useState(() => Date.now())
   const [salvando, setSalvando] = useState(false)
   const [, setPuladosVer] = useState(0)
@@ -111,10 +116,12 @@ export default function CsAmostraAviso() {
     setAmostragens(minhas)
     if (!minhas.length) return
     const inicioDia = new Date(hoje + 'T00:00:00').toISOString()
-    const [{ data: am }, { data: cs }] = await Promise.all([
+    const [{ data: am }, { data: cs }, atividadesC3] = await Promise.all([
       supabase.from('cs_amostras').select('amostragem_id, previsto_em').eq('usuario_id', uid).gte('previsto_em', inicioDia),
       supabase.from('cs_contratantes_fin').select('contratante_cod, nome'),
+      carregarC3(),
     ])
+    setC3(atividadesC3.lista)
     setRespondidos(new Set(((am ?? []) as { amostragem_id: string; previsto_em: string }[]).map(x => x.amostragem_id + '|' + new Date(x.previsto_em).toISOString())))
     setCtts(((cs ?? []) as Ctt[]).sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)))
   }, [supabase, uid])
@@ -173,7 +180,7 @@ export default function CsAmostraAviso() {
           </div>
           <button type="button" className="link" onClick={() => { pular(k); setPuladosVer(x => x + 1) }}>agora não</button>
         </div>
-        <EscolherResposta key={k} amostragem={pendente.amostragem} ctts={ctts} salvando={salvando} onRegistrar={registrar} />
+        <EscolherResposta key={k} amostragem={pendente.amostragem} todas={montarOpcoes(c3)} ctts={ctts} salvando={salvando} onRegistrar={registrar} />
       </div>
     </div>
   )
