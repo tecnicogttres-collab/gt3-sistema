@@ -87,6 +87,47 @@ const INPUT: React.CSSProperties = {
   background: '#fff', outline: 'none', boxSizing: 'border-box',
 }
 
+// ─── Quem falta responder (só admin) ──────────────────────────────────────────
+
+type Pendentes = { total: number; responderam: number; faltam: Array<{ id: string; nome: string | null; usuario: string | null }> }
+
+function QuemFalta({ enqueteId }: { enqueteId: string }) {
+  const [data, setData] = useState<Pendentes | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch(`/api/enquetes/${enqueteId}/pendentes`)
+      .then(r => r.ok ? r.json() : r.json().then((d: { error?: string }) => Promise.reject(d.error ?? 'Erro')))
+      .then(setData)
+      .catch((e: unknown) => setError(typeof e === 'string' ? e : 'Erro ao carregar'))
+  }, [enqueteId])
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${BORDER}`, fontSize: 13 }}>
+      {error ? <span style={{ color: '#DC2626' }}>{error}</span>
+        : !data ? <span style={{ color: MUTED }}>Carregando...</span>
+        : (
+          <>
+            <div style={{ color: MUTED, marginBottom: 8 }}>
+              {data.responderam} de {data.total} responderam
+              {data.faltam.length > 0 ? ` · faltam ${data.faltam.length}:` : ' · todos responderam ✓'}
+            </div>
+            {data.faltam.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {data.faltam.map(u => (
+                  <span key={u.id} style={{ padding: '3px 10px', borderRadius: 12, background: '#FFF7ED', color: '#B45309', fontSize: 12 }}>
+                    {u.nome ?? u.usuario ?? u.id}
+                    {u.usuario && <span style={{ color: MUTED }}> · {u.usuario}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+    </div>
+  )
+}
+
 // ─── Resultados View ───────────────────────────────────────────────────────────
 
 function ResultadosView({ enqueteId, titulo, onBack }: { enqueteId: string; titulo: string; onBack: () => void }) {
@@ -694,6 +735,8 @@ type View =
 export default function EnquetesClient() {
   const { profile } = useUser()
   const isGestorAdmin = profile?.papel === 'gestor' || profile?.papel === 'admin'
+  const isAdmin = profile?.papel === 'admin'
+  const [quemFaltaAberto, setQuemFaltaAberto] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -847,6 +890,12 @@ export default function EnquetesClient() {
                         {resultadosDestaque ? '📊 Ver resultados' : 'Resultados'}
                       </button>
                     )}
+                    {isAdmin && e.status !== 'draft' && (
+                      <button onClick={() => setQuemFaltaAberto(quemFaltaAberto === e.id ? null : e.id)} title="Ver quem ainda não respondeu"
+                        style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${quemFaltaAberto === e.id ? PRIMARY : BORDER}`, background: quemFaltaAberto === e.id ? PRIMARY_LIGHT : '#fff', color: quemFaltaAberto === e.id ? PRIMARY : MUTED, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        👥 Quem falta
+                      </button>
+                    )}
                     {isGestorAdmin && e.status === 'draft' && (
                       <button onClick={() => handleActivate(e.id)} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid #BBF7D0`, background: '#F0FFF4', color: SUCCESS, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
                         Ativar
@@ -864,6 +913,7 @@ export default function EnquetesClient() {
                     )}
                   </div>
                 </div>
+                {isAdmin && quemFaltaAberto === e.id && <QuemFalta enqueteId={e.id} />}
               </div>
             )
           })}
