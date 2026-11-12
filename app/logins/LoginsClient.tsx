@@ -372,17 +372,24 @@ export default function LoginsClient() {
 
   // ── Excluir login (definitivo) ──────────────────────────────────
   // Só é oferecido pra quem já está arquivado (inativo) — exige desativar antes.
-  // O login some de tudo (aniversários, mapa de acessos, listas de responsável etc.),
-  // exceto o PDI: ele foi feito pra sobreviver sem o login vinculado.
+  // O login e os dados pessoais somem (perfil, aniversário, preferências, leituras, notificações…).
+  // O histórico de ações fica, sem o vínculo com a pessoa ("usuário excluído"); o PDI também fica.
+  // Regras no banco: sql/usuarios-exclusao-definitiva.sql.
   async function handleDeleteUser(u: UserRow) {
     const nome = u.nome || u.usuario || u.email
-    const ok = confirm(
-      `Excluir DEFINITIVAMENTE o login de "${nome}"?\n\n` +
-      `Essa ação não pode ser desfeita. O login some de tudo (aniversários, mapa de acessos, ` +
-      `designações etc.). O PDI é preservado — fica sem o vínculo de login, mas nome, ciclos ` +
-      `e ações continuam intactos.`
+    const login = (u.usuario || u.email || '').trim()
+    const digitado = prompt(
+      `Excluir DEFINITIVAMENTE "${nome}"?\n\n` +
+      `• Somem: login, perfil, aniversário, assinatura, preferências, leituras e notificações.\n` +
+      `• Ficam: o histórico de ações (designações, medições, votos, revisões, atas…), ` +
+      `aparecendo como "usuário excluído"; e o PDI, sem o vínculo de login.\n\n` +
+      `Não pode ser desfeito. Para confirmar, digite o login: ${login}`
     )
-    if (!ok) return
+    if (digitado === null) return
+    if (digitado.trim().toLowerCase() !== login.toLowerCase()) {
+      alert('Login digitado não confere. Nada foi excluído.')
+      return
+    }
     const res = await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE' })
     if (!res.ok) {
       const e = await res.json().catch(() => ({}))
@@ -703,7 +710,7 @@ export default function LoginsClient() {
                               </button>
                               <button
                                 onClick={() => void handleDeleteUser(u)}
-                                title="Excluir definitivamente (PDI é preservado)"
+                                title="Excluir definitivamente (o histórico de ações é preservado)"
                                 style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #FECACA', backgroundColor: '#FEF2F2', color: '#DC2626', fontSize: 12, cursor: 'pointer' }}
                               >
                                 🗑 Excluir

@@ -14,6 +14,33 @@ async function getCaller(): Promise<{ role: string | null; id: string | null }> 
 
 type RouteContext = { params: Promise<{ id: string }> }
 
+/** Listas que guardam ids de usuário sem FK: ao excluir, a pessoa sai delas.
+ *  Se ela era a única da lista, a lista fica como está: esvaziar mudaria o sentido
+ *  (em enquetes, lista vazia = vale o público-alvo, ou seja, "todos"). */
+const LISTAS_DE_USUARIOS: { tabela: string; coluna: string; json?: boolean }[] = [
+  { tabela: 'enquetes', coluna: 'destinatarios' },        // uuid[]
+  { tabela: 'lembretes', coluna: 'destinatarios' },       // uuid[]
+  { tabela: 'campanhas', coluna: 'destinatarios' },       // text[] (ids ou "todos")
+  { tabela: 'legislacoes', coluna: 'destinatarios', json: true },
+  { tabela: 'designacoes', coluna: 'responsaveis', json: true },
+  { tabela: 'cs_amostragens', coluna: 'participantes' },  // uuid[]
+]
+
+async function removerDasListas(admin: ReturnType<typeof createAdminClient>, id: string): Promise<string | null> {
+  for (const { tabela, coluna, json } of LISTAS_DE_USUARIOS) {
+    const { data, error } = await admin.from(tabela).select(`id, ${coluna}`).contains(coluna, json ? JSON.stringify([id]) : [id])
+    if (error) return `${tabela}: ${error.message}`
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const lista = Array.isArray(row[coluna]) ? (row[coluna] as unknown[]) : []
+      const resto = lista.filter(x => x !== id)
+      if (resto.length === 0 || resto.length === lista.length) continue
+      const { error: upErr } = await admin.from(tabela).update({ [coluna]: resto }).eq('id', row.id as string)
+      if (upErr) return `${tabela}: ${upErr.message}`
+    }
+  }
+  return null
+}
+
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const caller = await getCaller()
   if (!caller.role || !['gestor', 'admin'].includes(caller.role)) {
@@ -63,12 +90,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   return Response.json({ success: true })
 }
 
-/** Exclusão definitiva do login — apaga o usuário do Supabase Auth, o que já
- *  derruba junto (ON DELETE CASCADE) a linha em profiles e tudo que depende
- *  dela (histórico, notificações, vínculo de aniversário etc.). PDI é o único
- *  módulo desenhado pra sobreviver a isso: pdis.colaborador_id e
- *  pdi_ciclos.colaborador_id são ON DELETE SET NULL, então o conteúdo do PDI
- *  (nome, ciclos, ações) continua intacto, só perde o vínculo com o login. */
+/** Exclusão definitiva do login — apaga o usuário do Supabase Auth, o que derruba
+ *  junto (ON DELETE CASCADE) a linha em profiles e os dados pessoais (leituras,
+ *  preferências, notificações…). Histórico e ações ficam com o autor NULL
+ *  ("usuário excluído"), conforme sql/usuarios-exclusao-definitiva.sql. O PDI
+ *  também fica (colaborador_id SET NULL). */
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const caller = await getCaller()
   if (!caller.role || !['gestor', 'admin'].includes(caller.role)) {
@@ -86,8 +112,20 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return Response.json({ error: 'Você não pode excluir sua própria conta' }, { status: 400 })
   }
 
+  // Adiamentos de lembrete são pessoais e não têm FK (não cairiam sozinhos)
+  await admin.from('lembretes_adiamentos').delete().eq('usuario_id', id)
+
+  // Tira o usuário das listas de destinatários/responsáveis/participantes (guardam só o id, sem FK)
+  const erroListas = await removerDasListas(admin, id)
+  if (erroListas) return Response.json({ error: `Não foi possível tirar o usuário das listas (${erroListas}). O login não foi excluído; tente de novo.` }, { status: 500 })
+
   const { error } = await admin.auth.admin.deleteUser(id)
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  if (error) {
+    const msg = /database error/i.test(error.message)
+      ? 'O banco recusou a exclusão: algum registro ainda depende deste usuário. Rode sql/usuarios-exclusao-definitiva.sql no Supabase e tente de novo.'
+      : error.message
+    return Response.json({ error: msg }, { status: 500 })
+  }
 
   return Response.json({ success: true })
 }

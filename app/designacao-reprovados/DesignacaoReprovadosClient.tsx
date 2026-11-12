@@ -648,7 +648,7 @@ export default function DesignacaoReprovadosClient() {
   const getSetorNome  = (id: string) => setores.find(s => s.id === id)?.nome ?? '—'
   const getDocNome    = (id: string) => documentos.find(d => d.id === id)?.nome ?? '—'
   const getSituacao   = (id: string | null) => situacoes.find(s => s.id === id) ?? { id: '', nome: '—', cor: '#64748B', ativo: true, created_at: '' }
-  const getUsuarioNome = (id: string) => usuarios.find(u => u.id === id)?.nome?.trim() || 'Usuário'
+  const getUsuarioNome = (id: string | null) => (id && usuarios.find(u => u.id === id)?.nome?.trim()) || (id ? 'Usuário' : 'Usuário excluído')
 
   /** E-mail cadastrado da empresa — comparação tolerante a espaço/maiúscula, igual ao
    *  match usado no hint do formulário. Editável a qualquer momento em Configurações → Empresas. */

@@ -385,8 +385,8 @@ export default function RevisoesTraineeClient() {
   const pendingByTrainee = useMemo(() => {
     const map: Record<string, { nome: string; count: number }> = {}
     records.filter(r => r.status === 'pending').forEach(r => {
-      const key = r.criado_por
-      if (!map[key]) map[key] = { nome: r.criado_por_profile?.nome ?? key.slice(0, 8), count: 0 }
+      const key = r.criado_por ?? 'excluido'
+      if (!map[key]) map[key] = { nome: r.criado_por_profile?.nome ?? (r.criado_por ? key.slice(0, 8) : 'Usuário excluído'), count: 0 }
       map[key].count += docWeight(r)
     })
     return map
