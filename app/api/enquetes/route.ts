@@ -3,6 +3,14 @@ import { createAdminClient } from '../../lib/supabase-admin'
 import { getAuthUser } from '../../lib/api-helpers'
 import { enqueteParaMim, notificarEnquete, carregarPerfisAtivos, alvosDaEnquete, todosResponderam } from '../../lib/enquetes-destinatarios'
 
+/** Data do formulário (AAAA-MM-DD) → vale até 23:59:59 daquele dia no horário de Brasília
+ *  (sem isso o banco grava meia-noite UTC = 21h do dia anterior em Brasília). */
+function encerramentoBrasilia(v: unknown): string | null {
+  if (typeof v !== 'string' || !v.trim()) return null
+  const d = v.trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T23:59:59-03:00` : d
+}
+
 const COLS = 'id, titulo, descricao, encerramento, publico_alvo, destinatarios, status, anonima, permitir_alterar_voto, mostrar_resultados_parciais, criado_por, criado_em'
 
 async function getCaller() {
@@ -119,7 +127,7 @@ export async function POST(req: NextRequest) {
     .insert({
       titulo: titulo.trim(),
       descricao: descricao?.trim() || null,
-      encerramento: encerramento || null,
+      encerramento: encerramentoBrasilia(encerramento),
       ...alvo,
       status: status ?? 'active',
       anonima: anonima ?? true,

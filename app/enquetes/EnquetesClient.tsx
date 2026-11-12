@@ -71,7 +71,7 @@ type UsuarioOpt = { id: string; nome: string | null; usuario: string | null; pap
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' })
 }
 
 function statusBadge(status: string, todosResponderam = false): { label: string; color: string; bg: string } {
