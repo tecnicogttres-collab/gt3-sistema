@@ -397,7 +397,15 @@ const KPI_ICON: Record<string, string> = {
   aguardando: '⏳', ciente: '👁', andamento: '▶', resolvido: '✔', excluido: '🗑', sem_definicao: '❔', total: '📊',
 }
 
-function Kpi({ label, value, color, icon }: { label: string; value: number; color: string; icon?: string }) {
+/** Percentual com 1 casa (pt-BR), ou null se não houver total. */
+function pctDe(valor: number, total: number): string | null {
+  if (!total) return null
+  return (Math.round((valor / total) * 1000) / 10).toLocaleString('pt-BR') + '%'
+}
+
+function Kpi({ label, value, color, icon, total }: { label: string; value: number; color: string; icon?: string; total?: number }) {
+  // Com `total`, mostra quanto esse item representa do total (usado no Histórico).
+  const pct = total !== undefined ? pctDe(value, total) : null
   return (
     <div className="gt3-fade-up" style={{
       display: 'flex', alignItems: 'center', gap: 12,
@@ -410,7 +418,47 @@ function Kpi({ label, value, color, icon }: { label: string; value: number; colo
       }}>{icon ?? '●'}</span>
       <div>
         <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px' }}>{label}</div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: TEXT, marginTop: 2, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 2 }}>
+          <span style={{ fontSize: 24, fontWeight: 800, color: TEXT, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+          {pct && (
+            <span title="Percentual em relação ao total de itens" style={{ fontSize: 12, fontWeight: 800, color, background: `${color}14`, borderRadius: 999, padding: '2px 8px', fontVariantNumeric: 'tabular-nums' }}>
+              {pct}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Barra empilhada do Histórico: quanto cada desfecho representa do total. */
+function DistribuicaoHistorico({ resolvido, excluido, semDefinicao }: { resolvido: number; excluido: number; semDefinicao: number }) {
+  const total = resolvido + excluido + semDefinicao
+  if (!total) return null
+  const partes = [
+    { label: 'Concluídos (resolvidos)', v: resolvido, cor: TRAT_COLORS.resolvido },
+    { label: 'Doc(s) excluído', v: excluido, cor: TRAT_COLORS.excluido },
+    { label: 'Sem definição', v: semDefinicao, cor: TRAT_COLORS.sem_definicao },
+  ]
+  return (
+    <div className="gt3-fade-up" style={{ background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '13px 16px', boxShadow: SHADOW, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 9 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '.6px' }}>Desfecho do histórico</span>
+        <span style={{ fontSize: 11.5, color: MUTED, marginLeft: 'auto' }}>{total} item(ns) finalizado(s)</span>
+      </div>
+      <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: BG, gap: 2 }}>
+        {partes.filter(p => p.v > 0).map(p => (
+          <div key={p.label} title={`${p.label}: ${p.v} (${pctDe(p.v, total)})`} style={{ width: `${(p.v / total) * 100}%`, background: p.cor }} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 9, fontSize: 12.5 }}>
+        {partes.map(p => (
+          <span key={p.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: TEXT }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: p.cor }} />
+            {p.label}: <b style={{ fontVariantNumeric: 'tabular-nums' }}>{p.v}</b>
+            <b style={{ color: p.cor, fontVariantNumeric: 'tabular-nums' }}>({pctDe(p.v, total)})</b>
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -1967,6 +2015,16 @@ export default function DesignacaoReprovadosClient() {
                 🕘 Histórico {caixaHistorico.length ? `(${caixaHistorico.length})` : ''}
               </button>
             </div>
+            {caixaSub === 'historico' && (() => {
+              const itens = caixaHistorico.flatMap(g => g.itens)
+              return (
+                <DistribuicaoHistorico
+                  resolvido={itens.filter(d => d.tratativa === 'resolvido').length}
+                  excluido={itens.filter(d => d.tratativa === 'excluido').length}
+                  semDefinicao={itens.filter(d => d.tratativa === 'sem_definicao').length}
+                />
+              )
+            })()}
             {minhaAtual.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: MUTED, background: SURF, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
                 <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
@@ -2074,9 +2132,9 @@ export default function DesignacaoReprovadosClient() {
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
               <Kpi label="Aguardando" value={kpis.aguardando} color={TRAT_COLORS.aguardando} icon={KPI_ICON.aguardando} />
               <Kpi label="Em andamento" value={kpis.andamento} color={TRAT_COLORS.andamento} icon={KPI_ICON.andamento} />
-              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} icon={KPI_ICON.resolvido} />
-              <Kpi label="Doc(s) excluído" value={kpis.excluido} color={TRAT_COLORS.excluido} icon={KPI_ICON.excluido} />
-              <Kpi label="Sem definição" value={kpis.sem_definicao} color={TRAT_COLORS.sem_definicao} icon={KPI_ICON.sem_definicao} />
+              <Kpi label="Resolvidos" value={kpis.resolvido} color={TRAT_COLORS.resolvido} icon={KPI_ICON.resolvido} total={geralSub === 'historico' ? kpis.total : undefined} />
+              <Kpi label="Doc(s) excluído" value={kpis.excluido} color={TRAT_COLORS.excluido} icon={KPI_ICON.excluido} total={geralSub === 'historico' ? kpis.total : undefined} />
+              <Kpi label="Sem definição" value={kpis.sem_definicao} color={TRAT_COLORS.sem_definicao} icon={KPI_ICON.sem_definicao} total={geralSub === 'historico' ? kpis.total : undefined} />
               <Kpi label="Total de itens" value={kpis.total} color={PRIMARY} icon={KPI_ICON.total} />
             </div>
 
@@ -2115,7 +2173,9 @@ export default function DesignacaoReprovadosClient() {
                           {s.aguardando > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.aguardando, background: `${TRAT_COLORS.aguardando}14`, border: `1px solid ${TRAT_COLORS.aguardando}33`, borderRadius: 999, padding: '2.5px 8px' }}>⏳ {s.aguardando}</span>}
                           {s.andamento > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.andamento, background: `${TRAT_COLORS.andamento}14`, border: `1px solid ${TRAT_COLORS.andamento}33`, borderRadius: 999, padding: '2.5px 8px' }}>▶ {s.andamento}</span>}
                           {s.retornou > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0A7A5E', background: '#0A7A5E14', border: '1px solid #0A7A5E33', borderRadius: 999, padding: '2.5px 8px' }}>🔁 {s.retornou}</span>}
-                          {s.resolvido > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.resolvido, background: `${TRAT_COLORS.resolvido}14`, border: `1px solid ${TRAT_COLORS.resolvido}33`, borderRadius: 999, padding: '2.5px 8px' }}>✔ {s.resolvido}</span>}
+                          {s.resolvido > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.resolvido, background: `${TRAT_COLORS.resolvido}14`, border: `1px solid ${TRAT_COLORS.resolvido}33`, borderRadius: 999, padding: '2.5px 8px' }}>✔ {s.resolvido}{geralSub === 'historico' ? ` · ${pctDe(s.resolvido, s.total)}` : ''}</span>}
+                          {s.excluido > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.excluido, background: `${TRAT_COLORS.excluido}14`, border: `1px solid ${TRAT_COLORS.excluido}33`, borderRadius: 999, padding: '2.5px 8px' }}>🗑 {s.excluido}{geralSub === 'historico' ? ` · ${pctDe(s.excluido, s.total)}` : ''}</span>}
+                          {s.sem_definicao > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: TRAT_COLORS.sem_definicao, background: `${TRAT_COLORS.sem_definicao}14`, border: `1px solid ${TRAT_COLORS.sem_definicao}33`, borderRadius: 999, padding: '2.5px 8px' }}>❔ {s.sem_definicao}{geralSub === 'historico' ? ` · ${pctDe(s.sem_definicao, s.total)}` : ''}</span>}
                         </div>
                         <div style={{ height: 6, borderRadius: 999, background: BG, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${pct}%`, background: TRAT_COLORS.resolvido, borderRadius: 999, transition: 'width .4s var(--ease-gt3)' }} />
