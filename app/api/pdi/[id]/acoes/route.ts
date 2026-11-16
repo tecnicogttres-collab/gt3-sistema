@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../lib/api-helpers'
+import { papelEfetivo } from '../../../../lib/ver-como'
 
 async function getCallerAndRole() {
   const user = await getAuthUser()
   if (!user) return { user: null, papel: null }
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('papel, pdi_slug').eq('id', user.id).single()
+  if (profile) profile.papel = await papelEfetivo(profile.papel) // "Ver como" do admin
   return { user, papel: profile?.papel as string | null, pdiSlug: profile?.pdi_slug as string | null }
 }
 
@@ -15,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { user, papel, pdiSlug } = await getCallerAndRole()
   if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
 
-  if (papel === 'colaborador' && pdiSlug !== id) {
+  if ((papel === 'colaborador' || papel === 'trainee') && pdiSlug !== id) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }
 

@@ -1,5 +1,6 @@
 import { createClient } from './supabase-server'
 import { createAdminClient } from './supabase-admin'
+import { papelEfetivo } from './ver-como'
 
 export type AuthUser = { id: string; email: string | null }
 
@@ -21,7 +22,8 @@ export async function getCaller() {
   const { data } = await admin.from('profiles').select('papel').eq('id', user.id).maybeSingle()
   // Sem perfil = login excluído (o perfil cai junto, ON DELETE CASCADE) mas token ainda válido.
   if (!data) return null
-  const raw = (data.papel as string) ?? 'colaborador'
+  // "Ver como": admin real simulando outro perfil responde como aquele perfil
+  const raw = (await papelEfetivo(data.papel as string | null)) ?? 'colaborador'
   return { user, role: raw === 'trainee' ? 'colaborador' : raw }
 }
 
@@ -31,7 +33,7 @@ export async function getCallerWithNome() {
   const admin = createAdminClient()
   const { data } = await admin.from('profiles').select('papel, nome').eq('id', user.id).maybeSingle()
   if (!data) return null
-  const raw = (data.papel as string) ?? 'colaborador'
+  const raw = (await papelEfetivo(data.papel as string | null)) ?? 'colaborador'
   return { user, role: raw === 'trainee' ? 'colaborador' : raw, nome: (data.nome as string) ?? '' }
 }
 

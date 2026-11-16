@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import { getAuthUser } from '../../lib/api-helpers'
+import { papelEfetivo } from '../../lib/ver-como'
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUser()
@@ -12,6 +13,7 @@ export async function POST(req: NextRequest) {
     .select('papel')
     .eq('id', user.id)
     .single()
+  if (callerProfile) callerProfile.papel = await papelEfetivo(callerProfile.papel) // "Ver como" do admin
   if (!['gestor', 'admin'].includes(callerProfile?.papel ?? '')) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../../lib/api-helpers'
+import { papelEfetivo } from '../../../../../lib/ver-como'
 
 type Params = { params: Promise<{ id: string; cicloId: string }> }
 
@@ -9,6 +10,7 @@ async function getAuth() {
   if (!user) return { user: null, papel: null, pdiSlug: null }
   const admin = createAdminClient()
   const { data: p } = await admin.from('profiles').select('papel, pdi_slug').eq('id', user.id).single()
+  if (p) p.papel = await papelEfetivo(p.papel) // "Ver como" do admin
   return { user, papel: p?.papel as string | null, pdiSlug: p?.pdi_slug as string | null }
 }
 

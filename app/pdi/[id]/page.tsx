@@ -4,6 +4,7 @@ import * as allPdis from '../../../data/pdis/index'
 import type { PdiColaborador, EneagramaRank, Animal } from '../../../data/pdis/types'
 import PdiDetailClient from './PdiDetailClient'
 import { getAuthUser } from '../../lib/api-helpers'
+import { papelEfetivo } from '../../lib/ver-como'
 
 const pdisMap = Object.values(allPdis).reduce<Record<string, PdiColaborador>>((acc, pdi) => {
   acc[(pdi as PdiColaborador).id] = pdi as PdiColaborador
@@ -89,12 +90,13 @@ export default async function PdiDetailPage({ params }: { params: Promise<{ id: 
     .select('papel, pdi_slug')
     .eq('id', user.id)
     .single()
+  if (profile) profile.papel = await papelEfetivo(profile.papel) // "Ver como" do admin
 
   const papel = (profile?.papel as string) ?? 'colaborador'
   const pdiSlug = (profile?.pdi_slug as string) ?? null
 
-  // Colaborador só acessa o próprio PDI
-  if (papel === 'colaborador' && pdiSlug !== id) {
+  // Colaborador e trainee só acessam o próprio PDI
+  if ((papel === 'colaborador' || papel === 'trainee') && pdiSlug !== id) {
     if (pdiSlug) redirect(`/pdi/${pdiSlug}`)
     redirect('/pdi')
   }

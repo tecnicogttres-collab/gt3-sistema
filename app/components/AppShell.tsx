@@ -86,8 +86,9 @@ function HeaderSearch() {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      {/* Para admin real, quem mostra o modo é o "Ver como" */}
-      {roleOverride && papelReal !== 'admin' && (
+      {/* Para admin real, quem mostra o modo é o "Ver como". Só depois do perfil carregar (papelReal):
+          o override vem do sessionStorage, que não existe no servidor — mostrar antes quebra a hidratação. */}
+      {roleOverride && papelReal && papelReal !== 'admin' && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 4,
           background: '#FEF3C7', border: '1px solid #F59E0B',
@@ -175,7 +176,9 @@ function VerComoPerfil() {
     setRoleOverride(novo)
     // Se o módulo aberto não existe para o perfil escolhido, volta para o início
     const mod = modules.find(m => m.path === pathname)
-    if (novo && mod && !mod.allowedRoles.includes(novo)) router.push('/')
+    if (novo && mod && !mod.allowedRoles.includes(novo)) { router.push('/'); return }
+    // Recarrega a tela para os dados virem de novo do servidor já com o perfil escolhido
+    window.location.reload()
   }
 
   const ativo = !!roleOverride && roleOverride !== 'admin'

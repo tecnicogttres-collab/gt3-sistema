@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../../lib/api-helpers'
+import { papelEfetivo } from '../../../../../lib/ver-como'
 
 async function requireGestorAdmin() {
   const user = await getAuthUser()
   if (!user) return { user: null, ok: false as const }
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('papel').eq('id', user.id).single()
+  if (profile) profile.papel = await papelEfetivo(profile.papel) // "Ver como" do admin
   const papel = profile?.papel as string | null
   if (!papel || !['gestor', 'admin'].includes(papel)) return { user, ok: false as const }
   return { user, ok: true as const }

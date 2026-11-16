@@ -3,6 +3,7 @@ import { createAdminClient } from '../../../lib/supabase-admin'
 import * as allPdis from '../../../../data/pdis/index'
 import type { PdiColaborador } from '../../../../data/pdis/types'
 import { getAuthUser } from '../../../lib/api-helpers'
+import { papelEfetivo } from '../../../lib/ver-como'
 
 const pdisMap = Object.values(allPdis).reduce<Record<string, PdiColaborador>>((acc, pdi) => {
   acc[(pdi as PdiColaborador).id] = pdi as PdiColaborador
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('papel').eq('id', user.id).single()
+  if (profile) profile.papel = await papelEfetivo(profile.papel) // "Ver como" do admin
   if (!['gestor', 'admin'].includes(profile?.papel ?? ''))
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
 

@@ -2,6 +2,7 @@
 import { createAdminClient } from '../lib/supabase-admin'
 import PdiListClient from './PdiListClient'
 import { getAuthUser } from '../lib/api-helpers'
+import { papelEfetivo } from '../lib/ver-como'
 
 export const metadata = { title: 'PDI — Sistema Interno GT3' }
 
@@ -38,6 +39,7 @@ export default async function PdiPage() {
     .select('papel, pdi_slug')
     .eq('id', user.id)
     .single()
+  if (profile) profile.papel = await papelEfetivo(profile.papel) // "Ver como" do admin
 
   const papel = (profile?.papel as string) ?? null
 

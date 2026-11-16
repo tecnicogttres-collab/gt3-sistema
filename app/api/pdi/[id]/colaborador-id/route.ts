@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../lib/api-helpers'
+import { papelEfetivo } from '../../../../lib/ver-como'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,6 +12,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const admin = createAdminClient()
   const { data: profile } = await admin.from('profiles').select('papel').eq('id', user.id).single()
+  if (profile) profile.papel = await papelEfetivo(profile.papel) // "Ver como" do admin
   if (!['gestor', 'admin'].includes(profile?.papel ?? ''))
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
 

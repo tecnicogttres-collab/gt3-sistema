@@ -1,6 +1,7 @@
 import { createAdminClient } from '../../../lib/supabase-admin'
 import { getAuthUser } from '../../../lib/api-helpers'
 import { getUsuariosDesativados } from '../../../lib/usuarios-desativados'
+import { papelEfetivo } from '../../../lib/ver-como'
 
 export async function GET() {
   const user = await getAuthUser()
@@ -12,6 +13,7 @@ export async function GET() {
     .select('papel')
     .eq('id', user.id)
     .single()
+  if (callerProfile) callerProfile.papel = await papelEfetivo(callerProfile.papel) // "Ver como" do admin
   if (!['gestor', 'admin'].includes(callerProfile?.papel ?? '')) {
     return Response.json({ error: 'Sem permissão' }, { status: 403 })
   }

@@ -1,5 +1,6 @@
 import { createAdminClient } from '../../../lib/supabase-admin'
 import { getAuthUser } from '../../../lib/api-helpers'
+import { papelEfetivo } from '../../../lib/ver-como'
 
 export async function GET() {
   const user = await getAuthUser()
@@ -12,6 +13,7 @@ export async function GET() {
     .select('papel')
     .eq('id', user.id)
     .single()
+  if (profile) profile.papel = await papelEfetivo(profile.papel) // "Ver como" do admin
 
   if (!['colaborador', 'trainee'].includes(profile?.papel ?? ''))
     return Response.json(null)

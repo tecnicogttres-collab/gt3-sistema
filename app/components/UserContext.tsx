@@ -22,6 +22,15 @@ export type Profile = {
 export type PapelRole = NonNullable<Profile['papel']>
 
 const OVERRIDE_KEY = 'gt3_role_override'
+/** Mesmo nome de COOKIE_VER_COMO (app/lib/ver-como.ts): o servidor só respeita para admin real. */
+const COOKIE_VER_COMO = 'gt3_ver_como'
+function gravarCookieVerComo(r: string | null) {
+  try {
+    document.cookie = r
+      ? `${COOKIE_VER_COMO}=${r}; path=/; SameSite=Lax`
+      : `${COOKIE_VER_COMO}=; path=/; max-age=0; SameSite=Lax`
+  } catch { /* sem document */ }
+}
 
 /** Retorna o nome de exibição: nome real se preenchido, senão usuario */
 export function displayName(profile: Profile | null, fallback = 'Usuário'): string {
@@ -68,6 +77,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setRoleOverrideState(r)
     if (r) sessionStorage.setItem(OVERRIDE_KEY, r)
     else sessionStorage.removeItem(OVERRIDE_KEY)
+    // Leva o "Ver como" para o servidor (admin vendo como outro perfil). 'admin' = sem simulação.
+    gravarCookieVerComo(r && r !== 'admin' ? r : null)
   }
 
   async function loadProfile(_userId: string) {
@@ -86,6 +97,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (!roleOverride) return rawProfile
     return { ...rawProfile, papel: roleOverride, modulos_permitidos: null, modulos_dashboard: null }
   }, [rawProfile, roleOverride])
+
+  // Cookie acompanha o estado desta aba ao abrir/recarregar (ex.: aba nova sem "Ver como" limpa o cookie)
+  useEffect(() => { gravarCookieVerComo(roleOverride && roleOverride !== 'admin' ? roleOverride : null) }, [roleOverride])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {

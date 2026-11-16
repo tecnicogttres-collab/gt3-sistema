@@ -541,13 +541,17 @@ export default function QuestionariosClient() {
     Promise.all([
       fetch('/api/questionarios').then(async r => r.ok ? r.json() : Promise.reject((await r.json().catch(() => ({}))).error ?? 'Erro ao carregar')),
       fetch('/api/terceiras/contratantes').then(r => r.ok ? r.json() : []).catch(() => []),
+      // Perfil vem do /api/me (papel real) e respeita o "Ver como" do admin (cookie lido no servidor
+      // não chega ao /api/me, então aplica aqui o mesmo perfil simulado do topo)
       fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([d, cts, me]: [{ questionarios: Questionario[]; convites: Convite[] }, { nome: string }[], { papel?: string } | null]) => {
       if (cancelled) return
       setQns(d.questionarios)
       setConvites(d.convites)
       setContratantesBase((cts ?? []).map(c => c.nome))
-      setPodeGerir(me?.papel === 'gestor' || me?.papel === 'admin')
+      const verComo = (() => { try { return sessionStorage.getItem('gt3_role_override') } catch { return null } })()
+      const papel = me?.papel === 'admin' && verComo ? verComo : me?.papel
+      setPodeGerir(papel === 'gestor' || papel === 'admin')
     }).catch(e => {
       if (!cancelled) setLoadErr(String(e))
     }).finally(() => { if (!cancelled) setLoading(false) })
