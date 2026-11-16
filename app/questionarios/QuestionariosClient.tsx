@@ -800,12 +800,13 @@ export default function QuestionariosClient() {
     const wb = new Workbook()
     const ws = wb.addWorksheet('Respostas')
     const interno = ehInterno(qn.publico)
+    const numQ = (id: string) => qn.perguntas.findIndex(x => x.id === id) + 1
     ws.columns = [
       { header: 'Nome', key: 'nome', width: 30 },
       ...(interno ? [] : [{ header: 'Empresa', key: 'empresa', width: 30 }]),
       { header: 'Status', key: 'status', width: 20 },
       { header: 'Respondido em', key: 'data', width: 14 },
-      ...qn.perguntas.map(q => ({ header: q.label, key: q.id, width: q.type === 'texto' ? 50 : 24 })),
+      ...qn.perguntas.map(q => ({ header: `${numQ(q.id)}. ${q.label}`, key: q.id, width: q.type === 'texto' ? 50 : 24 })),
     ]
     rows.forEach(d => ws.addRow({
       nome: d.nome, empresa: d.empresa, status: STATUS_EXIB_LABEL[statusExib(d)], data: fmtData(d.respondido_em),
@@ -1756,6 +1757,9 @@ export default function QuestionariosClient() {
     const todosRows = convitesDe(qn.id)
     // Questionário interno: todos são da GT3 (empresa/contratante não ajudam) e há "Prefiro não responder"
     const interno = ehInterno(qn.publico)
+    /** Número da pergunta no questionário (mesmo do formulário respondido). */
+    const numQ = (id: string) => qn.perguntas.findIndex(x => x.id === id) + 1
+    const tituloQ = (q: Pergunta) => `${numQ(q.id)}. ${q.label}`
     const cfg = cfgFor(qn)
     const search = fSearch.trim().toLowerCase()
 
@@ -1789,7 +1793,7 @@ export default function QuestionariosClient() {
     fStatus.forEach(v => pills.push({ label: `Status: ${STATUS_EXIB_LABEL[v]}`, rm: () => setFStatus(s => toggle(s, v)) }))
     Object.keys(fQ).forEach(qid => {
       const q = qn.perguntas.find(x => x.id === qid)
-      fQ[qid].forEach(v => pills.push({ label: `${q?.label ?? qid} → ${rotuloValor(v)}`, rm: () => setFQ(f => ({ ...f, [qid]: toggle(f[qid], v) })) }))
+      fQ[qid].forEach(v => pills.push({ label: `${q ? tituloQ(q) : qid} → ${rotuloValor(v)}`, rm: () => setFQ(f => ({ ...f, [qid]: toggle(f[qid], v) })) }))
     })
 
     // Stats
@@ -1825,7 +1829,7 @@ export default function QuestionariosClient() {
       return (
         <div className="card chart-card" key={q.id}>
           <div className="chart-head">
-            <h2>{q.label}</h2>
+            <h2>{tituloQ(q)}</h2>
             <div className="chart-meta">
               {media != null && <span className="kpi-pill"><b>{media.toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 })}</b> média</span>}
               <span className="kpi-pill"><b>{base.length}</b> resposta{base.length === 1 ? '' : 's'}</span>
@@ -1909,7 +1913,7 @@ export default function QuestionariosClient() {
               const linhas = full.filter(d => d.status === 'respondido' && valoresResposta(d.respostas[q.id]).length)
               return (
                 <div key={q.id}>
-                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{q.label} <span className="cap" style={{ fontWeight: 400 }}>· {linhas.length} resposta{linhas.length === 1 ? '' : 's'}</span></div>
+                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{tituloQ(q)} <span className="cap" style={{ fontWeight: 400 }}>· {linhas.length} resposta{linhas.length === 1 ? '' : 's'}</span></div>
                   {!linhas.length && <div className="empty-note" style={{ textAlign: 'left', padding: '2px 0' }}>Ninguém escreveu nesta pergunta no recorte atual.</div>}
                   <div className="escrita-lista">
                     {linhas.map(d => {
@@ -1998,7 +2002,7 @@ export default function QuestionariosClient() {
     const table = () => {
       const closed = qn.perguntas.filter(q => q.type !== 'texto')
       const open = qn.perguntas.filter(q => q.type === 'texto')
-      const heads = ['Nome', ...(interno ? [] : ['Empresa', 'Contratante']), 'Status', 'Respondido em', ...closed.map(q => q.label), ...open.map(q => q.label)]
+      const heads = ['Nome', ...(interno ? [] : ['Empresa', 'Contratante']), 'Status', 'Respondido em', ...closed.map(tituloQ), ...open.map(tituloQ)]
       const ORD_ST: Record<StatusExib, number> = { respondido: 0, enviado: 1, nao_enviado: 2 }
       const linhas = [...full].sort((a, b) =>
         tblOrdem === 'recente' ? (b.respondido_em ?? '').localeCompare(a.respondido_em ?? '') || a.nome.localeCompare(b.nome, 'pt-BR')
