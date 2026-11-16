@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { PdiColaborador, AcaoPdi } from '../../../data/pdis/types'
+import PesquisasTab from './PesquisasTab'
 
-type Tab = 'acoes' | 'avaliacoes' | 'eneagrama' | 'mbti' | 'conclusoes'
+type Tab = 'acoes' | 'avaliacoes' | 'eneagrama' | 'mbti' | 'conclusoes' | 'pesquisas'
 
 type OutroRascunho = { user_nome: string | null; texto: string | null; updated_at: string }
 
@@ -45,6 +46,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'eneagrama', label: 'Eneagrama' },
   { id: 'mbti', label: 'MBTI' },
   { id: 'conclusoes', label: 'Conclusões' },
+  { id: 'pesquisas', label: 'Pesquisas' },
 ]
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
@@ -1793,6 +1795,7 @@ export default function PdiDetailClient({ pdi, papel, isDbPdi }: { pdi: PdiColab
         {activeTab === 'eneagrama' && <EneagramaTab pdi={pdi} isDbPdi={isDbPdi} canEdit={canEdit} />}
         {activeTab === 'mbti' && <MbtiTab pdi={pdi} isDbPdi={isDbPdi} canEdit={canEdit} />}
         {activeTab === 'conclusoes' && <ConclusoesTab pdi={pdi} isDbPdi={isDbPdi} canEdit={canEdit} />}
+        {activeTab === 'pesquisas' && <PesquisasTab pdiId={pdi.id} papel={papel} />}
       </div>
     </div>
   )
