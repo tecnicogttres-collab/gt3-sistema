@@ -123,6 +123,14 @@ export function statusExib(c: Pick<Convite, 'status' | 'status_envio'>): StatusE
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://gt3-sistema-gt3.vercel.app').replace(/\/+$/, '')
 export const linkConvite = (token: string) => `${SITE_URL}/questionario/${token}`
 
+/** Questionário interno (público Colaborador): toda pergunta ganha "Prefiro não responder". */
+export const ehInterno = (publico: Publico | string) => publico === 'Colaborador'
+/** Valor gravado quando a pessoa marca "Prefiro não responder" (só em questionário interno). */
+export const PREFIRO_NAO = '__prefiro_nao_responder__'
+export const PREFIRO_NAO_LABEL = 'Prefiro não responder'
+/** Texto de exibição de um valor de resposta (traduz o "Prefiro não responder"). */
+export const rotuloValor = (v: string | number) => (v === PREFIRO_NAO ? PREFIRO_NAO_LABEL : String(v))
+
 /** Nome/empresa gravados nas respostas que chegam pelo link anônimo. */
 export const NOME_ANONIMO = 'Anônimo'
 

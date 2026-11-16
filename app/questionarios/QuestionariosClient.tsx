@@ -5,6 +5,7 @@ import {
   type Questionario, type Convite, type Pergunta, type TipoPergunta, type Publico, type StatusQn, PUBLICOS,
   type StatusExib, type PainelConfig,
   TYPE_NAME, TYPE_DESC, STATUS_QN_NAME, STATUS_EXIB_LABEL, statusExib, linkConvite, primeiroNome, NOME_ANONIMO, valoresResposta,
+  ehInterno, PREFIRO_NAO, PREFIRO_NAO_LABEL, rotuloValor,
 } from './types'
 import { lerPlanilhaEmails, type LinhaPlanilhaEmails } from '../lib/contratantes-emails'
 
@@ -15,6 +16,10 @@ const CAT_COLOR = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#0083
 const ST_COLOR: Record<StatusExib, string> = { respondido: '#0ca30c', enviado: '#fab219', nao_enviado: '#898781' }
 
 const fmtData = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('pt-BR') : ''
+
+/** Linha da lista "Incluir usuários do sistema" (vem de /api/questionarios/[id]/usuarios). */
+type UsuarioSistema = { id: string; nome: string; papel: string; email: string; temPdi: boolean; jaIncluido: boolean }
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /** Linha da lista "Incluir do Cadastro de Contratantes" (vem de /api/questionarios/[id]/cadastro). */
 type LinhaCadastro = { contratanteId: string; empresa: string; email: string; origem: string; nome: string; jaIncluido: boolean }
@@ -260,6 +265,14 @@ const CSS = `
 .qnm td{padding:9px 11px;border-top:1px solid var(--border);vertical-align:top}
 .qnm .name-cell{font-weight:600;white-space:nowrap}
 .qnm .comment-cell{min-width:220px;max-width:300px;color:var(--text-secondary)}
+.qnm .quem-lista{display:flex;flex-direction:column;gap:7px;margin-top:8px;border-top:1px solid var(--border);padding-top:10px}
+.qnm .quem-item{display:flex;flex-direction:column;gap:2px;font-size:13px}
+.qnm .quem-op{display:inline-flex;align-items:center;gap:6px;font-weight:700}
+.qnm .quem-op i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.qnm .quem-nomes{color:var(--text-secondary);padding-left:15px;line-height:1.45}
+.qnm .escrita-lista{display:flex;flex-direction:column;gap:6px}
+.qnm .escrita{display:flex;flex-direction:column;gap:2px;background:var(--surface-2);border-radius:8px;padding:8px 11px;font-size:13.5px;white-space:pre-wrap}
+.qnm .escrita b{font-size:12px;color:var(--primary)}
 .qnm .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:100px;white-space:nowrap}
 .qnm .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .qnm .badge.respondido{background:rgba(12,163,12,.15);color:var(--st-good-text)}
@@ -343,7 +356,9 @@ const blankDraft = (): Draft => ({ id: null, type: 'escala', label: '', min: 'Mu
 
 /** Respostas que podem servir de gatilho de uma pergunta condicional. */
 const valoresGatilho = (q: Pergunta): (string | number)[] => q.type === 'escala' ? [1, 2, 3, 4, 5] : q.type === 'multipla' ? (q.options ?? []) : []
-const fmtResposta = (v: Convite['respostas'][string] | undefined) => valoresResposta(v).join(', ')
+const fmtResposta = (v: Convite['respostas'][string] | undefined) => valoresResposta(v).map(rotuloValor).join(', ')
+/** Cor da barra "Prefiro não responder" nos gráficos. */
+const COR_PREFIRO_NAO = '#B6C0CE'
 const novoIdPergunta = () => `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
 function cfgFor(qn: Questionario): PainelConfig {
@@ -492,6 +507,14 @@ export default function QuestionariosClient() {
   const [impSel, setImpSel] = useState<Set<string>>(new Set())
   const [impNomes, setImpNomes] = useState<Record<string, string>>({})
   const [impBusca, setImpBusca] = useState('')
+  // Incluir usuários do sistema (pesquisa interna identificada → convite ligado ao usuário e ao PDI)
+  const [usOpen, setUsOpen] = useState(false)
+  const [usLoading, setUsLoading] = useState(false)
+  const [usErr, setUsErr] = useState('')
+  const [usLista, setUsLista] = useState<UsuarioSistema[]>([])
+  const [usSel, setUsSel] = useState<Set<string>>(new Set())
+  const [usEmails, setUsEmails] = useState<Record<string, string>>({})
+  const [usBusca, setUsBusca] = useState('')
   // Importar planilha (a gerada em Cadastro de Contratantes → "Exportar e-mails para planilha", revisada no Excel)
   const [plOpen, setPlOpen] = useState(false)
   const [plArquivo, setPlArquivo] = useState('')
@@ -507,6 +530,9 @@ export default function QuestionariosClient() {
   const [stackTodas, setStackTodas] = useState(false)
   const [fSearch, setFSearch] = useState('')
   const [fQ, setFQ] = useState<Record<string, Set<string | number>>>({})
+  // Painel: perguntas com a lista "quem respondeu o quê" aberta, e ordem da tabela
+  const [verQuem, setVerQuem] = useState<Set<string>>(new Set())
+  const [tblOrdem, setTblOrdem] = useState<'nome' | 'recente' | 'status'>('nome')
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -768,6 +794,33 @@ export default function QuestionariosClient() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   }
 
+  /** Planilha das respostas no recorte atual do painel: uma linha por pessoa, uma coluna por pergunta. */
+  async function exportarRespostas(qn: Questionario, rows: Convite[]) {
+    const { Workbook } = await import('exceljs')
+    const wb = new Workbook()
+    const ws = wb.addWorksheet('Respostas')
+    const interno = ehInterno(qn.publico)
+    ws.columns = [
+      { header: 'Nome', key: 'nome', width: 30 },
+      ...(interno ? [] : [{ header: 'Empresa', key: 'empresa', width: 30 }]),
+      { header: 'Status', key: 'status', width: 20 },
+      { header: 'Respondido em', key: 'data', width: 14 },
+      ...qn.perguntas.map(q => ({ header: q.label, key: q.id, width: q.type === 'texto' ? 50 : 24 })),
+    ]
+    rows.forEach(d => ws.addRow({
+      nome: d.nome, empresa: d.empresa, status: STATUS_EXIB_LABEL[statusExib(d)], data: fmtData(d.respondido_em),
+      ...Object.fromEntries(qn.perguntas.map(q => [q.id, fmtResposta(d.respostas[q.id])])),
+    }))
+    ws.getRow(1).font = { bold: true }
+    ws.getRow(1).alignment = { wrapText: true, vertical: 'top' }
+    const buf = await wb.xlsx.writeBuffer()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    a.download = `Respostas - ${qn.titulo.replace(/[\\/:*?"<>|]/g, '')}.xlsx`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+
   async function exportarMalaDireta(tipo: 'convites' | 'lembretes') {
     if (!selQn) return
     setBusy(true)
@@ -825,6 +878,37 @@ export default function QuestionariosClient() {
       aplicarConvites(selQn.id, d.convites ?? [])
       setImpOpen(false)
       setToast(`${d.incluidos} incluído(s)${d.duplicados ? ` · ${d.duplicados} já era(m) destinatário(s)` : ''}`)
+    } finally { setBusy(false) }
+  }
+
+  async function abrirUsuarios() {
+    if (!selQn) return
+    setUsOpen(true); setUsLoading(true); setUsErr(''); setUsBusca(''); setUsSel(new Set())
+    try {
+      const res = await fetch(`/api/questionarios/${selQn.id}/usuarios`)
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setUsErr(d.error ?? 'Erro ao ler os usuários'); return }
+      const lista = (d.usuarios ?? []) as UsuarioSistema[]
+      setUsLista(lista)
+      setUsEmails(Object.fromEntries(lista.map(u => [u.id, u.email])))
+    } finally { setUsLoading(false) }
+  }
+
+  async function confirmarUsuarios() {
+    if (!selQn || !usSel.size) return
+    const itens = [...usSel].map(pid => ({ profile_id: pid, email: (usEmails[pid] ?? '').trim() }))
+    const semEmail = itens.filter(i => !EMAIL_OK.test(i.email))
+    if (semEmail.length) { setUsErr(`Preencha um e-mail pessoal válido para ${semEmail.length} pessoa(s) marcada(s).`); return }
+    setBusy(true); setUsErr('')
+    try {
+      const res = await fetch(`/api/questionarios/${selQn.id}/usuarios`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itens }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setUsErr(d.error ?? 'Erro ao incluir'); return }
+      aplicarConvites(selQn.id, d.convites ?? [])
+      setUsOpen(false)
+      setToast(`${d.incluidos} pessoa(s) incluída(s)${d.duplicados ? ` · ${d.duplicados} já era(m) destinatário(s)` : ''}`)
     } finally { setBusy(false) }
   }
 
@@ -1327,7 +1411,11 @@ export default function QuestionariosClient() {
               <p className="cap" style={{ margin: 0 }}>{rows.length} destinatário{rows.length === 1 ? '' : 's'}{semLink ? ` · ${semLink} ainda sem link` : ''}</p>
             </div>
             <div className="actions">
-              {podeGerir && <button className="btn ghost" disabled={busy} onClick={() => void abrirImportacao()}>Incluir do Cadastro de Contratantes</button>}
+              {podeGerir && qn.publico === 'Colaborador' && (
+                <button className="btn" disabled={busy} onClick={() => void abrirUsuarios()}
+                  title="Cada pessoa vira um convite ligado ao usuário: a resposta aparece também no PDI dela">Incluir usuários do sistema</button>
+              )}
+              {podeGerir && qn.publico !== 'Colaborador' && <button className="btn ghost" disabled={busy} onClick={() => void abrirImportacao()}>Incluir do Cadastro de Contratantes</button>}
               {podeGerir && (
                 <>
                   <button className="btn ghost" disabled={busy} onClick={() => plInput.current?.click()}
@@ -1457,6 +1545,7 @@ export default function QuestionariosClient() {
           <p className="f-hint" style={{ marginTop: 10 }}>{hint}</p>
         </div>
         {impOpen && renderImportacao()}
+        {usOpen && renderUsuarios()}
         {plOpen && renderPlanilha(qn)}
       </>
     )
@@ -1524,6 +1613,70 @@ export default function QuestionariosClient() {
             <button className="btn" disabled={busy || !importar.length} onClick={() => void confirmarPlanilha(importar)}>
               Importar {importar.length || ''} destinatário{importar.length === 1 ? '' : 's'}
             </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function renderUsuarios() {
+    const q = usBusca.trim().toLowerCase()
+    const filtrados = usLista.filter(u => !q || `${u.nome} ${u.papel} ${usEmails[u.id] ?? ''}`.toLowerCase().includes(q))
+    const livres = filtrados.filter(u => !u.jaIncluido)
+    const todasSel = livres.length > 0 && livres.every(u => usSel.has(u.id))
+    return (
+      <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Incluir usuários do sistema" onClick={e => { if (e.target === e.currentTarget && !busy) setUsOpen(false) }}>
+        <div className="modal">
+          <div className="modal-head">
+            <h2>Incluir usuários do sistema</h2>
+            <p className="cap" style={{ margin: 0 }}>
+              Cada pessoa marcada vira um convite ligado ao usuário: a resposta aparece no painel (só gestor/admin) e na aba Pesquisas do PDI dela.
+              Use o <b>e-mail pessoal</b> (não o de login); ele fica guardado para as próximas pesquisas.
+            </p>
+          </div>
+          <div className="modal-tools">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <input type="checkbox" className="chk" disabled={!livres.length} checked={todasSel}
+                onChange={() => setUsSel(s => {
+                  const n = new Set(s)
+                  livres.forEach(u => { if (todasSel) n.delete(u.id); else n.add(u.id) })
+                  return n
+                })} />
+              Selecionar todos{q ? ' (da busca)' : ''}
+            </label>
+            <input type="text" value={usBusca} onChange={e => setUsBusca(e.target.value)} placeholder="Buscar nome, perfil ou e-mail..." />
+          </div>
+          <div className="modal-body">
+            {usLoading && <p className="cap" style={{ marginTop: 14 }}>Carregando usuários…</p>}
+            {!usLoading && !filtrados.length && !usErr && <p className="cap" style={{ marginTop: 14 }}>Nenhum usuário encontrado.</p>}
+            <div className="imp-emp">
+              {filtrados.map(u => {
+                const email = usEmails[u.id] ?? ''
+                const marcado = !u.jaIncluido && usSel.has(u.id)
+                const invalido = marcado && !EMAIL_OK.test(email.trim())
+                return (
+                  <div className={`imp-row${u.jaIncluido ? ' off' : ''}`} key={u.id}>
+                    <input type="checkbox" className="chk" disabled={u.jaIncluido} checked={marcado}
+                      aria-label={`Incluir ${u.nome}`} onChange={() => setUsSel(s => toggle(s, u.id))} />
+                    <div className="imp-email">
+                      {u.nome}
+                      {u.jaIncluido ? <span className="email-sub">já é destinatário</span> : !u.temPdi ? <span className="warn-sub">sem PDI vinculado: a resposta fica só no painel</span> : null}
+                    </div>
+                    <div className="imp-origem">{u.papel}</div>
+                    <input type="text" value={email} disabled={u.jaIncluido} placeholder="e-mail pessoal"
+                      style={invalido ? { borderColor: 'var(--danger)' } : undefined}
+                      aria-label={`E-mail pessoal de ${u.nome}`}
+                      onChange={e => { const v = e.target.value; setUsEmails(m => ({ ...m, [u.id]: v })); if (v.trim() && !usSel.has(u.id)) setUsSel(s => toggle(s, u.id)) }} />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <div className="modal-foot">
+            {usErr ? <span className="form-error" style={{ margin: '0 auto 0 0' }}>{usErr}</span>
+              : <span className="cap" style={{ margin: '0 auto 0 0' }}>{usSel.size} selecionado{usSel.size === 1 ? '' : 's'}</span>}
+            <button className="btn ghost" disabled={busy} onClick={() => setUsOpen(false)}>Cancelar</button>
+            <button className="btn" disabled={busy || !usSel.size} onClick={() => void confirmarUsuarios()}>Incluir {usSel.size || ''} pessoa{usSel.size === 1 ? '' : 's'}</button>
           </div>
         </div>
       </div>
@@ -1601,6 +1754,8 @@ export default function QuestionariosClient() {
 
   function renderPainel(qn: Questionario) {
     const todosRows = convitesDe(qn.id)
+    // Questionário interno: todos são da GT3 (empresa/contratante não ajudam) e há "Prefiro não responder"
+    const interno = ehInterno(qn.publico)
     const cfg = cfgFor(qn)
     const search = fSearch.trim().toLowerCase()
 
@@ -1634,7 +1789,7 @@ export default function QuestionariosClient() {
     fStatus.forEach(v => pills.push({ label: `Status: ${STATUS_EXIB_LABEL[v]}`, rm: () => setFStatus(s => toggle(s, v)) }))
     Object.keys(fQ).forEach(qid => {
       const q = qn.perguntas.find(x => x.id === qid)
-      fQ[qid].forEach(v => pills.push({ label: `${q?.label ?? qid} → ${v}`, rm: () => setFQ(f => ({ ...f, [qid]: toggle(f[qid], v) })) }))
+      fQ[qid].forEach(v => pills.push({ label: `${q?.label ?? qid} → ${rotuloValor(v)}`, rm: () => setFQ(f => ({ ...f, [qid]: toggle(f[qid], v) })) }))
     })
 
     // Stats
@@ -1642,14 +1797,15 @@ export default function QuestionariosClient() {
     const taxa = full.length ? Math.round(resp / full.length * 100) : 0
     const nEmp = new Set(full.map(d => d.empresa)).size
     const stats: { n: string | number; l: string; c: string; sub: string; meter?: number }[] = []
-    if (cfg.statTiles.total) stats.push({ n: full.length, l: 'Convites no recorte', c: '', sub: `${nEmp} empresa${nEmp === 1 ? '' : 's'}` })
+    if (cfg.statTiles.total) stats.push({ n: full.length, l: 'Convites no recorte', c: '', sub: interno ? `pessoa${full.length === 1 ? '' : 's'} convidada${full.length === 1 ? '' : 's'}` : `${nEmp} empresa${nEmp === 1 ? '' : 's'}` })
     if (cfg.statTiles.taxa) stats.push({ n: `${taxa}%`, l: 'Taxa de resposta', c: 'good', sub: `${resp} de ${full.length}`, meter: taxa })
     if (cfg.statTiles.respondido) stats.push({ n: resp, l: 'Respondido', c: 'good', sub: 'questionários concluídos' })
     if (cfg.statTiles.pendente) stats.push({ n: full.length - resp, l: 'Ainda sem resposta', c: 'warning', sub: `${full.filter(d => statusExib(d) === 'nao_enviado').length} ainda não enviados` })
 
     const chart = (q: Pergunta) => {
-      const domain: (string | number)[] = q.type === 'escala' ? [1, 2, 3, 4, 5] : (q.options ?? [])
-      const colors = q.type === 'escala' ? ORD_COLOR : CAT_COLOR
+      const domain: (string | number)[] = [...(q.type === 'escala' ? [1, 2, 3, 4, 5] : (q.options ?? [])), ...(interno ? [PREFIRO_NAO] : [])]
+      const paleta = q.type === 'escala' ? ORD_COLOR : CAT_COLOR
+      const colors = domain.map((v, i) => v === PREFIRO_NAO ? COR_PREFIRO_NAO : paleta[i % paleta.length])
       const base = withQuestions(broad, q.id).filter(d => d.status === 'respondido' && d.respostas[q.id] != null)
       const counts = domain.map(v => base.filter(d => valoresResposta(d.respostas[q.id]).includes(v)).length)
       const max = Math.max(1, ...counts)
@@ -1657,9 +1813,14 @@ export default function QuestionariosClient() {
       const totalAns = counts.reduce((a, b) => a + b, 0)
       // Base das porcentagens = quem respondeu a pergunta (na múltipla com várias respostas a soma passa de 100%)
       const pct = (n: number) => base.length ? Math.round(n / base.length * 100) : 0
-      const media = q.type === 'escala' && totalAns ? counts.reduce((a, n, i) => a + n * (i + 1), 0) / totalAns : null
+      // Média só das notas (1 a 5): "Prefiro não responder" fica fora da conta
+      const notas = q.type === 'escala' ? counts.slice(0, 5) : []
+      const totNotas = notas.reduce((a, b) => a + b, 0)
+      const media = q.type === 'escala' && totNotas ? notas.reduce((a, n, i) => a + n * (i + 1), 0) / totNotas : null
+      const nPrefiroNao = interno ? counts[domain.length - 1] : 0
+      const abertoQuem = verQuem.has(q.id)
       const clicar = (v: string | number) => setFQ(f => ({ ...f, [q.id]: toggle(f[q.id] ?? new Set(), v) }))
-      const dica = (v: string | number, n: number) => `${v}: ${n} resposta${n === 1 ? '' : 's'} (${pct(n)}%)`
+      const dica = (v: string | number, n: number) => `${rotuloValor(v)}: ${n} resposta${n === 1 ? '' : 's'} (${pct(n)}%)`
       const vazio = !totalAns && !sel.size
       return (
         <div className="card chart-card" key={q.id}>
@@ -1668,6 +1829,7 @@ export default function QuestionariosClient() {
             <div className="chart-meta">
               {media != null && <span className="kpi-pill"><b>{media.toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 })}</b> média</span>}
               <span className="kpi-pill"><b>{base.length}</b> resposta{base.length === 1 ? '' : 's'}</span>
+              {nPrefiroNao > 0 && <span className="kpi-pill" title={PREFIRO_NAO_LABEL}><b>{nPrefiroNao}</b> preferiu não responder</span>}
             </div>
           </div>
           <p className="cap">{q.type === 'escala' ? `1 = ${q.min || '—'} · 5 = ${q.max || '—'}. ` : q.multiplas ? 'Várias respostas por pessoa. ' : ''}Clique numa barra para isolar essa resposta.</p>
@@ -1684,9 +1846,9 @@ export default function QuestionariosClient() {
                       aria-pressed={on} aria-label={dica(v, counts[i])} data-tip={dica(v, counts[i])} onClick={() => clicar(v)}>
                       <span className="col-plot">
                         <span className="col-val">{counts[i]}</span>
-                        <span className="col-bar" style={{ height: `calc((100% - 22px) * ${counts[i] / max})`, background: colors[i % colors.length] }} />
+                        <span className="col-bar" style={{ height: `calc((100% - 22px) * ${counts[i] / max})`, background: colors[i] }} />
                       </span>
-                      <span className="col-label">{v}</span>
+                      <span className="col-label" title={rotuloValor(v)}>{v === PREFIRO_NAO ? 'Não resp.' : v}</span>
                     </button>
                   )
                 })}
@@ -1699,15 +1861,71 @@ export default function QuestionariosClient() {
                     <button key={String(v)} className={`hbar${on ? ' sel' : ''}${sel.size && !on ? ' dim' : ''}`}
                       aria-pressed={on} aria-label={dica(v, counts[i])} data-tip={dica(v, counts[i])} onClick={() => clicar(v)}>
                       <span className="hbar-top">
-                        <span className="hbar-label"><i style={{ background: colors[i % colors.length] }} />{v}</span>
+                        <span className="hbar-label"><i style={{ background: colors[i] }} />{rotuloValor(v)}</span>
                         <span className="hbar-val"><b>{counts[i]}</b> · {pct(counts[i])}%</span>
                       </span>
-                      <span className="hbar-track"><span className="hbar-fill" style={{ width: `${counts[i] / max * 100}%`, background: colors[i % colors.length] }} /></span>
+                      <span className="hbar-track"><span className="hbar-fill" style={{ width: `${counts[i] / max * 100}%`, background: colors[i] }} /></span>
                     </button>
                   )
                 })}
               </div>
             )}
+          </div>
+          {!vazio && (
+            <button className="link-btn" style={{ marginTop: 8 }} onClick={() => setVerQuem(s => toggle(s, q.id))}>
+              {abertoQuem ? '▾ Esconder quem respondeu' : '▸ Ver quem respondeu cada opção'}
+            </button>
+          )}
+          {abertoQuem && !vazio && (
+            <div className="quem-lista">
+              {domain.map((v, i) => {
+                const quem = base.filter(d => valoresResposta(d.respostas[q.id]).includes(v))
+                if (!quem.length) return null
+                const nomes = quem.filter(d => d.nome !== NOME_ANONIMO).map(d => d.nome || d.email).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+                const anon = quem.length - nomes.length
+                return (
+                  <div className="quem-item" key={String(v)}>
+                    <span className="quem-op"><i style={{ background: colors[i] }} />{rotuloValor(v)} <b>({quem.length})</b></span>
+                    <span className="quem-nomes">{nomes.join(', ')}{anon ? `${nomes.length ? ' · ' : ''}${anon} anônima${anon === 1 ? '' : 's'}` : ''}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    /** Respostas escritas: cada pergunta de texto com o que cada pessoa escreveu (respeita os filtros). */
+    const escritas = () => {
+      const abertas = qn.perguntas.filter(q => q.type === 'texto')
+      if (!abertas.length) return null
+      return (
+        <div className="card" key="escritas">
+          <h2>Respostas escritas</h2>
+          <p className="cap">O que cada pessoa escreveu nas perguntas abertas, no recorte atual.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {abertas.map(q => {
+              const linhas = full.filter(d => d.status === 'respondido' && valoresResposta(d.respostas[q.id]).length)
+              return (
+                <div key={q.id}>
+                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{q.label} <span className="cap" style={{ fontWeight: 400 }}>· {linhas.length} resposta{linhas.length === 1 ? '' : 's'}</span></div>
+                  {!linhas.length && <div className="empty-note" style={{ textAlign: 'left', padding: '2px 0' }}>Ninguém escreveu nesta pergunta no recorte atual.</div>}
+                  <div className="escrita-lista">
+                    {linhas.map(d => {
+                      const v = d.respostas[q.id]
+                      const nr = v === PREFIRO_NAO
+                      return (
+                        <div className="escrita" key={d.id}>
+                          <b>{d.nome || d.email}</b>
+                          <span className={nr ? 'cap' : ''} style={nr ? { fontStyle: 'italic', margin: 0 } : undefined}>{nr ? PREFIRO_NAO_LABEL : String(v)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )
@@ -1780,24 +1998,40 @@ export default function QuestionariosClient() {
     const table = () => {
       const closed = qn.perguntas.filter(q => q.type !== 'texto')
       const open = qn.perguntas.filter(q => q.type === 'texto')
-      const heads = ['Nome', 'Empresa', 'Contratante', 'Status', ...closed.map(q => q.label), ...open.map(q => q.label)]
+      const heads = ['Nome', ...(interno ? [] : ['Empresa', 'Contratante']), 'Status', 'Respondido em', ...closed.map(q => q.label), ...open.map(q => q.label)]
+      const ORD_ST: Record<StatusExib, number> = { respondido: 0, enviado: 1, nao_enviado: 2 }
+      const linhas = [...full].sort((a, b) =>
+        tblOrdem === 'recente' ? (b.respondido_em ?? '').localeCompare(a.respondido_em ?? '') || a.nome.localeCompare(b.nome, 'pt-BR')
+        : tblOrdem === 'status' ? ORD_ST[statusExib(a)] - ORD_ST[statusExib(b)] || a.nome.localeCompare(b.nome, 'pt-BR')
+        : a.nome.localeCompare(b.nome, 'pt-BR'))
       return (
         <div className="card" key="table">
-          <h2>Respondentes no recorte atual</h2>
-          <p className="cap">Sincronizada com todos os filtros acima, com cada resposta por pergunta.</p>
+          <div className="chart-head">
+            <h2>Respondentes no recorte atual</h2>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="seg seg-sm" role="group" aria-label="Ordenar respondentes">
+                {([['nome', 'A–Z'], ['recente', 'Mais recentes'], ['status', 'Status']] as const).map(([k, l]) => (
+                  <button key={k} className={tblOrdem === k ? 'on' : ''} onClick={() => setTblOrdem(k)}>{l}</button>
+                ))}
+              </div>
+              <button className="btn ghost small" disabled={!full.length} onClick={() => void exportarRespostas(qn, linhas)}>Exportar respostas (Excel)</button>
+            </div>
+          </div>
+          <p className="cap">Sincronizada com todos os filtros acima, com cada resposta por pergunta. A exportação leva exatamente o que está na tabela.</p>
           <div className="tbl-wrap">
             <table>
               <thead><tr>{heads.map((h, i) => <th key={i} title={h}>{h}</th>)}</tr></thead>
               <tbody>
                 {!full.length && <tr className="empty-row"><td colSpan={heads.length}>Nenhum respondente corresponde aos filtros atuais.</td></tr>}
-                {full.map(d => (
+                {linhas.map(d => (
                   <tr key={d.id}>
                     <td className="name-cell">{d.nome}</td>
-                    <td>{d.empresa}</td>
-                    <td>{d.tipo === 'Contratante' ? d.empresa : (d.vinculo || '—')}</td>
+                    {!interno && <td>{d.empresa}</td>}
+                    {!interno && <td>{d.tipo === 'Contratante' ? d.empresa : (d.vinculo || '—')}</td>}
                     <td><span className={`badge ${statusExib(d)}`}>{STATUS_EXIB_LABEL[statusExib(d)]}</span></td>
+                    <td>{fmtData(d.respondido_em) || <span className="dash">—</span>}</td>
                     {closed.map(q => <td key={q.id}>{fmtResposta(d.respostas[q.id]) || <span className="dash">—</span>}</td>)}
-                    {open.map(q => <td key={q.id} className="comment-cell">{d.respostas[q.id] ? String(d.respostas[q.id]) : <span className="dash">—</span>}</td>)}
+                    {open.map(q => <td key={q.id} className="comment-cell">{d.respostas[q.id] ? fmtResposta(d.respostas[q.id]) : <span className="dash">—</span>}</td>)}
                   </tr>
                 ))}
               </tbody>
@@ -1817,8 +2051,8 @@ export default function QuestionariosClient() {
       const q = qn.perguntas.find(x => x.id === id && x.type !== 'texto')
       if (q) { pendentes.push(chart(q)); return }
       flush()
-      if (id === 'empresaStack') blocos.push(empresaStack())
-      if (id === 'table') blocos.push(table())
+      if (id === 'empresaStack' && !interno) blocos.push(empresaStack())
+      if (id === 'table') { const e = escritas(); if (e) blocos.push(e); blocos.push(table()) }
     })
     flush()
 
@@ -1826,13 +2060,13 @@ export default function QuestionariosClient() {
       <>
         {qnSelect('Questionário')}
         <div className="filterbar">
-          <div className="f-group">
+          {!interno && <div className="f-group">
             <span className="field-label">Contratante vinculado</span>
             <select value={fContratante} onChange={e => setFContratante(e.target.value)}>
               <option value="all">Todos os contratantes</option>
               {contratantesList.map(ct => <option key={ct} value={ct}>{ct}</option>)}
             </select>
-          </div>
+          </div>}
           <div className="f-group">
             <span className="field-label">Status do convite</span>
             <div className="chipset">
@@ -1843,17 +2077,17 @@ export default function QuestionariosClient() {
               ))}
             </div>
           </div>
-          <div className="f-group">
+          {!interno && <div className="f-group">
             <span className="field-label">Empresa</span>
             <MultiFiltro opcoes={empresas} sel={fEmpresa} onChange={setFEmpresa} todosLabel="Todas as empresas" plural="empresas" />
-          </div>
+          </div>}
           <div className="f-group f-search">
             <span className="field-label">Buscar respondente</span>
-            <input type="text" value={fSearch} onChange={e => setFSearch(e.target.value)} placeholder="Nome ou empresa..." />
+            <input type="text" value={fSearch} onChange={e => setFSearch(e.target.value)} placeholder={interno ? 'Nome...' : 'Nome ou empresa...'} />
           </div>
           <button className="btn ghost small" onClick={() => selectQn(qn.id)}>Limpar filtros</button>
         </div>
-        <p className="f-hint">Filtrar por contratante também traz os prestadores vinculados a ele. Clique numa barra dos gráficos para isolar uma resposta específica.</p>
+        <p className="f-hint">{interno ? '' : 'Filtrar por contratante também traz os prestadores vinculados a ele. '}Clique numa barra dos gráficos para isolar uma resposta específica; os gráficos, as respostas escritas e a tabela passam a mostrar só quem respondeu aquilo.</p>
         {pills.length > 0 && (
           <div className="active-strip">
             <span>Filtros ativos:</span>

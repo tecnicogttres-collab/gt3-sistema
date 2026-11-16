@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { createAdminClient } from '../../../lib/supabase-admin'
-import { perguntaVisivel, NOME_ANONIMO, type Pergunta, type ValorResposta } from '../../../questionarios/types'
+import { ehInterno, perguntaVisivel, NOME_ANONIMO, PREFIRO_NAO, type Pergunta, type ValorResposta } from '../../../questionarios/types'
 
 type Params = { params: Promise<{ token: string }> }
 
@@ -57,6 +57,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     anonimo: r.anonimo,
     disponivel: r.qn.status === 'ativo',
     respondido,
+    // Questionário interno: toda pergunta tem a opção "Prefiro não responder"
+    prefiroNao: ehInterno(r.qn.publico),
     perguntas: r.qn.status === 'ativo' && !respondido ? r.qn.perguntas : [],
     total_perguntas: r.qn.perguntas.length,
   })
@@ -72,6 +74,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const body = await req.json().catch(() => ({})) as { respostas?: Record<string, unknown> }
   const recebidas = body.respostas ?? {}
   const respostas: Record<string, ValorResposta> = {}
+  const prefiroNao = ehInterno(r.qn.publico)
   const erroObrig = () => Response.json({ error: 'Responda todas as perguntas de nota e de múltipla escolha.' }, { status: 400 })
 
   // Perguntas na ordem: a condicional sempre vem depois da que a libera, então `respostas` já
@@ -79,6 +82,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   for (const q of r.qn.perguntas) {
     if (!perguntaVisivel(q, r.qn.perguntas, respostas)) continue
     const v = recebidas[q.id]
+    if (prefiroNao && v === PREFIRO_NAO) { respostas[q.id] = PREFIRO_NAO; continue }
     if (q.type === 'multipla' && q.multiplas) {
       const opts = q.options ?? []
       if (!Array.isArray(v) || !v.length || v.some(x => typeof x !== 'string' || !opts.includes(x))) return erroObrig()

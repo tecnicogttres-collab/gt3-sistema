@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { perguntaVisivel, valoresResposta, type Pergunta, type ValorResposta } from '../../questionarios/types'
+import { perguntaVisivel, valoresResposta, PREFIRO_NAO, PREFIRO_NAO_LABEL, type Pergunta, type ValorResposta } from '../../questionarios/types'
 
 // Tela PÚBLICA do respondente — abre sem login, pelo link único do convite.
 
@@ -20,6 +20,8 @@ type Dados = {
   anonimo?: boolean
   disponivel: boolean
   respondido: boolean
+  /** Questionário interno: cada pergunta tem a caixa "Prefiro não responder". */
+  prefiroNao?: boolean
   perguntas: Pergunta[]
   total_perguntas: number
 }
@@ -64,7 +66,7 @@ export default function ResponderClient({ token }: { token: string }) {
   async function enviar(d: Dados) {
     const visiveis = d.perguntas.filter(q => perguntaVisivel(q, d.perguntas, respostas))
     const faltando = visiveis.some(q => q.type !== 'texto' && !valoresResposta(respostas[q.id]).length)
-    if (faltando) { setErro('Responda todas as perguntas de nota e de múltipla escolha.'); return }
+    if (faltando) { setErro(d.prefiroNao ? 'Responda todas as perguntas de nota e de múltipla escolha (ou marque "Prefiro não responder").' : 'Responda todas as perguntas de nota e de múltipla escolha.'); return }
     // Só vai o que está visível — resposta de pergunta que ficou oculta depois não conta.
     const payload = Object.fromEntries(visiveis.filter(q => respostas[q.id] != null).map(q => [q.id, respostas[q.id]]))
     setEnviando(true); setErro('')
@@ -172,7 +174,7 @@ export default function ResponderClient({ token }: { token: string }) {
                       const sel = marcadas.includes(o)
                       const marcar = () => setRespostas(r => {
                         if (!q.multiplas) return { ...r, [q.id]: o }
-                        const atual = valoresResposta(r[q.id]) as string[]
+                        const atual = (valoresResposta(r[q.id]) as string[]).filter(x => x !== PREFIRO_NAO)
                         return { ...r, [q.id]: sel ? atual.filter(x => x !== o) : [...atual, o] }
                       })
                       return (
@@ -188,11 +190,26 @@ export default function ResponderClient({ token }: { token: string }) {
                   <textarea
                     rows={3}
                     placeholder="Escreva sua resposta…"
-                    value={String(respostas[q.id] ?? '')}
+                    value={respostas[q.id] === PREFIRO_NAO ? '' : String(respostas[q.id] ?? '')}
+                    disabled={respostas[q.id] === PREFIRO_NAO}
                     onChange={e => setRespostas(r => ({ ...r, [q.id]: e.target.value }))}
                     style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 14, padding: '9px 11px', borderRadius: 8, border: `1px solid ${BORDER}`, resize: 'vertical', lineHeight: 1.4 }}
                   />
                 )}
+                {d.prefiroNao && (() => {
+                  const nr = respostas[q.id] === PREFIRO_NAO
+                  return (
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', fontSize: 13, color: nr ? PRIMARY : MUTED, fontWeight: nr ? 700 : 500, cursor: 'pointer', background: nr ? PRIMARY_SOFT : 'transparent', borderRadius: 8, padding: '5px 9px', marginLeft: -9 }}>
+                      <input type="checkbox" checked={nr} style={{ accentColor: PRIMARY, margin: 0 }}
+                        onChange={() => setRespostas(r => {
+                          const n = { ...r }
+                          if (nr) delete n[q.id]; else n[q.id] = PREFIRO_NAO
+                          return n
+                        })} />
+                      {PREFIRO_NAO_LABEL}
+                    </label>
+                  )
+                })()}
               </div>
             ))}
           </div>
