@@ -33,6 +33,8 @@ type UserContextType = {
   profile: Profile | null
   loading: boolean
   roleOverride: PapelRole | null
+  /** Papel real do usuário (ignora o modo "ver como"). */
+  papelReal: PapelRole | null
   setRoleOverride: (r: PapelRole | null) => void
   signOut: () => Promise<void>
   reloadProfile: (userId: string) => Promise<void>
@@ -43,6 +45,7 @@ const UserContext = createContext<UserContextType>({
   profile: null,
   loading: true,
   roleOverride: null,
+  papelReal: null,
   setRoleOverride: () => {},
   signOut: async () => {},
   reloadProfile: async () => {},
@@ -115,7 +118,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <UserContext.Provider value={{ user, profile, loading, roleOverride, setRoleOverride, signOut, reloadProfile: loadProfile }}>
+    <UserContext.Provider value={{ user, profile, loading, roleOverride, papelReal: rawProfile?.papel ?? null, setRoleOverride, signOut, reloadProfile: loadProfile }}>
       {children}
     </UserContext.Provider>
   )

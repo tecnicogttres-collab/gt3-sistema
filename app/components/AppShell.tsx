@@ -55,7 +55,7 @@ function HeaderSearch() {
   const [query, setQuery] = useState('')
   const [focused, setFocused] = useState(false)
   const router = useRouter()
-  const { profile, roleOverride, setRoleOverride } = useUser()
+  const { profile, roleOverride, setRoleOverride, papelReal } = useUser()
   const { modules: MODULES } = useModules()
   const papel = profile?.papel as Role | null
 
@@ -86,7 +86,8 @@ function HeaderSearch() {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      {roleOverride && (
+      {/* Para admin real, quem mostra o modo é o "Ver como" */}
+      {roleOverride && papelReal !== 'admin' && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 4,
           background: '#FEF3C7', border: '1px solid #F59E0B',
@@ -148,6 +149,52 @@ function HeaderSearch() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Ver como (só admin real) ────────────────────────────────────────────────
+// Marcar um perfil faz o sistema inteiro se comportar como aquele perfil (menu, módulos,
+// abas e telas). Nenhum marcado = admin padrão. Só muda a visão: no banco o usuário continua admin.
+
+const VER_COMO: { papel: Role; label: string }[] = [
+  { papel: 'gestor', label: 'Gestor' },
+  { papel: 'colaborador', label: 'Colaborador' },
+  { papel: 'trainee', label: 'Trainee' },
+]
+
+function VerComoPerfil() {
+  const { papelReal, roleOverride, setRoleOverride } = useUser()
+  const { modules } = useModules()
+  const pathname = usePathname()
+  const router = useRouter()
+  if (papelReal !== 'admin') return null
+
+  function marcar(p: Role) {
+    const novo = roleOverride === p ? null : p
+    setRoleOverride(novo)
+    // Se o módulo aberto não existe para o perfil escolhido, volta para o início
+    const mod = modules.find(m => m.path === pathname)
+    if (novo && mod && !mod.allowedRoles.includes(novo)) router.push('/')
+  }
+
+  const ativo = !!roleOverride && roleOverride !== 'admin'
+  return (
+    <div
+      title="Marque um perfil para ver o sistema exatamente como ele vê. Nenhum marcado = admin padrão."
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        border: `1px solid ${ativo ? '#F59E0B' : '#E2E8F0'}`, background: ativo ? '#FEF3C7' : '#F8FAFC',
+        borderRadius: 20, padding: '4px 12px', fontSize: 12, color: ativo ? '#92400E' : '#475569',
+      }}>
+      <span style={{ fontWeight: 700 }}>{ativo ? '👁 Vendo como:' : '👁 Ver como:'}</span>
+      {VER_COMO.map(o => (
+        <label key={o.papel} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: roleOverride === o.papel ? 700 : 500 }}>
+          <input type="checkbox" checked={roleOverride === o.papel} onChange={() => marcar(o.papel)} style={{ cursor: 'pointer', accentColor: '#D97706' }} />
+          {o.label}
+        </label>
+      ))}
+      {!ativo && <span style={{ color: '#94A3B8' }}>(admin)</span>}
     </div>
   )
 }
@@ -247,7 +294,20 @@ function corTextoSobre(hex: string) {
   return lum > 0.65 ? '#1F2937' : '#fff'
 }
 
-type AtaNotif = { id: string; data: string; titulo: string | null; created_at: string }
+type AtaNotif = { id: string; data: string; titulo: string | null; created_at: string; status?: string; autor_id?: string | null }
+
+/** Atas internas: gestor/admin passaram a receber o pop-up só para atas criadas a partir desta data
+ *  (colaborador/trainee seguem como sempre). */
+const ATAS_POPUP_GESTAO_DESDE = '2026-11-16T00:00:00-03:00'
+
+/** Ata validada que deve avisar este usuário: todos, menos quem gerou a ata. */
+function ataNotificavel(a: AtaNotif, userId: string, colabOuTrainee: boolean, profileCreatedAt: string | null | undefined) {
+  if (a.status && a.status !== 'Validada') return false
+  if (a.autor_id && a.autor_id === userId) return false
+  if (!criadoAposConta(a.created_at, profileCreatedAt)) return false
+  if (!colabOuTrainee && new Date(a.created_at).getTime() < new Date(ATAS_POPUP_GESTAO_DESDE).getTime()) return false
+  return true
+}
 type AtaContratanteNotif = { id: string; data: string; titulo: string | null; cliente: string | null }
 
 /** Itens criados antes da conta do usuário existir não devem virar notificação/leitura pendente. */
@@ -367,9 +427,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [pdiCriadoNotif, setPdiCriadoNotif] = useState<PdiNotifBanner | null>(null)
   const pathname = usePathname()
   const breadcrumb = useBreadcrumb(pathname)
-  const { profile, loading, signOut } = useUser()
+  const { profile, loading, signOut, roleOverride } = useUser()
   const { modules } = useModules()
   const router = useRouter()
+  // No "Ver como" (admin simulando outro perfil) os pop-ups de atas ficam de fora
+  const vendoComo = !!roleOverride
 
   const splitModules = pinnableModules(
     modules,
@@ -416,7 +478,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const loadUnreadAtas = useCallback(async (userId: string, profileCreatedAt: string | null | undefined) => {
-    if (!isColabOrTrainee) return
+    if (vendoComo) return
     try {
       const res = await fetch('/api/atas')
       if (!res.ok) return
@@ -427,9 +489,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         .select('ata_id')
         .eq('user_id', userId)
       const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
-      setUnreadAtas(atas.filter(a => !seenSet.has(a.id) && criadoAposConta(a.created_at, profileCreatedAt)))
+      setUnreadAtas(atas.filter(a => !seenSet.has(a.id) && ataNotificavel(a, userId, isColabOrTrainee, profileCreatedAt)))
     } catch { /* noop */ }
-  }, [isColabOrTrainee])
+  }, [isColabOrTrainee, vendoComo])
 
   useEffect(() => {
     if (!profile) return
@@ -457,7 +519,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     async function checkUnseenAtas() {
-      if (!isColabOrTrainee) return
+      if (vendoComo) return
       try {
         const res = await fetch('/api/atas')
         if (!mounted || !res.ok) return
@@ -467,7 +529,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           .select('ata_id')
           .eq('user_id', userId)
         const seenSet = new Set((leituras ?? []).map(r => r.ata_id))
-        const unnotified = atas.filter(a => !seenSet.has(a.id) && criadoAposConta(a.created_at, profile?.created_at))
+        const unnotified = atas.filter(a => !seenSet.has(a.id) && ataNotificavel(a, userId, isColabOrTrainee, profile?.created_at))
         if (unnotified.length > 0) setAtaQueue(unnotified)
         setUnreadAtas(unnotified)
       } catch { /* noop */ }
@@ -623,8 +685,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'atas', filter: 'status=eq.Validada' },
         (payload) => {
-          const record = payload.new as { id: string; data: string; titulo: string | null; status: string; created_at: string }
+          const record = payload.new as { id: string; data: string; titulo: string | null; status: string; created_at: string; autor_id: string | null }
           if (record?.status !== 'Validada' || !record?.id) return
+          if (vendoComo || !ataNotificavel(record, userId, isColabOrTrainee, profile?.created_at)) return
           setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
           setUnreadAtas(prev =>
             prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo, created_at: record.created_at }]
@@ -634,8 +697,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'atas', filter: 'status=eq.Validada' },
         (payload) => {
-          const record = payload.new as { id: string; data: string; titulo: string | null; status: string; created_at: string }
+          const record = payload.new as { id: string; data: string; titulo: string | null; status: string; created_at: string; autor_id: string | null }
           if (record?.status !== 'Validada' || !record?.id) return
+          if (vendoComo || !ataNotificavel(record, userId, isColabOrTrainee, profile?.created_at)) return
           setAtaQueue(prev => prev.some(a => a.id === record.id) ? prev : [...prev, record])
           setUnreadAtas(prev =>
             prev.some(a => a.id === record.id) ? prev : [...prev, { id: record.id, data: record.data, titulo: record.titulo, created_at: record.created_at }]
@@ -690,7 +754,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       stopPoll()
       supabase.removeChannel(channel)
     }
-  }, [profile, isColabOrTrainee, loadLegislacoesPendentes, loadCampanhasPendentes])
+  }, [profile, isColabOrTrainee, vendoComo, loadLegislacoesPendentes, loadCampanhasPendentes])
 
   // Recarrega os avisos de atas/legislações só ao SAIR dessas telas (é lá que "lida" muda).
   // A carga inicial já acontece no efeito acima; antes, toda troca de tela refazia as duas consultas.
@@ -699,7 +763,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const anterior = pathAnterior.current
     pathAnterior.current = pathname
     if (anterior === pathname || !profile) return
-    if (anterior === '/atas' && isColabOrTrainee) loadUnreadAtas(profile.id, profile.created_at)
+    if (anterior === '/atas') loadUnreadAtas(profile.id, profile.created_at)
     if (anterior === '/legislacoes') loadLegislacoesPendentes(profile.created_at)
     if (anterior === '/atas-contratantes') {
       fetch('/api/atas-contratantes/notificacoes')
@@ -812,13 +876,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const showPrioNotif = prioQueue.length > 0
-  const showAtaNotif = !showPrioNotif && ataQueue.length > 0
-  const showAtaContratanteNotif = !showPrioNotif && !showAtaNotif && ataContratanteQueue.length > 0 && !pathname.startsWith('/atas-contratantes')
+  const showAtaNotif = !vendoComo && !showPrioNotif && ataQueue.length > 0
+  const showAtaContratanteNotif = !vendoComo && !showPrioNotif && !showAtaNotif && ataContratanteQueue.length > 0 && !pathname.startsWith('/atas-contratantes')
   const showSugestaoNotif = !showPrioNotif && !showAtaNotif && !showAtaContratanteNotif && sugestaoQueue.length > 0
   const showEnqueteNotif = !showPrioNotif && !showAtaNotif && !showAtaContratanteNotif && !showSugestaoNotif && enqueteQueue.length > 0
   const showLembrete = !showPrioNotif && !showAtaNotif && !showAtaContratanteNotif && !showSugestaoNotif && !showEnqueteNotif && showLembreteNotif
 
-  const bannerAta = pathname !== '/atas' && isColabOrTrainee && unreadAtas.length > 0 ? unreadAtas[0] : null
+  const bannerAta = !vendoComo && pathname !== '/atas' && unreadAtas.length > 0 ? unreadAtas[0] : null
   const bannerPdiConversa = isColabOrTrainee && pdiConversaBanner && !pathname.startsWith('/pdi') ? pdiConversaBanner : null
   const bannerPdiNotif = isColabOrTrainee && pdiNotifBanner && !pdiCriadoNotif && !pathname.startsWith('/pdi') ? pdiNotifBanner : null
 
@@ -876,6 +940,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {splitModules.length > 0 && (
                 <SplitViewButton split={split} modules={splitModules} onChange={setSplit} />
               )}
+              <VerComoPerfil />
               <HeaderSearch />
               <UserMenu name={isBirthdayToday ? `${fullName} 🎂` : fullName} onSignOut={signOut} onAlterarSenha={() => router.push('/perfil')} />
             </div>

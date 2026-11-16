@@ -87,7 +87,7 @@ function buildTree(atas: Ata[]): Tree {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function AtasClient() {
-  const { profile } = useUser()
+  const { profile, roleOverride } = useUser()
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -196,7 +196,8 @@ export default function AtasClient() {
       const [y, m] = ata.data.split('-').map(Number)
       setOpenYears(prev => new Set([...prev, `${y}`]))
       setOpenMonths(prev => new Set([...prev, `${y}-${m}`]))
-      if (isColabOrTrainee && ata.status === 'Validada' && !readingRegistered.current.has(id)) {
+      // Leitura vale para todos menos quem gerou a ata (e nao conta no "Ver como" do admin)
+      if (!roleOverride && ata.status === 'Validada' && ata.autor_id !== profile?.id && !readingRegistered.current.has(id)) {
         readingRegistered.current.add(id)
         fetch(`/api/atas/${id}/leitura`, { method: 'POST' }).catch(() => {})
         if (profile?.id) void markAtaNotifVista(id, profile.id)
