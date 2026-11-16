@@ -39,10 +39,12 @@ type Passo = typeof PASSOS[number][0]
 // ═════════════════════════════════════════════════════════════════════════════
 // Seletor de documentos em lote: busca, filtro por tipo, marcar varios e colar lista
 // ═════════════════════════════════════════════════════════════════════════════
-export function SeletorDocs({ ctx, jaTem, onIncluir, rotulo = '+ Incluir documentos', marcarBase }: {
+export function SeletorDocs({ ctx, jaTem, onIncluir, rotulo = '+ Incluir documentos', marcarBase, impacto }: {
   ctx: Ctx; jaTem: Set<string>; onIncluir: (ids: string[]) => Promise<boolean>; rotulo?: string
   /** Documentos da Base: aparecem com selo e da para marcar todos de uma vez. */
   marcarBase?: Set<string>
+  /** Previa do efeito dos marcados (ex.: quanto tempo a mais a Base passa a demandar). */
+  impacto?: (ids: string[]) => React.ReactNode
 }) {
   const [aberto, setAberto] = useState(false)
   const [q, setQ] = useState('')
@@ -111,6 +113,7 @@ export function SeletorDocs({ ctx, jaTem, onIncluir, rotulo = '+ Incluir documen
         <div className="row"><button type="button" className="btn sm" disabled={!colar.trim()} onClick={lerLista}>Marcar os da lista</button></div>
         {naoAchados.length > 0 && <div className="warnbox">Não encontrei (ou já estão incluídos): {naoAchados.join('; ')}</div>}
       </details>
+      {impacto && sel.size > 0 && impacto([...sel])}
       <div className="row">
         <button type="button" className="btn solid" disabled={ocupado || !sel.size} onClick={async () => {
           setOcupado(true)
@@ -575,74 +578,339 @@ function GruposContratantes({ ctx }: { ctx: Ctx }) {
   )
 }
 
+
 // ═════════════════════════════════════════════════════════════════════════════
-// Base: nivel de venda (perk), dividido em Empresa e Funcionarios
+// Base: nivel de venda (perk). Abre com os cards das bases; cada base abre um card
+// "Documentos base" onde se inclui/retira documento vendo quanto tempo isso muda.
 // ═════════════════════════════════════════════════════════════════════════════
-function BaseVenda({ ctx }: { ctx: Ctx }) {
-  const { d } = useCs()
-  const perks = d.conjuntos.filter(c => c.perk).sort((a, b) => a.ordem - b.ordem)
-  if (!perks.length) {
+type Resumo = { impl: number; mes: number; n: number; semTempo: number }
+/** Soma por tipo: implantacao (avaliar tudo uma vez) e recorrencia mensal (vencimentos), em minutos por unidade. */
+function resumoTempos(ctx: Ctx, gId: string, ids: string[]): Record<'empresa' | 'pessoa', Resumo> {
+  const r = { empresa: { impl: 0, mes: 0, n: 0, semTempo: 0 }, pessoa: { impl: 0, mes: 0, n: 0, semTempo: 0 } }
+  for (const id of new Set(ids)) {
+    const doc = ctx.docs.get(id)
+    if (doc?.tipo !== 'empresa' && doc?.tipo !== 'pessoa') continue
+    const t = tempoNoGrupo(ctx, gId, id, 'aprovado').val
+    const s = r[doc.tipo]
+    s.n++
+    if (t == null) { s.semTempo++; continue }
+    s.impl += t
+    s.mes += t * porMes(doc.validade_dias)
+  }
+  return r
+}
+
+/** Previa: como a base fica com os documentos incluidos (ou retirados). */
+function ImpactoBase({ ctx, gId, atuais, mudanca, retirar }: { ctx: Ctx; gId: string; atuais: string[]; mudanca: string[]; retirar?: boolean }) {
+  const tm = useTempo()
+  const antes = resumoTempos(ctx, gId, atuais)
+  const depois = resumoTempos(ctx, gId, retirar ? atuais.filter(id => !mudanca.includes(id)) : [...atuais, ...mudanca])
+  const linha = (tipo: 'empresa' | 'pessoa', k: 'impl' | 'mes', rot: string) => {
+    const a = antes[tipo][k], b = depois[tipo][k], dlt = b - a
+    if (Math.abs(dlt) < 0.05) return null
+    const pct = a > 0 ? ` (${dlt > 0 ? '+' : ''}${fmt((dlt / a) * 100, 0)}%)` : ''
     return (
-      <div className="box">
-        <h2>Base</h2>
-        <div className="warnbox">A Base ainda não está definida. Rode <b>sql/custo-servir-base-perks.sql</b> no SQL Editor do Supabase (cria a Base com os 13 documentos de empresa e os 3 de funcionário) e recarregue a página.</div>
+      <div key={tipo + k}>
+        {rot}: {tm.mu(a, 1)} → <b>{tm.mu(b, 1)}</b>{' '}
+        <span className={dlt > 0 ? 'mais' : 'menos'}>{dlt > 0 ? '+' : '−'}{tm.mu(Math.abs(dlt), 1)}{pct}</span>
       </div>
     )
   }
-  return <>{perks.map(p => <CartaoPerk key={p.id} ctx={ctx} p={p} />)}</>
+  const linhas = [
+    linha('empresa', 'impl', 'Implantação por empresa'),
+    linha('pessoa', 'impl', 'Implantação por funcionário'),
+    linha('empresa', 'mes', 'Por mês, por empresa'),
+    linha('pessoa', 'mes', 'Por mês, por funcionário'),
+  ].filter(Boolean)
+  const semTempo = mudanca.filter(id => ctx.docs.get(id)?.tipo && tempoNoGrupo(ctx, gId, id, 'aprovado').val == null).length
+  const semTipo = mudanca.filter(id => !ctx.docs.get(id)?.tipo).length
+  return (
+    <div className="impacto">
+      <b>{retirar ? 'Retirando' : 'Incluindo'} {mudanca.length} documento(s), a base passa a demandar:</b>
+      {linhas.length ? linhas : <div className="note">Sem mudança de tempo calculável.</div>}
+      {semTempo > 0 && <div className="note">{semTempo} documento(s) ainda sem tempo cronometrado: entram na conta quando o Cronometrar validar.</div>}
+      {semTipo > 0 && <div className="note">{semTipo} documento(s) sem tipo (empresa/funcionário) ficam fora da conta.</div>}
+    </div>
+  )
 }
 
-function CartaoPerk({ ctx, p }: { ctx: Ctx; p: Conjunto }) {
-  const { docsConjunto, salvarConjunto, tentar } = useCs()
+function BaseVenda({ ctx }: { ctx: Ctx }) {
+  const { d } = useCs()
+  const [aberta, setAberta] = useState<string | null>(null)
+  const perks = d.conjuntos.filter(c => c.perk).sort((a, b) => a.ordem - b.ordem)
+  const g = grupoPadrao(ctx)
+  const tm = useTempo()
+  const atual = aberta && aberta !== 'nova' ? perks.find(p => p.id === aberta) ?? null : null
+
+  if (aberta === 'nova') return <NovaBase ctx={ctx} perks={perks} voltar={id => setAberta(id)} />
+  if (atual) return <DetalheBase ctx={ctx} p={atual} principal={perks[0]?.id === atual.id} voltar={() => setAberta(null)} />
+
+  return (
+    <div className="box">
+      <div>
+        <h2>Bases (níveis de venda)</h2>
+        <p className="note">Cada base é um pacote de documentos vendido junto. Abra uma base para incluir ou retirar documentos e ver na hora quanto tempo ela passa a demandar.</p>
+      </div>
+      {!perks.length && (
+        <div className="warnbox">Nenhuma base ainda. Crie a primeira abaixo (ou rode <b>sql/custo-servir-base-perks.sql</b> para criar a Base padrão com 13 documentos de empresa e 3 de funcionário).</div>
+      )}
+      <div className="base-grid">
+        {perks.map((p, i) => {
+          const r = g ? resumoTempos(ctx, g.id, p.docs) : null
+          const prontos = g ? p.docs.filter(id => situacaoDoc(ctx, g.id, id) === 'pronto').length : 0
+          return (
+            <button key={p.id} type="button" className="base-card" onClick={() => setAberta(p.id)}>
+              <div>
+                <span className="eyebrow">{i === 0 ? 'Base principal' : 'Nível de venda'}</span>
+                <h3>📦 {p.nome}</h3>
+                {p.descricao && <span className="note">{p.descricao}</span>}
+              </div>
+              <div className="mini">
+                <div><b>{r?.empresa.n ?? 0}</b><span>docs da empresa{r ? ` · ${tm.mu(r.empresa.impl, 0)}` : ''}</span></div>
+                <div><b>{r?.pessoa.n ?? 0}</b><span>docs por funcionário{r ? ` · ${tm.mu(r.pessoa.impl, 0)}` : ''}</span></div>
+              </div>
+              <div className="prog" title="Documentos com tempo pronto"><i style={{ width: (p.docs.length ? (prontos / p.docs.length) * 100 : 0) + '%' }} /></div>
+              <span className="note">{prontos}/{p.docs.length} com tempo pronto · <b style={{ color: 'var(--cs-edge)' }}>Abrir documentos base →</b></span>
+            </button>
+          )
+        })}
+        <button type="button" className="base-card nova" onClick={() => setAberta('nova')}>
+          <span style={{ fontSize: 26 }}>＋</span>
+          Nova base
+          <span className="note" style={{ fontWeight: 400 }}>pode começar copiando os documentos de outra base</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Fontes para importar documentos: outras bases e grupos de contratantes. */
+function SelFonte({ d, valor, setValor, sem }: { d: ReturnType<typeof useCs>['d']; valor: string; setValor: (v: string) => void; sem?: string }) {
+  const perks = d.conjuntos.filter(c => c.perk && c.id !== sem).sort((a, b) => a.ordem - b.ordem)
+  const grupos = d.conjuntos.filter(c => !c.perk && c.id !== sem)
+  return (
+    <select value={valor} onChange={e => setValor(e.target.value)} aria-label="Importar documentos de">
+      <option value="">escolha…</option>
+      {perks.length > 0 && <optgroup label="Bases">{perks.map(c => <option key={c.id} value={c.id}>★ {c.nome} ({c.docs.length})</option>)}</optgroup>}
+      {grupos.length > 0 && <optgroup label="Grupos de contratantes">{grupos.map(c => <option key={c.id} value={c.id}>{c.nome} ({c.docs.length})</option>)}</optgroup>}
+    </select>
+  )
+}
+
+/** Lista de documentos para marcar (importacao). */
+function MarcarDocs({ ctx, ids, sel, setSel }: { ctx: Ctx; ids: string[]; sel: Set<string>; setSel: (s: Set<string>) => void }) {
+  return <>
+    <div className="row">
+      <button type="button" className="btn sm" onClick={() => setSel(new Set(ids))}>Todos</button>
+      <button type="button" className="btn sm" onClick={() => setSel(new Set())}>Nenhum</button>
+      <span className="note">{sel.size} de {ids.length} marcado(s)</span>
+    </div>
+    <div className="tp-lista tp-grid" style={{ maxHeight: 280 }}>
+      {[...ids].sort(porNome(ctx)).map(id => (
+        <label key={id}>
+          <input type="checkbox" checked={sel.has(id)} onChange={e => { const n = new Set(sel); if (e.target.checked) n.add(id); else n.delete(id); setSel(n) }} />
+          <span>{ctx.docs.get(id)?.nome ?? '—'} <span className="note">· {tipoCurto(ctx.docs.get(id)?.tipo)}</span></span>
+        </label>
+      ))}
+    </div>
+  </>
+}
+
+function NovaBase({ ctx, perks, voltar }: { ctx: Ctx; perks: Conjunto[]; voltar: (id: string | null) => void }) {
+  const { d, criarConjunto, tentar } = useCs()
+  const [nome, setNome] = useState('')
+  const [desc, setDesc] = useState('')
+  const [fonte, setFonte] = useState('')
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [ocupado, setOcupado] = useState(false)
+  const docsFonte = d.conjuntos.find(c => c.id === fonte)?.docs ?? []
+  const g = grupoPadrao(ctx)
+  return (
+    <div className="box">
+      <div className="row between">
+        <h2>Nova base</h2>
+        <button type="button" className="btn sm" onClick={() => voltar(null)}>← Todas as bases</button>
+      </div>
+      <div className="kv">
+        <label>Nome<input type="text" autoFocus value={nome} onChange={e => setNome(e.target.value)} placeholder="ex.: Essencial, Completo" /></label>
+        <label style={{ flex: '1 1 320px' }}>Descrição (opcional)<input type="text" value={desc} onChange={e => setDesc(e.target.value)} placeholder="o que esta base cobre" /></label>
+      </div>
+      <div className="tp-bloco">
+        <div className="row">
+          <b>Importar documentos de</b>
+          <SelFonte d={d} valor={fonte} setValor={f => { setFonte(f); setSel(new Set(d.conjuntos.find(c => c.id === f)?.docs ?? [])) }} />
+          <span className="note">opcional: dá para começar vazia e incluir depois</span>
+        </div>
+        {fonte && <MarcarDocs ctx={ctx} ids={docsFonte} sel={sel} setSel={setSel} />}
+        {fonte && sel.size > 0 && g && <ImpactoBase ctx={ctx} gId={g.id} atuais={[]} mudanca={[...sel]} />}
+      </div>
+      <div className="row">
+        <button type="button" className="btn solid" disabled={ocupado || !nome.trim()} onClick={async () => {
+          setOcupado(true)
+          let id = ''
+          const okk = await tentar(async () => {
+            id = await criarConjunto(nome.trim(), fonte ? [...sel] : [], desc.trim() || null, { ordem: Math.max(0, ...perks.map(p => p.ordem)) + 1 })
+          }, `Base "${nome.trim()}" criada${fonte && sel.size ? ` com ${sel.size} documento(s)` : ''}`)
+          setOcupado(false)
+          if (okk) voltar(id)
+        }}>Criar base{fonte && sel.size ? ` com ${sel.size} documento(s)` : ''}</button>
+        <button type="button" className="btn" onClick={() => voltar(null)}>Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
+function DetalheBase({ ctx, p, principal, voltar }: { ctx: Ctx; p: Conjunto; principal: boolean; voltar: () => void }) {
+  const { d, docsConjunto, salvarConjunto, excluirConjunto, tentar } = useCs()
+  const tm = useTempo()
   const g = grupoPadrao(ctx)
   const docsSet = new Set(p.docs)
   const prontos = p.docs.filter(id => g && situacaoDoc(ctx, g.id, id) === 'pronto').length
   const pct = p.docs.length ? (prontos / p.docs.length) * 100 : 0
+  const r = g ? resumoTempos(ctx, g.id, p.docs) : null
+  const [importar, setImportar] = useState(false)
+  const [fonte, setFonte] = useState('')
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [verCusto, setVerCusto] = useState(false)
+  const candidatos = (d.conjuntos.find(c => c.id === fonte)?.docs ?? []).filter(id => !docsSet.has(id))
+  const tempoDoc = (id: string) => (g ? tempoNoGrupo(ctx, g.id, id, 'aprovado').val : null)
+
   return (
-    <div className="box">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="row between">
+        <button type="button" className="btn sm" onClick={voltar}>← Todas as bases</button>
+        <BotaoConfirmar disabled={principal} onConfirm={() => void tentar(async () => { await excluirConjunto(p.id); voltar() }, `Base "${p.nome}" excluída`)}>
+          {principal ? 'Base principal (não exclui)' : 'Excluir base'}
+        </BotaoConfirmar>
+      </div>
+
+      <div className="box">
         <div>
-          <span className="eyebrow">Nível de venda</span>
-          <input key={p.id + p.nome} type="text" defaultValue={p.nome} aria-label="Nome do nível" style={{ fontSize: 20, fontWeight: 900, minWidth: 220 }}
+          <span className="eyebrow">{principal ? 'Base principal' : 'Nível de venda'}</span>
+          <input key={p.id + p.nome} type="text" defaultValue={p.nome} aria-label="Nome da base" style={{ fontSize: 20, fontWeight: 900, minWidth: 220, width: '100%' }}
             onBlur={e => { const v = e.target.value.trim(); if (v && v !== p.nome) void tentar(() => salvarConjunto(p.id, { nome: v }), 'Nome salvo') }} />
         </div>
-        <SeletorDocs ctx={ctx} jaTem={docsSet} rotulo="+ Incluir documentos na Base" onIncluir={ids => tentar(() => docsConjunto(p.id, ids), `${ids.length} documento(s) incluído(s) na ${p.nome}`)} />
+        <input key={p.id + 'd' + (p.descricao ?? '')} type="text" defaultValue={p.descricao ?? ''} placeholder="Descrição para a venda (ex.: o essencial para entrar no portal)" aria-label="Descrição"
+          onBlur={e => { const v = e.target.value.trim() || null; if (v !== p.descricao) void tentar(() => salvarConjunto(p.id, { descricao: v })) }} />
+        <div className="tiles">
+          <div className="tile"><b>{r?.empresa.n ?? 0}</b><span>docs da empresa · {r ? tm.mu(r.empresa.impl, 1) : '—'} por empresa</span></div>
+          <div className="tile"><b>{r?.pessoa.n ?? 0}</b><span>docs por funcionário · {r ? tm.mu(r.pessoa.impl, 1) : '—'} por funcionário</span></div>
+          <div className="tile"><b>{prontos}/{p.docs.length}</b><span>com tempo pronto (≥ {ctx.cfg.minimo} medições no grupo padrão)</span></div>
+        </div>
+        <div className="prog" title="Documentos da base com tempo pronto"><i style={{ width: pct + '%' }} /></div>
       </div>
-      <input key={p.id + 'd' + (p.descricao ?? '')} type="text" defaultValue={p.descricao ?? ''} placeholder="Descrição para a venda (ex.: o essencial para entrar no portal)" aria-label="Descrição"
-        onBlur={e => { const v = e.target.value.trim() || null; if (v !== p.descricao) void tentar(() => salvarConjunto(p.id, { descricao: v })) }} />
-      <div className="tiles">
-        <div className="tile"><b>{p.docs.filter(id => ctx.docs.get(id)?.tipo === 'empresa').length}</b><span>documentos da empresa</span></div>
-        <div className="tile"><b>{p.docs.filter(id => ctx.docs.get(id)?.tipo === 'pessoa').length}</b><span>documentos por funcionário</span></div>
-        <div className="tile"><b>{prontos}/{p.docs.length}</b><span>com tempo pronto (≥ {ctx.cfg.minimo} medições no grupo padrão)</span></div>
+
+      <div className="box">
+        <div className="row between">
+          <div>
+            <h2>📄 Documentos base</h2>
+            <p className="note">Inclua um documento para ver, antes de confirmar, quanto tempo a mais a base passa a demandar. Os tempos atualizam sozinhos conforme o Cronometrar valida medições.</p>
+          </div>
+          <div className="row">
+            <SeletorDocs ctx={ctx} jaTem={docsSet} rotulo="+ Adicionar documento"
+              impacto={g ? ids => <ImpactoBase ctx={ctx} gId={g.id} atuais={p.docs} mudanca={ids} /> : undefined}
+              onIncluir={ids => tentar(() => docsConjunto(p.id, ids), `${ids.length} documento(s) incluído(s) na ${p.nome}`)} />
+            <button type="button" className={'btn sm' + (importar ? ' solid' : '')} onClick={() => { setImportar(!importar); setFonte(''); setSel(new Set()) }}>Importar de outra base</button>
+          </div>
+        </div>
+
+        {importar && (
+          <div className="tp-bloco">
+            <div className="row">
+              <b>Importar de</b>
+              <SelFonte d={d} valor={fonte} sem={p.id} setValor={f => { setFonte(f); setSel(new Set((d.conjuntos.find(c => c.id === f)?.docs ?? []).filter(id => !docsSet.has(id)))) }} />
+              {fonte && <span className="note">{candidatos.length} documento(s) que esta base ainda não tem</span>}
+            </div>
+            {fonte && candidatos.length > 0 && <>
+              <MarcarDocs ctx={ctx} ids={candidatos} sel={sel} setSel={setSel} />
+              {g && sel.size > 0 && <ImpactoBase ctx={ctx} gId={g.id} atuais={p.docs} mudanca={[...sel]} />}
+              <div className="row">
+                <button type="button" className="btn solid" disabled={!sel.size} onClick={async () => {
+                  if (await tentar(() => docsConjunto(p.id, [...sel]), `${sel.size} documento(s) importado(s)`)) { setImportar(false); setFonte(''); setSel(new Set()) }
+                }}>Importar {sel.size} documento(s)</button>
+              </div>
+            </>}
+          </div>
+        )}
+
+        <TabelaPorTipo ctx={ctx} ids={p.docs} vazio="Nenhum documento nesta base. Use “+ Adicionar documento” ou importe de outra base."
+          tempoDe={id => (g ? { val: tempoDoc(id), n: stat(ctx, g.id, id, 'aprovado').n } : { val: null })}
+          extra={{ titulo: 'Situação', cel: id => (g ? <span className="pills"><PillSituacao s={situacaoDoc(ctx, g.id, id)} /><span className="note mono">{stat(ctx, g.id, id, 'aprovado').n}/{ctx.cfg.minimo}</span></span> : null) }}
+          acao={id => {
+            const t = tempoDoc(id)
+            return (
+              <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                {t != null && <span className="note mono" title="Quanto a base deixa de demandar (por unidade)">−{tm.mu(t, 1)}</span>}
+                <BotaoConfirmar onConfirm={() => void tentar(() => docsConjunto(p.id, [], [id]), `Documento retirado da ${p.nome}`)}>Retirar</BotaoConfirmar>
+              </span>
+            )
+          }}
+        />
       </div>
-      <div className="prog" title="Documentos da Base com tempo pronto"><i style={{ width: pct + '%' }} /></div>
-      <p className="note">O tempo e o preço abaixo atualizam sozinhos conforme o Cronometrar valida medições (grupo padrão). Documento sem tempo ainda fica fora da conta.</p>
-      <TabelaPorTipo ctx={ctx} ids={p.docs} vazio="Nenhum documento na Base."
-        tempoDe={id => (g ? { val: tempoNoGrupo(ctx, g.id, id, 'aprovado').val, n: stat(ctx, g.id, id, 'aprovado').n } : { val: null })}
-        extra={{ titulo: 'Situação', cel: id => (g ? <span className="pills"><PillSituacao s={situacaoDoc(ctx, g.id, id)} /><span className="note mono">{stat(ctx, g.id, id, 'aprovado').n}/{ctx.cfg.minimo}</span></span> : null) }}
-        acao={id => <button type="button" className="btn sm bad" onClick={() => tentar(() => docsConjunto(p.id, [], [id]), `Documento retirado da ${p.nome}`)}>Retirar</button>}
-      />
-      {p.docs.length > 0 && <Calculadora key={p.id} ctx={ctx} docs={p.docs} titulo={`Quanto custa a ${p.nome}`} />}
+
+      {p.docs.length > 0 && (
+        <div className="box">
+          <div className="row between">
+            <h2>💰 Quanto custa a {p.nome}</h2>
+            <button type="button" className="btn sm" onClick={() => setVerCusto(!verCusto)}>{verCusto ? 'Esconder calculadora' : 'Abrir calculadora'}</button>
+          </div>
+          {verCusto && <Calculadora key={p.id} ctx={ctx} docs={p.docs} titulo="Simule por quantidade de empresas e funcionários" />}
+        </div>
+      )}
     </div>
   )
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Aba Documentos e bases
+// Aba Documentos e bases: abre numa visao geral (os 4 passos em cards)
 // ═════════════════════════════════════════════════════════════════════════════
+const PASSO_INFO: Record<Passo, { icone: string; desc: string }> = {
+  docs: { icone: '🗂', desc: 'O catálogo: de onde todos os documentos vêm.' },
+  ctt: { icone: '🏢', desc: 'O que cada contratante exige: Base + extras.' },
+  grupos: { icone: '🧩', desc: 'Pacotes de extras (o que difere da Base) aplicáveis a vários contratantes.' },
+  base: { icone: '📦', desc: 'Níveis de venda: os documentos base, com tempo e preço.' },
+}
+
 export default function Bases() {
-  const { ctx } = useCs()
-  const [passo, setPasso] = useState<Passo>(() => {
-    try { const v = localStorage.getItem('cs_bases_passo'); return (PASSOS.some(([k]) => k === v) ? v : 'base') as Passo } catch { return 'base' }
-  })
+  const { ctx, d } = useCs()
+  const [passo, setPasso] = useState<Passo | ''>('')
   if (!ctx) return null
-  const ir = (p: Passo) => { setPasso(p); try { localStorage.setItem('cs_bases_passo', p) } catch { /* ignore */ } }
+  const ir = (p: Passo | '') => { setPasso(p); window.scrollTo({ top: 0 }) }
+  const perks = d.conjuntos.filter(c => c.perk)
+  const contagem: Record<Passo, string> = {
+    docs: `${ctx.docs.size} documento(s)`,
+    ctt: `${ctx.ctts.size} contratante(s)`,
+    grupos: `${d.conjuntos.length - perks.length} grupo(s)`,
+    base: `${perks.length} base(s)`,
+  }
+
+  if (!passo) {
+    return (
+      <div className="box">
+        <div>
+          <h2>Como se organiza</h2>
+          <p className="note">Documentos (catálogo) › Contratantes (o que cada um exige) › Grupos de contratantes (só o que difere da Base) › Bases (níveis de venda). Os documentos vêm sempre do catálogo; do Cronometrar vem só o tempo.</p>
+        </div>
+        <div className="passo-grid">
+          {PASSOS.map(([k, l], i) => (
+            <button key={k} type="button" className={'passo-card' + (k === 'base' ? ' base' : '')} onClick={() => ir(k)}>
+              <span className="row" style={{ gap: 8 }}><span className="n">{i + 1}</span><span style={{ fontSize: 20 }}>{PASSO_INFO[k].icone}</span></span>
+              <b>{l.replace(/^\d+ · /, '')}</b>
+              <span className="note">{PASSO_INFO[k].desc}</span>
+              <span className="num">{contagem[k]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="cfgnav">
+        <button type="button" onClick={() => ir('')}>⌂ Visão geral</button>
         {PASSOS.map(([k, l]) => <button key={k} type="button" className={k === passo ? 'on' : ''} onClick={() => ir(k)}>{l}</button>)}
       </div>
-      <p className="note">Documentos (catálogo) › Contratantes (o que cada um exige) › Grupos de contratantes (só o que difere da Base) › Base (nível de venda). Os documentos vêm sempre do catálogo; do Cronometrar vem só o tempo.</p>
       {passo === 'docs' && <Catalogo ctx={ctx} />}
       {passo === 'ctt' && <HubContratantes ctx={ctx} />}
       {passo === 'grupos' && <GruposContratantes ctx={ctx} />}

@@ -21,16 +21,44 @@ import { ModoTempoToggle } from './cs-ui'
 import { displayName, useUser } from '../components/UserContext'
 import './custo-servir.css'
 
-const abaInicial = (): AbaId => {
-  if (typeof window === 'undefined') return 'cronometrar'
+/** 'inicio' = tela de escolha (cards). O modulo abre nela, a nao ser que a URL ja aponte uma aba. */
+type Tela = AbaId | 'inicio'
+
+const abaInicial = (): Tela => {
+  if (typeof window === 'undefined') return 'inicio'
   const h = window.location.hash.slice(1)
-  return (ABAS.some(a => a.id === h) ? h : 'cronometrar') as AbaId
+  return (ABAS.some(a => a.id === h) ? h : 'inicio') as Tela
 }
+
+/** Como cada aba aparece na tela inicial e na barra lateral. */
+const META: Record<AbaId, { icone: string; desc: string }> = {
+  cronometrar: { icone: '⏱', desc: 'Cronometrar a avaliação dos documentos por grupo de critério.' },
+  tempos: { icone: '📏', desc: 'Tempo-padrão de cada documento, aprovado e reprovado.' },
+  medicoes: { icone: '📋', desc: 'Todas as medições registradas, por avaliador.' },
+  contagem: { icone: '🏢', desc: 'Relatório do sistema convertido em volume por contratante.' },
+  resultado: { icone: '📊', desc: 'Horas e custo por contratante a partir do volume.' },
+  suporte: { icone: '🎧', desc: 'Cadastro, e-mail, ligação e demais atendimentos.' },
+  extra: { icone: '🧩', desc: 'Atividades fora do portal (camada 3).' },
+  bases: { icone: '📚', desc: 'Catálogo, documentos por contratante e bases de venda.' },
+  configuracoes: { icone: '⚙', desc: 'Grupos, catálogo, turnos, perfis e parâmetros.' },
+  fechamento: { icone: '★', desc: 'A conta inteira: avaliação + suporte contra a capacidade da equipe.' },
+}
+
+/** Agrupamento das abas (o Fechamento fica fora: tem destaque proprio). */
+const SECOES_NAV: { titulo: string; ids: AbaId[] }[] = [
+  { titulo: 'Medir', ids: ['cronometrar', 'tempos', 'medicoes'] },
+  { titulo: 'Volume e resultado', ids: ['contagem', 'resultado'] },
+  { titulo: 'Outras atividades', ids: ['suporte', 'extra'] },
+  { titulo: 'Cadastros', ids: ['bases', 'configuracoes'] },
+]
+
+const LS_LATERAL = 'cs_nav_recolhida'
+const rotulo = (id: AbaId) => ABAS.find(a => a.id === id)?.label ?? id
 
 export default function CustoServirClient() {
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const [aba, setAba] = useState<AbaId>(abaInicial)
+  const [aba, setAba] = useState<Tela>(abaInicial)
   const [nav, setNav] = useState<NavCron>({ g: null, d: null, q: '' })
   const [cfgSub, setCfgSub] = useState('grupos')
 
@@ -61,7 +89,7 @@ export default function CustoServirClient() {
 }
 
 function Modulo({ aba, setAba, nav, setNav }: {
-  aba: AbaId; setAba: (a: AbaId) => void; nav: NavCron; setNav: (n: NavCron) => void
+  aba: Tela; setAba: (a: Tela) => void; nav: NavCron; setNav: (n: NavCron) => void
 }) {
   const { d, carregando, erro, recarregar, carregarMedicoes, papel } = useCs()
   const { profile } = useUser()
@@ -72,22 +100,28 @@ function Modulo({ aba, setAba, nav, setNav }: {
   // Abas visiveis por perfil (cs_config.abas_perfis). Admin sempre ve todas.
   const mapa = d.cfg?.abas_perfis ?? {}
   const abas = ABAS.filter(a => papel === 'admin' || !mapa[a.id] || mapa[a.id].includes(papel))
-  const abaAtual: AbaId = abas.some(a => a.id === aba) ? aba : (abas[0]?.id ?? 'cronometrar')
+  const visivel = (id: AbaId) => abas.some(a => a.id === id)
+  const abaAtual: Tela = aba === 'inicio' || visivel(aba) ? aba : 'inicio'
 
-  const trocarAba = (a: AbaId) => {
+  const trocarAba = (a: Tela) => {
     // Clicar em Cronometrar (mesmo ja estando nela) volta para a tela inicial de grupos
     if (a === 'cronometrar') setNav({ g: null, d: null, q: '' })
     setAba(a)
-    try { history.replaceState(null, '', '#' + a) } catch { /* ignore */ }
+    try { history.replaceState(null, '', a === 'inicio' ? location.pathname + location.search : '#' + a) } catch { /* ignore */ }
     window.scrollTo({ top: 0 })
   }
   const naTelaGrupos = abaAtual === 'cronometrar' && !nav.g
+
+  // Barra lateral recolhida (so icones): preferencia guardada no navegador
+  // (a barra so aparece depois do carregamento, entao ler o localStorage aqui nao gera diferenca de hidratacao)
+  const [recolhida, setRecolhida] = useState(() => { try { return typeof window !== 'undefined' && localStorage.getItem(LS_LATERAL) === '1' } catch { return false } })
+  const alternarLateral = () => setRecolhida(v => { try { localStorage.setItem(LS_LATERAL, v ? '0' : '1') } catch { /* ignore */ } return !v })
 
   // Medicoes de outros avaliadores: rele ao entrar nas abas que dependem delas
   const ultimaAba = useRef(abaAtual)
   useEffect(() => {
     if (!telaVisivel || carregando) return
-    if (ultimaAba.current !== abaAtual && abaAtual !== 'configuracoes') void carregarMedicoes().catch(() => {})
+    if (ultimaAba.current !== abaAtual && abaAtual !== 'configuracoes' && abaAtual !== 'inicio') void carregarMedicoes().catch(() => {})
     ultimaAba.current = abaAtual
   }, [abaAtual, telaVisivel, carregando, carregarMedicoes])
 
@@ -133,35 +167,107 @@ function Modulo({ aba, setAba, nav, setNav }: {
           <p className="note">{erro ?? 'Configuração do módulo não encontrada (cs_config).'}</p>
           <div className="row"><button type="button" className="btn solid" onClick={() => void recarregar()}>Tentar de novo</button></div>
         </div>
+      ) : abaAtual === 'inicio' ? (
+        <Inicio visivel={visivel} nMed={d.meds.length} abrir={trocarAba} />
       ) : (
-        <>
-          <div className="tabsbar">
-            <div className="tabs" role="tablist">
-              {abas.map(a => (
-                <button key={a.id} type="button" role="tab" aria-selected={a.id === abaAtual} className={(a.id === abaAtual ? 'on' : '') + (a.id === 'fechamento' ? ' destaque' : '')} onClick={() => trocarAba(a.id)}
-                  title={a.id === 'cronometrar' ? 'Volta para a escolha do grupo' : a.id === 'fechamento' ? 'A conta inteira: avaliação + suporte contra a capacidade' : undefined}>
-                  {a.id === 'fechamento' && '★ '}
-                  {a.label}{a.id === 'medicoes' && <span className="cnt">{d.meds.length}</span>}
+        <div className={'cs-shell' + (recolhida ? ' recolhida' : '')}>
+          <nav className="cs-lateral" aria-label="Seções do módulo">
+            <div className="lat-topo">
+              <button type="button" className="lat-item" onClick={() => trocarAba('inicio')} title="Voltar para a tela inicial">
+                <span className="ic">⌂</span><span className="tx">Início</span>
+              </button>
+              <button type="button" className="lat-recolher" onClick={alternarLateral}
+                title={recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral'} aria-label={recolhida ? 'Expandir barra lateral' : 'Recolher barra lateral'}>
+                {recolhida ? '»' : '«'}
+              </button>
+            </div>
+            {visivel('fechamento') && (
+              <button type="button" className={'lat-item fech' + (abaAtual === 'fechamento' ? ' on' : '')} aria-current={abaAtual === 'fechamento' ? 'page' : undefined}
+                onClick={() => trocarAba('fechamento')} title={META.fechamento.desc}>
+                <span className="ic">★</span><span className="tx">Fechamento</span>
+              </button>
+            )}
+            {SECOES_NAV.map(s => {
+              const ids = s.ids.filter(visivel)
+              if (!ids.length) return null
+              return (
+                <div key={s.titulo} className="lat-sec">
+                  <span className="lat-tit">{s.titulo}</span>
+                  {ids.map(id => (
+                    <button key={id} type="button" className={'lat-item' + (abaAtual === id ? ' on' : '')} aria-current={abaAtual === id ? 'page' : undefined}
+                      onClick={() => trocarAba(id)} title={recolhida ? rotulo(id) : id === 'cronometrar' ? 'Volta para a escolha do grupo' : META[id].desc}>
+                      <span className="ic">{META[id].icone}</span>
+                      <span className="tx">{rotulo(id)}</span>
+                      {id === 'medicoes' && <span className="cnt">{d.meds.length}</span>}
+                    </button>
+                  ))}
+                </div>
+              )
+            })}
+          </nav>
+
+          <div className="cs-conteudo">
+            <div className="cs-topo">
+              <h2>{abaAtual === 'fechamento' ? '★ ' : META[abaAtual].icone + ' '}{rotulo(abaAtual)}</h2>
+              <div className="row" style={{ marginLeft: 'auto' }}>
+                {!naTelaGrupos && abaAtual === 'cronometrar' && (
+                  <button type="button" className="btn sm" onClick={() => trocarAba('cronometrar')} title="Voltar para a tela inicial de grupos">⌂ Grupos</button>
+                )}
+                <ModoTempoToggle />
+              </div>
+            </div>
+            {abaAtual === 'cronometrar' && <Cronometrar nav={nav} setNav={setNav} telaVisivel={telaVisivel} />}
+            {abaAtual === 'tempos' && <Tempos />}
+            {abaAtual === 'medicoes' && <Medicoes />}
+            {abaAtual === 'contagem' && <Contagem />}
+            {abaAtual === 'resultado' && <Resultado />}
+            {abaAtual === 'suporte' && <Suporte />}
+            {abaAtual === 'extra' && <ExtraPortal />}
+            {abaAtual === 'bases' && <Bases />}
+            {abaAtual === 'configuracoes' && <Configuracoes />}
+            {abaAtual === 'fechamento' && <Fechamento />}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Tela inicial: cards para escolher a secao, com o Fechamento em destaque. */
+function Inicio({ visivel, nMed, abrir }: { visivel: (id: AbaId) => boolean; nMed: number; abrir: (a: AbaId) => void }) {
+  return (
+    <div className="cs-inicio">
+      {visivel('fechamento') && (
+        <button type="button" className="ini-fech" onClick={() => abrir('fechamento')}>
+          <span className="ic">★</span>
+          <span className="tx">
+            <span className="eyebrow">Resultado final</span>
+            <b>Fechamento</b>
+            <span>{META.fechamento.desc}</span>
+          </span>
+          <span className="ir" aria-hidden>Abrir →</span>
+        </button>
+      )}
+      {SECOES_NAV.map(s => {
+        const ids = s.ids.filter(visivel)
+        if (!ids.length) return null
+        return (
+          <section key={s.titulo} className="ini-sec">
+            <h3 className="eyebrow">{s.titulo}</h3>
+            <div className="ini-grid">
+              {ids.map(id => (
+                <button key={id} type="button" className="ini-card" onClick={() => abrir(id)}>
+                  <span className="ic">{META[id].icone}</span>
+                  <span className="tx">
+                    <b>{rotulo(id)}{id === 'medicoes' && <span className="cnt">{nMed}</span>}</b>
+                    <span>{META[id].desc}</span>
+                  </span>
                 </button>
               ))}
             </div>
-            <ModoTempoToggle />
-            {!naTelaGrupos && abas.some(a => a.id === 'cronometrar') && (
-              <button type="button" className="btn sm home" onClick={() => trocarAba('cronometrar')} title="Voltar para a tela inicial de grupos">⌂ Grupos</button>
-            )}
-          </div>
-          {abaAtual === 'cronometrar' && <Cronometrar nav={nav} setNav={setNav} telaVisivel={telaVisivel} />}
-          {abaAtual === 'tempos' && <Tempos />}
-          {abaAtual === 'medicoes' && <Medicoes />}
-          {abaAtual === 'contagem' && <Contagem />}
-          {abaAtual === 'resultado' && <Resultado />}
-          {abaAtual === 'suporte' && <Suporte />}
-          {abaAtual === 'extra' && <ExtraPortal />}
-          {abaAtual === 'bases' && <Bases />}
-          {abaAtual === 'configuracoes' && <Configuracoes />}
-          {abaAtual === 'fechamento' && <Fechamento />}
-        </>
-      )}
+          </section>
+        )
+      })}
     </div>
   )
 }

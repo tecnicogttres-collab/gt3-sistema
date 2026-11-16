@@ -474,8 +474,9 @@ function useCsDataInterno() {
 
   // ── Bases prontas (conjuntos) ───────────────────────────────────────────────
   const erroConj = (e: { message: string }) => new Error(/cs_conjunto/.test(e.message) ? 'Rode a migração sql/custo-servir-bases-prontas.sql no Supabase.' : e.message)
-  const criarConjunto = useCallback(async (nome: string, docs: string[] = [], descricao: string | null = null) => {
-    const r = await supabase.from('cs_conjuntos').insert({ nome, descricao, created_by: meuId }).select('*').single()
+  /** `nivel` cria um nivel de venda (perk = Base) na ordem dada; sem ele, um grupo de contratantes. */
+  const criarConjunto = useCallback(async (nome: string, docs: string[] = [], descricao: string | null = null, nivel?: { ordem: number }) => {
+    const r = await supabase.from('cs_conjuntos').insert({ nome, descricao, created_by: meuId, ...(nivel ? { perk: true, ordem: nivel.ordem } : {}) }).select('*').single()
     if (r.error) throw erroConj(r.error)
     const c = r.data as Omit<Conjunto, 'docs'>
     const ds = [...new Set(docs)]
