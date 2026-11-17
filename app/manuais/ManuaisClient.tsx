@@ -71,6 +71,18 @@ function metaDe(d: Doc, rotulo: string): string {
   return it ? it.slice(rotulo.length + 1).trim() : ''
 }
 const pendente = (d: Doc) => /^pendente/i.test(metaDe(d, 'Status'))
+/** Agrupa pela etiqueta "Tipo doc" (Empresa → Pessoas → Geral → sem etiqueta), mantendo a ordem por nome dentro do grupo.
+ *  É a mesma ordem da tela e da exportação. */
+const ORDEM_TIPO = ['Empresa', 'Pessoas', 'Geral', '']
+const ICONE_TIPO: Record<string, string> = { Empresa: '🏢', Pessoas: '👤', Geral: '📌' }
+function agruparPorTipo(docs: Doc[]): { tipo: string; docs: Doc[] }[] {
+  const grupos = new Map<string, Doc[]>()
+  for (const d of docs) { const g = metaDe(d, 'Tipo doc'); grupos.set(g, [...(grupos.get(g) ?? []), d]) }
+  const pos = (g: string) => ORDEM_TIPO.indexOf(g) + 1 || 9
+  return [...grupos.keys()]
+    .sort((a, b) => pos(a) - pos(b) || a.localeCompare(b, 'pt-BR'))
+    .map(tipo => ({ tipo, docs: grupos.get(tipo)!.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
+}
 
 // ── Pequenos componentes ────────────────────────────────────────────────────
 
@@ -442,7 +454,7 @@ export default function ManuaisClient() {
                   <div style={{ fontSize: 17, fontWeight: 800 }}>{info.icon} {info.label}</div>
                   <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>{info.sub}</div>
                 </div>
-                <button onClick={() => setPdfEscopo(cat)} style={btnGhost}>📄 PDF desta categoria</button>
+                <button onClick={() => setPdfEscopo(cat)} style={btnGhost}>📄 Exportar manual {info.label}</button>
                 {canEdit && <button onClick={() => { setNewName(''); setAddOpen(true) }} style={btnPrimary}>＋ Novo documento</button>}
               </div>
 
@@ -462,21 +474,15 @@ export default function ManuaisClient() {
                 </div>
               ) : (
                 // Documentos com etiqueta "Tipo doc" (ex.: BSA) aparecem agrupados — Empresa / Pessoas / Geral.
-                (() => {
-                  const grupos = new Map<string, Doc[]>()
-                  for (const d of docsFiltrados) { const g = metaDe(d, 'Tipo doc'); grupos.set(g, [...(grupos.get(g) ?? []), d]) }
-                  const ordem = ['Empresa', 'Pessoas', 'Geral', '']
-                  const chaves = [...grupos.keys()].sort((a, b) => (ordem.indexOf(a) + 1 || 9) - (ordem.indexOf(b) + 1 || 9))
-                  const icone: Record<string, string> = { Empresa: '🏢', Pessoas: '👤', Geral: '📌' }
-                  return chaves.map(g => (
+                agruparPorTipo(docsFiltrados).map(({ tipo: g, docs: docsDoGrupo }) => (
                     <div key={g || '_'} style={{ marginBottom: 20 }}>
                       {g && (
                         <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.7px', textTransform: 'uppercase', color: PRIMARY, margin: '0 0 10px 2px' }}>
-                          {icone[g] ?? '•'} {g} <span style={{ color: MUTED, fontWeight: 600 }}>· {grupos.get(g)!.length}</span>
+                          {ICONE_TIPO[g] ?? '•'} {g} <span style={{ color: MUTED, fontWeight: 600 }}>· {docsDoGrupo.length}</span>
                         </div>
                       )}
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
-                        {grupos.get(g)!.map(doc => (
+                        {docsDoGrupo.map(doc => (
                           <button key={doc.id} className="mn-card" onClick={() => setOpenRef({ tab: cat as DocTab, id: doc.id })}>
                             <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.4, flex: 1 }}>{doc.nome}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -490,7 +496,6 @@ export default function ManuaisClient() {
                       </div>
                     </div>
                   ))
-                })()
               )}
             </div>
           )}
@@ -1039,8 +1044,13 @@ function Matriz({ doc, editing, extraRows, onExtraRows, onUpdate }: {
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-function htmlDoc(d: Doc, tab: DocTab, caixas: boolean, quebra: boolean): string {
-  const cab = `<h3>${esc(d.nome)} <span class="pill">${esc(d.periodicidade || '—')}</span></h3>`
+/** Seção vai marcada por padrão na exportação? Histórico fica de fora, mas pode ser marcado. */
+const secaoPadrao = (s: DocSection) => s.tipo !== 'historico'
+const rotuloSecao = (s: DocSection) => s.tipo === 'meta' ? `${s.label} (etiquetas)` : s.tipo === 'historico' ? `${s.label} (histórico)` : s.label
+
+/** `d.sections` já vem filtrado pelas seções escolhidas na exportação. */
+function htmlDoc(d: Doc, tab: DocTab, caixas: boolean, quebra: boolean, numero = ''): string {
+  const cab = `<h3 id="d-${esc(d.id)}">${numero ? `<span class="num">${esc(numero)}</span> ` : ''}${esc(d.nome)} <span class="pill">${esc(d.periodicidade || '—')}</span></h3>`
   let corpo: string
   if (tab === 'variacoes') {
     const { colunas, comuns, linhas } = derivarMatriz(d.sections, [])
@@ -1050,10 +1060,10 @@ function htmlDoc(d: Doc, tab: DocTab, caixas: boolean, quebra: boolean): string 
     const notas = colunas.flatMap(c => c.s.items.filter(isNota).map(n => `<li><b>${esc(c.s.label)}:</b> ${esc(n)}</li>`)).join('')
     corpo = `${comunsHtml}<table class="mx">${head}${rows}</table>${notas ? `<ul class="obs">${notas}</ul>` : ''}`
   } else {
-    // Histórico não vai para o PDF; etiquetas viram uma linha; requisito da contratante em destaque.
+    // Etiquetas viram uma linha; requisito da contratante em destaque; o resto como lista.
     const meta = d.sections.find(s => s.tipo === 'meta')?.items.filter(i => !/^status:/i.test(i)) ?? []
     corpo = (meta.length ? `<p class="comum">${meta.map(esc).join(' · ')}</p>` : '') + d.sections
-      .filter(s => s.tipo !== 'historico' && s.tipo !== 'meta')
+      .filter(s => s.tipo !== 'meta' && s.items.length > 0)
       .map(s => s.tipo === 'requisito'
         ? `<h4>${esc(s.label)}</h4><p style="font-weight:700;background:#FEF3C7;padding:6px 10px;border-left:4px solid #D1AE6E">${s.items.map(esc).join('<br>')}</p>`
         : `<h4>${esc(s.label)}</h4><ul class="${caixas && conferivel(s) ? 'box' : ''}">${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`)
@@ -1080,6 +1090,10 @@ function imprimirPdf(titulo: string, corpoHtml: string) {
     h2{font-size:14pt;color:#fff;background:#2A4F96;padding:6px 10px;border-radius:5px;margin:18px 0 8px;break-after:avoid}
     h3{font-size:12pt;margin:12px 0 4px;break-after:avoid}
     h4{font-size:9pt;text-transform:uppercase;letter-spacing:.6px;color:#2A4F96;margin:8px 0 3px;break-after:avoid}
+    .num{color:#2A4F96}
+    h2.tipo{font-size:11pt;color:#2A4F96;background:none;border-bottom:1.5px solid #D1AE6E;border-radius:0;padding:2px 0;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.6px}
+    .sumario{font-size:9.5pt;margin:0 0 14px;padding:8px 12px;background:#F7F9FC;border:1px solid #E4EAF2;border-radius:6px;columns:2;column-gap:24px}
+    .sumario b{display:block;color:#2A4F96;margin-top:4px;break-after:avoid}.sumario div{margin:1px 0}
     .pill{font-size:8pt;font-weight:700;background:#EEF1F6;border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:middle}
     ul{margin:0 0 4px 16px;padding:0}li{margin:2px 0;line-height:1.35}
     ul.box{list-style:none;margin-left:2px}ul.box li{padding-left:18px;position:relative}
@@ -1107,110 +1121,204 @@ function imprimirPdf(titulo: string, corpoHtml: string) {
   setTimeout(() => { w.focus(); w.print(); limpar() }, 250)
 }
 
-function PdfModal({ data, escopo, onClose, onToast }: {
+function PdfModal({ data: dataAoAbrir, escopo, onClose, onToast }: {
   data: ManuaisData; escopo: TabKey; onClose: () => void; onToast: (m: string, err?: boolean) => void
 }) {
-  const grupos = useMemo(() => CATS_AZ
-    .filter(c => c.key === escopo)
-    .map(c => ({
-      cat: c,
-      itens: c.key === 'nrs'
-        ? (data.nrs.length ? [{ id: '__nrs__', nome: 'Tabela de treinamentos (NRs)', per: `${data.nrs.length} linhas` }] : [])
-        : data[c.key as DocTab].map(d => ({ id: d.id, nome: d.nome, per: d.periodicidade })),
-    }))
-    .filter(g => g.itens.length > 0), [data, escopo])
+  // Foto dos dados ao abrir: as seções são marcadas pela posição, então não podem mudar por realtime no meio da escolha.
+  const [data] = useState(dataAoAbrir)
+  const isNrs = escopo === 'nrs'
+  const tab = escopo as DocTab
+  const cat = catOf(escopo)
+  const grupos = useMemo(() => isNrs ? [] : agruparPorTipo(data[tab]), [data, tab, isNrs])
+  const docs = useMemo(() => grupos.flatMap(g => g.docs), [grupos])
+  const chave = (docId: string, si: number) => `${docId}#${si}`
 
-  // Tudo marcado por padrão — é só desmarcar o que não quiser imprimir.
-  const [sel, setSel] = useState<Set<string>>(() => new Set(grupos.flatMap(g => g.itens.map(i => i.id))))
+  // Tudo marcado por padrão (menos histórico) — é só desmarcar o que não quiser exportar.
+  const [sel, setSel] = useState<Set<string>>(() => new Set(docs.map(d => d.id)))
+  const [secs, setSecs] = useState<Set<string>>(() => new Set(docs.flatMap(d => d.sections.flatMap((s, si) => secaoPadrao(s) ? [chave(d.id, si)] : []))))
+  const [abertos, setAbertos] = useState<Set<string>>(() => new Set())
   const [caixas, setCaixas] = useState(true)
   const [quebra, setQuebra] = useState(false)
+  const [sumario, setSumario] = useState(true)
+  const [numerar, setNumerar] = useState(true)
   const [busca, setBusca] = useState('')
-  const total = grupos.reduce((n, g) => n + g.itens.length, 0)
 
-  function alternar(ids: string[], marcar: boolean) {
-    setSel(prev => { const n = new Set(prev); ids.forEach(id => marcar ? n.add(id) : n.delete(id)); return n })
+  // Seções com o mesmo nome em vários documentos (ex.: "Critérios de aprovação (vigentes)") — liga/desliga em todos de uma vez.
+  const nomesSecao = useMemo(() => {
+    const m = new Map<string, { label: string; chaves: string[] }>()
+    for (const d of docs) d.sections.forEach((s, si) => {
+      const k = norm(rotuloSecao(s).trim())
+      const e = m.get(k) ?? { label: rotuloSecao(s), chaves: [] }
+      e.chaves.push(chave(d.id, si)); m.set(k, e)
+    })
+    return [...m.values()].sort((a, b) => b.chaves.length - a.chaves.length || a.label.localeCompare(b.label, 'pt-BR'))
+  }, [docs])
+
+  function alternar(setter: typeof setSel, ids: string[], marcar: boolean) {
+    setter(prev => { const n = new Set(prev); ids.forEach(id => marcar ? n.add(id) : n.delete(id)); return n })
   }
+  const secoesDe = (d: Doc) => d.sections.map((s, si) => ({ s, si, k: chave(d.id, si) }))
+  const docsExportados = docs.filter(d => sel.has(d.id) && d.sections.some((s, si) => secs.has(chave(d.id, si)) && s.items.length))
 
   function gerar() {
-    const partes: string[] = []
-    for (const g of grupos) {
-      const marcados = g.itens.filter(i => sel.has(i.id))
-      if (!marcados.length) continue
-      partes.push(`<h2>${g.cat.icon} ${esc(g.cat.label)}</h2>`)
-      if (g.cat.key === 'nrs') partes.push(htmlNrs(data))
-      else marcados.forEach(i => {
-        const d = data[g.cat.key as DocTab].find(x => x.id === i.id)
-        if (d) partes.push(htmlDoc(d, g.cat.key as DocTab, caixas, quebra))
-      })
+    const titulo = `Manual ${cat.label} — GT3`
+    if (isNrs) {
+      if (!data.nrs.length) { onToast('Nada para exportar.', true); return }
+      imprimirPdf(titulo, htmlNrs(data))
+    } else {
+      const partes: string[] = []
+      const indice: string[] = []
+      let n = 0
+      for (const g of grupos) {
+        const docsG = g.docs
+          .filter(d => sel.has(d.id))
+          .map(d => ({ ...d, sections: d.sections.filter((_, si) => secs.has(chave(d.id, si))) }))
+          .filter(d => d.sections.some(s => s.items.length))
+        if (!docsG.length) continue
+        if (g.tipo) {
+          partes.push(`<h2 class="tipo">${ICONE_TIPO[g.tipo] ?? '•'} ${esc(g.tipo)}</h2>`)
+          indice.push(`<b>${esc(g.tipo)}</b>`)
+        }
+        for (const d of docsG) {
+          n++
+          const num = numerar ? `${n}.` : ''
+          indice.push(`<div>${num ? esc(num) + ' ' : ''}${esc(d.nome)}</div>`)
+          partes.push(htmlDoc(d, tab, caixas, quebra, num))
+        }
+      }
+      if (!partes.length) { onToast('Marque ao menos um documento com uma seção.', true); return }
+      const sumarioHtml = sumario && n > 1 ? `<div class="sumario">${indice.join('')}</div>` : ''
+      imprimirPdf(titulo, sumarioHtml + partes.join(''))
     }
-    if (!partes.length) { onToast('Marque ao menos um documento.', true); return }
-    const titulo = `Manuais GT3 — ${catOf(escopo).label}`
-    imprimirPdf(titulo, partes.join(''))
     onToast('Na janela de impressão, escolha "Salvar como PDF" ou a impressora.')
     onClose()
   }
 
   const q = norm(busca)
+  const ckStyle = { width: 16, height: 16, accentColor: PRIMARY, flexShrink: 0 } as const
   return (
     <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, background: 'rgba(14,20,37,.5)', backdropFilter: 'blur(2px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
+      <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 760, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
         <div style={{ padding: '18px 24px 12px', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{ fontSize: 17, fontWeight: 800 }}>📄 Gerar PDF — {catOf(escopo).label}</div>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>📄 Exportar manual — {cat.icon} {cat.label}</div>
             <button onClick={onClose} style={{ ...iconBtn, marginLeft: 'auto', fontSize: 16 }}>✕</button>
           </div>
-          <div style={{ fontSize: 12.5, color: MUTED, margin: '4px 0 12px' }}>Tudo vem marcado. Desmarque o que não quiser imprimir.</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Filtrar documento…" className="mn-input"
-              style={{ flex: '1 1 180px', padding: '7px 11px', borderRadius: 9, border: `1.5px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
-            <button style={btnGhost} onClick={() => alternar(grupos.flatMap(g => g.itens.map(i => i.id)), true)}>Marcar tudo</button>
-            <button style={btnGhost} onClick={() => alternar(grupos.flatMap(g => g.itens.map(i => i.id)), false)}>Desmarcar tudo</button>
-          </div>
+          {!isNrs && (<>
+            <div style={{ fontSize: 12.5, color: MUTED, margin: '4px 0 12px' }}>
+              Sai na mesma ordem da tela{grupos.some(g => g.tipo) ? ' (Empresa → Pessoas → Geral, por nome)' : ' (por nome)'}. Tudo vem marcado, menos o histórico — desmarque documentos ou abra cada um para escolher as seções.
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Filtrar documento…" className="mn-input"
+                style={{ flex: '1 1 180px', padding: '7px 11px', borderRadius: 9, border: `1.5px solid ${BORDER}`, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+              <button style={btnGhost} onClick={() => alternar(setSel, docs.map(d => d.id), true)}>Marcar tudo</button>
+              <button style={btnGhost} onClick={() => alternar(setSel, docs.map(d => d.id), false)}>Desmarcar tudo</button>
+            </div>
+          </>)}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 24px' }}>
-          {grupos.map(g => {
-            const itens = g.itens.filter(i => !q || norm(i.nome).includes(q))
-            if (!itens.length) return null
-            const ids = g.itens.map(i => i.id)
-            const n = ids.filter(id => sel.has(id)).length
-            return (
-              <div key={g.cat.key} style={{ marginBottom: 10 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 0', cursor: 'pointer', fontWeight: 800, fontSize: 14 }}>
-                  <input type="checkbox" checked={n === ids.length} ref={el => { if (el) el.indeterminate = n > 0 && n < ids.length }}
-                    onChange={e => alternar(ids, e.target.checked)} style={{ width: 17, height: 17, accentColor: PRIMARY }} />
-                  <span>{g.cat.icon} {g.cat.label}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: MUTED }}>{n}/{ids.length}</span>
-                </label>
-                <div style={{ paddingLeft: 26 }}>
-                  {itens.map(i => (
-                    <label key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 0', cursor: 'pointer', fontSize: 13.5 }}>
-                      <input type="checkbox" checked={sel.has(i.id)} onChange={e => alternar([i.id], e.target.checked)} style={{ width: 16, height: 16, accentColor: PRIMARY }} />
-                      <span style={{ flex: 1 }}>{i.nome}</span>
-                      {i.per && <span style={{ fontSize: 11, color: MUTED }}>{i.per}</span>}
-                    </label>
-                  ))}
+          {isNrs ? (
+            <div style={{ padding: '14px 0', fontSize: 13.5 }}>
+              {data.nrs.length ? <>Tabela de treinamentos normativos — <b>{data.nrs.length}</b> linha(s), com as orientações complementares.</> : <span style={{ color: MUTED }}>Nada para exportar.</span>}
+            </div>
+          ) : (<>
+            {nomesSecao.length > 1 && (
+              <div style={{ background: '#F7F9FC', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px', margin: '6px 0 12px' }}>
+                <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: MUTED, marginBottom: 6 }}>Seções em todos os documentos</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
+                  {nomesSecao.map(ns => {
+                    const on = ns.chaves.filter(k => secs.has(k)).length
+                    return (
+                      <label key={ns.label} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer', padding: '2px 0' }}>
+                        <input type="checkbox" checked={on === ns.chaves.length} ref={el => { if (el) el.indeterminate = on > 0 && on < ns.chaves.length }}
+                          onChange={e => alternar(setSecs, ns.chaves, e.target.checked)} style={ckStyle} />
+                        <span>{ns.label}</span>
+                        <span style={{ fontSize: 11, color: MUTED }}>({ns.chaves.length})</span>
+                      </label>
+                    )
+                  })}
                 </div>
               </div>
-            )
-          })}
-          {total === 0 && <div style={{ padding: 30, textAlign: 'center', color: MUTED }}>Nada para imprimir.</div>}
+            )}
+
+            {grupos.map(g => {
+              const itens = g.docs.filter(d => !q || norm(d.nome).includes(q))
+              if (!itens.length) return null
+              const ids = g.docs.map(d => d.id)
+              const n = ids.filter(id => sel.has(id)).length
+              return (
+                <div key={g.tipo || '_'} style={{ marginBottom: 12 }}>
+                  {g.tipo && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 0 4px', cursor: 'pointer', fontWeight: 800, fontSize: 13, textTransform: 'uppercase', letterSpacing: '.5px', color: PRIMARY }}>
+                      <input type="checkbox" checked={n === ids.length} ref={el => { if (el) el.indeterminate = n > 0 && n < ids.length }}
+                        onChange={e => alternar(setSel, ids, e.target.checked)} style={ckStyle} />
+                      <span>{ICONE_TIPO[g.tipo] ?? '•'} {g.tipo}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: MUTED, textTransform: 'none' }}>{n}/{ids.length}</span>
+                    </label>
+                  )}
+                  <div style={{ paddingLeft: g.tipo ? 18 : 0 }}>
+                    {itens.map(d => {
+                      const ss = secoesDe(d)
+                      const nOn = ss.filter(x => secs.has(x.k)).length
+                      const aberto = abertos.has(d.id)
+                      return (
+                        <div key={d.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0', fontSize: 13.5 }}>
+                            <input type="checkbox" checked={sel.has(d.id)} onChange={e => alternar(setSel, [d.id], e.target.checked)} style={ckStyle} />
+                            <span style={{ flex: 1, cursor: 'pointer', opacity: sel.has(d.id) ? 1 : .55 }} onClick={() => alternar(setSel, [d.id], !sel.has(d.id))}>{d.nome}</span>
+                            {d.periodicidade && <span style={{ fontSize: 11, color: MUTED }}>{d.periodicidade}</span>}
+                            <button onClick={() => alternar(setAbertos, [d.id], !aberto)} title="Escolher seções deste documento"
+                              style={{ ...btnGhost, padding: '3px 10px', fontSize: 11.5, borderRadius: 999, color: nOn < ss.length ? '#92400E' : MUTED, borderColor: nOn < ss.length ? '#F6D58E' : BORDER }}>
+                              Seções {nOn}/{ss.length} {aberto ? '▴' : '▾'}
+                            </button>
+                          </div>
+                          {aberto && (
+                            <div style={{ padding: '0 0 8px 26px' }}>
+                              {ss.map(({ s, k }) => (
+                                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12.5, cursor: 'pointer', color: s.tipo === 'historico' ? MUTED : TEXT }}>
+                                  <input type="checkbox" checked={secs.has(k)} onChange={e => alternar(setSecs, [k], e.target.checked)} style={{ ...ckStyle, width: 14, height: 14 }} />
+                                  <span style={{ flex: 1 }}>{rotuloSecao(s)}</span>
+                                  <span style={{ fontSize: 11, color: MUTED }}>{s.items.length} item(ns)</span>
+                                </label>
+                              ))}
+                              {!ss.length && <div style={{ fontSize: 12, color: MUTED }}>Sem seções.</div>}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+            {docs.length === 0 && <div style={{ padding: 30, textAlign: 'center', color: MUTED }}>Nada para exportar.</div>}
+          </>)}
         </div>
 
         <div style={{ padding: '12px 24px 16px', borderTop: `1px solid ${BORDER}` }}>
-          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13, marginBottom: 12 }}>
-            <label style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={caixas} onChange={e => setCaixas(e.target.checked)} style={{ accentColor: PRIMARY }} /> Caixinhas ☐ de conferência
-            </label>
-            <label style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={quebra} onChange={e => setQuebra(e.target.checked)} style={{ accentColor: PRIMARY }} /> Um documento por página
-            </label>
-          </div>
+          {!isNrs && (
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13, marginBottom: 12 }}>
+              <label style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={sumario} onChange={e => setSumario(e.target.checked)} style={{ accentColor: PRIMARY }} /> Sumário no início
+              </label>
+              <label style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={numerar} onChange={e => setNumerar(e.target.checked)} style={{ accentColor: PRIMARY }} /> Numerar documentos
+              </label>
+              <label style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={caixas} onChange={e => setCaixas(e.target.checked)} style={{ accentColor: PRIMARY }} /> Caixinhas ☐ de conferência
+              </label>
+              <label style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={quebra} onChange={e => setQuebra(e.target.checked)} style={{ accentColor: PRIMARY }} /> Um documento por página
+              </label>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12.5, color: MUTED }}><b style={{ color: TEXT }}>{sel.size}</b> de {total} selecionado(s)</span>
+            {!isNrs && <span style={{ fontSize: 12.5, color: MUTED }}><b style={{ color: TEXT }}>{docsExportados.length}</b> de {docs.length} documento(s) serão exportados</span>}
             <span style={{ flex: 1 }} />
             <button onClick={onClose} style={btnGhost}>Cancelar</button>
-            <button onClick={gerar} disabled={sel.size === 0} style={{ ...btnPrimary, opacity: sel.size ? 1 : .5 }}>📄 Gerar PDF</button>
+            <button onClick={gerar} disabled={!isNrs && docsExportados.length === 0}
+              style={{ ...btnPrimary, opacity: isNrs || docsExportados.length ? 1 : .5 }}>📄 Gerar PDF</button>
           </div>
         </div>
       </div>
