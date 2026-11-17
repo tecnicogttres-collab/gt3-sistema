@@ -82,7 +82,12 @@
 .cs .dcard:hover{background:var(--cs-tint2)}
 .cs .dcard b{font-size:13px;line-height:1.3}
 .cs .dcard .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--cs-muted)}
-.cs .dcard.ready{border-color:var(--cs-good)}
+/* Card inteiro destacado: pronto = verde cheio; com medicao (ainda sem o minimo) = ambar suave */
+.cs .dcard.ready{border:2px solid var(--cs-good);background:var(--cs-good-bg);box-shadow:inset 5px 0 0 var(--cs-good)}
+.cs .dcard.ready:hover{background:#DDF1E6}
+.cs .dcard.ready b{color:#14603F}
+.cs .dcard.andamento{border:2px solid var(--cs-warn);background:var(--cs-warn-bg);box-shadow:inset 5px 0 0 var(--cs-warn)}
+.cs .dcard.andamento:hover{background:#F6EAD2}
 .cs .timer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:16px;align-items:start}
 .cs .clock{border:2.5px solid var(--cs-edge);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:16px;align-items:center;text-align:center}
 .cs .clock .doc{font-weight:800;font-size:15px;color:var(--cs-edge-2)}
@@ -279,6 +284,8 @@
 .cs .lat-item.fech{margin-top:4px;border:1.5px solid var(--cs-gold);background:#FBF6EC;color:var(--cs-gold-ink)}
 .cs .lat-item.fech:hover{background:#F6EBD3}
 .cs .lat-item.fech.on{background:var(--cs-gold);color:#FFFFFF}
+.cs .lat-item.def{border:1.5px solid var(--cs-line);background:var(--cs-bg)}
+.cs .lat-item.def.on{background:var(--cs-edge);border-color:var(--cs-edge);color:#FFFFFF}
 .cs .cs-shell.recolhida .lat-item .tx,.cs .cs-shell.recolhida .lat-item .cnt,.cs .cs-shell.recolhida .lat-tit{display:none}
 .cs .cs-shell.recolhida .lat-topo{flex-direction:column}
 .cs .cs-shell.recolhida .lat-item{justify-content:center;padding:8px 0}
@@ -334,3 +341,45 @@
 .cs .cmp-cam-barra i{display:block;height:100%;min-width:2px}
 .cs .cmp-cam-barra i:last-child{border-radius:0 4px 4px 0}
 @media (max-width:640px){.cs .cmp-cam-linha{grid-template-columns:minmax(0,1fr) auto}.cs .cmp-cam-barra{grid-column:1 / -1;grid-row:2}}
+
+/* Extra portal: "como esta o ritmo agora?" (pop-up e registro por conta propria) */
+.cs .ritmo{display:flex;flex-direction:column;gap:6px;border:1.5px dashed var(--cs-line);border-radius:10px;padding:8px 10px;background:var(--cs-tint2)}
+.cs .ritmo-ops{display:flex;flex-wrap:wrap;gap:6px}
+.cs .ritmo-op{--rc:var(--cs-edge);flex:1 1 110px;border:1.5px solid var(--cs-line);background:var(--cs-bg);border-radius:99px;padding:6px 12px;font-weight:700;cursor:pointer;color:var(--cs-ink);transition:border-color .15s,background-color .15s}
+.cs .ritmo-op:hover:not(:disabled){border-color:var(--rc)}
+.cs .ritmo-op.on{border-color:var(--rc);background:var(--rc);color:#FFFFFF}
+.cs .ritmo-barra{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--cs-tint)}
+.cs .ritmo-barra i{display:block;min-width:2px}
+
+/* Inicio: atalho discreto para Definicoes (sem o destaque do Fechamento) */
+.cs .ini-def{display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;border:1.5px solid var(--cs-line);border-radius:12px;padding:10px 14px;background:var(--cs-tint2)}
+.cs .ini-def:hover{border-color:var(--cs-edge);background:var(--cs-tint)}
+.cs .ini-def .ic{font-size:18px;color:var(--cs-edge)}
+.cs .ini-def .tx{flex:1;display:flex;flex-direction:column;min-width:0}
+.cs .ini-def .tx b{color:var(--cs-edge-2)}
+.cs .ini-def .tx span{font-size:12.5px;color:var(--cs-muted)}
+.cs .ini-def .ir{color:var(--cs-edge);font-weight:800}
+
+/* Definicoes: tela de escolha em cartoes + navegacao interna */
+.cs .def-sec{display:flex;flex-direction:column;gap:8px}
+.cs .def-sec > h3{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--cs-muted);margin:0}
+.cs .def-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.cs .def-card{display:flex;gap:12px;align-items:flex-start;text-align:left;cursor:pointer;border:1.5px solid var(--cs-line);border-radius:12px;padding:14px;background:var(--cs-bg);transition:border-color .15s,background-color .15s,transform .15s}
+.cs .def-card:hover{border-color:var(--cs-edge);background:var(--cs-tint2);transform:translateY(-1px)}
+.cs .def-card .ic{flex:none;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--cs-tint);font-size:19px}
+.cs .def-card .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cs .def-card .tx b{color:var(--cs-edge-2);font-size:14.5px}
+.cs .def-card .tx .d{font-size:12.5px;color:var(--cs-muted);line-height:1.4}
+.cs .def-card .num{font-family:var(--cs-num);font-weight:800;color:var(--cs-edge);font-size:12.5px}
+.cs .def-card .alerta{font-size:11.5px;font-weight:700;color:var(--cs-warn);background:var(--cs-warn-bg);border-radius:99px;padding:1px 8px;align-self:flex-start}
+.cs .def-topo{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.cs .def-topo .cfgnav button{font-size:12.5px;padding:4px 10px}
+.cs .def-sub{display:flex;gap:12px;align-items:center;border:1.5px solid var(--cs-line);border-radius:12px;padding:10px 14px;background:var(--cs-tint2)}
+.cs .def-sub .ic{font-size:22px}
+.cs .def-sub b{color:var(--cs-edge-2);font-size:15.5px}
+
+/* Documentos de um grupo (Definicoes e Cronometrar) */
+.cs .gdoc-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px;max-height:420px;overflow:auto}
+.cs .gdoc-item{display:flex;align-items:center;gap:8px;border:1.5px solid var(--cs-line);border-radius:9px;padding:6px 8px;background:var(--cs-bg);font-size:13px;min-width:0}
+.cs .gdoc-item .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs .gdoc-item.med{border-color:var(--cs-good);background:var(--cs-good-bg)}

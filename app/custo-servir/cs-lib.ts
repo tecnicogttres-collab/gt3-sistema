@@ -55,7 +55,7 @@ export const ABAS = [
   { id: 'suporte', label: 'Suporte' },
   { id: 'extra', label: 'Extra portal' },
   { id: 'bases', label: 'Documentos e bases' },
-  { id: 'configuracoes', label: 'Configurações' },
+  { id: 'configuracoes', label: 'Definições' },
   { id: 'fechamento', label: 'Fechamento' },
 ] as const
 export type AbaId = typeof ABAS[number]['id']

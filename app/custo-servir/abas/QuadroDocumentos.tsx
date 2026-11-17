@@ -7,7 +7,8 @@
 import { useState } from 'react'
 import { useCs } from '../cs-data'
 import { nomeCtt, norm, stat, type Ctx, type Grupo } from '../cs-lib'
-import { OrdemControle, ordenar, type Ordem } from '../cs-ui'
+import { BotaoConfirmar, OrdemControle, ordenar, type Ordem } from '../cs-ui'
+import { SeletorDocs } from './Bases'
 
 type Drag = { from: string; ids: string[] }
 type Sel = { g: string; ids: Set<string> }
@@ -206,6 +207,51 @@ function Cartao({ ctx, g, docs, q, sel, drag, sobre, ocupado, nMed, onSel, onDra
         <datalist id={listId}>{naoEstao.map(x => <option key={x.id} value={x.nome} />)}</datalist>
         <button type="button" className="btn sm" disabled={!naoEstao.some(x => norm(x.nome) === norm(novo))} onClick={adicionar}>＋</button>
       </div>
+    </div>
+  )
+}
+
+/** Documentos de UM grupo, sem arrastar: incluir varios do catalogo de uma vez e remover com um clique.
+ *  Usado nas Definicoes (Documentos por grupo) e no Cronometrar (dentro do grupo): e a mesma lista. */
+export function DocsDoGrupo({ ctx, g, compacto = false }: { ctx: Ctx; g: Grupo; compacto?: boolean }) {
+  const { d, copiarDocs, removerDoGrupo, tentar } = useCs()
+  const [q, setQ] = useState('')
+  const ids = ctx.gd.get(g.id) ?? new Set<string>()
+  const docs = [...ids].map(id => ctx.docs.get(id)!).filter(Boolean).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  const vis = q ? docs.filter(x => norm(x.nome + ' ' + (x.codigo ?? '')).includes(norm(q))) : docs
+  const nMed = (doc: string) => d.meds.filter(m => m.grupo_id === g.id && m.documento_id === doc).length
+  return (
+    <div className="tp-bloco" style={{ gap: 10 }}>
+      <div className="row between">
+        <div>
+          <b>{g.nome}</b> <span className="pill p-blue">{docs.length} documento(s)</span>
+          {!compacto && <div className="note">{g.padrao ? 'Grupo padrão: vale para todos os contratantes sem grupo específico.' : `Grupo específico: ${g.contratantes.map(c => c + ' · ' + nomeCtt(ctx, c)).join(', ') || 'nenhum contratante ainda'}.`}</div>}
+        </div>
+        <SeletorDocs ctx={ctx} jaTem={ids} rotulo="+ Incluir documentos neste grupo"
+          onIncluir={novos => tentar(() => copiarDocs(g.id, novos), `${novos.length} documento(s) incluído(s) em ${g.nome}`)} />
+      </div>
+      <p className="note">
+        {g.padrao
+          ? <>Para <b>incluir</b>, use o botão acima. No grupo padrão o documento não sai (é a base de todos); para tirá-lo da conta, marque &quot;Não conta&quot; no Catálogo.</>
+          : <>Para <b>incluir</b>, use o botão acima (busca, marca vários ou cola uma lista). Para <b>tirar</b> deste grupo, clique em Remover: os contratantes dele voltam a usar o tempo do grupo padrão e as medições ficam no histórico.</>}
+      </p>
+      {docs.length > 8 && <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar neste grupo" style={{ maxWidth: 320 }} />}
+      {vis.length ? (
+        <div className="gdoc-lista">
+          {vis.map(x => {
+            const n = nMed(x.id)
+            return (
+              <div key={x.id} className={'gdoc-item' + (n ? ' med' : '')} title={x.nome}>
+                <span className="n">{x.nome}</span>
+                {n > 0 && <span className="pill p-good" title="Medições neste grupo">{n} med.</span>}
+                {!g.padrao && (
+                  <BotaoConfirmar onConfirm={() => tentar(() => removerDoGrupo(g.id, x.id), `${x.nome} saiu de ${g.nome}`)}>Remover</BotaoConfirmar>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : <div className="empty">{q ? 'Nada encontrado.' : 'Nenhum documento neste grupo ainda. Use “+ Incluir documentos neste grupo”.'}</div>}
     </div>
   )
 }

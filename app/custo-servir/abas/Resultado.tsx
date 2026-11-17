@@ -138,7 +138,7 @@ export default function Resultado() {
               {bloco(<><IconeCatraca /> Com catraca</>, com, true)}
               {bloco('Sem catraca', sem, false)}
             </div>
-            <p className="note">Contratante com catraca = pelo menos um turno com código de integração (Configurações › Turnos).</p>
+            <p className="note">Contratante com catraca = pelo menos um turno com código de integração (Definições › Turnos).</p>
           </div>
         )
       })()}

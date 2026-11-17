@@ -10,7 +10,7 @@ import { ativo, elapsed, resetTimer, setTimer, useTimer } from '../cs-timer'
 import { BotaoExcluirMedicao, OrdemControle, ordenar, PillMedicao, PillOrigem, PillResultado, PillSituacao, useOrdem, type Ordem } from '../cs-ui'
 import { dt, nomeUsuario } from '../cs-lib'
 import type { Medicao, Usuario } from '../cs-lib'
-import QuadroDocumentos from './QuadroDocumentos'
+import QuadroDocumentos, { DocsDoGrupo } from './QuadroDocumentos'
 import TransportarTempo, { type ModoTransporte } from './TransportarTempo'
 import { EditorDocsContratante } from './Bases'
 import { useTempo } from '../cs-tempo'
@@ -59,7 +59,7 @@ function Grupos({ ctx, setNav }: { ctx: Ctx; setNav: (n: NavCron) => void }) {
           <button type="button" className="btn" onClick={() => setOrganizar(true)}>⠿ Organizar documentos nos grupos</button>
         </div>
       </div>
-      <p className="note">Os documentos nascem no grupo padrão. Um grupo específico só tem os documentos em que o critério dele é diferente (copiados ou movidos em Configurações).</p>
+      <p className="note">Os documentos nascem no grupo padrão. Um grupo específico só tem os documentos em que o critério dele é diferente (inclua ou tire dentro do grupo, em “✎ Incluir / tirar documentos”, ou em Definições).</p>
       <div className="groups">
         {grupos.map(g => {
           const ds = [...(ctx.gd.get(g.id) ?? [])]
@@ -92,6 +92,7 @@ function Grupos({ ctx, setNav }: { ctx: Ctx; setNav: (n: NavCron) => void }) {
 function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron; setNav: (n: NavCron) => void }) {
   const { d } = useCs()
   const [cttDocs, setCttDocs] = useState<string | null>(null)
+  const [editarDocs, setEditarDocs] = useState(false)
   const tm = useTempo()
   const [ord, setOrd] = useState<Ordem>({ col: 'nome', dir: 'asc' })
   let ds = [...(ctx.gd.get(g.id) ?? [])].map(id => ctx.docs.get(id)!).filter(Boolean)
@@ -117,6 +118,18 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
           </div>
         </div>
       )}
+      {editarDocs && (
+        <div className="cs-modal" onClick={e => { if (e.target === e.currentTarget) setEditarDocs(false) }}>
+          <div className="cs">
+            <div className="row between">
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--cs-edge-2)' }}>Documentos do grupo {g.nome}</h2>
+              <button type="button" className="btn" onClick={() => setEditarDocs(false)}>Fechar</button>
+            </div>
+            <p className="note">É a mesma lista de Definições › Documentos de cada grupo: o que mudar aqui já vale lá.</p>
+            <DocsDoGrupo ctx={ctx} g={g} />
+          </div>
+        </div>
+      )}
       {!g.padrao && g.contratantes.length > 0 && (
         <div className="selbar">
           <b>Documentos de cada contratante:</b>
@@ -130,10 +143,17 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
       <div className="box">
         <div className="row between">
           <h2>2. Escolha o documento</h2>
-          <input type="search" placeholder="Buscar documento" value={nav.q} onChange={e => setNav({ ...nav, q: e.target.value })} style={{ width: 'min(320px,100%)' }} />
+          <div className="row">
+            <input type="search" placeholder="Buscar documento" value={nav.q} onChange={e => setNav({ ...nav, q: e.target.value })} style={{ width: 'min(320px,100%)' }} />
+            <button type="button" className="btn" onClick={() => setEditarDocs(true)} title="Incluir documentos neste grupo ou tirar algum dele">✎ Incluir / tirar documentos</button>
+          </div>
         </div>
         <div className="row between">
-          <p className="note">O volume de referência aparece em cada documento.</p>
+          <p className="note">
+            O volume de referência aparece em cada documento.{' '}
+            <span style={{ color: 'var(--cs-good)', fontWeight: 700 }}>■ Verde</span> = tempo pronto ·{' '}
+            <span style={{ color: 'var(--cs-warn)', fontWeight: 700 }}>■ Âmbar</span> = já tem medição, falta chegar ao mínimo.
+          </p>
           <OrdemControle ord={ord} setOrd={setOrd} opcoes={[
             { col: 'nome', label: 'Nome' }, { col: 'vol', label: 'Volume de referência' }, { col: 'an', label: 'Medições de aprovado' },
             { col: 'tempo', label: 'Tempo-padrão aprovado' }, { col: 'sit', label: 'Situação' },
@@ -144,7 +164,7 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
             {ds.map(x => {
               const a = stat(ctx, g.id, x.id, 'aprovado'), r = stat(ctx, g.id, x.id, 'reprovado'), s = situacaoDoc(ctx, g.id, x.id)
               return (
-                <button key={x.id} type="button" className={'dcard' + (s === 'pronto' ? ' ready' : '')} onClick={() => setNav({ ...nav, d: x.id })}>
+                <button key={x.id} type="button" className={'dcard' + (s === 'pronto' ? ' ready' : s === 'andamento' ? ' andamento' : '')} onClick={() => setNav({ ...nav, d: x.id })}>
                   <b>{x.nome}</b>
                   <span className="meta">
                     <span className="mono">{fmt(x.volume_ref)} no volume de ref.</span>
@@ -161,7 +181,7 @@ function Documentos({ ctx, g, nav, setNav }: { ctx: Ctx; g: Grupo; nav: NavCron;
             })}
           </div>
         ) : (
-          <div className="empty">{nav.q ? 'Nada encontrado.' : 'Nenhum documento neste grupo. Copie ou mova documentos em Configurações › Documentos por grupo.'}</div>
+          <div className="empty">{nav.q ? 'Nada encontrado.' : 'Nenhum documento neste grupo. Use “✎ Incluir / tirar documentos” acima.'}</div>
         )}
       </div>
     </>

@@ -106,7 +106,7 @@ export default function Tempos() {
             </tbody>
           </table>
         </div>
-        <p className="note">Tempos em minutos (troque para hora/minuto no seletor ao lado das abas). Tempo-padrão = {base} das medições validadas (altere em Configurações › Parâmetros). * Sem medição de reprovado: usa o tempo de aprovado até haver medições.</p>
+        <p className="note">Tempos em minutos (troque para hora/minuto no seletor ao lado das abas). Tempo-padrão = {base} das medições validadas (altere em Definições › Parâmetros). * Sem medição de reprovado: usa o tempo de aprovado até haver medições.</p>
       </div>
       {docSel && (
         <div className="box">

@@ -32,7 +32,17 @@ export type Amostra = {
   contratantes?: string[] | null
   /** Registrado por conta propria (nao veio de um pop-up sorteado). */
   espontanea?: boolean
+  /** Como a pessoa disse que estava o ritmo naquele momento. null = nao informou. */
+  ritmo?: Ritmo | null
 }
+export type Ritmo = 'tranquilo' | 'normal' | 'pesado'
+export const RITMOS: { k: Ritmo; label: string; ic: string; cor: string }[] = [
+  { k: 'tranquilo', label: 'Tranquilo', ic: '😌', cor: '#1F8A5B' },
+  { k: 'normal', label: 'Normal', ic: '🙂', cor: '#2A4F96' },
+  { k: 'pesado', label: 'Pesado', ic: '😰', cor: '#C2412D' },
+]
+/** Colunas do insert em cs_amostras com o ritmo (so vai quando informado). */
+export const colunaRitmo = (r: Ritmo | null | undefined) => (r ? { ritmo: r } : {})
 
 // ── Opcoes do aviso (lista 3.3 do material) ──────────────────────────────────
 // As opcoes das camadas 1 e 2, interno e ociosa sao fixas; as da camada 3 vem de cs_camada3_atividades

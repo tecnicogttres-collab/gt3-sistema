@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '../../lib/supabase'
-import { C2_PADRAO, CHAVES_FIXAS, OPCOES_PADRAO, colunasContratantes, type Amostra, type AtividadeC3, type Amostragem, type AtivMedicao, type Atividade, type VolumeLinha, type VolumeLote } from '../cs-suporte-lib'
+import { C2_PADRAO, CHAVES_FIXAS, OPCOES_PADRAO, colunaRitmo, colunasContratantes, type Amostra, type Ritmo, type AtividadeC3, type Amostragem, type AtivMedicao, type Atividade, type VolumeLinha, type VolumeLote } from '../cs-suporte-lib'
 
 type PageRes<T> = PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null }>
 async function todas<T>(q: (a: number, b: number) => PageRes<T>): Promise<T[]> {
@@ -202,10 +202,11 @@ export function useSuporte(meuId: string) {
     setAmostragens(p => p.map(a => (a.id === id ? { ...a, ...patch } : a)))
   }, [supabase])
   /** Registro por conta propria no Extra portal (sem pop-up): horario = agora. */
-  const registrarAmostra = useCallback(async (amostragem_id: string, atividade: Amostra['atividade'], contratantes: string[]) => {
-    const res = await supabase.from('cs_amostras').insert({
-      amostragem_id, usuario_id: meuId, previsto_em: new Date().toISOString(), atividade, ...colunasContratantes(contratantes), espontanea: true,
-    }).select('*').single()
+  const registrarAmostra = useCallback(async (amostragem_id: string, atividade: Amostra['atividade'], contratantes: string[], ritmo: Ritmo | null = null) => {
+    const linha: Record<string, unknown> = { amostragem_id, usuario_id: meuId, previsto_em: new Date().toISOString(), atividade, ...colunasContratantes(contratantes), espontanea: true }
+    let res = await supabase.from('cs_amostras').insert({ ...linha, ...colunaRitmo(ritmo) }).select('*').single()
+    // Coluna ritmo ainda nao criada (falta sql/custo-servir-ritmo.sql): grava sem ela
+    if (res.error && ritmo && /ritmo/.test(res.error.message)) res = await supabase.from('cs_amostras').insert(linha).select('*').single()
     if (res.error && /contratantes/.test(res.error.message)) throw new Error('Vários contratantes ainda não estão liberados: rode sql/custo-servir-base-perks.sql no Supabase. Por enquanto marque só um.')
     const r = ok(res) as Amostra
     setAmostrasDe(p => (p && p.id === amostragem_id ? { id: p.id, amostras: [...p.amostras, r] } : p))

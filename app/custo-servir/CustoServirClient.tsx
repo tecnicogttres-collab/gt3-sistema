@@ -42,16 +42,16 @@ const META: Record<AbaId, { icone: string; desc: string }> = {
   suporte: { icone: '🎧', desc: 'Cadastro, e-mail, ligação e demais atendimentos.' },
   extra: { icone: '🧩', desc: 'Atividades fora do portal (camada 3).' },
   bases: { icone: '📚', desc: 'Modelos de venda, contratantes, pacotes de extras e catálogo.' },
-  configuracoes: { icone: '⚙', desc: 'Grupos, catálogo, turnos, perfis e parâmetros.' },
+  configuracoes: { icone: '⚙', desc: 'Grupos de critério, documentos de cada grupo, catálogo, contratantes, turnos e parâmetros.' },
   fechamento: { icone: '★', desc: 'A conta inteira: avaliação + suporte contra a capacidade da equipe.' },
 }
 
-/** Agrupamento das abas (o Fechamento fica fora: tem destaque proprio). */
+/** Agrupamento das abas (Fechamento e Definicoes ficam fora: vao no topo da barra). */
 const SECOES_NAV: { titulo: string; ids: AbaId[] }[] = [
   { titulo: 'Medir', ids: ['cronometrar', 'tempos', 'medicoes'] },
   { titulo: 'Volume e resultado', ids: ['contagem', 'resultado', 'comparativo'] },
   { titulo: 'Outras atividades', ids: ['suporte', 'extra'] },
-  { titulo: 'Cadastros', ids: ['bases', 'configuracoes'] },
+  { titulo: 'Cadastros', ids: ['bases'] },
 ]
 
 const LS_LATERAL = 'cs_nav_recolhida'
@@ -62,7 +62,7 @@ export default function CustoServirClient() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [aba, setAba] = useState<Tela>(abaInicial)
   const [nav, setNav] = useState<NavCron>({ g: null, d: null, q: '' })
-  const [cfgSub, setCfgSub] = useState('grupos')
+  const [cfgSub, setCfgSub] = useState('inicio')
 
   const toast = useCallback((msg: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -93,7 +93,7 @@ export default function CustoServirClient() {
 function Modulo({ aba, setAba, nav, setNav }: {
   aba: Tela; setAba: (a: Tela) => void; nav: NavCron; setNav: (n: NavCron) => void
 }) {
-  const { d, carregando, erro, recarregar, carregarMedicoes, papel } = useCs()
+  const { d, carregando, erro, recarregar, carregarMedicoes, papel, setCfgSub } = useCs()
   const { profile } = useUser()
   const pathname = usePathname()
   const telaVisivel = pathname === CS_PATH
@@ -108,6 +108,8 @@ function Modulo({ aba, setAba, nav, setNav }: {
   const trocarAba = (a: Tela) => {
     // Clicar em Cronometrar (mesmo ja estando nela) volta para a tela inicial de grupos
     if (a === 'cronometrar') setNav({ g: null, d: null, q: '' })
+    // Definicoes pela barra/inicio abre sempre na tela de escolha
+    if (a === 'configuracoes') setCfgSub('inicio')
     setAba(a)
     try { history.replaceState(null, '', a === 'inicio' ? location.pathname + location.search : '#' + a) } catch { /* ignore */ }
     window.scrollTo({ top: 0 })
@@ -189,6 +191,12 @@ function Modulo({ aba, setAba, nav, setNav }: {
                 <span className="ic">★</span><span className="tx">Fechamento</span>
               </button>
             )}
+            {visivel('configuracoes') && (
+              <button type="button" className={'lat-item def' + (abaAtual === 'configuracoes' ? ' on' : '')} aria-current={abaAtual === 'configuracoes' ? 'page' : undefined}
+                onClick={() => trocarAba('configuracoes')} title={META.configuracoes.desc}>
+                <span className="ic">⚙</span><span className="tx">Definições</span>
+              </button>
+            )}
             {SECOES_NAV.map(s => {
               const ids = s.ids.filter(visivel)
               if (!ids.length) return null
@@ -249,6 +257,13 @@ function Inicio({ visivel, nMed, abrir }: { visivel: (id: AbaId) => boolean; nMe
             <span>{META.fechamento.desc}</span>
           </span>
           <span className="ir" aria-hidden>Abrir →</span>
+        </button>
+      )}
+      {visivel('configuracoes') && (
+        <button type="button" className="ini-def" onClick={() => abrir('configuracoes')}>
+          <span className="ic">⚙</span>
+          <span className="tx"><b>Definições</b><span>{META.configuracoes.desc}</span></span>
+          <span className="ir" aria-hidden>→</span>
         </button>
       )}
       {SECOES_NAV.map(s => {

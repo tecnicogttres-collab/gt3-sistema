@@ -6,7 +6,7 @@ import { useModules } from '../../components/ModulesContext'
 import { ABAS, docsComTurno, fmt, grupoDe, nomeCtt, nomeUsuario, norm, PERFIS, rotuloValidade, temCatraca, unidadesDe, validadePeloNome, VALIDADES, type Ctx } from '../cs-lib'
 import { BotaoConfirmar, IconeCatraca, SeloCatraca, useOrdem } from '../cs-ui'
 import { NumCampo } from './Resultado'
-import QuadroDocumentos from './QuadroDocumentos'
+import QuadroDocumentos, { DocsDoGrupo } from './QuadroDocumentos'
 import QuadroTurnos from './QuadroTurnos'
 import DocsContratantes from './DocsContratantes'
 
@@ -32,24 +32,99 @@ function TxtCampo({ valor, onSalvar, obrigatorio = true, style, placeholder, ari
   )
 }
 
-const SUB = [
-  ['grupos', 'Grupos'], ['docs', 'Documentos por grupo'], ['catalogo', 'Catálogo de documentos'], ['exigidos', 'Documentos por contratante'], ['ctt', 'Contratantes'],
-  ['turnos', 'Turnos'], ['param', 'Parâmetros'], ['users', 'Avaliadores'],
-] as const
-type Sub = typeof SUB[number][0]
+type Sub = 'grupos' | 'docs' | 'catalogo' | 'exigidos' | 'ctt' | 'turnos' | 'param' | 'users'
+/** Cada definicao: icone, nome, o que se faz la (linguagem de quem usa). */
+const SUB_INFO: Record<Sub, { ic: string; label: string; desc: string }> = {
+  grupos: { ic: '🧩', label: 'Grupos de critério', desc: 'Criar, renomear e excluir grupos, e dizer quais contratantes ficam em cada um.' },
+  docs: { ic: '🗂', label: 'Documentos de cada grupo', desc: 'Incluir ou tirar documentos de um grupo. É a mesma lista que aparece no Cronometrar.' },
+  catalogo: { ic: '📚', label: 'Catálogo de documentos', desc: 'Todos os documentos: tipo (empresa/pessoa), validade, código e o que não conta.' },
+  exigidos: { ic: '📑', label: 'Documentos por contratante', desc: 'O que cada contratante exige (GT0010).' },
+  ctt: { ic: '🏢', label: 'Contratantes', desc: 'Cadastro, faturamento, ativo/inativo e unidades de um principal.' },
+  turnos: { ic: '🕑', label: 'Turnos', desc: 'Turnos por contratante e catraca de acesso.' },
+  param: { ic: '🎚', label: 'Parâmetros', desc: 'Mediana ou média, medições mínimas, nome do módulo e acesso por perfil.' },
+  users: { ic: '👥', label: 'Avaliadores', desc: 'Quem mede e quantas medições cada um já fez.' },
+}
+const SECOES_DEF: { titulo: string; ids: Sub[] }[] = [
+  { titulo: 'Grupos e documentos', ids: ['grupos', 'docs'] },
+  { titulo: 'Cadastros', ids: ['catalogo', 'ctt', 'exigidos', 'turnos'] },
+  { titulo: 'Medição e acesso', ids: ['param', 'users'] },
+]
+const SUBS = SECOES_DEF.flatMap(x => x.ids)
 
 export default function Configuracoes() {
-  const { ctx, cfgSub, setCfgSub } = useCs()
-  const sub = (SUB.some(([k]) => k === cfgSub) ? cfgSub : 'grupos') as Sub
-  const setSub = (s: Sub) => setCfgSub(s)
+  const { ctx, d, cfgSub, setCfgSub } = useCs()
   if (!ctx) return null
+  const sub = (SUBS as string[]).includes(cfgSub) ? cfgSub as Sub : null
+  const ir = (k: Sub | 'inicio') => { setCfgSub(k); window.scrollTo({ top: 0 }) }
+
+  // Numeros e pendencias de cada cartao
+  const semTipo = d.docs.filter(x => !x.tipo && !x.nao_conta).length
+  const semValidade = d.docs.filter(x => x.validade_dias == null && !x.nao_conta).length
+  const especificos = ctx.grupos.filter(g => !g.padrao)
+  const docsEspecificos = especificos.reduce((n, g) => n + (ctx.gd.get(g.id)?.size ?? 0), 0)
+  const resumo: Record<Sub, { num: string; alerta?: string }> = {
+    grupos: {
+      num: `${ctx.grupos.length} grupo(s) · ${especificos.reduce((n, g) => n + g.contratantes.length, 0)} contratante(s) em grupo específico`,
+      alerta: especificos.some(g => !g.contratantes.length) ? 'grupo sem contratante' : undefined,
+    },
+    docs: { num: `${docsEspecificos} documento(s) em grupos específicos` },
+    catalogo: { num: `${d.docs.length} documento(s)`, alerta: semTipo ? `${semTipo} sem tipo` : semValidade ? `${semValidade} sem validade` : undefined },
+    exigidos: { num: `${new Set(d.exig.filter(x => x.ativo).map(x => x.contratante_cod)).size} contratante(s) com exigências` },
+    ctt: { num: `${d.ctts.filter(c => c.ativo !== false).length} ativo(s) de ${d.ctts.length}` },
+    turnos: { num: `${d.turnos.length} turno(s)` },
+    param: { num: `${ctx.cfg.base === 'media' ? 'Média' : 'Mediana'} · mínimo ${ctx.cfg.minimo}` },
+    users: { num: `${d.usuarios.filter(u => !u.desativado).length} usuário(s)` },
+  }
+
+  if (!sub) {
+    return (
+      <>
+        <details className="tp-bloco">
+          <summary style={{ cursor: 'pointer' }}><b>Como as definições se encaixam</b> <span className="note">(para quem está chegando)</span></summary>
+          <ol className="note" style={{ margin: '6px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <li>Todo documento nasce no <b>Catálogo</b> e entra no <b>grupo padrão</b>, que vale para todos os contratantes.</li>
+            <li>Quando um contratante avalia algum documento com critério diferente, crie um <b>grupo específico</b> para ele (Grupos de critério).</li>
+            <li>Em <b>Documentos de cada grupo</b>, inclua no grupo específico só os documentos em que o critério muda. O resto continua usando o tempo do padrão.</li>
+            <li>No <b>Cronometrar</b>, dentro de cada grupo, dá para fazer o mesmo (incluir ou tirar documento) sem vir até aqui.</li>
+          </ol>
+        </details>
+        {SECOES_DEF.map(sec => (
+          <section key={sec.titulo} className="def-sec">
+            <h3>{sec.titulo}</h3>
+            <div className="def-grid">
+              {sec.ids.map(k => (
+                <button key={k} type="button" className="def-card" onClick={() => ir(k)}>
+                  <span className="ic" aria-hidden>{SUB_INFO[k].ic}</span>
+                  <span className="tx">
+                    <b>{SUB_INFO[k].label}</b>
+                    <span className="d">{SUB_INFO[k].desc}</span>
+                    <span className="num">{resumo[k].num}</span>
+                    {resumo[k].alerta && <span className="alerta">⚠ {resumo[k].alerta}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </>
+    )
+  }
+
   return (
     <>
-      <div className="cfgnav">
-        {SUB.map(([k, l]) => <button key={k} type="button" className={k === sub ? 'on' : ''} onClick={() => setSub(k)}>{l}</button>)}
+      <div className="def-topo">
+        <button type="button" className="btn sm" onClick={() => ir('inicio')}>← Todas as definições</button>
+        <span className="cfgnav" style={{ margin: 0 }}>
+          {SUBS.map(k => <button key={k} type="button" className={k === sub ? 'on' : ''} title={SUB_INFO[k].desc} onClick={() => ir(k)}>{SUB_INFO[k].ic} {SUB_INFO[k].label}</button>)}
+        </span>
+      </div>
+      <div className="def-sub">
+        <span className="ic" aria-hidden>{SUB_INFO[sub].ic}</span>
+        <div><b>{SUB_INFO[sub].label}</b><div className="note">{SUB_INFO[sub].desc}</div></div>
+        {resumo[sub].alerta && <span className="pill p-warn" style={{ marginLeft: 'auto' }}>⚠ {resumo[sub].alerta}</span>}
       </div>
       {sub === 'grupos' && <Grupos ctx={ctx} />}
-      {sub === 'docs' && <QuadroDocumentos ctx={ctx} />}
+      {sub === 'docs' && <DocsPorGrupo ctx={ctx} />}
       {sub === 'catalogo' && <Catalogo ctx={ctx} />}
       {sub === 'exigidos' && <DocsContratantes ctx={ctx} />}
       {sub === 'ctt' && <Contratantes ctx={ctx} />}
@@ -60,6 +135,39 @@ export default function Configuracoes() {
   )
 }
 
+/** Documentos de cada grupo: por padrao um grupo por vez (incluir/remover); o quadro de arrastar fica como opcao. */
+function DocsPorGrupo({ ctx }: { ctx: Ctx }) {
+  const LS = 'cs_def_docs_modo'
+  const [modo, setModoSt] = useState<'grupo' | 'quadro'>(() => { try { return localStorage.getItem(LS) === 'quadro' ? 'quadro' : 'grupo' } catch { return 'grupo' } })
+  const setModo = (m: 'grupo' | 'quadro') => { setModoSt(m); try { localStorage.setItem(LS, m) } catch { /* ignore */ } }
+  const ordenados = [...ctx.grupos].sort((a, b) => (a.padrao === b.padrao ? a.nome.localeCompare(b.nome, 'pt-BR') : a.padrao ? -1 : 1))
+  const [gSel, setGSel] = useState<string>(() => ordenados.find(g => !g.padrao)?.id ?? ordenados[0]?.id ?? '')
+  const g = ctx.grupos.find(x => x.id === gSel) ?? ordenados[0]
+  return (
+    <>
+      <div className="row">
+        <span className="cfgnav" style={{ margin: 0 }}>
+          <button type="button" className={modo === 'grupo' ? 'on' : ''} onClick={() => setModo('grupo')}>Um grupo por vez</button>
+          <button type="button" className={modo === 'quadro' ? 'on' : ''} onClick={() => setModo('quadro')}>⠿ Quadro (arrastar entre grupos)</button>
+        </span>
+        <span className="note">{modo === 'grupo' ? 'Escolha o grupo e inclua ou tire documentos.' : 'Para copiar ou mover vários documentos de um grupo para outro.'}</span>
+      </div>
+      {modo === 'quadro' ? <QuadroDocumentos ctx={ctx} /> : (
+        <div className="box">
+          <h2>Escolha o grupo</h2>
+          <div className="cfgnav">
+            {ordenados.map(x => (
+              <button key={x.id} type="button" className={x.id === g?.id ? 'on' : ''} onClick={() => setGSel(x.id)}>
+                {x.padrao ? '★ ' : ''}{x.nome} <span className="mono">({ctx.gd.get(x.id)?.size ?? 0})</span>
+              </button>
+            ))}
+          </div>
+          {g && <DocsDoGrupo key={g.id} ctx={ctx} g={g} />}
+        </div>
+      )}
+    </>
+  )
+}
 
 function Grupos({ ctx }: { ctx: Ctx }) {
   const { d, criarGrupo, renomearGrupo, excluirGrupo, tentar } = useCs()

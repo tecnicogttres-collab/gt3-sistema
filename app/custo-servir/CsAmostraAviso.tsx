@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../lib/supabase'
 import { useUser } from '../components/UserContext'
-import { OPCOES_PADRAO, colunasContratantes, hojeIso, horariosDoDia, montarOpcoes, opcoesDe, participa, type Amostragem, type AtividadeC3, type ChaveAmostra, type OpcaoAmostra } from './cs-suporte-lib'
+import { OPCOES_PADRAO, RITMOS, colunaRitmo, colunasContratantes, hojeIso, horariosDoDia, montarOpcoes, opcoesDe, participa, type Amostragem, type AtividadeC3, type ChaveAmostra, type OpcaoAmostra, type Ritmo } from './cs-suporte-lib'
 import { carregarC3 } from './abas/suporte-data'
 import './custo-servir.css'
 
@@ -26,10 +26,12 @@ export function EscolherResposta({ amostragem, todas, ctts, salvando, onRegistra
   /** Opcoes ativas do aviso (fixas + camada 3), de montarOpcoes */
   todas: OpcaoAmostra[]
   ctts: Ctt[]; salvando: boolean
-  /** contratantes vazio = nao e de um contratante; varios = a resposta divide igual entre eles. */
-  onRegistrar: (atividade: ChaveAmostra, contratantes: string[]) => Promise<boolean>
+  /** contratantes vazio = nao e de um contratante; varios = a resposta divide igual entre eles.
+   *  ritmo: como a pessoa disse que esta o momento (opcional). */
+  onRegistrar: (atividade: ChaveAmostra, contratantes: string[], ritmo: Ritmo | null) => Promise<boolean>
 }) {
   const [ativ, setAtiv] = useState<ChaveAmostra | null>(null)
+  const [ritmo, setRitmo] = useState<Ritmo | null>(null)
   const [busca, setBusca] = useState('')
   const [marcados, setMarcados] = useState<string[]>([])
   const opcoes = opcoesDe(amostragem, todas)
@@ -37,7 +39,7 @@ export function EscolherResposta({ amostragem, todas, ctts, salvando, onRegistra
   const limpar = () => { setAtiv(null); setBusca(''); setMarcados([]) }
   const registrar = async (cs: string[]) => {
     if (!ativ) return
-    if (await onRegistrar(ativ, cs)) limpar()
+    if (await onRegistrar(ativ, cs, ritmo)) { limpar(); setRitmo(null) }
   }
   const alternar = (c: string) => setMarcados(p => (p.includes(c) ? p.filter(x => x !== c) : [...p, c]))
   const q = busca.trim().toLowerCase()
@@ -47,8 +49,24 @@ export function EscolherResposta({ amostragem, todas, ctts, salvando, onRegistra
     ...(q ? ctts.filter(c => (c.contratante_cod + ' ' + c.nome).toLowerCase().includes(q)) : ctts).filter(c => !marcados.includes(c.contratante_cod)),
   ]
 
+  const seletorRitmo = (
+    <div className="ritmo" role="radiogroup" aria-label="Como está o ritmo agora?">
+      <span className="note"><b>Como está o ritmo agora?</b> (opcional)</span>
+      <div className="ritmo-ops">
+        {RITMOS.map(r => (
+          <button key={r.k} type="button" role="radio" aria-checked={ritmo === r.k} disabled={salvando}
+            className={'ritmo-op' + (ritmo === r.k ? ' on' : '')} style={{ ['--rc' as string]: r.cor }}
+            onClick={() => setRitmo(ritmo === r.k ? null : r.k)}>
+            <span aria-hidden>{r.ic}</span> {r.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
   if (!opc) {
     return (
+      <>{seletorRitmo}
       <div className="grid2" style={{ gap: 8 }}>
         {opcoes.map(o => (
           <button key={o.chave} type="button" className="dcard" disabled={salvando} onClick={() => setAtiv(o.chave)}>
@@ -56,10 +74,12 @@ export function EscolherResposta({ amostragem, todas, ctts, salvando, onRegistra
           </button>
         ))}
       </div>
+      </>
     )
   }
   if (!opc.pedeContratante) {
     return (
+      <>{seletorRitmo}
       <div className="box">
         <p><b>{opc.label}</b>: {opc.inclui}.</p>
         <div className="row">
@@ -67,9 +87,11 @@ export function EscolherResposta({ amostragem, todas, ctts, salvando, onRegistra
           <button type="button" className="link" onClick={limpar}>voltar</button>
         </div>
       </div>
+      </>
     )
   }
   return (
+    <>{seletorRitmo}
     <div className="box">
       <div className="row between">
         <b>{opc.label} · para qual(is) contratante(s)?</b>
@@ -92,6 +114,7 @@ export function EscolherResposta({ amostragem, todas, ctts, salvando, onRegistra
         {marcados.length > 1 && <span className="note">A resposta divide igual entre eles.</span>}
       </div>
     </div>
+    </>
   )
 }
 
@@ -153,13 +176,16 @@ export default function CsAmostraAviso() {
   if (!pendente) return null
   const k = pendente.amostragem.id + '|' + pendente.previsto.toISOString()
 
-  async function registrar(atividade: ChaveAmostra, contratantes: string[]) {
+  async function registrar(atividade: ChaveAmostra, contratantes: string[], ritmo: Ritmo | null) {
     if (salvando) return false
     setSalvando(true)
-    const { error } = await supabase.from('cs_amostras').insert({
+    const linha: Record<string, unknown> = {
       amostragem_id: pendente!.amostragem.id, usuario_id: uid, previsto_em: pendente!.previsto.toISOString(),
       atividade, ...colunasContratantes(contratantes),
-    })
+    }
+    let { error } = await supabase.from('cs_amostras').insert({ ...linha, ...colunaRitmo(ritmo) })
+    // Coluna ritmo ainda nao criada (falta sql/custo-servir-ritmo.sql): grava a resposta sem ela
+    if (error && ritmo && /ritmo/.test(error.message)) ({ error } = await supabase.from('cs_amostras').insert(linha))
     setSalvando(false)
     if (error && error.code !== '23505') {
       alert('Não foi possível registrar: ' + (/contratantes/.test(error.message) ? 'vários contratantes ainda não estão liberados (falta rodar sql/custo-servir-base-perks.sql). Marque só um.' : error.message))

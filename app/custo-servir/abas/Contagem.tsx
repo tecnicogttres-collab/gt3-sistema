@@ -257,7 +257,7 @@ export default function Contagem() {
                   {ordenar(Object.entries(r.unkList), { doc: ([n]) => n, n: ([, c]) => c }, oUnk).map(([n, c]) => <tr key={n}><td>{n}</td><td className="r mono">{c}</td></tr>)}
                 </tbody></table>
               </div>
-              <p className="note">Inclua-os em Configurações › Catálogo de documentos (ou informe o código do documento lá).</p>
+              <p className="note">Inclua-os em Definições › Catálogo de documentos (ou informe o código do documento lá).</p>
             </>}
           </>}
         </div>

@@ -9,7 +9,7 @@ import { useCs } from '../cs-data'
 import { contar, fatorMes, financeiro, fmt, nomeCtt, nomeUsuario, type Ctx } from '../cs-lib'
 import {
   avisosEfetivos, avisosPrevistosAte, calcCamada2, calcCamada3, CLASSES, cttsDaAmostra, diasUteisEntre, diaUtil, faixasMin, hojeIso,
-  labelOpcao, margemErro, margemPiorCaso, minutosDia, montarOpcoes, opcoesDe, participa, podeRegistrar, tempoC2,
+  labelOpcao, margemErro, margemPiorCaso, minutosDia, montarOpcoes, opcoesDe, participa, podeRegistrar, RITMOS, tempoC2,
   type Amostra, type Amostragem, type AtividadeC3, type ChaveAmostra, type Classe, type Janela,
 } from '../cs-suporte-lib'
 import { BotaoConfirmar, useOrdem } from '../cs-ui'
@@ -85,10 +85,10 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
             </p>
             {abrir === a.id ? (
               <>
-                <EscolherResposta amostragem={a} todas={montarOpcoes(s.c3)} ctts={ctts} salvando={salvando} onRegistrar={async (atv, cs) => {
+                <EscolherResposta amostragem={a} todas={montarOpcoes(s.c3)} ctts={ctts} salvando={salvando} onRegistrar={async (atv, cs, rit) => {
                   setSalvando(true)
                   let r: Amostra | null = null
-                  const okk = await tentar(async () => { r = await s.registrarAmostra(a.id, atv, cs) }, 'Registrado. Obrigado!')
+                  const okk = await tentar(async () => { r = await s.registrarAmostra(a.id, atv, cs, rit) }, 'Registrado. Obrigado!')
                   setSalvando(false)
                   const novo = r as Amostra | null
                   if (okk && novo) { setMinhas(p => [novo, ...p]); setAbrir(null) }
@@ -106,13 +106,14 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
         <h3>Minhas respostas de hoje</h3>
         <div className="tbl">
           <table>
-            <thead><tr><th>Hora</th><th>O quê</th><th>Contratante</th><th>Como</th></tr></thead>
+            <thead><tr><th>Hora</th><th>O quê</th><th>Contratante</th><th>Ritmo</th><th>Como</th></tr></thead>
             <tbody>
               {minhas.map(m => (
                 <tr key={m.id}>
                   <td className="mono">{new Date(m.respondido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
                   <td>{labelOpcao(m.atividade, montarOpcoes(s.c3, true))}</td>
                   <td className="note">{cttsDaAmostra(m).map(c => `${c} · ${nomeCtt(ctx, c)}`).join('; ') || '—'}</td>
+                  <td className="note">{RITMOS.find(r => r.k === m.ritmo)?.label ?? '—'}</td>
                   <td className="note">{m.espontanea ? 'por conta própria' : 'pop-up'}</td>
                 </tr>
               ))}
@@ -515,10 +516,57 @@ function ResultadoPesquisa({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
           </table>
         </div>
         <ConferenciaCamadas ctx={ctx} s={s} pctClasse={k => pct(c3.porClasse[k])} />
+        <RitmoInformado s={s} opcoes={montarOpcoes(s.c3, true)} />
         <h3>Camada 3{nomesC3 ? ` (${nomesC3})` : ''} por contratante</h3>
         <PorContratanteC3 ctx={ctx} porCtt={c3.porCttCamada3} n={c3.n} semCtt={c3.camada3SemCtt} cap={fin.ok ? fin.cap : null} />
       </>}
     </div>
+  )
+}
+
+/** "Como esta o ritmo agora?": quanto das respostas veio tranquilo / normal / pesado, no geral e por atividade. */
+function RitmoInformado({ s, opcoes }: { s: SuporteApi; opcoes: ReturnType<typeof montarOpcoes> }) {
+  const com = s.amostras.filter(x => x.ritmo)
+  if (!com.length) return <><h3>Ritmo informado</h3><p className="note">Ninguém informou o ritmo ainda (a pergunta é opcional no pop-up).</p></>
+  const conta = (lista: Amostra[]) => Object.fromEntries(RITMOS.map(r => [r.k, lista.filter(x => x.ritmo === r.k).length])) as Record<string, number>
+  const geral = conta(com)
+  const porAtiv = new Map<string, Amostra[]>()
+  for (const x of com) porAtiv.set(x.atividade, [...(porAtiv.get(x.atividade) ?? []), x])
+  const linhas = [...porAtiv].map(([k, l]) => ({ k, l, c: conta(l) })).sort((a, b) => b.c.pesado / b.l.length - a.c.pesado / a.l.length || b.l.length - a.l.length)
+  const barra = (c: Record<string, number>, n: number) => (
+    <div className="ritmo-barra" title={RITMOS.map(r => `${r.label}: ${c[r.k]}`).join(' · ')}>
+      {RITMOS.map(r => c[r.k] > 0 && <i key={r.k} style={{ flexGrow: c[r.k], background: r.cor }} />)}
+      {!n && <i style={{ flexGrow: 1 }} />}
+    </div>
+  )
+  return (
+    <>
+      <h3>Ritmo informado</h3>
+      <p className="note">{com.length} de {s.amostras.length} resposta(s) disseram como estava o momento. Ajuda a ler o resultado: muita resposta &quot;pesado&quot; numa atividade indica sobrecarga ali.</p>
+      <div className="tiles">
+        {RITMOS.map(r => (
+          <div key={r.k} className="tile" style={{ borderColor: r.cor }}>
+            <b style={{ color: r.cor }}>{fmt((geral[r.k] / com.length) * 100)}%</b>
+            <span>{r.ic} {r.label} ({geral[r.k]})</span>
+          </div>
+        ))}
+      </div>
+      <div className="tbl">
+        <table>
+          <thead><tr><th>Atividade</th><th className="r">Informaram</th>{RITMOS.map(r => <th key={r.k} className="r">{r.label}</th>)}<th style={{ width: '30%' }} /></tr></thead>
+          <tbody>
+            {linhas.map(({ k, l, c }) => (
+              <tr key={k}>
+                <td>{labelOpcao(k, opcoes)}</td>
+                <td className="r mono">{l.length}</td>
+                {RITMOS.map(r => <td key={r.k} className="r mono">{fmt((c[r.k] / l.length) * 100)}%</td>)}
+                <td>{barra(c, l.length)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }
 

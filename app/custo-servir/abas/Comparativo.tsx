@@ -5,7 +5,7 @@
 // Mesma conta do Fechamento: camada 1 (relatorio × tempo-padrao), camada 2 (volumes × tempo da atividade) e
 // camada 3 (amostragem × capacidade), projetadas para o mes.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCs } from '../cs-data'
 import { brl, brl2, contar, fatorMes, financeiro, fmt, nomeCtt, norm, principalDe, type Ctx } from '../cs-lib'
 import { calcCamada2, calcCamada3, tempoC2 } from '../cs-suporte-lib'
@@ -122,6 +122,17 @@ function ComparativoTela({ ctx, s, linhas, relSel }: {
   const escolhidos = selVal.map(c => porCod.get(c)!)
   const alternar = (c: string) => setSel(p => (p.includes(c) ? p.filter(x => x !== c) : [...p, c]))
 
+  // O resultado fica no fim da pagina: ao mudar a selecao (com 2 ou mais), rola ate ele.
+  const resultadoRef = useRef<HTMLDivElement>(null)
+  const chaveSel = selVal.join(',')
+  const primeiraVez = useRef(true)
+  useEffect(() => {
+    if (primeiraVez.current) { primeiraVez.current = false; return }
+    if (chaveSel.split(',').filter(Boolean).length < 2) return
+    const t = setTimeout(() => resultadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+    return () => clearTimeout(t)
+  }, [chaveSel])
+
   // ── Frases ────────────────────────────────────────────────────────────────────
   function frase(a: Linha, b: Linha, m: Met): string | null {
     const va = valor(a, m), vb = valor(b, m)
@@ -176,7 +187,7 @@ function ComparativoTela({ ctx, s, linhas, relSel }: {
         <div className="row between">
           <div>
             <h2>Quem comparar</h2>
-            <p className="note">Escolha dois ou mais contratantes (busque pelo nome ou código, ou marque na classificação abaixo).</p>
+            <p className="note">Escolha dois ou mais contratantes (busque pelo nome ou código, ou marque na classificação abaixo). O resultado aparece no fim da página e a tela rola até ele sozinha.</p>
           </div>
           <div className="row">
             <label className="row note" style={{ gap: 6 }} title="Soma as unidades (ex.: GUTEN, GLOW) no contratante principal">
@@ -222,8 +233,56 @@ function ComparativoTela({ ctx, s, linhas, relSel }: {
         {faltas.length > 0 && <div className="warnbox" style={{ fontWeight: 500 }}>Ainda falta para a conta completa: {faltas.join('; ')}.</div>}
       </div>
 
+      <div className="box">
+        <div className="row between">
+          <div>
+            <h2>Classificação: {METRICAS[met].label}</h2>
+            <p className="note">{ranking.length} contratante(s) com {METRICAS[met].label.toLowerCase()}{mediana != null ? ` · mediana ${fmtVal(mediana, met)}` : ''}{somavel && somaMet > 0 ? ` · total ${fmtVal(somaMet, met)}` : ''}. Marque para comparar.</p>
+          </div>
+          <div className="row">
+            <input type="search" value={qRank} onChange={e => setQRank(e.target.value)} placeholder="Filtrar por nome ou código" aria-label="Filtrar classificação" style={{ width: 200 }} />
+            <select value={topN} onChange={e => setTopN(+e.target.value)} aria-label="Quantos mostrar">
+              <option value={10}>10 primeiros</option>
+              <option value={20}>20 primeiros</option>
+              <option value={50}>50 primeiros</option>
+              <option value={0}>Todos</option>
+            </select>
+            <button type="button" className="btn sm" onClick={() => setAsc(!asc)} title="Inverter a ordem">{asc ? '▲ Menor primeiro' : '▼ Maior primeiro'}</button>
+            <label className="row note" style={{ gap: 6 }}><input type="checkbox" checked={soComDados} onChange={e => setSoComDados(e.target.checked)} /> Só com dados</label>
+          </div>
+        </div>
+        <div className="tbl scroll" style={{ maxHeight: 620 }}>
+          <table>
+            <thead><tr>
+              <th className="c" style={{ width: 44 }}>#</th><th className="c" style={{ width: 70 }}>Comparar</th><th>Contratante</th>
+              <th style={{ width: '32%' }}>{METRICAS[met].label}</th><th className="r">Valor</th>
+              <th className="r" title="Quantas vezes a mediana dos contratantes">× mediana</th>
+              {somavel && <th className="r" title="Participação no total">% do total</th>}
+            </tr></thead>
+            <tbody>
+              {rankVis.length ? rankVis.map(x => {
+                const v = valor(x, met)!
+                const marcado = selVal.includes(x.c)
+                return (
+                  <tr key={x.c} className={marcado ? 'sel' : undefined}>
+                    <td className="c mono">{posicao.get(x.c)}</td>
+                    <td className="c"><input type="checkbox" checked={marcado} aria-label={`Comparar ${x.nome}`} onChange={() => alternar(x.c)} /></td>
+                    <td><span className="mono note">{x.c}</span> · {x.nome}{!x.ativo && <> <span className="pill p-gray">inativo</span></>}</td>
+                    <td><div className="cmp-barra" title={`${x.nome}: ${fmtVal(v, met)}`}><i style={{ width: (v / maxRank) * 100 + '%' }} /></div></td>
+                    <td className="r mono">{fmtVal(v, met)}</td>
+                    <td className="r mono">{mediana && mediana > 0 ? vezes(v / mediana) : '—'}</td>
+                    {somavel && <td className="r mono">{somaMet > 0 ? fmt((v / somaMet) * 100, 1) + '%' : '—'}</td>}
+                  </tr>
+                )
+              }) : <tr><td colSpan={7} className="empty">Nenhum contratante com {METRICAS[met].label.toLowerCase()}{qRank ? ' para esse filtro' : ''}.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="note">Horas projetadas para o mês como no Fechamento (relatório da Contagem, volumes do Suporte e amostragem do Extra portal). &quot;Tempo por avaliação&quot; não depende da projeção: é o tempo médio de cada documento avaliado para aquele contratante.</p>
+      </div>
+      <div ref={resultadoRef} style={{ scrollMarginTop: 12 }} />
       {escolhidos.length < 2 ? (
-        <div className="box"><div className="empty">Escolha pelo menos dois contratantes para ver a comparação.</div></div>
+        <div className="box"><div className="empty">{escolhidos.length === 1 ? `Marque mais um contratante para comparar com ${escolhidos[0].nome}.` : 'Escolha pelo menos dois contratantes (na busca acima ou marcando na classificação) para ver a comparação aqui.'}</div></div>
       ) : (
         <>
           <div className="box cmp-destaque">
@@ -291,53 +350,6 @@ function ComparativoTela({ ctx, s, linhas, relSel }: {
         </>
       )}
 
-      <div className="box">
-        <div className="row between">
-          <div>
-            <h2>Classificação: {METRICAS[met].label}</h2>
-            <p className="note">{ranking.length} contratante(s) com {METRICAS[met].label.toLowerCase()}{mediana != null ? ` · mediana ${fmtVal(mediana, met)}` : ''}{somavel && somaMet > 0 ? ` · total ${fmtVal(somaMet, met)}` : ''}. Marque para comparar.</p>
-          </div>
-          <div className="row">
-            <input type="search" value={qRank} onChange={e => setQRank(e.target.value)} placeholder="Filtrar por nome ou código" aria-label="Filtrar classificação" style={{ width: 200 }} />
-            <select value={topN} onChange={e => setTopN(+e.target.value)} aria-label="Quantos mostrar">
-              <option value={10}>10 primeiros</option>
-              <option value={20}>20 primeiros</option>
-              <option value={50}>50 primeiros</option>
-              <option value={0}>Todos</option>
-            </select>
-            <button type="button" className="btn sm" onClick={() => setAsc(!asc)} title="Inverter a ordem">{asc ? '▲ Menor primeiro' : '▼ Maior primeiro'}</button>
-            <label className="row note" style={{ gap: 6 }}><input type="checkbox" checked={soComDados} onChange={e => setSoComDados(e.target.checked)} /> Só com dados</label>
-          </div>
-        </div>
-        <div className="tbl scroll" style={{ maxHeight: 620 }}>
-          <table>
-            <thead><tr>
-              <th className="c" style={{ width: 44 }}>#</th><th className="c" style={{ width: 70 }}>Comparar</th><th>Contratante</th>
-              <th style={{ width: '32%' }}>{METRICAS[met].label}</th><th className="r">Valor</th>
-              <th className="r" title="Quantas vezes a mediana dos contratantes">× mediana</th>
-              {somavel && <th className="r" title="Participação no total">% do total</th>}
-            </tr></thead>
-            <tbody>
-              {rankVis.length ? rankVis.map(x => {
-                const v = valor(x, met)!
-                const marcado = selVal.includes(x.c)
-                return (
-                  <tr key={x.c} className={marcado ? 'sel' : undefined}>
-                    <td className="c mono">{posicao.get(x.c)}</td>
-                    <td className="c"><input type="checkbox" checked={marcado} aria-label={`Comparar ${x.nome}`} onChange={() => alternar(x.c)} /></td>
-                    <td><span className="mono note">{x.c}</span> · {x.nome}{!x.ativo && <> <span className="pill p-gray">inativo</span></>}</td>
-                    <td><div className="cmp-barra" title={`${x.nome}: ${fmtVal(v, met)}`}><i style={{ width: (v / maxRank) * 100 + '%' }} /></div></td>
-                    <td className="r mono">{fmtVal(v, met)}</td>
-                    <td className="r mono">{mediana && mediana > 0 ? vezes(v / mediana) : '—'}</td>
-                    {somavel && <td className="r mono">{somaMet > 0 ? fmt((v / somaMet) * 100, 1) + '%' : '—'}</td>}
-                  </tr>
-                )
-              }) : <tr><td colSpan={7} className="empty">Nenhum contratante com {METRICAS[met].label.toLowerCase()}{qRank ? ' para esse filtro' : ''}.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <p className="note">Horas projetadas para o mês como no Fechamento (relatório da Contagem, volumes do Suporte e amostragem do Extra portal). &quot;Tempo por avaliação&quot; não depende da projeção: é o tempo médio de cada documento avaliado para aquele contratante.</p>
-      </div>
     </>
   )
 }
