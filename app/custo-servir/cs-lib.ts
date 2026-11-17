@@ -21,7 +21,8 @@ export type Medicao = {
 /** codigo_integracao preenchido ("Código Perfil Integração" do GT0130) = turno com catraca de acesso. */
 export type Turno = { turno_cod: string; contratante_cod: string; descricao: string | null; codigo_integracao: string | null }
 /** contratante_pai: contratante principal (ex.: unidades da SEDE / MATRIZ). */
-export type Contratante = { contratante_cod: string; nome: string; faturamento_mensal: number; contratante_pai: string | null }
+/** ativo = false: nao atende mais (some das listas de escolha; o historico continua valendo). */
+export type Contratante = { contratante_cod: string; nome: string; faturamento_mensal: number; contratante_pai: string | null; ativo?: boolean }
 /** Documento exigido pelo contratante no GT0010 (por contratante ou por contrato de servico). */
 export type DocCtt = {
   documento_id: string; contratante_cod: string; origem: 'contratante' | 'contrato_servico'
@@ -50,6 +51,7 @@ export const ABAS = [
   { id: 'medicoes', label: 'Medições' },
   { id: 'contagem', label: 'Contagem por contratante' },
   { id: 'resultado', label: 'Resultado' },
+  { id: 'comparativo', label: 'Comparativo' },
   { id: 'suporte', label: 'Suporte' },
   { id: 'extra', label: 'Extra portal' },
   { id: 'bases', label: 'Documentos e bases' },
@@ -467,3 +469,7 @@ export function tempoNoGrupo(ctx: Ctx, g: string, d: string, r: Resultado): { va
   if (p) { const t = tempo(ctx, p.id, d, r); if (t.val != null) return { ...t, g: p.id } }
   return { val: null, est: false, g: null }
 }
+
+/** Contratantes ativos (para listas de escolha), em ordem de codigo. */
+export const cttsAtivos = (ctx: Ctx) =>
+  [...ctx.ctts.values()].filter(c => c.ativo !== false).sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0))

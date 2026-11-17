@@ -112,7 +112,7 @@ function useCsDataInterno() {
         })),
         docs: docs.map(x => ({ ...x, tipo: x.tipo ?? null, validade_dias: x.validade_dias ?? null })), gd, meds,
         turnos: ((turnos ?? []) as Turno[]).map(t => ({ ...t, descricao: t.descricao ?? null, codigo_integracao: t.codigo_integracao ?? null })).sort((a, b) => (+a.turno_cod || 0) - (+b.turno_cod || 0) || a.turno_cod.localeCompare(b.turno_cod)),
-        ctts: ((ctts ?? []) as Contratante[]).map(c => ({ ...c, faturamento_mensal: +c.faturamento_mensal || 0, contratante_pai: c.contratante_pai ?? null }))
+        ctts: ((ctts ?? []) as Contratante[]).map(c => ({ ...c, faturamento_mensal: +c.faturamento_mensal || 0, contratante_pai: c.contratante_pai ?? null, ativo: c.ativo !== false }))
           .sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)),
         rels: (rels ?? []) as Relatorio[],
         usuarios: usuarios as Usuario[],
@@ -346,16 +346,21 @@ function useCsDataInterno() {
   // ── Contratantes ────────────────────────────────────────────────────────────
   const salvarCtt = useCallback(async (cod: string, patch: Partial<Contratante>) => {
     const r = await supabase.from('cs_contratantes_fin').update(patch).eq('contratante_cod', cod)
-    if (r.error) throw new Error(r.error.code === '23505' ? 'Já existe um contratante com esse código.' : r.error.message)
+    if (r.error) {
+      if ('ativo' in patch && /ativo/.test(r.error.message)) throw new Error('Rode a migração sql/custo-servir-ativos-camada2.sql no Supabase para inativar contratantes.')
+      throw new Error(r.error.code === '23505' ? 'Já existe um contratante com esse código.' : r.error.message)
+    }
     // Troca de codigo propaga no banco (turnos, grupos, unidades): rele tudo
     if (patch.contratante_cod && patch.contratante_cod !== cod) { await carregar(); return }
     setD(prev => ({ ...prev, ctts: prev.ctts.map(c => (c.contratante_cod === cod ? { ...c, ...patch } : c)) }))
   }, [supabase, carregar])
 
   const adicionarCtt = useCallback(async (c: Contratante) => {
-    const r = await supabase.from('cs_contratantes_fin').insert(c)
+    const { ativo: _ativo, ...linha } = c   // a coluna ativo nasce true no banco (e pode nem existir antes da migracao)
+    void _ativo
+    const r = await supabase.from('cs_contratantes_fin').insert(linha)
     if (r.error) throw new Error(r.error.code === '23505' ? 'Já existe um contratante com esse código.' : r.error.message)
-    setD(prev => ({ ...prev, ctts: [...prev.ctts, c] }))
+    setD(prev => ({ ...prev, ctts: [...prev.ctts, { ...c, ativo: true }].sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)) }))
   }, [supabase])
 
   const excluirCtt = useCallback(async (cod: string) => {
@@ -484,7 +489,7 @@ function useCsDataInterno() {
     setD(prev => ({ ...prev, conjuntos: [...prev.conjuntos, { ...c, perk: !!c.perk, ordem: c.ordem ?? 0, docs: ds }].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
     return c.id
   }, [supabase, meuId])
-  const salvarConjunto = useCallback(async (id: string, patch: { nome?: string; descricao?: string | null }) => {
+  const salvarConjunto = useCallback(async (id: string, patch: { nome?: string; descricao?: string | null; ordem?: number }) => {
     ok(await supabase.from('cs_conjuntos').update(patch).eq('id', id))
     setD(prev => ({ ...prev, conjuntos: prev.conjuntos.map(c => (c.id === id ? { ...c, ...patch } : c)) }))
   }, [supabase])

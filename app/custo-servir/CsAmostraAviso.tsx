@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '../lib/supabase'
 import { useUser } from '../components/UserContext'
-import { C3_PADRAO, colunasContratantes, hojeIso, horariosDoDia, montarOpcoes, opcoesDe, participa, type Amostragem, type AtividadeC3, type ChaveAmostra, type OpcaoAmostra } from './cs-suporte-lib'
+import { OPCOES_PADRAO, colunasContratantes, hojeIso, horariosDoDia, montarOpcoes, opcoesDe, participa, type Amostragem, type AtividadeC3, type ChaveAmostra, type OpcaoAmostra } from './cs-suporte-lib'
 import { carregarC3 } from './abas/suporte-data'
 import './custo-servir.css'
 
@@ -102,7 +102,7 @@ export default function CsAmostraAviso() {
   const [amostragens, setAmostragens] = useState<Amostragem[]>([])
   const [respondidos, setRespondidos] = useState<Set<string>>(new Set())
   const [ctts, setCtts] = useState<Ctt[]>([])
-  const [c3, setC3] = useState<AtividadeC3[]>(C3_PADRAO)
+  const [c3, setC3] = useState<AtividadeC3[]>(OPCOES_PADRAO)
   const [agora, setAgora] = useState(() => Date.now())
   const [salvando, setSalvando] = useState(false)
   const [, setPuladosVer] = useState(0)
@@ -118,12 +118,12 @@ export default function CsAmostraAviso() {
     const inicioDia = new Date(hoje + 'T00:00:00').toISOString()
     const [{ data: am }, { data: cs }, atividadesC3] = await Promise.all([
       supabase.from('cs_amostras').select('amostragem_id, previsto_em').eq('usuario_id', uid).gte('previsto_em', inicioDia),
-      supabase.from('cs_contratantes_fin').select('contratante_cod, nome'),
+      supabase.from('cs_contratantes_fin').select('*'),
       carregarC3(),
     ])
     setC3(atividadesC3.lista)
     setRespondidos(new Set(((am ?? []) as { amostragem_id: string; previsto_em: string }[]).map(x => x.amostragem_id + '|' + new Date(x.previsto_em).toISOString())))
-    setCtts(((cs ?? []) as Ctt[]).sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)))
+    setCtts(((cs ?? []) as (Ctt & { ativo?: boolean })[]).filter(c => c.ativo !== false).sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)))
   }, [supabase, uid])
 
   useEffect(() => {

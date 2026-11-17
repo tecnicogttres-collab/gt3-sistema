@@ -315,3 +315,22 @@
 .cs .impacto{border:1.5px solid var(--cs-gold);background:#FFFCF6;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:13.5px}
 .cs .impacto .mais{color:var(--cs-bad);font-weight:800}
 .cs .impacto .menos{color:var(--cs-good);font-weight:800}
+
+/* Comparativo entre contratantes */
+.cs .cmp-sug{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:5;background:var(--cs-bg);border:1.5px solid var(--cs-edge);border-radius:10px;box-shadow:0 10px 24px rgb(26 37 64 / .15);display:flex;flex-direction:column;max-height:300px;overflow:auto}
+.cs .cmp-sug button{border:0;border-bottom:1px solid var(--cs-line);background:var(--cs-bg);text-align:left;padding:7px 10px;cursor:pointer;font-size:13px}
+.cs .cmp-sug button:hover,.cs .cmp-sug button:focus-visible{background:var(--cs-tint)}
+.cs .cmp-destaque{border-color:var(--cs-gold);background:#FFFCF6;gap:8px}
+.cs .cmp-frase{font-size:17px;font-weight:700;color:var(--cs-edge-2);line-height:1.35}
+.cs .cmp-outras{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:13.5px}
+.cs .cmp-mini{height:4px;border-radius:2px;background:var(--cs-tint);margin-top:4px;min-width:60px}
+.cs .cmp-mini i{display:block;height:100%;border-radius:2px;background:var(--cs-edge);margin-left:auto}
+.cs .cmp-barra{height:12px;border-radius:0 4px 4px 0;background:var(--cs-tint2)}
+.cs .cmp-barra i{display:block;height:100%;border-radius:0 4px 4px 0;background:var(--cs-edge);min-width:2px}
+.cs .cmp-camadas{display:flex;flex-direction:column;gap:8px}
+.cs .cmp-cam-linha{display:grid;grid-template-columns:minmax(120px,240px) minmax(0,1fr) auto;gap:10px;align-items:center}
+.cs .cmp-cam-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.cs .cmp-cam-barra{display:flex;gap:2px;height:16px;min-width:4px}
+.cs .cmp-cam-barra i{display:block;height:100%;min-width:2px}
+.cs .cmp-cam-barra i:last-child{border-radius:0 4px 4px 0}
+@media (max-width:640px){.cs .cmp-cam-linha{grid-template-columns:minmax(0,1fr) auto}.cs .cmp-cam-barra{grid-column:1 / -1;grid-row:2}}

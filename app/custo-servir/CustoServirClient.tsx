@@ -15,6 +15,7 @@ import Configuracoes from './abas/Configuracoes'
 import Suporte from './abas/Suporte'
 import Bases from './abas/Bases'
 import Fechamento from './abas/Fechamento'
+import Comparativo from './abas/Comparativo'
 import ExtraPortal from './abas/ExtraPortal'
 import { prefetchSuporte } from './abas/suporte-data'
 import { ModoTempoToggle } from './cs-ui'
@@ -37,9 +38,10 @@ const META: Record<AbaId, { icone: string; desc: string }> = {
   medicoes: { icone: '📋', desc: 'Todas as medições registradas, por avaliador.' },
   contagem: { icone: '🏢', desc: 'Relatório do sistema convertido em volume por contratante.' },
   resultado: { icone: '📊', desc: 'Horas e custo por contratante a partir do volume.' },
+  comparativo: { icone: '⚖', desc: 'Compare dois ou mais contratantes e veja o ranking de todos.' },
   suporte: { icone: '🎧', desc: 'Cadastro, e-mail, ligação e demais atendimentos.' },
   extra: { icone: '🧩', desc: 'Atividades fora do portal (camada 3).' },
-  bases: { icone: '📚', desc: 'Catálogo, documentos por contratante e bases de venda.' },
+  bases: { icone: '📚', desc: 'Modelos de venda, contratantes, pacotes de extras e catálogo.' },
   configuracoes: { icone: '⚙', desc: 'Grupos, catálogo, turnos, perfis e parâmetros.' },
   fechamento: { icone: '★', desc: 'A conta inteira: avaliação + suporte contra a capacidade da equipe.' },
 }
@@ -47,7 +49,7 @@ const META: Record<AbaId, { icone: string; desc: string }> = {
 /** Agrupamento das abas (o Fechamento fica fora: tem destaque proprio). */
 const SECOES_NAV: { titulo: string; ids: AbaId[] }[] = [
   { titulo: 'Medir', ids: ['cronometrar', 'tempos', 'medicoes'] },
-  { titulo: 'Volume e resultado', ids: ['contagem', 'resultado'] },
+  { titulo: 'Volume e resultado', ids: ['contagem', 'resultado', 'comparativo'] },
   { titulo: 'Outras atividades', ids: ['suporte', 'extra'] },
   { titulo: 'Cadastros', ids: ['bases', 'configuracoes'] },
 ]
@@ -126,7 +128,7 @@ function Modulo({ aba, setAba, nav, setNav }: {
   }, [abaAtual, telaVisivel, carregando, carregarMedicoes])
 
   // Suporte/Fechamento: comeca a carregar em segundo plano para a aba abrir na hora
-  const veSuporte = abas.some(a => a.id === 'suporte' || a.id === 'extra' || a.id === 'fechamento')
+  const veSuporte = abas.some(a => a.id === 'suporte' || a.id === 'extra' || a.id === 'fechamento' || a.id === 'comparativo')
   useEffect(() => { if (telaVisivel && !carregando && veSuporte) prefetchSuporte() }, [telaVisivel, carregando, veSuporte])
 
   // Esconde o botao flutuante quando a tela do cronometro em andamento esta aberta
@@ -221,6 +223,7 @@ function Modulo({ aba, setAba, nav, setNav }: {
             {abaAtual === 'medicoes' && <Medicoes />}
             {abaAtual === 'contagem' && <Contagem />}
             {abaAtual === 'resultado' && <Resultado />}
+            {abaAtual === 'comparativo' && <Comparativo />}
             {abaAtual === 'suporte' && <Suporte />}
             {abaAtual === 'extra' && <ExtraPortal />}
             {abaAtual === 'bases' && <Bases />}

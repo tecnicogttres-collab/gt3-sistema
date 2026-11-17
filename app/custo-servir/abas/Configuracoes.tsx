@@ -303,7 +303,7 @@ function Contratantes({ ctx }: { ctx: Ctx }) {
     cod: c => +c.contratante_cod || c.contratante_cod, nome: c => c.nome, fat: c => c.faturamento_mensal,
     pai: c => (c.contratante_pai ? nomeCtt(ctx, c.contratante_pai) : null), turnos: c => nTurnos(c.contratante_cod),
     cat: c => ctx.catraca.get(c.contratante_cod) ?? 0,
-    grupo: c => grupoDe(ctx, c.contratante_cod)?.nome,
+    grupo: c => grupoDe(ctx, c.contratante_cod)?.nome, ativo: c => (c.ativo === false ? 0 : 1),
   }, { col: 'cod', dir: 'asc' })
   // Pode ser principal quem nao e unidade de ninguem
   const candidatos = [...d.ctts].filter(c => !c.contratante_pai).sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0))
@@ -326,7 +326,7 @@ function Contratantes({ ctx }: { ctx: Ctx }) {
       </div>
       <div className="tbl scroll">
         <table>
-          <thead><tr>{th('cod', 'Código')}{th('nome', 'Nome')}{th('pai', 'Contratante principal')}{th('turnos', 'Turnos', 'r')}{th('cat', <><IconeCatraca title="Catraca de acesso" /> Catraca</>, 'c', 'Turnos com código de integração')}{th('fat', 'Faturamento/mês (R$)', 'r')}{th('grupo', 'Grupo de critério')}<th /></tr></thead>
+          <thead><tr>{th('cod', 'Código')}{th('nome', 'Nome')}{th('pai', 'Contratante principal')}{th('turnos', 'Turnos', 'r')}{th('cat', <><IconeCatraca title="Catraca de acesso" /> Catraca</>, 'c', 'Turnos com código de integração')}{th('fat', 'Faturamento/mês (R$)', 'r')}{th('grupo', 'Grupo de critério')}{th('ativo', 'Ativo', 'c', 'Inativo: não atende mais (sai das listas; o histórico continua)')}<th /></tr></thead>
           <tbody>
             {ctts.length ? ctts.map(c => {
               const unidades = unidadesDe(ctx, c.contratante_cod)
@@ -353,10 +353,11 @@ function Contratantes({ ctx }: { ctx: Ctx }) {
                   <td className="r"><NumCampo valor={c.faturamento_mensal} permiteVazio={false} ariaLabel="Faturamento" style={{ width: 130, textAlign: 'right' }}
                     onSalvar={v => tentar(() => salvarCtt(c.contratante_cod, { faturamento_mensal: v ?? 0 }))} /></td>
                   <td className="note">{grupoDe(ctx, c.contratante_cod)?.nome}</td>
+                  <td className="c"><input type="checkbox" checked={c.ativo !== false} aria-label="Ativo" onChange={e => tentar(() => salvarCtt(c.contratante_cod, { ativo: e.target.checked }), e.target.checked ? "Contratante reativado" : "Contratante inativado")} /></td>
                   <td><BotaoConfirmar onConfirm={() => tentar(() => excluirCtt(c.contratante_cod), 'Contratante excluído')}>Excluir</BotaoConfirmar></td>
                 </tr>
               )
-            }) : <tr><td colSpan={8} className="empty">Nenhum contratante.</td></tr>}
+            }) : <tr><td colSpan={9} className="empty">Nenhum contratante.</td></tr>}
           </tbody>
         </table>
       </div>

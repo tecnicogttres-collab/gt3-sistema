@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCs } from '../cs-data'
 import {
-  baixar, csvCell, dt, fmt, mmss, nomeCtt, nomeUsuario, norm, unidadesDe,
+  baixar, csvCell, cttsAtivos, dt, fmt, mmss, nomeCtt, nomeUsuario, norm, unidadesDe,
   type Ctx,
 } from '../cs-lib'
 import {
@@ -18,12 +18,14 @@ import { lerMinutos, useTempo } from '../cs-tempo'
 import { lerArquivo } from './Contagem'
 import { NumCampo } from './Resultado'
 import { useSuporte, type SuporteApi } from './suporte-data'
+import { AtividadesPopup } from './ExtraPortal'
 
-const SUBS = [['cron', '⏱ Cronometrar atividade'], ['c2', 'Atividades e volumes'], ['metodo', 'Como funciona']] as const
+const SUBS = [['cron', '⏱ Cronometrar atividade'], ['ativs', '✎ Atividades da camada 2'], ['c2', 'Medições e volumes'], ['metodo', 'Como funciona']] as const
 type Sub = typeof SUBS[number][0]
 
 export default function Suporte() {
-  const { ctx, meuId } = useCs()
+  const { ctx, meuId, papel } = useCs()
+  const gerencia = papel === 'admin' || papel === 'gestor'
   const s = useSuporte(meuId)
   const [sub, setSub] = useState<Sub>('cron')
   if (!ctx) return null
@@ -42,7 +44,14 @@ export default function Suporte() {
       <div className="cfgnav">
         {SUBS.map(([k, l]) => <button key={k} type="button" className={k === sub ? 'on' : ''} onClick={() => setSub(k)}>{l}</button>)}
       </div>
-      {sub === 'c2' && <Camada2 ctx={ctx} s={s} />}
+      {sub === 'ativs' && <>
+        <AtividadesComRastro ctx={ctx} s={s} />
+        {gerencia && <AtividadesPopup s={s} camada={2} />}
+      </>}
+      {sub === 'c2' && <>
+        <CronometroAtividade ctx={ctx} s={s} />
+        <Volumes ctx={ctx} s={s} />
+      </>}
       {sub === 'cron' && <CronometroSimples ctx={ctx} s={s} />}
       {sub === 'metodo' && <Metodo />}
     </>
@@ -52,22 +61,32 @@ export default function Suporte() {
 // ═════════════════════════════════════════════════════════════════════════════
 // Camada 2
 // ═════════════════════════════════════════════════════════════════════════════
-function Camada2({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
+/** Atividades cronometradas da camada 2 (cs_atividades): incluir, editar, ativar/desativar, reordenar e excluir. */
+function AtividadesComRastro({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const { tentar } = useCs()
   const base = ctx.cfg.base
   const tempo = (id: string) => tempoAtividade(s.meds, id, base)
   const [novo, setNovo] = useState('')
   const [novaUn, setNovaUn] = useState<Atividade['unidade']>('quantidade')
+  const ordenadas = [...s.ativs].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
+  const mover = (a: Atividade, dir: -1 | 1) => {
+    const i = ordenadas.findIndex(x => x.id === a.id), b = ordenadas[i + dir]
+    if (!b) return
+    // Ordens iguais (cadastro antigo) ganham posicoes distintas ao trocar
+    const oa = a.ordem === b.ordem ? a.ordem + dir : b.ordem
+    void tentar(async () => { await s.salvarAtividade(a.id, { ordem: oa }); await s.salvarAtividade(b.id, { ordem: a.ordem }) })
+  }
   return (
     <>
       <div className="box">
-        <h2>Atividades com rastro</h2>
-        <p className="note">Mesma lógica da avaliação: volume da atividade × tempo-padrão. Cronometre 5 a 10 de cada para ter o tempo; associe a medição a um contratante ou grupo quando o tempo dele for diferente (ex.: faturamento da SEDE / MATRIZ). Ligação usa os minutos que a central já registra (não precisa de tempo-padrão).</p>
+        <h2>Atividades cronometradas (volume × tempo)</h2>
+        <p className="note">Mesma lógica da avaliação: volume da atividade × tempo-padrão. Inclua, edite ou exclua as atividades aqui; cronometre 5 a 10 de cada para ter o tempo (sub-aba Cronometrar ou Medições e volumes). Desmarque &quot;Ativa&quot; para tirar do cronômetro sem perder o histórico. Ligação usa os minutos que a central já registra (não precisa de tempo-padrão).</p>
         <div className="tbl">
           <table>
-            <thead><tr><th>Atividade</th><th>Unidade</th><th>Fonte do volume</th><th>Liga ao contratante por</th><th className="r">Medições</th><th className="r">Tempo-padrão (min)</th><th title="Contratantes ou grupos com o mínimo de medições próprias">Tempos específicos</th><th className="c">Ativa</th><th /></tr></thead>
+            <thead><tr><th style={{ width: 60 }}>Ordem</th><th>Atividade</th><th>Unidade</th><th>Fonte do volume</th><th>Liga ao contratante por</th><th className="r">Medições</th><th className="r">Tempo-padrão (min)</th><th title="Contratantes ou grupos com o mínimo de medições próprias">Tempos específicos</th><th className="c">Ativa</th><th /></tr></thead>
             <tbody>
-              {s.ativs.map(a => <LinhaAtividade key={a.id} ctx={ctx} s={s} a={a} t={tempo(a.id)} />)}
+              {ordenadas.map((a, i) => <LinhaAtividade key={a.id} ctx={ctx} s={s} a={a} t={tempo(a.id)} subir={i > 0 ? () => mover(a, -1) : undefined} descer={i < ordenadas.length - 1 ? () => mover(a, 1) : undefined} />)}
+              {!ordenadas.length && <tr><td colSpan={10} className="empty">Nenhuma atividade. Inclua a primeira abaixo.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -80,14 +99,12 @@ function Camada2({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
           <button type="button" className="btn solid" disabled={!novo.trim()} onClick={async () => { if (await tentar(() => s.adicionarAtividade(novo.trim(), novaUn), 'Atividade criada')) setNovo('') }}>Adicionar</button>
         </div>
       </div>
-      <CronometroAtividade ctx={ctx} s={s} />
-      <Volumes ctx={ctx} s={s} />
     </>
   )
 }
 
 /** Linha da atividade: ver, editar (nome, unidade, fonte, ligacao) e excluir. */
-function LinhaAtividade({ ctx, s, a, t }: { ctx: Ctx; s: SuporteApi; a: Atividade; t: ReturnType<typeof tempoAtividade> }) {
+function LinhaAtividade({ ctx, s, a, t, subir, descer }: { ctx: Ctx; s: SuporteApi; a: Atividade; t: ReturnType<typeof tempoAtividade>; subir?: () => void; descer?: () => void }) {
   const { tentar } = useCs()
   const tm = useTempo()
   const [ed, setEd] = useState<{ nome: string; unidade: Atividade['unidade']; fonte: string; liga_por: string } | null>(null)
@@ -96,6 +113,7 @@ function LinhaAtividade({ ctx, s, a, t }: { ctx: Ctx; s: SuporteApi; a: Atividad
   if (ed) {
     return (
       <tr className="sel">
+        <td />
         <td><input type="text" value={ed.nome} onChange={e => setEd({ ...ed, nome: e.target.value })} aria-label="Nome" style={{ width: '100%', minWidth: 160 }} /></td>
         <td>
           <select value={ed.unidade} onChange={e => setEd({ ...ed, unidade: e.target.value as Atividade['unidade'] })} aria-label="Unidade">
@@ -120,7 +138,8 @@ function LinhaAtividade({ ctx, s, a, t }: { ctx: Ctx; s: SuporteApi; a: Atividad
   }
   return (
     <tr>
-      <td><b style={{ fontWeight: 600 }}>{a.nome}</b></td>
+      <td><span className="pills"><button type="button" className="link" aria-label="Subir" disabled={!subir} onClick={subir}>▲</button><button type="button" className="link" aria-label="Descer" disabled={!descer} onClick={descer}>▼</button></span></td>
+      <td><b style={{ fontWeight: 600, opacity: a.ativo ? 1 : 0.55 }}>{a.nome}</b></td>
       <td className="note">{a.unidade === 'minutos' ? 'minutos' : 'quantidade'}</td>
       <td className="note">{a.fonte ?? '—'}</td>
       <td className="note">{a.liga_por ?? '—'}</td>
@@ -179,7 +198,7 @@ function CronometroSimples({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const a = ativs.find(x => x.id === sel)
   const ms = decorrido(t)
   const zerar = () => setT({ run: false, acc: 0, t0: 0 })
-  const ctts = [...ctx.ctts.values()].sort((x, y) => (+x.contratante_cod || 0) - (+y.contratante_cod || 0))
+  const ctts = cttsAtivos(ctx)
   const minhas = s.meds.filter(m => m.avaliador_id === meuId).slice(0, 8)
 
   async function terminar() {
@@ -306,7 +325,7 @@ function CronometroAtividade({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const codAssoc = assoc ? assoc.slice(2) : null, grupoAssoc = assoc.startsWith('g:')
   const tpAssoc = sel && codAssoc ? tempoAtividade(s.meds, sel.id, ctx.cfg.base, m => m.contratante_cod === codAssoc && m.grupo === grupoAssoc) : null
   const principais = [...new Set([...ctx.ctts.values()].map(c => c.contratante_pai).filter((x): x is string => !!x))].sort((a, b) => (+a || 0) - (+b || 0))
-  const ctts = [...ctx.ctts.values()].sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0))
+  const ctts = cttsAtivos(ctx)
   return (
     <div className="timer">
       <div className={'clock' + (t.run ? ' run' : t.parado ? ' stop' : '')}>

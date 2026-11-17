@@ -27,7 +27,7 @@ export default function ExtraPortal() {
   return (
     <>
       <MinhaParticipacao ctx={ctx} s={s} />
-      {gerencia && <AtividadesC3 s={s} />}
+      {gerencia && <AtividadesPopup s={s} camada={3} />}
       {gerencia && <Configurar s={s} />}
       {gerencia && <ResultadoPesquisa ctx={ctx} s={s} />}
     </>
@@ -44,7 +44,7 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const [abrir, setAbrir] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [minhas, setMinhas] = useState<Amostra[]>([])
-  const ctts = useMemo(() => [...d.ctts].sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)), [d.ctts])
+  const ctts = useMemo(() => d.ctts.filter(c => c.ativo !== false).sort((a, b) => (+a.contratante_cod || 0) - (+b.contratante_cod || 0)), [d.ctts])
 
   // Minhas respostas de hoje (pop-up e por conta propria)
   const ids = ativas.map(a => a.id).join(',')
@@ -127,18 +127,24 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // Gestor/admin: atividades da camada 3 (opcoes do pop-up fora do portal)
 // ═════════════════════════════════════════════════════════════════════════════
-function AtividadesC3({ s }: { s: SuporteApi }) {
+/** Opcoes editaveis do pop-up de uma camada: 2 (com rastro, aba Suporte) ou 3 (difuso, aba Extra portal). */
+export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 }) {
   const { toast, tentar } = useCs()
   const [novo, setNovo] = useState({ label: '', inclui: '' })
   const [edit, setEdit] = useState<{ chave: string; label: string; inclui: string } | null>(null)
   const [verInativas, setVerInativas] = useState(false)
-  const ativas = s.c3.filter(a => a.ativo).sort((a, b) => a.ordem - b.ordem)
-  const inativas = s.c3.filter(a => !a.ativo)
+  const daCamada = s.c3.filter(a => a.camada === camada)
+  const ativas = daCamada.filter(a => a.ativo).sort((a, b) => a.ordem - b.ordem)
+  const inativas = daCamada.filter(a => !a.ativo)
+  const editavel = s.c3Tabela && (camada === 3 || s.c2Editavel)
+  // Nome unico no pop-up inteiro (as duas camadas aparecem juntas)
   const nomeRepetido = (label: string, chave?: string) =>
     s.c3.some(a => a.chave !== chave && a.ativo && a.label.trim().toLowerCase() === label.trim().toLowerCase())
+  const fixas = camada === 2 ? 'Avaliação, as da camada 3 (aba Extra portal), Interno e Sem demanda' : 'Avaliação, as da camada 2 (aba Suporte), Interno e Sem demanda'
+  const exemplo = camada === 2 ? ['ex.: Portal do prestador', 'ex.: Liberar acesso, redefinir senha'] : ['ex.: Teams', 'ex.: Mensagens e chamadas pelo Teams']
 
   async function incluir() {
-    if (await tentar(() => s.adicionarC3(novo.label.trim(), novo.inclui.trim()), 'Atividade incluída')) setNovo({ label: '', inclui: '' })
+    if (await tentar(() => s.adicionarC3(novo.label.trim(), novo.inclui.trim(), camada), 'Atividade incluída')) setNovo({ label: '', inclui: '' })
   }
   async function salvarEdicao() {
     if (!edit) return
@@ -159,9 +165,15 @@ function AtividadesC3({ s }: { s: SuporteApi }) {
 
   return (
     <div className="box">
-      <h2>Atividades da camada 3 (gestor e admin)</h2>
-      <p className="note">Trabalho fora do portal sem rastro, medido pela amostragem. Estas atividades aparecem como botões no pop-up, entre as fixas (Avaliação, Cadastro, E-mail, Ligação, Faturamento, Interno e Sem demanda), e sempre pedem o contratante.</p>
-      {!s.c3Tabela && <div className="warnbox">Para editar, rode <b>sql/custo-servir-camada3-atividades.sql</b> no SQL Editor do Supabase. Até lá valem WhatsApp e Orientação.</div>}
+      <h2>{camada === 2 ? 'Atividades da camada 2 no pop-up (gestor e admin)' : 'Atividades da camada 3 (gestor e admin)'}</h2>
+      <p className="note">
+        {camada === 2
+          ? 'Trabalho com rastro (cadastro, e-mail, ligação...). Estas opções aparecem como botões no pop-up da amostragem e sempre pedem o contratante. '
+          : 'Trabalho fora do portal sem rastro, medido pela amostragem. Estas atividades aparecem como botões no pop-up e sempre pedem o contratante. '}
+        Também aparecem no pop-up, editadas em outro lugar: {fixas}.
+      </p>
+      {!s.c3Tabela && <div className="warnbox">Para editar, rode <b>sql/custo-servir-camada3-atividades.sql</b> no SQL Editor do Supabase.</div>}
+      {s.c3Tabela && camada === 2 && !s.c2Editavel && <div className="warnbox">Para editar, rode <b>sql/custo-servir-ativos-camada2.sql</b> no SQL Editor do Supabase. Até lá valem Cadastro, E-mail, Ligação e Faturamento.</div>}
 
       <div className="tbl">
         <table>
@@ -183,34 +195,34 @@ function AtividadesC3({ s }: { s: SuporteApi }) {
               <tr key={a.chave}>
                 <td>
                   <span className="pills">
-                    <button type="button" className="link" aria-label="Subir" disabled={i === 0 || !s.c3Tabela} onClick={() => void mover(a, -1)}>▲</button>
-                    <button type="button" className="link" aria-label="Descer" disabled={i === ativas.length - 1 || !s.c3Tabela} onClick={() => void mover(a, 1)}>▼</button>
+                    <button type="button" className="link" aria-label="Subir" disabled={i === 0 || !editavel} onClick={() => void mover(a, -1)}>▲</button>
+                    <button type="button" className="link" aria-label="Descer" disabled={i === ativas.length - 1 || !editavel} onClick={() => void mover(a, 1)}>▼</button>
                   </span>
                 </td>
                 <td><b style={{ fontWeight: 600 }}>{a.label}</b></td>
                 <td className="note">{a.inclui || '—'}</td>
                 <td>
                   <span className="pills">
-                    <button type="button" className="btn sm" disabled={!s.c3Tabela} onClick={() => setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' })}>Editar</button>
-                    <BotaoConfirmar disabled={!s.c3Tabela} onConfirm={() => void remover(a)}>Remover</BotaoConfirmar>
+                    <button type="button" className="btn sm" disabled={!editavel} onClick={() => setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' })}>Editar</button>
+                    <BotaoConfirmar disabled={!editavel} onConfirm={() => void remover(a)}>Remover</BotaoConfirmar>
                   </span>
                 </td>
               </tr>
             ))}
-            {!ativas.length && <tr><td colSpan={4} className="empty">Nenhuma atividade de camada 3 ativa. O pop-up mostra só as opções fixas.</td></tr>}
+            {!ativas.length && <tr><td colSpan={4} className="empty">Nenhuma atividade da camada {camada} ativa no pop-up.</td></tr>}
           </tbody>
         </table>
       </div>
 
       <div className="kv">
-        <label>Nova atividade<input type="text" value={novo.label} disabled={!s.c3Tabela} onChange={e => setNovo({ ...novo, label: e.target.value })} placeholder="ex.: Teams" /></label>
-        <label>O que inclui<input type="text" value={novo.inclui} disabled={!s.c3Tabela} onChange={e => setNovo({ ...novo, inclui: e.target.value })} placeholder="ex.: Mensagens e chamadas pelo Teams" /></label>
+        <label>Nova atividade<input type="text" value={novo.label} disabled={!editavel} onChange={e => setNovo({ ...novo, label: e.target.value })} placeholder={exemplo[0]} /></label>
+        <label>O que inclui<input type="text" value={novo.inclui} disabled={!editavel} onChange={e => setNovo({ ...novo, inclui: e.target.value })} placeholder={exemplo[1]} /></label>
       </div>
       <div className="row">
-        <button type="button" className="btn solid" disabled={!s.c3Tabela || !novo.label.trim() || nomeRepetido(novo.label)} onClick={() => void incluir()}>+ Incluir atividade</button>
+        <button type="button" className="btn solid" disabled={!editavel || !novo.label.trim() || nomeRepetido(novo.label)} onClick={() => void incluir()}>+ Incluir atividade</button>
         {novo.label.trim() && nomeRepetido(novo.label) && <span className="note">Já existe uma atividade com esse nome.</span>}
       </div>
-      <p className="note">Pesquisas com &quot;O que conta: todas&quot; passam a mostrar a nova atividade no pop-up na hora. Nas que têm opções escolhidas, marque-a em Editar. Remover uma atividade que já tem respostas só a tira do pop-up: as respostas continuam no resultado.</p>
+      <p className="note">Pesquisas com &quot;O que conta: todas&quot; passam a mostrar a nova atividade no pop-up na hora. Nas que têm opções escolhidas, marque-a em Editar (aba Extra portal). Remover uma atividade que já tem respostas só a tira do pop-up: as respostas continuam no resultado.</p>
 
       {inativas.length > 0 && (
         <>
@@ -220,7 +232,7 @@ function AtividadesC3({ s }: { s: SuporteApi }) {
               {inativas.map(a => (
                 <span key={a.chave} className="selbar" style={{ padding: '4px 10px' }}>
                   {a.label}
-                  <button type="button" className="link" disabled={!s.c3Tabela} onClick={() => void tentar(() => s.salvarC3(a.chave, { ativo: true, ordem: Math.max(0, ...s.c3.map(x => x.ordem)) + 1 }), `"${a.label}" voltou ao pop-up`)}>reativar</button>
+                  <button type="button" className="link" disabled={!editavel} onClick={() => void tentar(() => s.salvarC3(a.chave, { ativo: true, ordem: Math.max(0, ...daCamada.map(x => x.ordem)) + 1 }), `"${a.label}" voltou ao pop-up`)}>reativar</button>
                 </span>
               ))}
             </div>
@@ -457,13 +469,13 @@ function ResultadoPesquisa({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const a = s.amSel
   if (!a) return null
   const ativos = d.usuarios.filter(u => !u.desativado)
-  const c3 = calcCamada3(s.amostras)
+  const c3 = calcCamada3(s.amostras, s.c3)
   const fin = financeiro(ctx.cfg)
   const previstas = avisosPrevistosAte(a, ativos.map(u => u.id))
   const nPopup = s.amostras.filter(x => !x.espontanea).length
   const nProprio = c3.n - nPopup
   const pct = (n: number) => (c3.n ? n / c3.n : 0)
-  const nomesC3 = s.c3.filter(x => x.ativo).map(x => x.label).join(', ')
+  const nomesC3 = s.c3.filter(x => x.ativo && x.camada === 3).map(x => x.label).join(', ')
   return (
     <div className="box">
       <div className="row between">

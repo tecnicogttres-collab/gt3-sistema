@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '../../lib/supabase'
-import { C3_PADRAO, CHAVES_FIXAS, colunasContratantes, type Amostra, type AtividadeC3, type Amostragem, type AtivMedicao, type Atividade, type VolumeLinha, type VolumeLote } from '../cs-suporte-lib'
+import { C2_PADRAO, CHAVES_FIXAS, OPCOES_PADRAO, colunasContratantes, type Amostra, type AtividadeC3, type Amostragem, type AtivMedicao, type Atividade, type VolumeLinha, type VolumeLote } from '../cs-suporte-lib'
 
 type PageRes<T> = PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null }>
 async function todas<T>(q: (a: number, b: number) => PageRes<T>): Promise<T[]> {
@@ -32,7 +32,7 @@ function ok<T>(r: { data: T; error: { message: string } | null }): T {
 // buscava tudo de novo e travava em "Carregando…". Agora a 1a busca e feita em segundo
 // plano quando o modulo abre (prefetchSuporte) e as entradas seguintes sao instantaneas,
 // com atualizacao silenciosa por tras.
-type Base = { ativs: Atividade[]; meds: AtivMedicao[]; lotes: VolumeLote[]; amostragens: Amostragem[]; c3: AtividadeC3[]; c3Tabela: boolean }
+type Base = { ativs: Atividade[]; meds: AtivMedicao[]; lotes: VolumeLote[]; amostragens: Amostragem[]; c3: AtividadeC3[]; c3Tabela: boolean; c2Editavel: boolean }
 type Cache = Partial<Base> & { linhasDe?: { id: string; linhas: VolumeLinha[] } | null; amostrasDe?: { id: string; amostras: Amostra[] } | null }
 const cache: Cache = {}
 let emVoo: Promise<Base> | null = null
@@ -47,18 +47,22 @@ function buscarBase(): Promise<Base> {
     todas<Amostragem>((x, y) => supabase.from('cs_amostragens').select('*').order('inicio', { ascending: false }).range(x, y)),
     carregarC3(),
   ]).then(([ativs, m, lotes, amostragens, c3]) => {
-    const b: Base = { ativs, meds: m.map(x => ({ ...x, contratante_cod: x.contratante_cod ?? null, grupo: !!x.grupo })), lotes, amostragens, c3: c3.lista, c3Tabela: c3.tabela }
+    const b: Base = { ativs, meds: m.map(x => ({ ...x, contratante_cod: x.contratante_cod ?? null, grupo: !!x.grupo })), lotes, amostragens, c3: c3.lista, c3Tabela: c3.tabela, c2Editavel: c3.camada2 }
     Object.assign(cache, b)
     return b
   }).finally(() => { emVoo = null })
   return emVoo
 }
 
-/** Atividades da camada 3. Sem a tabela (migracao nao rodou), vale a lista padrao e a edicao fica bloqueada. */
-export async function carregarC3(): Promise<{ lista: AtividadeC3[]; tabela: boolean }> {
-  const { data, error } = await createClient().from('cs_camada3_atividades').select('chave, label, inclui, ordem, ativo').order('ordem')
-  if (error) return { lista: C3_PADRAO, tabela: false }
-  return { lista: (data ?? []) as AtividadeC3[], tabela: true }
+/** Opcoes editaveis do pop-up (camadas 2 e 3). Sem a tabela, vale a lista padrao e a edicao fica bloqueada;
+ *  sem a coluna `camada` (migracao sql/custo-servir-ativos-camada2.sql), a camada 2 fica fixa (padrao). */
+export async function carregarC3(): Promise<{ lista: AtividadeC3[]; tabela: boolean; camada2: boolean }> {
+  const sb = createClient()
+  const r = await sb.from('cs_camada3_atividades').select('chave, label, inclui, ordem, ativo, camada').order('ordem')
+  if (!r.error) return { lista: ((r.data ?? []) as AtividadeC3[]).map(a => ({ ...a, camada: a.camada === 2 ? 2 : 3 })), tabela: true, camada2: true }
+  const v = await sb.from('cs_camada3_atividades').select('chave, label, inclui, ordem, ativo').order('ordem')
+  if (v.error) return { lista: OPCOES_PADRAO, tabela: false, camada2: false }
+  return { lista: [...C2_PADRAO, ...((v.data ?? []) as Omit<AtividadeC3, 'camada'>[]).map(a => ({ ...a, camada: 3 as const }))], tabela: true, camada2: false }
 }
 
 /** Comeca a carregar o suporte em segundo plano (chamado quando o modulo abre). */
@@ -73,8 +77,9 @@ export function useSuporte(meuId: string) {
   const [meds, setMeds] = useState<AtivMedicao[]>(() => cache.meds ?? [])
   const [lotes, setLotes] = useState<VolumeLote[]>(() => cache.lotes ?? [])
   const [amostragens, setAmostragens] = useState<Amostragem[]>(() => cache.amostragens ?? [])
-  const [c3, setC3] = useState<AtividadeC3[]>(() => cache.c3 ?? C3_PADRAO)
+  const [c3, setC3] = useState<AtividadeC3[]>(() => cache.c3 ?? OPCOES_PADRAO)
   const [c3Tabela, setC3Tabela] = useState(() => cache.c3Tabela ?? false)
+  const [c2Editavel, setC2Editavel] = useState(() => cache.c2Editavel ?? false)
   const [carregando, setCarregando] = useState(() => !cache.ativs)
   const [faltaSql, setFaltaSql] = useState(false)
   const [loteId, setLoteId] = useState<string | null>(null)
@@ -83,14 +88,14 @@ export function useSuporte(meuId: string) {
   const [amostrasDe, setAmostrasDe] = useState<{ id: string; amostras: Amostra[] } | null>(() => cache.amostrasDe ?? null)
 
   // Mantem o cache igual ao estado (inclui o que as acoes de salvar/excluir mudam)
-  useEffect(() => { if (!carregando) Object.assign(cache, { ativs, meds, lotes, amostragens, c3, c3Tabela }) }, [carregando, ativs, meds, lotes, amostragens, c3, c3Tabela])
+  useEffect(() => { if (!carregando) Object.assign(cache, { ativs, meds, lotes, amostragens, c3, c3Tabela, c2Editavel }) }, [carregando, ativs, meds, lotes, amostragens, c3, c3Tabela, c2Editavel])
   useEffect(() => { cache.linhasDe = linhasDe }, [linhasDe])
   useEffect(() => { cache.amostrasDe = amostrasDe }, [amostrasDe])
 
   const carregar = useCallback(async () => {
     try {
       const b = await buscarBase()
-      setAtivs(b.ativs); setMeds(b.meds); setLotes(b.lotes); setAmostragens(b.amostragens); setC3(b.c3); setC3Tabela(b.c3Tabela); setFaltaSql(false)
+      setAtivs(b.ativs); setMeds(b.meds); setLotes(b.lotes); setAmostragens(b.amostragens); setC3(b.c3); setC3Tabela(b.c3Tabela); setC2Editavel(b.c2Editavel); setFaltaSql(false)
     } catch (e) {
       const code = (e as { code?: string }).code
       if (code === '42P01' || code === 'PGRST205') setFaltaSql(true)
@@ -213,24 +218,32 @@ export function useSuporte(meuId: string) {
 
   // ── Atividades da camada 3 (Extra portal) ─────────────────────────────────
   const SEM_TABELA_C3 = 'Rode a migração sql/custo-servir-camada3-atividades.sql no Supabase para editar as atividades da camada 3.'
-  const adicionarC3 = useCallback(async (label: string, inclui: string) => {
+  const SEM_COLUNA_C2 = 'Rode a migração sql/custo-servir-ativos-camada2.sql no Supabase para editar as opções da camada 2.'
+  const podeEditar = useCallback((chave: string) => {
     if (!c3Tabela) throw new Error(SEM_TABELA_C3)
+    if (!c2Editavel && c3.find(a => a.chave === chave)?.camada === 2) throw new Error(SEM_COLUNA_C2)
+  }, [c3, c3Tabela, c2Editavel])
+  const adicionarC3 = useCallback(async (label: string, inclui: string, camada: 2 | 3 = 3) => {
+    if (!c3Tabela) throw new Error(SEM_TABELA_C3)
+    if (camada === 2 && !c2Editavel) throw new Error(SEM_COLUNA_C2)
     const base = label.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'atividade'
     const usadas = new Set([...CHAVES_FIXAS, ...c3.map(a => a.chave)])
     let chave = base
     for (let i = 2; usadas.has(chave); i++) chave = `${base}_${i}`
-    const ordem = Math.max(0, ...c3.map(a => a.ordem)) + 1
-    const r = ok(await supabase.from('cs_camada3_atividades').insert({ chave, label, inclui: inclui || null, ordem }).select('chave, label, inclui, ordem, ativo').single()) as AtividadeC3
-    setC3(p => [...p, r])
-  }, [supabase, c3, c3Tabela])
+    const ordem = Math.max(0, ...c3.filter(a => a.camada === camada).map(a => a.ordem)) + 1
+    const row: Record<string, unknown> = { chave, label, inclui: inclui || null, ordem }
+    if (c2Editavel) row.camada = camada
+    const r = ok(await supabase.from('cs_camada3_atividades').insert(row).select('*').single()) as AtividadeC3
+    setC3(p => [...p, { ...r, camada }])
+  }, [supabase, c3, c3Tabela, c2Editavel])
   const salvarC3 = useCallback(async (chave: string, patch: Partial<Pick<AtividadeC3, 'label' | 'inclui' | 'ordem' | 'ativo'>>) => {
-    if (!c3Tabela) throw new Error(SEM_TABELA_C3)
+    podeEditar(chave)
     ok(await supabase.from('cs_camada3_atividades').update(patch).eq('chave', chave))
     setC3(p => p.map(a => (a.chave === chave ? { ...a, ...patch } : a)))
-  }, [supabase, c3Tabela])
+  }, [supabase, podeEditar])
   /** Remove: com respostas gravadas, so desativa (o historico continua contando); sem respostas, exclui. */
   const removerC3 = useCallback(async (chave: string): Promise<'excluida' | 'desativada'> => {
-    if (!c3Tabela) throw new Error(SEM_TABELA_C3)
+    podeEditar(chave)
     const { count, error } = await supabase.from('cs_amostras').select('id', { count: 'exact', head: true }).eq('atividade', chave)
     if (error) throw new Error(error.message)
     if (count) {
@@ -241,10 +254,10 @@ export function useSuporte(meuId: string) {
     ok(await supabase.from('cs_camada3_atividades').delete().eq('chave', chave))
     setC3(p => p.filter(a => a.chave !== chave))
     return 'excluida'
-  }, [supabase, c3Tabela])
+  }, [supabase, podeEditar])
 
   return {
-    c3, c3Tabela, adicionarC3, salvarC3, removerC3,
+    c3, c3Tabela, c2Editavel, adicionarC3, salvarC3, removerC3,
     carregando, faltaSql, recarregar: carregar, ativs, meds, lotes, loteSel, setLoteId, linhas, amostragens, amSel, setAmId, amostras,
     recarregarAmostras, salvarAtividade, adicionarAtividade, excluirAtividade, registrarMedAtiv, alternarMedAtiv, excluirMedAtiv,
     importarLote, adicionarLinhas, atualizarLote, excluirLote, criarAmostragem, salvarAmostragem, excluirAmostragem, registrarAmostra,

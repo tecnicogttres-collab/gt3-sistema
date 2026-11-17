@@ -27,7 +27,7 @@ function FechamentoConta({ ctx, s, linhas, relSel }: { ctx: Ctx; s: SuporteApi; 
   const diasMes = ctx.cfg.dias_mes ?? ctx.cfg.dias_uteis
   const f2 = s.loteSel?.dias_uteis && diasMes ? diasMes / s.loteSel.dias_uteis : null
   const c2 = calcCamada2(s.linhas, s.ativs, tempoC2(ctx, s.meds))
-  const c3 = calcCamada3(s.amostras)
+  const c3 = calcCamada3(s.amostras, s.c3)
   const cap = fin.ok ? fin.cap : null
 
   const cods = [...new Set([...Object.keys(r.by), ...Object.keys(c2.porCtt), ...Object.keys(c3.porCttCamada3)])]
@@ -54,7 +54,7 @@ function FechamentoConta({ ctx, s, linhas, relSel }: { ctx: Ctx; s: SuporteApi; 
   if (!fin.ok) faltas.push('Parâmetros da equipe (aba Resultado) para a capacidade prática e o custo-hora.')
   if (!relSel) faltas.push('Relatório EFIDOCEMP-201 importado (aba Contagem) para a camada 1.')
   else if (!f1) faltas.push('Dias úteis do relatório (aba Resultado) para projetar a camada 1.')
-  if (!s.loteSel) faltas.push('Volumes da camada 2 (Suporte › Camada 2).')
+  if (!s.loteSel) faltas.push('Volumes da camada 2 (Suporte › Medições e volumes).')
   else if (!f2) faltas.push('Dias úteis do lote de volumes da camada 2.')
   if (!c3.n) faltas.push('Respostas de uma amostragem (aba Extra portal).')
 
