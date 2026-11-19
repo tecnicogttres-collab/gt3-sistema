@@ -909,7 +909,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             onSwapSide={() => setSplit(prev => ({ ...prev, side: 'right' }))}
           />
         )}
-        {splitActive && <SplitDivider onMouseDown={startDrag} />}
+        {splitActive && split.side === 'left' && <SplitDivider onMouseDown={startDrag} />}
         <div style={{
           position: 'relative', display: 'flex', flexDirection: 'column',
           flex: splitActive ? undefined : 1,

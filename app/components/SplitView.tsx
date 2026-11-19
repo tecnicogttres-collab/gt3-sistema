@@ -155,7 +155,19 @@ export function SplitViewButton({
   onChange: (next: SplitState) => void
 }) {
   const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const active = split.open && !!split.path
+
+  // Fecha ao clicar fora ou com Esc. (Antes fechava no mouseleave: ao escolher o módulo na lista
+  // suspensa, que abre para fora do painel, ele sumia antes do clique em "Ativar".)
+  useEffect(() => {
+    if (!open) return
+    const fora = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', fora)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc) }
+  }, [open])
   const activeModule = active ? modules.find(m => m.path === split.path) : null
 
   function activate(path: string, side: SplitSide) {
@@ -165,8 +177,8 @@ export function SplitViewButton({
 
   if (active) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 4,
+      <div ref={wrapRef} style={{
+        position: 'relative', display: 'flex', alignItems: 'center', gap: 4,
         background: '#EBF0FB', border: '1px solid #C7D6F0',
         borderRadius: 20, padding: '4px 6px 4px 10px', fontSize: 12, fontWeight: 600, color: '#1E3A6E',
       }}>
@@ -182,14 +194,14 @@ export function SplitViewButton({
           style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#1E3A6E', fontSize: 13, padding: '2px 6px' }}
         >✕</button>
         {open && (
-          <SplitPicker modules={modules} onPick={activate} onClose={() => setOpen(false)} />
+          <SplitPicker modules={modules} current={split.path} onPick={activate} />
         )}
       </div>
     )
   }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(v => !v)}
         title="Dividir tela e fixar um módulo"
@@ -202,25 +214,24 @@ export function SplitViewButton({
         ⧉ Dividir tela
       </button>
       {open && (
-        <SplitPicker modules={modules} onPick={activate} onClose={() => setOpen(false)} />
+        <SplitPicker modules={modules} current={split.path} onPick={activate} />
       )}
     </div>
   )
 }
 
 function SplitPicker({
-  modules, onPick, onClose,
+  modules, current, onPick,
 }: {
   modules: Module[]
+  current: string | null
   onPick: (path: string, side: SplitSide) => void
-  onClose: () => void
 }) {
-  const [path, setPath] = useState(modules[0]?.path ?? '')
+  const [path, setPath] = useState(current && modules.some(m => m.path === current) ? current : modules[0]?.path ?? '')
   const [side, setSide] = useState<SplitSide>('right')
 
   return (
     <div
-      onMouseLeave={onClose}
       style={{
         position: 'absolute', top: 'calc(100% + 6px)', right: 0,
         background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10,
