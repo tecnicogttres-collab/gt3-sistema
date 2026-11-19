@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { CsProvider, useCs } from './cs-data'
-import { ABAS, type AbaId } from './cs-lib'
+import { ABAS, abaVetada, type AbaId } from './cs-lib'
 import { consumirPedidoAbrir, getTimer, onPedidoAbrir, setVendoCronometro, useTimer } from './cs-timer'
 import { CS_PATH } from './CsTimerFloat'
 import Cronometrar, { type NavCron } from './abas/Cronometrar'
@@ -40,19 +40,29 @@ const META: Record<AbaId, { icone: string; desc: string }> = {
   resultado: { icone: '📊', desc: 'Horas e custo por contratante a partir do volume.' },
   comparativo: { icone: '⚖', desc: 'Compare dois ou mais contratantes e veja o ranking de todos.' },
   suporte: { icone: '🎧', desc: 'Cadastro, e-mail, ligação e demais atendimentos.' },
-  extra: { icone: '🧩', desc: 'Atividades fora do portal (camada 3).' },
+  extra: { icone: '🧩', desc: 'Atividades fora do portal (WhatsApp, Teams...), medidas por amostragem.' },
   bases: { icone: '📚', desc: 'Modelos de venda, contratantes, pacotes de extras e catálogo.' },
   configuracoes: { icone: '⚙', desc: 'Grupos de critério, documentos de cada grupo, catálogo, contratantes, turnos e parâmetros.' },
   fechamento: { icone: '★', desc: 'A conta inteira: avaliação + suporte contra a capacidade da equipe.' },
 }
 
-/** Agrupamento das abas (Fechamento e Definicoes ficam fora: vao no topo da barra). */
-const SECOES_NAV: { titulo: string; ids: AbaId[] }[] = [
-  { titulo: 'Medir', ids: ['cronometrar', 'tempos', 'medicoes'] },
-  { titulo: 'Volume e resultado', ids: ['contagem', 'resultado', 'comparativo'] },
-  { titulo: 'Outras atividades', ids: ['suporte', 'extra'] },
-  { titulo: 'Cadastros', ids: ['bases'] },
+/** Agrupamento das abas (Fechamento e Definicoes ficam fora: vao no topo da barra).
+ *  O Medir se divide nas tres camadas: avaliacao no portal, suporte com rastro e extra portal. */
+type GrupoNav = { camada?: string; ids: AbaId[] }
+const SECOES_NAV: { titulo: string; grupos: GrupoNav[] }[] = [
+  {
+    titulo: 'Medir', grupos: [
+      { camada: 'Camada 1', ids: ['cronometrar', 'tempos', 'medicoes'] },
+      { camada: 'Camada 2', ids: ['suporte'] },
+      { camada: 'Camada 3', ids: ['extra'] },
+    ],
+  },
+  { titulo: 'Volume e resultado', grupos: [{ ids: ['contagem', 'resultado', 'comparativo'] }] },
+  { titulo: 'Cadastros', grupos: [{ ids: ['bases'] }] },
 ]
+/** Grupos da secao com ao menos uma aba visivel (cada um so com as abas visiveis). */
+const gruposVisiveis = (grupos: GrupoNav[], visivel: (id: AbaId) => boolean) =>
+  grupos.map(g => ({ ...g, ids: g.ids.filter(visivel) })).filter(g => g.ids.length)
 
 const LS_LATERAL = 'cs_nav_recolhida'
 const rotulo = (id: AbaId) => ABAS.find(a => a.id === id)?.label ?? id
@@ -99,9 +109,9 @@ function Modulo({ aba, setAba, nav, setNav }: {
   const telaVisivel = pathname === CS_PATH
   const T = useTimer()
 
-  // Abas visiveis por perfil (cs_config.abas_perfis). Admin sempre ve todas.
+  // Abas visiveis por perfil (cs_config.abas_perfis). Admin sempre ve todas; vetos fixos (ABAS_VETADAS) valem sempre.
   const mapa = d.cfg?.abas_perfis ?? {}
-  const abas = ABAS.filter(a => papel === 'admin' || !mapa[a.id] || mapa[a.id].includes(papel))
+  const abas = ABAS.filter(a => papel === 'admin' || (!abaVetada(a.id, papel) && (!mapa[a.id] || mapa[a.id].includes(papel))))
   const visivel = (id: AbaId) => abas.some(a => a.id === id)
   const abaAtual: Tela = aba === 'inicio' || visivel(aba) ? aba : 'inicio'
 
@@ -198,18 +208,23 @@ function Modulo({ aba, setAba, nav, setNav }: {
               </button>
             )}
             {SECOES_NAV.map(s => {
-              const ids = s.ids.filter(visivel)
-              if (!ids.length) return null
+              const grupos = gruposVisiveis(s.grupos, visivel)
+              if (!grupos.length) return null
               return (
                 <div key={s.titulo} className="lat-sec">
                   <span className="lat-tit">{s.titulo}</span>
-                  {ids.map(id => (
-                    <button key={id} type="button" className={'lat-item' + (abaAtual === id ? ' on' : '')} aria-current={abaAtual === id ? 'page' : undefined}
-                      onClick={() => trocarAba(id)} title={recolhida ? rotulo(id) : id === 'cronometrar' ? 'Volta para a escolha do grupo' : META[id].desc}>
-                      <span className="ic">{META[id].icone}</span>
-                      <span className="tx">{rotulo(id)}</span>
-                      {id === 'medicoes' && <span className="cnt">{d.meds.length}</span>}
-                    </button>
+                  {grupos.map(g => (
+                    <div key={g.camada ?? s.titulo} className={g.camada ? 'lat-cam' : 'lat-cam sem'}>
+                      {g.camada && <span className="lat-cam-tit">{g.camada}</span>}
+                      {g.ids.map(id => (
+                        <button key={id} type="button" className={'lat-item' + (abaAtual === id ? ' on' : '')} aria-current={abaAtual === id ? 'page' : undefined}
+                          onClick={() => trocarAba(id)} title={recolhida ? (g.camada ? g.camada + ' · ' : '') + rotulo(id) : id === 'cronometrar' ? 'Volta para a escolha do grupo' : META[id].desc}>
+                          <span className="ic">{META[id].icone}</span>
+                          <span className="tx">{rotulo(id)}</span>
+                          {id === 'medicoes' && <span className="cnt">{d.meds.length}</span>}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )
@@ -267,22 +282,32 @@ function Inicio({ visivel, nMed, abrir }: { visivel: (id: AbaId) => boolean; nMe
         </button>
       )}
       {SECOES_NAV.map(s => {
-        const ids = s.ids.filter(visivel)
-        if (!ids.length) return null
+        const grupos = gruposVisiveis(s.grupos, visivel)
+        if (!grupos.length) return null
+        const card = (id: AbaId) => (
+          <button key={id} type="button" className="ini-card" onClick={() => abrir(id)}>
+            <span className="ic">{META[id].icone}</span>
+            <span className="tx">
+              <b>{rotulo(id)}{id === 'medicoes' && <span className="cnt">{nMed}</span>}</b>
+              <span>{META[id].desc}</span>
+            </span>
+          </button>
+        )
         return (
           <section key={s.titulo} className="ini-sec">
             <h3 className="eyebrow">{s.titulo}</h3>
-            <div className="ini-grid">
-              {ids.map(id => (
-                <button key={id} type="button" className="ini-card" onClick={() => abrir(id)}>
-                  <span className="ic">{META[id].icone}</span>
-                  <span className="tx">
-                    <b>{rotulo(id)}{id === 'medicoes' && <span className="cnt">{nMed}</span>}</b>
-                    <span>{META[id].desc}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
+            {grupos.some(g => g.camada) ? (
+              <div className="ini-camadas">
+                {grupos.map(g => (
+                  <div key={g.camada} className="ini-camada" style={{ flexGrow: g.ids.length, flexBasis: g.ids.length * 220 }}>
+                    <span className="ini-camada-tab">{g.camada}</span>
+                    <div className="ini-grid">{g.ids.map(card)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="ini-grid">{grupos.flatMap(g => g.ids).map(card)}</div>
+            )}
           </section>
         )
       })}

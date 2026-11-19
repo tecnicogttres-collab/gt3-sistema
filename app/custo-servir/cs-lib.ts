@@ -60,6 +60,9 @@ export const ABAS = [
 ] as const
 export type AbaId = typeof ABAS[number]['id']
 export const PERFIS = ['admin', 'gestor', 'colaborador'] as const
+/** Abas que certos perfis nunca veem, mesmo marcadas em "Acesso por perfil" (trainee entra como colaborador). */
+export const ABAS_VETADAS: Partial<Record<AbaId, readonly string[]>> = { comparativo: ['colaborador'] }
+export const abaVetada = (aba: string, papel: string) => (ABAS_VETADAS[aba as AbaId] ?? []).includes(papel)
 
 // ── Formatacao ────────────────────────────────────────────────────────────────
 export const norm = (s: unknown) =>

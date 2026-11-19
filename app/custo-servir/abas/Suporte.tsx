@@ -13,14 +13,14 @@ import {
   calcCamada2, tempoAtividade, tempoC2,
   type AtivMedicao, type Atividade, type VolumeLinha,
 } from '../cs-suporte-lib'
-import { BotaoConfirmar, CampoTempo, useOrdem } from '../cs-ui'
+import { BotaoConfirmar, CampoTempo, Interruptor, SetasOrdem, useOrdem } from '../cs-ui'
 import { lerMinutos, useTempo } from '../cs-tempo'
 import { lerArquivo } from './Contagem'
 import { NumCampo } from './Resultado'
 import { useSuporte, type SuporteApi } from './suporte-data'
 import { AtividadesPopup } from './ExtraPortal'
 
-const SUBS = [['cron', '⏱ Cronometrar atividade'], ['ativs', '✎ Atividades da camada 2'], ['c2', 'Medições e volumes'], ['metodo', 'Como funciona']] as const
+const SUBS = [['cron', '⏱ Cronometrar atividade'], ['ativs', '✎ Incluir e editar atividades'], ['c2', 'Medições e volumes'], ['metodo', 'Como funciona']] as const
 type Sub = typeof SUBS[number][0]
 
 export default function Suporte() {
@@ -61,101 +61,152 @@ export default function Suporte() {
 // ═════════════════════════════════════════════════════════════════════════════
 // Camada 2
 // ═════════════════════════════════════════════════════════════════════════════
+type FormAtiv = { nome: string; unidade: Atividade['unidade']; fonte: string; liga_por: string }
+const FORM_VAZIO: FormAtiv = { nome: '', unidade: 'quantidade', fonte: '', liga_por: '' }
+const ordenarAtivs = (l: Atividade[]) => [...l].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
+
 /** Atividades cronometradas da camada 2 (cs_atividades): incluir, editar, ativar/desativar, reordenar e excluir. */
 function AtividadesComRastro({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
   const { tentar } = useCs()
   const base = ctx.cfg.base
-  const tempo = (id: string) => tempoAtividade(s.meds, id, base)
-  const [novo, setNovo] = useState('')
-  const [novaUn, setNovaUn] = useState<Atividade['unidade']>('quantidade')
-  const ordenadas = [...s.ativs].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
+  const [novo, setNovo] = useState<FormAtiv | null>(null)
+  const [ed, setEd] = useState<{ id: string; f: FormAtiv } | null>(null)
+  const [verInativas, setVerInativas] = useState(false)
+  const ativas = ordenarAtivs(s.ativs.filter(a => a.ativo))
+  const inativas = ordenarAtivs(s.ativs.filter(a => !a.ativo))
+  const repetido = (nome: string, id?: string) => !!nome.trim() && s.ativs.some(a => a.id !== id && norm(a.nome) === norm(nome))
   const mover = (a: Atividade, dir: -1 | 1) => {
-    const i = ordenadas.findIndex(x => x.id === a.id), b = ordenadas[i + dir]
+    const i = ativas.findIndex(x => x.id === a.id), b = ativas[i + dir]
     if (!b) return
     // Ordens iguais (cadastro antigo) ganham posicoes distintas ao trocar
     const oa = a.ordem === b.ordem ? a.ordem + dir : b.ordem
     void tentar(async () => { await s.salvarAtividade(a.id, { ordem: oa }); await s.salvarAtividade(b.id, { ordem: a.ordem }) })
   }
-  return (
-    <>
-      <div className="box">
-        <h2>Atividades cronometradas (volume × tempo)</h2>
-        <p className="note">Mesma lógica da avaliação: volume da atividade × tempo-padrão. Inclua, edite ou exclua as atividades aqui; cronometre 5 a 10 de cada para ter o tempo (sub-aba Cronometrar ou Medições e volumes). Desmarque &quot;Ativa&quot; para tirar do cronômetro sem perder o histórico. Ligação usa os minutos que a central já registra (não precisa de tempo-padrão).</p>
-        <div className="tbl">
-          <table>
-            <thead><tr><th style={{ width: 60 }}>Ordem</th><th>Atividade</th><th>Unidade</th><th>Fonte do volume</th><th>Liga ao contratante por</th><th className="r">Medições</th><th className="r">Tempo-padrão (min)</th><th title="Contratantes ou grupos com o mínimo de medições próprias">Tempos específicos</th><th className="c">Ativa</th><th /></tr></thead>
-            <tbody>
-              {ordenadas.map((a, i) => <LinhaAtividade key={a.id} ctx={ctx} s={s} a={a} t={tempo(a.id)} subir={i > 0 ? () => mover(a, -1) : undefined} descer={i < ordenadas.length - 1 ? () => mover(a, 1) : undefined} />)}
-              {!ordenadas.length && <tr><td colSpan={10} className="empty">Nenhuma atividade. Inclua a primeira abaixo.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <div className="row">
-          <input type="text" value={novo} onChange={e => setNovo(e.target.value)} placeholder="Nova atividade (ex.: Cadastro de veículo)" style={{ flex: 1, minWidth: 220 }} />
-          <select value={novaUn} onChange={e => setNovaUn(e.target.value as Atividade['unidade'])} aria-label="Unidade">
-            <option value="quantidade">por quantidade</option>
-            <option value="minutos">já em minutos</option>
-          </select>
-          <button type="button" className="btn solid" disabled={!novo.trim()} onClick={async () => { if (await tentar(() => s.adicionarAtividade(novo.trim(), novaUn), 'Atividade criada')) setNovo('') }}>Adicionar</button>
-        </div>
-      </div>
-    </>
-  )
-}
-
-/** Linha da atividade: ver, editar (nome, unidade, fonte, ligacao) e excluir. */
-function LinhaAtividade({ ctx, s, a, t, subir, descer }: { ctx: Ctx; s: SuporteApi; a: Atividade; t: ReturnType<typeof tempoAtividade>; subir?: () => void; descer?: () => void }) {
-  const { tentar } = useCs()
-  const tm = useTempo()
-  const [ed, setEd] = useState<{ nome: string; unidade: Atividade['unidade']; fonte: string; liga_por: string } | null>(null)
-  const nMed = s.meds.filter(m => m.atividade_id === a.id).length
-  const nVol = s.linhas.filter(l => l.atividade_id === a.id).length
-  if (ed) {
+  async function incluir(f: FormAtiv) {
+    const nome = f.nome.trim()
+    // Continua aberto para incluir a proxima na sequencia
+    if (await tentar(() => s.adicionarAtividade(nome, f.unidade, { fonte: f.fonte.trim() || null, liga_por: f.liga_por.trim() || null }), `"${nome}" incluída`)) setNovo({ ...FORM_VAZIO, unidade: f.unidade })
+  }
+  async function salvar(id: string, f: FormAtiv) {
+    const patch = { nome: f.nome.trim(), unidade: f.unidade, fonte: f.fonte.trim() || null, liga_por: f.liga_por.trim() || null }
+    if (await tentar(() => s.salvarAtividade(id, patch), 'Atividade salva')) setEd(null)
+  }
+  const abrirEdicao = (a: Atividade) => { setNovo(null); setEd({ id: a.id, f: { nome: a.nome, unidade: a.unidade, fonte: a.fonte ?? '', liga_por: a.liga_por ?? '' } }) }
+  const item = (a: Atividade, i: number, lista: Atividade[]) => {
+    if (ed?.id === a.id) {
+      return (
+        <FormAtividade key={a.id} titulo={`Editando "${a.nome}"`} valor={ed.f} setValor={f => setEd({ id: a.id, f })} repetido={repetido(ed.f.nome, a.id)}
+          aviso={ed.f.unidade !== a.unidade ? (ed.f.unidade === 'minutos' ? 'Passa a usar o volume como minutos (as medições ficam guardadas, mas não entram).' : 'Passa a usar volume × tempo-padrão cronometrado.') : null}
+          rotuloSalvar="Salvar" onSalvar={() => void salvar(a.id, ed.f)} onCancelar={() => setEd(null)} />
+      )
+    }
     return (
-      <tr className="sel">
-        <td />
-        <td><input type="text" value={ed.nome} onChange={e => setEd({ ...ed, nome: e.target.value })} aria-label="Nome" style={{ width: '100%', minWidth: 160 }} /></td>
-        <td>
-          <select value={ed.unidade} onChange={e => setEd({ ...ed, unidade: e.target.value as Atividade['unidade'] })} aria-label="Unidade">
-            <option value="quantidade">quantidade</option>
-            <option value="minutos">minutos</option>
-          </select>
-        </td>
-        <td><input type="text" value={ed.fonte} onChange={e => setEd({ ...ed, fonte: e.target.value })} aria-label="Fonte do volume" placeholder="opcional" style={{ width: '100%', minWidth: 140 }} /></td>
-        <td><input type="text" value={ed.liga_por} onChange={e => setEd({ ...ed, liga_por: e.target.value })} aria-label="Liga ao contratante por" placeholder="opcional" style={{ width: '100%', minWidth: 140 }} /></td>
-        <td colSpan={4} className="note">{ed.unidade !== a.unidade ? (ed.unidade === 'minutos' ? 'Passa a usar o volume como minutos (as medições ficam guardadas, mas não entram).' : 'Passa a usar volume × tempo-padrão cronometrado.') : ''}</td>
-        <td>
-          <span className="pills">
-            <button type="button" className="btn sm solid" disabled={!ed.nome.trim()} onClick={async () => {
-              const patch = { nome: ed.nome.trim(), unidade: ed.unidade, fonte: ed.fonte.trim() || null, liga_por: ed.liga_por.trim() || null }
-              if (await tentar(() => s.salvarAtividade(a.id, patch), 'Atividade salva')) setEd(null)
-            }}>Salvar</button>
-            <button type="button" className="btn sm" onClick={() => setEd(null)}>Cancelar</button>
-          </span>
-        </td>
-      </tr>
+      <CardAtividade key={a.id} ctx={ctx} s={s} a={a} t={tempoAtividade(s.meds, a.id, base)} editar={() => abrirEdicao(a)}
+        subir={a.ativo && i > 0 ? () => mover(a, -1) : undefined} descer={a.ativo && i < lista.length - 1 ? () => mover(a, 1) : undefined} />
     )
   }
   return (
-    <tr>
-      <td><span className="pills"><button type="button" className="link" aria-label="Subir" disabled={!subir} onClick={subir}>▲</button><button type="button" className="link" aria-label="Descer" disabled={!descer} onClick={descer}>▼</button></span></td>
-      <td><b style={{ fontWeight: 600, opacity: a.ativo ? 1 : 0.55 }}>{a.nome}</b></td>
-      <td className="note">{a.unidade === 'minutos' ? 'minutos' : 'quantidade'}</td>
-      <td className="note">{a.fonte ?? '—'}</td>
-      <td className="note">{a.liga_por ?? '—'}</td>
-      <td className="r mono">{a.unidade === 'minutos' ? '—' : t.n}</td>
-      <td className="r mono">{a.unidade === 'minutos' ? <span className="note">duração informada</span> : t.val != null ? tm.min(t.val, 2) : <span className="pill p-warn">cronometrar</span>}</td>
-      <td className="note">{a.unidade === 'minutos' ? '—' : especificos(ctx, s.meds, a.id) || '—'}</td>
-      <td className="c"><input type="checkbox" checked={a.ativo} aria-label="Ativa" onChange={e => tentar(() => s.salvarAtividade(a.id, { ativo: e.target.checked }))} /></td>
-      <td>
-        <span className="pills">
-          <button type="button" className="btn sm" onClick={() => setEd({ nome: a.nome, unidade: a.unidade, fonte: a.fonte ?? '', liga_por: a.liga_por ?? '' })}>Editar</button>
-          <span title={nMed || nVol ? `Exclui também ${nMed} medição(ões) e as linhas de volume dela em todos os lotes${nVol ? ` (${nVol} no lote aberto)` : ''}` : 'Excluir atividade'}>
-            <BotaoConfirmar onConfirm={() => void tentar(() => s.excluirAtividade(a.id), 'Atividade excluída')}>Excluir</BotaoConfirmar>
-          </span>
+    <div className="box">
+      <div className="it-topo">
+        <div>
+          <h2>Atividades cronometradas <span className="cnt">{ativas.length} ativa{ativas.length === 1 ? '' : 's'}</span></h2>
+          <p className="note">Volume da atividade × tempo-padrão, como na avaliação. Clique no nome para editar; desligue &quot;Ativa&quot; para tirar do cronômetro sem perder o histórico.</p>
+        </div>
+        {!novo && <button type="button" className="btn solid" onClick={() => { setEd(null); setNovo(FORM_VAZIO) }}>+ Nova atividade</button>}
+      </div>
+      {novo && (
+        <FormAtividade novo titulo="Nova atividade" valor={novo} setValor={setNovo} repetido={repetido(novo.nome)}
+          rotuloSalvar="Incluir" onSalvar={() => void incluir(novo)} onCancelar={() => setNovo(null)} />
+      )}
+      <div className="it-lista">
+        {ativas.map((a, i) => item(a, i, ativas))}
+        {!ativas.length && <div className="empty">Nenhuma atividade ativa. Clique em &quot;+ Nova atividade&quot;.</div>}
+      </div>
+      {inativas.length > 0 && (
+        <div className="it-sec">
+          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setVerInativas(v => !v)}>
+            {verInativas ? 'ocultar' : 'ver'} desativadas ({inativas.length})
+          </button>
+          {verInativas && <div className="it-lista">{inativas.map((a, i) => item(a, i, inativas))}</div>}
+        </div>
+      )}
+      <p className="note">Cronometre 5 a 10 de cada para ter o tempo (sub-aba Cronometrar ou Medições e volumes). Atividade &quot;já em minutos&quot; (ex.: ligação, que a central já registra) não precisa de tempo-padrão.</p>
+    </div>
+  )
+}
+
+/** Formulario de incluir/editar atividade cronometrada. Enter salva, Esc cancela. */
+function FormAtividade({ titulo, valor, setValor, repetido, aviso, rotuloSalvar, onSalvar, onCancelar, novo }: {
+  titulo: string; valor: FormAtiv; setValor: (f: FormAtiv) => void; repetido: boolean; aviso?: string | null
+  rotuloSalvar: string; onSalvar: () => void; onCancelar: () => void; novo?: boolean
+}) {
+  const [mais, setMais] = useState(!!(valor.fonte || valor.liga_por))
+  const pode = !!valor.nome.trim() && !repetido
+  const un = (u: Atividade['unidade'], b: string, sub: string) => (
+    <button type="button" role="radio" aria-checked={valor.unidade === u} onClick={() => setValor({ ...valor, unidade: u })}><b>{b}</b><span>{sub}</span></button>
+  )
+  return (
+    <form className={'it-form' + (novo ? ' novo' : '')} onSubmit={e => { e.preventDefault(); if (pode) onSalvar() }} onKeyDown={e => { if (e.key === 'Escape') onCancelar() }}>
+      <b>{titulo}</b>
+      <label>Nome da atividade
+        <input type="text" autoFocus value={valor.nome} onChange={e => setValor({ ...valor, nome: e.target.value })} placeholder="ex.: Cadastro de veículo" />
+      </label>
+      {repetido && <span className="note" style={{ color: 'var(--cs-bad)' }}>Já existe uma atividade com esse nome.</span>}
+      <div className="it-escolha" role="radiogroup" aria-label="Como medir">
+        {un('quantidade', 'Por quantidade', 'volume × tempo cronometrado')}
+        {un('minutos', 'Já vem em minutos', 'ex.: ligações da central')}
+      </div>
+      {aviso && <span className="note">{aviso}</span>}
+      {mais ? (
+        <div className="kv">
+          <label>Fonte do volume (opcional)<input type="text" value={valor.fonte} onChange={e => setValor({ ...valor, fonte: e.target.value })} placeholder="ex.: relatório de cadastros" /></label>
+          <label>Liga ao contratante por (opcional)<input type="text" value={valor.liga_por} onChange={e => setValor({ ...valor, liga_por: e.target.value })} placeholder="ex.: CNPJ do prestador" /></label>
+        </div>
+      ) : (
+        <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setMais(true)}>+ fonte do volume e ligação ao contratante (opcional)</button>
+      )}
+      <div className="row">
+        <button type="submit" className="btn solid" disabled={!pode}>{rotuloSalvar}</button>
+        <button type="button" className="btn" onClick={onCancelar}>{novo ? 'Fechar' : 'Cancelar'}</button>
+        <span className="note">Enter salva · Esc cancela</span>
+      </div>
+    </form>
+  )
+}
+
+/** Cartao da atividade: nome (clique edita), tempo, liga/desliga, editar e excluir. */
+function CardAtividade({ ctx, s, a, t, editar, subir, descer }: {
+  ctx: Ctx; s: SuporteApi; a: Atividade; t: ReturnType<typeof tempoAtividade>; editar: () => void; subir?: () => void; descer?: () => void
+}) {
+  const { tentar } = useCs()
+  const tm = useTempo()
+  const nMed = s.meds.filter(m => m.atividade_id === a.id).length
+  const nVol = s.linhas.filter(l => l.atividade_id === a.id).length
+  const esp = a.unidade === 'minutos' ? '' : especificos(ctx, s.meds, a.id)
+  return (
+    <div className={'it-card' + (a.ativo ? '' : ' off')}>
+      {a.ativo && <SetasOrdem subir={subir} descer={descer} />}
+      <div className="it-corpo">
+        <button type="button" className="it-nome" title="Clique para editar" onClick={editar}>{a.nome}</button>
+        <span className="it-info">
+          <span className="it-chip">{a.unidade === 'minutos' ? 'já em minutos' : 'por quantidade'}</span>
+          {a.unidade !== 'minutos' && (t.val != null
+            ? <span>tempo-padrão <b className="mono">{tm.min(t.val, 2)}</b> · {t.n} medição(ões)</span>
+            : <span className="pill p-warn">cronometrar{t.n ? ` (${t.n})` : ''}</span>)}
+          {esp && <span title="Contratantes ou grupos com o mínimo de medições próprias">específicos: {esp}</span>}
+          {a.fonte && <span>fonte: {a.fonte}</span>}
+          {a.liga_por && <span>liga por: {a.liga_por}</span>}
         </span>
-      </td>
-    </tr>
+      </div>
+      <div className="it-acoes">
+        <Interruptor on={a.ativo} rotulo={a.ativo ? 'Ativa' : 'Desativada'}
+          onChange={v => void tentar(() => s.salvarAtividade(a.id, { ativo: v }), v ? `"${a.nome}" reativada` : `"${a.nome}" desativada (histórico mantido)`)} />
+        <button type="button" className="btn sm" onClick={editar}>✎ Editar</button>
+        <span title={nMed || nVol ? `Exclui também ${nMed} medição(ões) e as linhas de volume dela em todos os lotes${nVol ? ` (${nVol} no lote aberto)` : ''}` : 'Excluir atividade'}>
+          <BotaoConfirmar onConfirm={() => void tentar(() => s.excluirAtividade(a.id), 'Atividade excluída')}>Excluir</BotaoConfirmar>
+        </span>
+      </div>
+    </div>
   )
 }
 

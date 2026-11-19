@@ -12,7 +12,7 @@ import {
   labelOpcao, margemErro, margemPiorCaso, minutosDia, montarOpcoes, opcoesDe, participa, podeRegistrar, RITMOS, tempoC2,
   type Amostra, type Amostragem, type AtividadeC3, type ChaveAmostra, type Classe, type Janela,
 } from '../cs-suporte-lib'
-import { BotaoConfirmar, useOrdem } from '../cs-ui'
+import { BotaoConfirmar, SetasOrdem, useOrdem } from '../cs-ui'
 import { EscolherResposta } from '../CsAmostraAviso'
 import { createClient } from '../../lib/supabase'
 import { useSuporte, type SuporteApi } from './suporte-data'
@@ -131,7 +131,7 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
 /** Opcoes editaveis do pop-up de uma camada: 2 (com rastro, aba Suporte) ou 3 (difuso, aba Extra portal). */
 export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 }) {
   const { toast, tentar } = useCs()
-  const [novo, setNovo] = useState({ label: '', inclui: '' })
+  const [novo, setNovo] = useState<{ label: string; inclui: string } | null>(null)
   const [edit, setEdit] = useState<{ chave: string; label: string; inclui: string } | null>(null)
   const [verInativas, setVerInativas] = useState(false)
   const daCamada = s.c3.filter(a => a.camada === camada)
@@ -140,12 +140,15 @@ export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 })
   const editavel = s.c3Tabela && (camada === 3 || s.c2Editavel)
   // Nome unico no pop-up inteiro (as duas camadas aparecem juntas)
   const nomeRepetido = (label: string, chave?: string) =>
-    s.c3.some(a => a.chave !== chave && a.ativo && a.label.trim().toLowerCase() === label.trim().toLowerCase())
+    !!label.trim() && s.c3.some(a => a.chave !== chave && a.ativo && a.label.trim().toLowerCase() === label.trim().toLowerCase())
   const fixas = camada === 2 ? 'Avaliação, as da camada 3 (aba Extra portal), Interno e Sem demanda' : 'Avaliação, as da camada 2 (aba Suporte), Interno e Sem demanda'
   const exemplo = camada === 2 ? ['ex.: Portal do prestador', 'ex.: Liberar acesso, redefinir senha'] : ['ex.: Teams', 'ex.: Mensagens e chamadas pelo Teams']
 
   async function incluir() {
-    if (await tentar(() => s.adicionarC3(novo.label.trim(), novo.inclui.trim(), camada), 'Atividade incluída')) setNovo({ label: '', inclui: '' })
+    if (!novo) return
+    const label = novo.label.trim()
+    // Continua aberto para incluir a proxima na sequencia
+    if (await tentar(() => s.adicionarC3(label, novo.inclui.trim(), camada), `"${label}" incluída no pop-up`)) setNovo({ label: '', inclui: '' })
   }
   async function salvarEdicao() {
     if (!edit) return
@@ -163,83 +166,87 @@ export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 })
     if (!b) return
     await tentar(async () => { await s.salvarC3(a.chave, { ordem: b.ordem }); await s.salvarC3(b.chave, { ordem: a.ordem }) })
   }
+  const form = (titulo: string, v: { label: string; inclui: string }, set: (v: { label: string; inclui: string }) => void,
+    repetido: boolean, salvar: () => void, cancelar: () => void, eNovo: boolean) => (
+    <form className={'it-form' + (eNovo ? ' novo' : '')} onSubmit={e => { e.preventDefault(); if (v.label.trim() && !repetido) salvar() }}
+      onKeyDown={e => { if (e.key === 'Escape') cancelar() }}>
+      <b>{titulo}</b>
+      <div className="kv">
+        <label>Nome no botão<input type="text" autoFocus value={v.label} onChange={e => set({ ...v, label: e.target.value })} placeholder={exemplo[0]} /></label>
+        <label>O que inclui (texto menor do botão, opcional)<input type="text" value={v.inclui} onChange={e => set({ ...v, inclui: e.target.value })} placeholder={exemplo[1]} /></label>
+      </div>
+      {repetido && <span className="note" style={{ color: 'var(--cs-bad)' }}>Já existe uma atividade com esse nome no pop-up.</span>}
+      <div className="row">
+        <button type="submit" className="btn solid" disabled={!v.label.trim() || repetido}>{eNovo ? 'Incluir' : 'Salvar'}</button>
+        <button type="button" className="btn" onClick={cancelar}>{eNovo ? 'Fechar' : 'Cancelar'}</button>
+        <span className="note">Enter salva · Esc cancela</span>
+      </div>
+    </form>
+  )
 
   return (
     <div className="box">
-      <h2>{camada === 2 ? 'Atividades da camada 2 no pop-up (gestor e admin)' : 'Atividades da camada 3 (gestor e admin)'}</h2>
-      <p className="note">
-        {camada === 2
-          ? 'Trabalho com rastro (cadastro, e-mail, ligação...). Estas opções aparecem como botões no pop-up da amostragem e sempre pedem o contratante. '
-          : 'Trabalho fora do portal sem rastro, medido pela amostragem. Estas atividades aparecem como botões no pop-up e sempre pedem o contratante. '}
-        Também aparecem no pop-up, editadas em outro lugar: {fixas}.
-      </p>
+      <div className="it-topo">
+        <div>
+          <h2>{camada === 2 ? 'Botões da camada 2 no pop-up' : 'Atividades da camada 3 no pop-up'} <span className="cnt">{ativas.length} ativa{ativas.length === 1 ? '' : 's'}</span></h2>
+          <p className="note">
+            {camada === 2
+              ? 'Trabalho com rastro (cadastro, e-mail, ligação...). Cada uma vira um botão no pop-up da amostragem e sempre pede o contratante. '
+              : 'Trabalho fora do portal sem rastro, medido pela amostragem. Cada uma vira um botão no pop-up e sempre pede o contratante. '}
+            Clique no nome para editar. Também aparecem no pop-up, editadas em outro lugar: {fixas}.
+          </p>
+        </div>
+        {!novo && <button type="button" className="btn solid" disabled={!editavel} onClick={() => { setEdit(null); setNovo({ label: '', inclui: '' }) }}>+ Nova atividade</button>}
+      </div>
       {!s.c3Tabela && <div className="warnbox">Para editar, rode <b>sql/custo-servir-camada3-atividades.sql</b> no SQL Editor do Supabase.</div>}
       {s.c3Tabela && camada === 2 && !s.c2Editavel && <div className="warnbox">Para editar, rode <b>sql/custo-servir-ativos-camada2.sql</b> no SQL Editor do Supabase. Até lá valem Cadastro, E-mail, Ligação e Faturamento.</div>}
 
-      <div className="tbl">
-        <table>
-          <thead><tr><th style={{ width: 70 }}>Ordem</th><th>Atividade</th><th>O que inclui (texto do botão)</th><th /></tr></thead>
-          <tbody>
-            {ativas.map((a, i) => edit?.chave === a.chave ? (
-              <tr key={a.chave}>
-                <td />
-                <td><input type="text" value={edit.label} aria-label="Nome da atividade" onChange={e => setEdit({ ...edit, label: e.target.value })} /></td>
-                <td><input type="text" value={edit.inclui} aria-label="O que inclui" onChange={e => setEdit({ ...edit, inclui: e.target.value })} /></td>
-                <td>
-                  <span className="pills">
-                    <button type="button" className="btn sm solid" disabled={!edit.label.trim() || nomeRepetido(edit.label, a.chave)} onClick={() => void salvarEdicao()}>Salvar</button>
-                    <button type="button" className="btn sm" onClick={() => setEdit(null)}>Cancelar</button>
-                  </span>
-                </td>
-              </tr>
-            ) : (
-              <tr key={a.chave}>
-                <td>
-                  <span className="pills">
-                    <button type="button" className="link" aria-label="Subir" disabled={i === 0 || !editavel} onClick={() => void mover(a, -1)}>▲</button>
-                    <button type="button" className="link" aria-label="Descer" disabled={i === ativas.length - 1 || !editavel} onClick={() => void mover(a, 1)}>▼</button>
-                  </span>
-                </td>
-                <td><b style={{ fontWeight: 600 }}>{a.label}</b></td>
-                <td className="note">{a.inclui || '—'}</td>
-                <td>
-                  <span className="pills">
-                    <button type="button" className="btn sm" disabled={!editavel} onClick={() => setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' })}>Editar</button>
-                    <BotaoConfirmar disabled={!editavel} onConfirm={() => void remover(a)}>Remover</BotaoConfirmar>
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {!ativas.length && <tr><td colSpan={4} className="empty">Nenhuma atividade da camada {camada} ativa no pop-up.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      {novo && editavel && form('Nova atividade no pop-up', novo, setNovo, nomeRepetido(novo.label), () => void incluir(), () => setNovo(null), true)}
 
-      <div className="kv">
-        <label>Nova atividade<input type="text" value={novo.label} disabled={!editavel} onChange={e => setNovo({ ...novo, label: e.target.value })} placeholder={exemplo[0]} /></label>
-        <label>O que inclui<input type="text" value={novo.inclui} disabled={!editavel} onChange={e => setNovo({ ...novo, inclui: e.target.value })} placeholder={exemplo[1]} /></label>
+      <div className="it-lista">
+        {ativas.map((a, i) => edit?.chave === a.chave
+          ? <div key={a.chave}>{form(`Editando "${a.label}"`, edit, v => setEdit({ ...edit, ...v }), nomeRepetido(edit.label, a.chave), () => void salvarEdicao(), () => setEdit(null), false)}</div>
+          : (
+            <div key={a.chave} className="it-card">
+              <SetasOrdem disabled={!editavel} subir={i > 0 ? () => void mover(a, -1) : undefined} descer={i < ativas.length - 1 ? () => void mover(a, 1) : undefined} />
+              <div className="it-corpo">
+                <button type="button" className="it-nome" disabled={!editavel} title={editavel ? 'Clique para editar' : undefined}
+                  onClick={() => { setNovo(null); setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' }) }}>{a.label}</button>
+                <span className="it-info">{a.inclui || <i>sem descrição</i>}</span>
+              </div>
+              <div className="it-acoes">
+                <button type="button" className="btn sm" disabled={!editavel} onClick={() => { setNovo(null); setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' }) }}>✎ Editar</button>
+                <span title="Sem respostas: exclui. Com respostas: só tira do pop-up (o resultado continua contando).">
+                  <BotaoConfirmar disabled={!editavel} onConfirm={() => void remover(a)}>Remover</BotaoConfirmar>
+                </span>
+              </div>
+            </div>
+          ))}
+        {!ativas.length && <div className="empty">Nenhuma atividade da camada {camada} no pop-up. Clique em &quot;+ Nova atividade&quot;.</div>}
       </div>
-      <div className="row">
-        <button type="button" className="btn solid" disabled={!editavel || !novo.label.trim() || nomeRepetido(novo.label)} onClick={() => void incluir()}>+ Incluir atividade</button>
-        {novo.label.trim() && nomeRepetido(novo.label) && <span className="note">Já existe uma atividade com esse nome.</span>}
-      </div>
-      <p className="note">Pesquisas com &quot;O que conta: todas&quot; passam a mostrar a nova atividade no pop-up na hora. Nas que têm opções escolhidas, marque-a em Editar (aba Extra portal). Remover uma atividade que já tem respostas só a tira do pop-up: as respostas continuam no resultado.</p>
 
       {inativas.length > 0 && (
-        <>
-          <button type="button" className="link" onClick={() => setVerInativas(v => !v)}>{verInativas ? 'ocultar' : 'ver'} removidas com histórico ({inativas.length})</button>
+        <div className="it-sec">
+          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setVerInativas(v => !v)}>{verInativas ? 'ocultar' : 'ver'} removidas com histórico ({inativas.length})</button>
           {verInativas && (
-            <div className="row">
+            <div className="it-lista">
               {inativas.map(a => (
-                <span key={a.chave} className="selbar" style={{ padding: '4px 10px' }}>
-                  {a.label}
-                  <button type="button" className="link" disabled={!editavel} onClick={() => void tentar(() => s.salvarC3(a.chave, { ativo: true, ordem: Math.max(0, ...daCamada.map(x => x.ordem)) + 1 }), `"${a.label}" voltou ao pop-up`)}>reativar</button>
-                </span>
+                <div key={a.chave} className="it-card off">
+                  <div className="it-corpo">
+                    <span className="it-nome" style={{ cursor: 'default' }}>{a.label}</span>
+                    <span className="it-info">{a.inclui || <i>sem descrição</i>}</span>
+                  </div>
+                  <div className="it-acoes">
+                    <button type="button" className="btn sm" disabled={!editavel}
+                      onClick={() => void tentar(() => s.salvarC3(a.chave, { ativo: true, ordem: Math.max(0, ...daCamada.map(x => x.ordem)) + 1 }), `"${a.label}" voltou ao pop-up`)}>↺ Reativar</button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
+      <p className="note">Pesquisas com &quot;O que conta: todas&quot; mostram a nova atividade no pop-up na hora. Nas que têm opções escolhidas, marque-a em Editar (aba Extra portal).</p>
     </div>
   )
 }

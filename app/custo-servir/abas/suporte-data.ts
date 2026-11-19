@@ -141,10 +141,10 @@ export function useSuporte(meuId: string) {
     ok(await supabase.from('cs_atividades').update(patch).eq('id', id))
     setAtivs(p => p.map(a => (a.id === id ? { ...a, ...patch } : a)))
   }, [supabase])
-  const adicionarAtividade = useCallback(async (nome: string, unidade: Atividade['unidade']) => {
+  const adicionarAtividade = useCallback(async (nome: string, unidade: Atividade['unidade'], extra?: Partial<Pick<Atividade, 'fonte' | 'liga_por'>>) => {
     const chave = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now().toString(36).slice(-4)
     const ordem = Math.max(0, ...ativs.map(a => a.ordem)) + 1
-    const a = ok(await supabase.from('cs_atividades').insert({ chave, nome, unidade, ordem }).select('*').single()) as Atividade
+    const a = ok(await supabase.from('cs_atividades').insert({ chave, nome, unidade, ordem, ...(extra?.fonte ? { fonte: extra.fonte } : {}), ...(extra?.liga_por ? { liga_por: extra.liga_por } : {}) }).select('*').single()) as Atividade
     setAtivs(p => [...p, a])
   }, [supabase, ativs])
   const registrarMedAtiv = useCallback(async (atividade_id: string, ms: number, situacao: AtivMedicao['situacao'], motivo: string | null, contratante_cod: string | null = null, grupo = false) => {

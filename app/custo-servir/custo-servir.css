@@ -383,3 +383,60 @@
 .cs .gdoc-item{display:flex;align-items:center;gap:8px;border:1.5px solid var(--cs-line);border-radius:9px;padding:6px 8px;background:var(--cs-bg);font-size:13px;min-width:0}
 .cs .gdoc-item .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs .gdoc-item.med{border-color:var(--cs-good);background:var(--cs-good-bg)}
+
+/* Medir: as tres camadas, cada uma com uma sub-aba transparente em cima dos cards */
+.cs .ini-camadas{display:flex;flex-wrap:wrap;gap:14px 12px;align-items:stretch}
+.cs .ini-camada{position:relative;display:flex;flex-direction:column;min-width:0;margin-top:24px;border:1.5px dashed var(--cs-line);border-radius:0 12px 12px 12px;padding:10px;background:transparent}
+.cs .ini-camada-tab{position:absolute;bottom:100%;left:-1.5px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--cs-edge);border:1.5px dashed var(--cs-line);border-bottom:0;border-radius:9px 9px 0 0;padding:3px 12px;background:transparent;white-space:nowrap}
+.cs .ini-camada .ini-grid{flex:1;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.cs .lat-cam{display:flex;flex-direction:column;gap:2px;margin-left:4px;padding-left:6px;border-left:1.5px dashed var(--cs-line)}
+.cs .lat-cam + .lat-cam{margin-top:4px}
+.cs .lat-cam.sem{margin-left:0;padding-left:0;border-left:0}
+.cs .lat-cam-tit{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--cs-edge);opacity:.7;padding:2px 4px 0}
+.cs .cs-shell.recolhida .lat-cam-tit{display:none}
+.cs .cs-shell.recolhida .lat-cam{margin-left:0;padding-left:0;border-left:0}
+@media (max-width:900px){
+  .cs .lat-cam{display:contents}
+  .cs .lat-cam-tit{display:none}
+}
+
+/* Listas editaveis de atividades (Suporte e Extra portal) */
+.cs .it-topo{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;justify-content:space-between}
+.cs .it-topo > div{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.cs .it-lista{display:flex;flex-direction:column;gap:6px}
+.cs .it-card{display:flex;align-items:center;gap:10px;border:1.5px solid var(--cs-line);border-radius:10px;padding:8px 10px;background:var(--cs-bg);transition:border-color .15s}
+.cs .it-card:hover{border-color:var(--cs-edge)}
+.cs .it-card.off{background:var(--cs-tint2)}
+.cs .it-card.off .it-nome{color:var(--cs-muted)}
+.cs .it-ord{display:flex;flex-direction:column;flex:none}
+.cs .it-ord button{border:0;background:none;color:var(--cs-muted);cursor:pointer;font-size:10.5px;line-height:1;padding:3px 5px;border-radius:5px}
+.cs .it-ord button:hover:not(:disabled){background:var(--cs-tint);color:var(--cs-edge)}
+.cs .it-ord button:disabled{opacity:.25;cursor:default}
+.cs .it-corpo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cs .it-nome{align-self:flex-start;border:0;background:none;padding:0;cursor:pointer;text-align:left;font-weight:700;color:var(--cs-edge-2);font-size:14.5px}
+.cs .it-nome:hover:not(:disabled){text-decoration:underline dotted;text-underline-offset:3px}
+.cs .it-nome:disabled{cursor:default}
+.cs .it-info{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--cs-muted);align-items:center}
+.cs .it-chip{background:var(--cs-tint);color:var(--cs-edge-2);border-radius:99px;padding:1px 8px;font-weight:700}
+.cs .it-acoes{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;flex:none}
+.cs .it-form{border:1.5px solid var(--cs-edge);border-radius:10px;padding:12px 14px;background:var(--cs-tint2);display:flex;flex-direction:column;gap:10px}
+.cs .it-form.novo{border-style:dashed}
+.cs .it-form > b{color:var(--cs-edge-2)}
+.cs .it-form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600;color:var(--cs-muted)}
+.cs .it-escolha{display:flex;flex-wrap:wrap;gap:6px}
+.cs .it-escolha button{display:flex;flex-direction:column;gap:1px;border:1.5px solid var(--cs-line);background:var(--cs-bg);border-radius:9px;padding:7px 12px;cursor:pointer;text-align:left;min-width:180px}
+.cs .it-escolha button b{font-size:13.5px}
+.cs .it-escolha button span{font-size:12px;color:var(--cs-muted)}
+.cs .it-escolha button[aria-checked=true]{border-color:var(--cs-edge);background:var(--cs-tint);color:var(--cs-edge-2)}
+.cs .it-sec{display:flex;flex-direction:column;gap:6px}
+.cs .sw{display:inline-flex;align-items:center;gap:6px;border:0;background:none;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--cs-muted);padding:2px;white-space:nowrap}
+.cs .sw .tr{position:relative;width:32px;height:18px;border-radius:99px;background:var(--cs-line);transition:background-color .15s;flex:none}
+.cs .sw .tr::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#FFFFFF;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.cs .sw[aria-checked=true]{color:var(--cs-good)}
+.cs .sw[aria-checked=true] .tr{background:var(--cs-good)}
+.cs .sw[aria-checked=true] .tr::after{transform:translateX(14px)}
+.cs .sw:disabled{opacity:.4;cursor:not-allowed}
+@media (max-width:640px){
+  .cs .it-card{flex-wrap:wrap}
+  .cs .it-acoes{width:100%}
+}

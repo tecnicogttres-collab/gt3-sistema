@@ -259,3 +259,24 @@ export function CampoTempo({ valor, onChange, placeholder = 'ex.: 90 ou 1:30', s
     </span>
   )
 }
+
+/** Interruptor liga/desliga (ex.: atividade ativa). */
+export function Interruptor({ on, onChange, rotulo, disabled, title }: {
+  on: boolean; onChange: (v: boolean) => void; rotulo?: string; disabled?: boolean; title?: string
+}) {
+  return (
+    <button type="button" role="switch" aria-checked={on} className="sw" disabled={disabled} title={title} onClick={() => onChange(!on)}>
+      <span className="tr" aria-hidden />{rotulo}
+    </button>
+  )
+}
+
+/** Setas para subir/descer um item numa lista ordenada. */
+export function SetasOrdem({ subir, descer, disabled }: { subir?: () => void; descer?: () => void; disabled?: boolean }) {
+  return (
+    <span className="it-ord">
+      <button type="button" aria-label="Subir" title="Subir" disabled={disabled || !subir} onClick={subir}>▲</button>
+      <button type="button" aria-label="Descer" title="Descer" disabled={disabled || !descer} onClick={descer}>▼</button>
+    </span>
+  )
+}

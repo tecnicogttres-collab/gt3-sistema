@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useCs } from '../cs-data'
 import { useModules } from '../../components/ModulesContext'
-import { ABAS, docsComTurno, fmt, grupoDe, nomeCtt, nomeUsuario, norm, PERFIS, rotuloValidade, temCatraca, unidadesDe, validadePeloNome, VALIDADES, type Ctx } from '../cs-lib'
+import { ABAS, abaVetada, docsComTurno, fmt, grupoDe, nomeCtt, nomeUsuario, norm, PERFIS, rotuloValidade, temCatraca, unidadesDe, validadePeloNome, VALIDADES, type Ctx } from '../cs-lib'
 import { BotaoConfirmar, IconeCatraca, SeloCatraca, useOrdem } from '../cs-ui'
 import { NumCampo } from './Resultado'
 import QuadroDocumentos, { DocsDoGrupo } from './QuadroDocumentos'
@@ -629,7 +629,7 @@ function Parametros({ ctx }: { ctx: Ctx }) {
       </div>
       <div className="box">
         <h2>Acesso por perfil</h2>
-        <p className="note">Quais perfis veem cada aba. Hoje todos veem todas. O admin sempre vê todas as abas.{!gerencia && ' Só gestor ou admin altera.'}</p>
+        <p className="note">Quais perfis veem cada aba. O admin sempre vê todas as abas. O Comparativo nunca aparece para colaborador nem trainee.{!gerencia && ' Só gestor ou admin altera.'}</p>
         <div className="tbl">
           <table>
             <thead><tr><th>Aba</th>{PERFIS.map(p => <th key={p} className="c">{p}</th>)}</tr></thead>
@@ -640,8 +640,9 @@ function Parametros({ ctx }: { ctx: Ctx }) {
                   {PERFIS.map(p => (
                     <td key={p} className="c">
                       <input type="checkbox" aria-label={`${a.label} para ${p}`}
-                        checked={p === 'admin' || (c.abas_perfis[a.id] ?? []).includes(p)}
-                        disabled={!gerencia || p === 'admin'}
+                        checked={p === 'admin' || (!abaVetada(a.id, p) && (c.abas_perfis[a.id] ?? []).includes(p))}
+                        disabled={!gerencia || p === 'admin' || abaVetada(a.id, p)}
+                        title={abaVetada(a.id, p) ? 'Esta aba nunca aparece para este perfil (nem para trainee)' : undefined}
                         onChange={e => toggleAba(a.id, p, e.target.checked)} />
                     </td>
                   ))}
