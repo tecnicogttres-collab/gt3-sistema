@@ -158,7 +158,7 @@ export default function Resultado() {
             <thead>
               <tr>
                 {th('ctt', 'Contratante')}{th('h', <>Horas{per}</>, 'r')}{th('ev', <>Evitável{per}</>, 'r')}{th('fat', 'Faturamento/mês (R$)', 'r')}
-                {th('rh', 'Receita/hora', 'r')}{th('cs', 'Custo de servir', 'r')}{th('m', 'Margem', 'r')}{th('sit', 'Situação')}
+                {th('rh', 'Receita/hora', 'r')}{th('cs', 'Custo de operação', 'r')}{th('m', 'Margem', 'r')}{th('sit', 'Situação')}
               </tr>
             </thead>
             <tbody>

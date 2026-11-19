@@ -160,13 +160,13 @@ function Modulo({ aba, setAba, nav, setNav }: {
     return onPedidoAbrir(abrir)
   }, [setNav, setAba])
 
-  const nome = d.cfg?.nome_modulo || 'Custo de Servir'
+  const nome = d.cfg?.nome_modulo || 'Custo de Operação'
 
   return (
     <div className="cs">
       <div className="head">
         <div>
-          <div className="eyebrow">Tempo-padrão e custo de servir</div>
+          <div className="eyebrow">Tempo-padrão e custo de operação</div>
           <h1>{nome}</h1>
           <p>Cronometre os documentos por grupo de critério, acompanhe os tempos-padrão e transforme o relatório do sistema em horas por contratante.</p>
         </div>
