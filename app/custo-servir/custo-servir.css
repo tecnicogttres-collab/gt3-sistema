@@ -384,17 +384,31 @@
 .cs .gdoc-item .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs .gdoc-item.med{border-color:var(--cs-good);background:var(--cs-good-bg)}
 
-/* Medir: as tres camadas, cada uma com uma sub-aba transparente em cima dos cards */
-.cs .ini-camadas{display:flex;flex-wrap:wrap;gap:14px 12px;align-items:stretch}
-.cs .ini-camada{position:relative;display:flex;flex-direction:column;min-width:0;margin-top:24px;border:1.5px dashed var(--cs-line);border-radius:0 12px 12px 12px;padding:10px;background:transparent}
-.cs .ini-camada-tab{position:absolute;bottom:100%;left:-1.5px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--cs-edge);border:1.5px dashed var(--cs-line);border-bottom:0;border-radius:9px 9px 0 0;padding:3px 12px;background:transparent;white-space:nowrap}
+/* Medir: as tres camadas, cada uma com sua cor e uma aba em cima dos cards */
+.cs .ini-camadas{display:flex;flex-wrap:wrap;gap:16px 14px;align-items:stretch}
+.cs .ini-camada{--cam:#2A4F96;--cam-bg:rgba(42,79,150,.06);--cam-bd:rgba(42,79,150,.28);position:relative;display:flex;flex-direction:column;min-width:0;margin-top:34px;border:1.5px solid var(--cam-bd);border-radius:0 16px 16px 16px;padding:12px;background:linear-gradient(160deg,var(--cam-bg),rgba(255,255,255,0) 70%);box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 6px 18px -12px var(--cam)}
+.cs .ini-camada.c2{--cam:#0E8A7A;--cam-bg:rgba(14,138,122,.07);--cam-bd:rgba(14,138,122,.3)}
+.cs .ini-camada.c3{--cam:#7A4FC9;--cam-bg:rgba(122,79,201,.07);--cam-bd:rgba(122,79,201,.3)}
+.cs .ini-camada::before{content:'';position:absolute;left:12px;right:12px;top:-1.5px;height:3px;border-radius:0 0 3px 3px;background:var(--cam);opacity:.85}
+.cs .ini-camada-tab{position:absolute;bottom:100%;left:-1.5px;display:flex;align-items:center;gap:8px;padding:5px 14px 5px 6px;border:1.5px solid var(--cam-bd);border-bottom:0;border-radius:12px 12px 0 0;background:rgba(255,255,255,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);white-space:nowrap}
+.cs .ini-camada-tab .num{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--cam);color:#FFFFFF;font-size:12px;font-weight:900;box-shadow:0 3px 8px -3px var(--cam)}
+.cs .ini-camada-tab .tt{display:flex;flex-direction:column;line-height:1.1}
+.cs .ini-camada-tab .tt b{font-size:11.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--cam)}
+.cs .ini-camada-tab .tt span{font-size:11px;font-weight:600;color:var(--cs-muted)}
 .cs .ini-camada .ini-grid{flex:1;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
-.cs .lat-cam{display:flex;flex-direction:column;gap:2px;margin-left:4px;padding-left:6px;border-left:1.5px dashed var(--cs-line)}
-.cs .lat-cam + .lat-cam{margin-top:4px}
+.cs .ini-camada .ini-card{border-color:var(--cam-bd);background:rgba(255,255,255,.85)}
+.cs .ini-camada .ini-card:hover{border-color:var(--cam);box-shadow:0 8px 20px -14px var(--cam)}
+.cs .ini-camada .ini-card .ic{background:var(--cam-bg);box-shadow:0 0 0 1.5px var(--cam-bd) inset}
+.cs .lat-cam{--cam:#2A4F96;--cam-bd:rgba(42,79,150,.35);display:flex;flex-direction:column;gap:2px;margin-left:4px;padding-left:6px;border-left:2px solid var(--cam-bd)}
+.cs .lat-cam.c2{--cam:#0E8A7A;--cam-bd:rgba(14,138,122,.4)}
+.cs .lat-cam.c3{--cam:#7A4FC9;--cam-bd:rgba(122,79,201,.4)}
+.cs .lat-cam + .lat-cam{margin-top:6px}
 .cs .lat-cam.sem{margin-left:0;padding-left:0;border-left:0}
-.cs .lat-cam-tit{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--cs-edge);opacity:.7;padding:2px 4px 0}
+.cs .lat-cam-tit{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--cam);padding:3px 4px 1px}
+.cs .lat-cam-tit .num{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:var(--cam);color:#FFFFFF;font-size:9.5px;letter-spacing:0}
 .cs .cs-shell.recolhida .lat-cam-tit{display:none}
-.cs .cs-shell.recolhida .lat-cam{margin-left:0;padding-left:0;border-left:0}
+.cs .cs-shell.recolhida .lat-cam{margin-left:0;padding-left:0;border-left:0;border-top:2px solid var(--cam-bd);padding-top:4px}
+.cs .cs-shell.recolhida .lat-cam.sem{border-top:0;padding-top:0}
 @media (max-width:900px){
   .cs .lat-cam{display:contents}
   .cs .lat-cam-tit{display:none}

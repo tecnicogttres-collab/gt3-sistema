@@ -48,13 +48,13 @@ const META: Record<AbaId, { icone: string; desc: string }> = {
 
 /** Agrupamento das abas (Fechamento e Definicoes ficam fora: vao no topo da barra).
  *  O Medir se divide nas tres camadas: avaliacao no portal, suporte com rastro e extra portal. */
-type GrupoNav = { camada?: string; ids: AbaId[] }
+type GrupoNav = { camada?: string; n?: number; sub?: string; ids: AbaId[] }
 const SECOES_NAV: { titulo: string; grupos: GrupoNav[] }[] = [
   {
     titulo: 'Medir', grupos: [
-      { camada: 'Camada 1', ids: ['cronometrar', 'tempos', 'medicoes'] },
-      { camada: 'Camada 2', ids: ['suporte'] },
-      { camada: 'Camada 3', ids: ['extra'] },
+      { camada: 'Camada 1', n: 1, sub: 'Avaliação no portal', ids: ['cronometrar', 'tempos', 'medicoes'] },
+      { camada: 'Camada 2', n: 2, sub: 'Suporte com rastro', ids: ['suporte'] },
+      { camada: 'Camada 3', n: 3, sub: 'Fora do portal', ids: ['extra'] },
     ],
   },
   { titulo: 'Volume e resultado', grupos: [{ ids: ['contagem', 'resultado', 'comparativo'] }] },
@@ -214,8 +214,8 @@ function Modulo({ aba, setAba, nav, setNav }: {
                 <div key={s.titulo} className="lat-sec">
                   <span className="lat-tit">{s.titulo}</span>
                   {grupos.map(g => (
-                    <div key={g.camada ?? s.titulo} className={g.camada ? 'lat-cam' : 'lat-cam sem'}>
-                      {g.camada && <span className="lat-cam-tit">{g.camada}</span>}
+                    <div key={g.camada ?? s.titulo} className={g.camada ? 'lat-cam c' + g.n : 'lat-cam sem'}>
+                      {g.camada && <span className="lat-cam-tit"><span className="num">{g.n}</span>{g.camada}</span>}
                       {g.ids.map(id => (
                         <button key={id} type="button" className={'lat-item' + (abaAtual === id ? ' on' : '')} aria-current={abaAtual === id ? 'page' : undefined}
                           onClick={() => trocarAba(id)} title={recolhida ? (g.camada ? g.camada + ' · ' : '') + rotulo(id) : id === 'cronometrar' ? 'Volta para a escolha do grupo' : META[id].desc}>
@@ -299,8 +299,11 @@ function Inicio({ visivel, nMed, abrir }: { visivel: (id: AbaId) => boolean; nMe
             {grupos.some(g => g.camada) ? (
               <div className="ini-camadas">
                 {grupos.map(g => (
-                  <div key={g.camada} className="ini-camada" style={{ flexGrow: g.ids.length, flexBasis: g.ids.length * 220 }}>
-                    <span className="ini-camada-tab">{g.camada}</span>
+                  <div key={g.camada} className={'ini-camada c' + g.n} style={{ flexGrow: g.ids.length, flexBasis: g.ids.length * 220 }}>
+                    <span className="ini-camada-tab">
+                      <span className="num">{g.n}</span>
+                      <span className="tt"><b>{g.camada}</b><span>{g.sub}</span></span>
+                    </span>
                     <div className="ini-grid">{g.ids.map(card)}</div>
                   </div>
                 ))}
