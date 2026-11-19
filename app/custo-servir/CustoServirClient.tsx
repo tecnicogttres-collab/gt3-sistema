@@ -19,6 +19,7 @@ import Comparativo from './abas/Comparativo'
 import ExtraPortal from './abas/ExtraPortal'
 import { prefetchSuporte } from './abas/suporte-data'
 import { ModoTempoToggle } from './cs-ui'
+import { useStatusInicio } from './CsInicioStatus'
 import { displayName, useUser } from '../components/UserContext'
 import './custo-servir.css'
 
@@ -261,6 +262,7 @@ function Modulo({ aba, setAba, nav, setNav }: {
 
 /** Tela inicial: cards para escolher a secao, com o Fechamento em destaque. */
 function Inicio({ visivel, nMed, abrir }: { visivel: (id: AbaId) => boolean; nMed: number; abrir: (a: AbaId) => void }) {
+  const status = useStatusInicio(visivel('suporte') || visivel('extra'))
   return (
     <div className="cs-inicio">
       {visivel('fechamento') && (
@@ -290,6 +292,7 @@ function Inicio({ visivel, nMed, abrir }: { visivel: (id: AbaId) => boolean; nMe
             <span className="tx">
               <b>{rotulo(id)}{id === 'medicoes' && <span className="cnt">{nMed}</span>}</b>
               <span>{META[id].desc}</span>
+              {status[id] && <span className={'ini-st ' + status[id]!.nivel}>{status[id]!.txt}</span>}
             </span>
           </button>
         )

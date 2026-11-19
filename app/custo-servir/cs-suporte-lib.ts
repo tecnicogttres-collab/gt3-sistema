@@ -5,6 +5,8 @@ import { principalDe, type Ctx } from './cs-lib'
 export type Atividade = {
   id: string; chave: string; nome: string; unidade: 'quantidade' | 'minutos'
   fonte: string | null; liga_por: string | null; ordem: number; ativo: boolean
+  /** Botao do pop-up (chave de cs_camada3_atividades) a que pertence. Ausente = migracao custo-servir-atividade-botao.sql nao rodou. */
+  botao_popup?: string | null
 }
 export type AtivMedicao = {
   id: string; atividade_id: string; duracao_ms: number; situacao: 'validada' | 'descartada'

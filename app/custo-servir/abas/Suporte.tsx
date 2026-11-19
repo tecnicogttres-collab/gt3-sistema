@@ -18,7 +18,7 @@ import { lerMinutos, useTempo } from '../cs-tempo'
 import { lerArquivo } from './Contagem'
 import { NumCampo } from './Resultado'
 import { useSuporte, type SuporteApi } from './suporte-data'
-import { AtividadesPopup } from './ExtraPortal'
+import { AvisoPopupSql, FormPopup, usePopupEditor, type FormPopupValor } from './ExtraPortal'
 
 const SUBS = [['cron', '⏱ Cronometrar atividade'], ['ativs', '✎ Incluir e editar atividades'], ['c2', 'Medições e volumes'], ['metodo', 'Como funciona']] as const
 type Sub = typeof SUBS[number][0]
@@ -44,10 +44,7 @@ export default function Suporte() {
       <div className="cfgnav">
         {SUBS.map(([k, l]) => <button key={k} type="button" className={k === sub ? 'on' : ''} onClick={() => setSub(k)}>{l}</button>)}
       </div>
-      {sub === 'ativs' && <>
-        <AtividadesComRastro ctx={ctx} s={s} />
-        {gerencia && <AtividadesPopup s={s} camada={2} />}
-      </>}
+      {sub === 'ativs' && <AtividadesCamada2 ctx={ctx} s={s} gerencia={gerencia} />}
       {sub === 'c2' && <>
         <CronometroAtividade ctx={ctx} s={s} />
         <Volumes ctx={ctx} s={s} />
@@ -61,84 +58,183 @@ export default function Suporte() {
 // ═════════════════════════════════════════════════════════════════════════════
 // Camada 2
 // ═════════════════════════════════════════════════════════════════════════════
-type FormAtiv = { nome: string; unidade: Atividade['unidade']; fonte: string; liga_por: string }
-const FORM_VAZIO: FormAtiv = { nome: '', unidade: 'quantidade', fonte: '', liga_por: '' }
+type FormAtiv = { nome: string; unidade: Atividade['unidade']; fonte: string; liga_por: string; botao: string }
+const FORM_VAZIO: FormAtiv = { nome: '', unidade: 'quantidade', fonte: '', liga_por: '', botao: '' }
 const ordenarAtivs = (l: Atividade[]) => [...l].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
+const SEM_BOTAO = '__sem__'
 
-/** Atividades cronometradas da camada 2 (cs_atividades): incluir, editar, ativar/desativar, reordenar e excluir. */
-function AtividadesComRastro({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
+/** Camada 2 numa lista so: cada botao do pop-up da amostragem com as atividades cronometradas dele.
+ *  Botoes (cs_camada3_atividades) so gestor/admin editam; atividades cronometradas (cs_atividades), todos. */
+function AtividadesCamada2({ ctx, s, gerencia }: { ctx: Ctx; s: SuporteApi; gerencia: boolean }) {
   const { tentar } = useCs()
+  const p = usePopupEditor(s, 2)
   const base = ctx.cfg.base
-  const [novo, setNovo] = useState<FormAtiv | null>(null)
+  // Formularios abertos: novo botao, edicao de botao, nova atividade (em qual grupo) e edicao de atividade
+  const [novoBotao, setNovoBotao] = useState<FormPopupValor | null>(null)
+  const [edBotao, setEdBotao] = useState<({ chave: string } & FormPopupValor) | null>(null)
+  const [novaEm, setNovaEm] = useState<{ grupo: string; f: FormAtiv } | null>(null)
   const [ed, setEd] = useState<{ id: string; f: FormAtiv } | null>(null)
   const [verInativas, setVerInativas] = useState(false)
+  const fecharTudo = () => { setNovoBotao(null); setEdBotao(null); setNovaEm(null); setEd(null) }
+
+  const botoesAtivos = new Set(p.ativas.map(b => b.chave))
+  const grupoDa = (a: Atividade) => (s.vinculo && a.botao_popup && botoesAtivos.has(a.botao_popup) ? a.botao_popup : SEM_BOTAO)
   const ativas = ordenarAtivs(s.ativs.filter(a => a.ativo))
   const inativas = ordenarAtivs(s.ativs.filter(a => !a.ativo))
+  const doGrupo = (g: string) => ativas.filter(a => grupoDa(a) === g)
+  const semBotao = doGrupo(SEM_BOTAO)
+  const opcoesBotao = p.ativas.map(b => ({ chave: b.chave, label: b.label }))
   const repetido = (nome: string, id?: string) => !!nome.trim() && s.ativs.some(a => a.id !== id && norm(a.nome) === norm(nome))
-  const mover = (a: Atividade, dir: -1 | 1) => {
-    const i = ativas.findIndex(x => x.id === a.id), b = ativas[i + dir]
+
+  const mover = (lista: Atividade[], a: Atividade, dir: -1 | 1) => {
+    const i = lista.findIndex(x => x.id === a.id), b = lista[i + dir]
     if (!b) return
     // Ordens iguais (cadastro antigo) ganham posicoes distintas ao trocar
     const oa = a.ordem === b.ordem ? a.ordem + dir : b.ordem
     void tentar(async () => { await s.salvarAtividade(a.id, { ordem: oa }); await s.salvarAtividade(b.id, { ordem: a.ordem }) })
   }
-  async function incluir(f: FormAtiv) {
+  async function incluir(grupo: string, f: FormAtiv) {
     const nome = f.nome.trim()
-    // Continua aberto para incluir a proxima na sequencia
-    if (await tentar(() => s.adicionarAtividade(nome, f.unidade, { fonte: f.fonte.trim() || null, liga_por: f.liga_por.trim() || null }), `"${nome}" incluída`)) setNovo({ ...FORM_VAZIO, unidade: f.unidade })
+    const extra = { fonte: f.fonte.trim() || null, liga_por: f.liga_por.trim() || null, ...(s.vinculo && f.botao ? { botao_popup: f.botao } : {}) }
+    // Continua aberto para incluir a proxima na sequencia, no mesmo grupo
+    if (await tentar(() => s.adicionarAtividade(nome, f.unidade, extra), `"${nome}" incluída`)) setNovaEm({ grupo, f: { ...FORM_VAZIO, unidade: f.unidade, botao: f.botao } })
   }
   async function salvar(id: string, f: FormAtiv) {
-    const patch = { nome: f.nome.trim(), unidade: f.unidade, fonte: f.fonte.trim() || null, liga_por: f.liga_por.trim() || null }
+    const patch: Partial<Atividade> = { nome: f.nome.trim(), unidade: f.unidade, fonte: f.fonte.trim() || null, liga_por: f.liga_por.trim() || null }
+    if (s.vinculo) patch.botao_popup = f.botao || null
     if (await tentar(() => s.salvarAtividade(id, patch), 'Atividade salva')) setEd(null)
   }
-  const abrirEdicao = (a: Atividade) => { setNovo(null); setEd({ id: a.id, f: { nome: a.nome, unidade: a.unidade, fonte: a.fonte ?? '', liga_por: a.liga_por ?? '' } }) }
+  const abrirEdicao = (a: Atividade) => {
+    fecharTudo()
+    setEd({ id: a.id, f: { nome: a.nome, unidade: a.unidade, fonte: a.fonte ?? '', liga_por: a.liga_por ?? '', botao: a.botao_popup && botoesAtivos.has(a.botao_popup) ? a.botao_popup : '' } })
+  }
+  const abrirNova = (grupo: string) => { fecharTudo(); setNovaEm({ grupo, f: { ...FORM_VAZIO, botao: grupo === SEM_BOTAO ? '' : grupo } }) }
+
   const item = (a: Atividade, i: number, lista: Atividade[]) => {
     if (ed?.id === a.id) {
       return (
         <FormAtividade key={a.id} titulo={`Editando "${a.nome}"`} valor={ed.f} setValor={f => setEd({ id: a.id, f })} repetido={repetido(ed.f.nome, a.id)}
+          botoes={s.vinculo ? opcoesBotao : undefined}
           aviso={ed.f.unidade !== a.unidade ? (ed.f.unidade === 'minutos' ? 'Passa a usar o volume como minutos (as medições ficam guardadas, mas não entram).' : 'Passa a usar volume × tempo-padrão cronometrado.') : null}
           rotuloSalvar="Salvar" onSalvar={() => void salvar(a.id, ed.f)} onCancelar={() => setEd(null)} />
       )
     }
     return (
       <CardAtividade key={a.id} ctx={ctx} s={s} a={a} t={tempoAtividade(s.meds, a.id, base)} editar={() => abrirEdicao(a)}
-        subir={a.ativo && i > 0 ? () => mover(a, -1) : undefined} descer={a.ativo && i < lista.length - 1 ? () => mover(a, 1) : undefined} />
+        subir={a.ativo && i > 0 ? () => mover(lista, a, -1) : undefined} descer={a.ativo && i < lista.length - 1 ? () => mover(lista, a, 1) : undefined} />
     )
   }
+  const corpo = (grupo: string, lista: Atividade[], vazio: string) => (
+    <div className="it-lista">
+      {lista.map((a, i) => item(a, i, lista))}
+      {novaEm?.grupo === grupo && (
+        <FormAtividade novo titulo="Nova atividade cronometrada" valor={novaEm.f} setValor={f => setNovaEm({ grupo, f })} repetido={repetido(novaEm.f.nome)}
+          botoes={s.vinculo ? opcoesBotao : undefined}
+          rotuloSalvar="Incluir" onSalvar={() => void incluir(grupo, novaEm.f)} onCancelar={() => setNovaEm(null)} />
+      )}
+      {!lista.length && novaEm?.grupo !== grupo && <div className="note c2-vazio">{vazio}</div>}
+    </div>
+  )
+
   return (
     <div className="box">
       <div className="it-topo">
         <div>
-          <h2>Atividades cronometradas <span className="cnt">{ativas.length} ativa{ativas.length === 1 ? '' : 's'}</span></h2>
-          <p className="note">Volume da atividade × tempo-padrão, como na avaliação. Clique no nome para editar; desligue &quot;Ativa&quot; para tirar do cronômetro sem perder o histórico.</p>
+          <h2>Atividades da camada 2</h2>
+          <p className="note">
+            Cada <b>botão do pop-up</b> da amostragem reúne as <b>atividades que você cronometra</b>. Ex.: o botão Cadastro agrupa Cadastro de empresa,
+            Cadastro de pessoa, Troca de função... Clique em um nome para editar.
+          </p>
         </div>
-        {!novo && <button type="button" className="btn solid" onClick={() => { setEd(null); setNovo(FORM_VAZIO) }}>+ Nova atividade</button>}
+        {gerencia && !novoBotao && <button type="button" className="btn solid" disabled={!p.editavel} onClick={() => { fecharTudo(); setNovoBotao({ label: '', inclui: '' }) }}>+ Novo botão do pop-up</button>}
       </div>
-      {novo && (
-        <FormAtividade novo titulo="Nova atividade" valor={novo} setValor={setNovo} repetido={repetido(novo.nome)}
-          rotuloSalvar="Incluir" onSalvar={() => void incluir(novo)} onCancelar={() => setNovo(null)} />
+      {gerencia && <AvisoPopupSql s={s} camada={2} />}
+      {!s.vinculo && (
+        <div className="warnbox">Para guardar em qual botão do pop-up fica cada atividade cronometrada, rode <b>sql/custo-servir-atividade-botao.sql</b> no SQL Editor do Supabase. Até lá elas aparecem em &quot;Sem botão no pop-up&quot;.</div>
       )}
-      <div className="it-lista">
-        {ativas.map((a, i) => item(a, i, ativas))}
-        {!ativas.length && <div className="empty">Nenhuma atividade ativa. Clique em &quot;+ Nova atividade&quot;.</div>}
-      </div>
-      {inativas.length > 0 && (
+      {novoBotao && p.editavel && (
+        <FormPopup novo titulo="Novo botão do pop-up" valor={novoBotao} setValor={setNovoBotao} repetido={p.nomeRepetido(novoBotao.label)} exemplo={p.exemplo}
+          onSalvar={async () => { if (await p.incluir(novoBotao)) setNovoBotao({ label: '', inclui: '' }) }} onCancelar={() => setNovoBotao(null)} />
+      )}
+
+      {p.ativas.map((b, i) => {
+        const lista = doGrupo(b.chave)
+        return (
+          <section key={b.chave} className="c2-grupo">
+            {edBotao?.chave === b.chave ? (
+              <FormPopup titulo={`Editando o botão "${b.label}"`} valor={edBotao} setValor={v => setEdBotao({ ...edBotao, ...v })} repetido={p.nomeRepetido(edBotao.label, b.chave)} exemplo={p.exemplo}
+                onSalvar={async () => { if (await p.salvar(b.chave, edBotao)) setEdBotao(null) }} onCancelar={() => setEdBotao(null)} />
+            ) : (
+              <div className="c2-grupo-topo">
+                {gerencia && <SetasOrdem disabled={!p.editavel} subir={i > 0 ? () => void p.mover(b, -1) : undefined} descer={i < p.ativas.length - 1 ? () => void p.mover(b, 1) : undefined} />}
+                <span className="c2-botao" aria-hidden>●</span>
+                <div className="it-corpo">
+                  <span className="c2-tag">Botão do pop-up</span>
+                  {gerencia && p.editavel
+                    ? <button type="button" className="it-nome" title="Clique para editar o botão" onClick={() => { fecharTudo(); setEdBotao({ chave: b.chave, label: b.label, inclui: b.inclui ?? '' }) }}>{b.label}</button>
+                    : <span className="it-nome" style={{ cursor: 'default' }}>{b.label}</span>}
+                  <span className="it-info">{b.inclui || <i>sem descrição</i>}{s.vinculo && <> · {lista.length} atividade{lista.length === 1 ? '' : 's'} cronometrada{lista.length === 1 ? '' : 's'}</>}</span>
+                </div>
+                <div className="it-acoes">
+                  {s.vinculo && <button type="button" className="btn sm" onClick={() => abrirNova(b.chave)}>+ Atividade</button>}
+                  {gerencia && <button type="button" className="btn sm" disabled={!p.editavel} onClick={() => { fecharTudo(); setEdBotao({ chave: b.chave, label: b.label, inclui: b.inclui ?? '' }) }}>✎ Editar</button>}
+                  {gerencia && (
+                    <span title="Sem respostas: exclui. Com respostas: só tira do pop-up (o resultado continua contando). As atividades cronometradas dele vão para 'Sem botão'.">
+                      <BotaoConfirmar disabled={!p.editavel} onConfirm={() => void p.remover(b)}>Remover</BotaoConfirmar>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {s.vinculo && corpo(b.chave, lista, 'Nenhuma atividade cronometrada neste botão ainda. Use "+ Atividade" para incluir.')}
+          </section>
+        )
+      })}
+
+      <section className="c2-grupo sem">
+        <div className="c2-grupo-topo">
+          <div className="it-corpo">
+            <span className="it-nome" style={{ cursor: 'default' }}>Sem botão no pop-up</span>
+            <span className="it-info">Cronometradas, mas não aparecem como opção no pop-up da amostragem.</span>
+          </div>
+          <div className="it-acoes"><button type="button" className="btn sm" onClick={() => abrirNova(SEM_BOTAO)}>+ Atividade</button></div>
+        </div>
+        {corpo(SEM_BOTAO, semBotao, 'Todas as atividades estão em algum botão.')}
+      </section>
+
+      {(inativas.length > 0 || (gerencia && p.inativas.length > 0)) && (
         <div className="it-sec">
           <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setVerInativas(v => !v)}>
-            {verInativas ? 'ocultar' : 'ver'} desativadas ({inativas.length})
+            {verInativas ? 'ocultar' : 'ver'} desativadas e removidas ({inativas.length + (gerencia ? p.inativas.length : 0)})
           </button>
-          {verInativas && <div className="it-lista">{inativas.map((a, i) => item(a, i, inativas))}</div>}
+          {verInativas && (
+            <div className="it-lista">
+              {inativas.map((a, i) => item(a, i, inativas))}
+              {gerencia && p.inativas.map(b => (
+                <div key={b.chave} className="it-card off">
+                  <span className="c2-botao" aria-hidden>●</span>
+                  <div className="it-corpo">
+                    <span className="c2-tag">Botão do pop-up removido</span>
+                    <span className="it-nome" style={{ cursor: 'default' }}>{b.label}</span>
+                  </div>
+                  <div className="it-acoes"><button type="button" className="btn sm" disabled={!p.editavel} onClick={() => void p.reativar(b)}>↺ Reativar</button></div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
-      <p className="note">Cronometre 5 a 10 de cada para ter o tempo (sub-aba Cronometrar ou Medições e volumes). Atividade &quot;já em minutos&quot; (ex.: ligação, que a central já registra) não precisa de tempo-padrão.</p>
+      <p className="note">Cronometre 5 a 10 de cada atividade para ter o tempo (sub-aba Cronometrar). Atividade &quot;já em minutos&quot; (ex.: ligação, que a central já registra) não precisa de tempo-padrão. Também aparecem no pop-up, editadas em outro lugar: Avaliação, as da camada 3 (aba Extra portal), Interno e Sem demanda.</p>
     </div>
   )
 }
 
 /** Formulario de incluir/editar atividade cronometrada. Enter salva, Esc cancela. */
-function FormAtividade({ titulo, valor, setValor, repetido, aviso, rotuloSalvar, onSalvar, onCancelar, novo }: {
+function FormAtividade({ titulo, valor, setValor, repetido, aviso, rotuloSalvar, onSalvar, onCancelar, novo, botoes }: {
   titulo: string; valor: FormAtiv; setValor: (f: FormAtiv) => void; repetido: boolean; aviso?: string | null
   rotuloSalvar: string; onSalvar: () => void; onCancelar: () => void; novo?: boolean
+  /** Botoes do pop-up para escolher o grupo (so com a migracao do vinculo). */
+  botoes?: { chave: string; label: string }[]
 }) {
   const [mais, setMais] = useState(!!(valor.fonte || valor.liga_por))
   const pode = !!valor.nome.trim() && !repetido
@@ -148,9 +244,19 @@ function FormAtividade({ titulo, valor, setValor, repetido, aviso, rotuloSalvar,
   return (
     <form className={'it-form' + (novo ? ' novo' : '')} onSubmit={e => { e.preventDefault(); if (pode) onSalvar() }} onKeyDown={e => { if (e.key === 'Escape') onCancelar() }}>
       <b>{titulo}</b>
-      <label>Nome da atividade
-        <input type="text" autoFocus value={valor.nome} onChange={e => setValor({ ...valor, nome: e.target.value })} placeholder="ex.: Cadastro de veículo" />
-      </label>
+      <div className="kv">
+        <label>Nome da atividade
+          <input type="text" autoFocus value={valor.nome} onChange={e => setValor({ ...valor, nome: e.target.value })} placeholder="ex.: Cadastro de veículo" />
+        </label>
+        {botoes && (
+          <label>Botão do pop-up
+            <select value={valor.botao} onChange={e => setValor({ ...valor, botao: e.target.value })}>
+              <option value="">Sem botão no pop-up</option>
+              {botoes.map(b => <option key={b.chave} value={b.chave}>{b.label}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
       {repetido && <span className="note" style={{ color: 'var(--cs-bad)' }}>Já existe uma atividade com esse nome.</span>}
       <div className="it-escolha" role="radiogroup" aria-label="Como medir">
         {un('quantidade', 'Por quantidade', 'volume × tempo cronometrado')}

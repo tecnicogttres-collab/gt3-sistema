@@ -128,12 +128,9 @@ function MinhaParticipacao({ ctx, s }: { ctx: Ctx; s: SuporteApi }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // Gestor/admin: atividades da camada 3 (opcoes do pop-up fora do portal)
 // ═════════════════════════════════════════════════════════════════════════════
-/** Opcoes editaveis do pop-up de uma camada: 2 (com rastro, aba Suporte) ou 3 (difuso, aba Extra portal). */
-export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 }) {
+/** Acoes sobre os botoes do pop-up de uma camada (cs_camada3_atividades): usado no Extra portal e no Suporte. */
+export function usePopupEditor(s: SuporteApi, camada: 2 | 3) {
   const { toast, tentar } = useCs()
-  const [novo, setNovo] = useState<{ label: string; inclui: string } | null>(null)
-  const [edit, setEdit] = useState<{ chave: string; label: string; inclui: string } | null>(null)
-  const [verInativas, setVerInativas] = useState(false)
   const daCamada = s.c3.filter(a => a.camada === camada)
   const ativas = daCamada.filter(a => a.ativo).sort((a, b) => a.ordem - b.ordem)
   const inativas = daCamada.filter(a => !a.ativo)
@@ -141,19 +138,8 @@ export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 })
   // Nome unico no pop-up inteiro (as duas camadas aparecem juntas)
   const nomeRepetido = (label: string, chave?: string) =>
     !!label.trim() && s.c3.some(a => a.chave !== chave && a.ativo && a.label.trim().toLowerCase() === label.trim().toLowerCase())
-  const fixas = camada === 2 ? 'Avaliação, as da camada 3 (aba Extra portal), Interno e Sem demanda' : 'Avaliação, as da camada 2 (aba Suporte), Interno e Sem demanda'
-  const exemplo = camada === 2 ? ['ex.: Portal do prestador', 'ex.: Liberar acesso, redefinir senha'] : ['ex.: Teams', 'ex.: Mensagens e chamadas pelo Teams']
-
-  async function incluir() {
-    if (!novo) return
-    const label = novo.label.trim()
-    // Continua aberto para incluir a proxima na sequencia
-    if (await tentar(() => s.adicionarC3(label, novo.inclui.trim(), camada), `"${label}" incluída no pop-up`)) setNovo({ label: '', inclui: '' })
-  }
-  async function salvarEdicao() {
-    if (!edit) return
-    if (await tentar(() => s.salvarC3(edit.chave, { label: edit.label.trim(), inclui: edit.inclui.trim() || null }), 'Atividade salva')) setEdit(null)
-  }
+  const incluir = (v: FormPopupValor) => tentar(() => s.adicionarC3(v.label.trim(), v.inclui.trim(), camada), `"${v.label.trim()}" incluída no pop-up`)
+  const salvar = (chave: string, v: FormPopupValor) => tentar(() => s.salvarC3(chave, { label: v.label.trim(), inclui: v.inclui.trim() || null }), 'Botão salvo')
   async function remover(a: AtividadeC3) {
     let r: 'excluida' | 'desativada' | null = null
     await tentar(async () => { r = await s.removerC3(a.chave) })
@@ -166,29 +152,58 @@ export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 })
     if (!b) return
     await tentar(async () => { await s.salvarC3(a.chave, { ordem: b.ordem }); await s.salvarC3(b.chave, { ordem: a.ordem }) })
   }
-  const form = (titulo: string, v: { label: string; inclui: string }, set: (v: { label: string; inclui: string }) => void,
-    repetido: boolean, salvar: () => void, cancelar: () => void, eNovo: boolean) => (
-    <form className={'it-form' + (eNovo ? ' novo' : '')} onSubmit={e => { e.preventDefault(); if (v.label.trim() && !repetido) salvar() }}
-      onKeyDown={e => { if (e.key === 'Escape') cancelar() }}>
+  const reativar = (a: AtividadeC3) =>
+    tentar(() => s.salvarC3(a.chave, { ativo: true, ordem: Math.max(0, ...daCamada.map(x => x.ordem)) + 1 }), `"${a.label}" voltou ao pop-up`)
+  const exemplo = camada === 2 ? ['ex.: Portal do prestador', 'ex.: Liberar acesso, redefinir senha'] : ['ex.: Teams', 'ex.: Mensagens e chamadas pelo Teams']
+  return { ativas, inativas, editavel, nomeRepetido, incluir, salvar, remover, mover, reativar, exemplo }
+}
+
+export type FormPopupValor = { label: string; inclui: string }
+
+/** Formulario de um botao do pop-up. Enter salva, Esc cancela. */
+export function FormPopup({ titulo, valor, setValor, repetido, exemplo, novo, onSalvar, onCancelar }: {
+  titulo: string; valor: FormPopupValor; setValor: (v: FormPopupValor) => void; repetido: boolean; exemplo: string[]
+  novo?: boolean; onSalvar: () => void; onCancelar: () => void
+}) {
+  return (
+    <form className={'it-form' + (novo ? ' novo' : '')} onSubmit={e => { e.preventDefault(); if (valor.label.trim() && !repetido) onSalvar() }}
+      onKeyDown={e => { if (e.key === 'Escape') onCancelar() }}>
       <b>{titulo}</b>
       <div className="kv">
-        <label>Nome no botão<input type="text" autoFocus value={v.label} onChange={e => set({ ...v, label: e.target.value })} placeholder={exemplo[0]} /></label>
-        <label>O que inclui (texto menor do botão, opcional)<input type="text" value={v.inclui} onChange={e => set({ ...v, inclui: e.target.value })} placeholder={exemplo[1]} /></label>
+        <label>Nome no botão<input type="text" autoFocus value={valor.label} onChange={e => setValor({ ...valor, label: e.target.value })} placeholder={exemplo[0]} /></label>
+        <label>O que inclui (texto menor do botão, opcional)<input type="text" value={valor.inclui} onChange={e => setValor({ ...valor, inclui: e.target.value })} placeholder={exemplo[1]} /></label>
       </div>
-      {repetido && <span className="note" style={{ color: 'var(--cs-bad)' }}>Já existe uma atividade com esse nome no pop-up.</span>}
+      {repetido && <span className="note" style={{ color: 'var(--cs-bad)' }}>Já existe um botão com esse nome no pop-up.</span>}
       <div className="row">
-        <button type="submit" className="btn solid" disabled={!v.label.trim() || repetido}>{eNovo ? 'Incluir' : 'Salvar'}</button>
-        <button type="button" className="btn" onClick={cancelar}>{eNovo ? 'Fechar' : 'Cancelar'}</button>
+        <button type="submit" className="btn solid" disabled={!valor.label.trim() || repetido}>{novo ? 'Incluir' : 'Salvar'}</button>
+        <button type="button" className="btn" onClick={onCancelar}>{novo ? 'Fechar' : 'Cancelar'}</button>
         <span className="note">Enter salva · Esc cancela</span>
       </div>
     </form>
   )
+}
+
+/** Avisos de migracao pendente para editar os botoes do pop-up. */
+export function AvisoPopupSql({ s, camada }: { s: SuporteApi; camada: 2 | 3 }) {
+  if (!s.c3Tabela) return <div className="warnbox">Para editar, rode <b>sql/custo-servir-camada3-atividades.sql</b> no SQL Editor do Supabase.</div>
+  if (camada === 2 && !s.c2Editavel) return <div className="warnbox">Para editar, rode <b>sql/custo-servir-ativos-camada2.sql</b> no SQL Editor do Supabase. Até lá valem Cadastro, E-mail, Ligação e Faturamento.</div>
+  return null
+}
+
+/** Opcoes editaveis do pop-up de uma camada: 2 (com rastro, aba Suporte) ou 3 (difuso, aba Extra portal). */
+export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 }) {
+  const p = usePopupEditor(s, camada)
+  const [novo, setNovo] = useState<FormPopupValor | null>(null)
+  const [edit, setEdit] = useState<({ chave: string } & FormPopupValor) | null>(null)
+  const [verInativas, setVerInativas] = useState(false)
+  const fixas = camada === 2 ? 'Avaliação, as da camada 3 (aba Extra portal), Interno e Sem demanda' : 'Avaliação, as da camada 2 (aba Suporte), Interno e Sem demanda'
+  const editar = (a: AtividadeC3) => { setNovo(null); setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' }) }
 
   return (
     <div className="box">
       <div className="it-topo">
         <div>
-          <h2>{camada === 2 ? 'Botões da camada 2 no pop-up' : 'Atividades da camada 3 no pop-up'} <span className="cnt">{ativas.length} ativa{ativas.length === 1 ? '' : 's'}</span></h2>
+          <h2>{camada === 2 ? 'Botões da camada 2 no pop-up' : 'Atividades da camada 3 no pop-up'} <span className="cnt">{p.ativas.length} ativa{p.ativas.length === 1 ? '' : 's'}</span></h2>
           <p className="note">
             {camada === 2
               ? 'Trabalho com rastro (cadastro, e-mail, ligação...). Cada uma vira um botão no pop-up da amostragem e sempre pede o contratante. '
@@ -196,49 +211,50 @@ export function AtividadesPopup({ s, camada }: { s: SuporteApi; camada: 2 | 3 })
             Clique no nome para editar. Também aparecem no pop-up, editadas em outro lugar: {fixas}.
           </p>
         </div>
-        {!novo && <button type="button" className="btn solid" disabled={!editavel} onClick={() => { setEdit(null); setNovo({ label: '', inclui: '' }) }}>+ Nova atividade</button>}
+        {!novo && <button type="button" className="btn solid" disabled={!p.editavel} onClick={() => { setEdit(null); setNovo({ label: '', inclui: '' }) }}>+ Nova atividade</button>}
       </div>
-      {!s.c3Tabela && <div className="warnbox">Para editar, rode <b>sql/custo-servir-camada3-atividades.sql</b> no SQL Editor do Supabase.</div>}
-      {s.c3Tabela && camada === 2 && !s.c2Editavel && <div className="warnbox">Para editar, rode <b>sql/custo-servir-ativos-camada2.sql</b> no SQL Editor do Supabase. Até lá valem Cadastro, E-mail, Ligação e Faturamento.</div>}
+      <AvisoPopupSql s={s} camada={camada} />
 
-      {novo && editavel && form('Nova atividade no pop-up', novo, setNovo, nomeRepetido(novo.label), () => void incluir(), () => setNovo(null), true)}
+      {novo && p.editavel && (
+        <FormPopup novo titulo="Nova atividade no pop-up" valor={novo} setValor={setNovo} repetido={p.nomeRepetido(novo.label)} exemplo={p.exemplo}
+          onSalvar={async () => { if (await p.incluir(novo)) setNovo({ label: '', inclui: '' }) }} onCancelar={() => setNovo(null)} />
+      )}
 
       <div className="it-lista">
-        {ativas.map((a, i) => edit?.chave === a.chave
-          ? <div key={a.chave}>{form(`Editando "${a.label}"`, edit, v => setEdit({ ...edit, ...v }), nomeRepetido(edit.label, a.chave), () => void salvarEdicao(), () => setEdit(null), false)}</div>
+        {p.ativas.map((a, i) => edit?.chave === a.chave
+          ? <FormPopup key={a.chave} titulo={`Editando "${a.label}"`} valor={edit} setValor={v => setEdit({ ...edit, ...v })} repetido={p.nomeRepetido(edit.label, a.chave)} exemplo={p.exemplo}
+              onSalvar={async () => { if (await p.salvar(a.chave, edit)) setEdit(null) }} onCancelar={() => setEdit(null)} />
           : (
             <div key={a.chave} className="it-card">
-              <SetasOrdem disabled={!editavel} subir={i > 0 ? () => void mover(a, -1) : undefined} descer={i < ativas.length - 1 ? () => void mover(a, 1) : undefined} />
+              <SetasOrdem disabled={!p.editavel} subir={i > 0 ? () => void p.mover(a, -1) : undefined} descer={i < p.ativas.length - 1 ? () => void p.mover(a, 1) : undefined} />
               <div className="it-corpo">
-                <button type="button" className="it-nome" disabled={!editavel} title={editavel ? 'Clique para editar' : undefined}
-                  onClick={() => { setNovo(null); setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' }) }}>{a.label}</button>
+                <button type="button" className="it-nome" disabled={!p.editavel} title={p.editavel ? 'Clique para editar' : undefined} onClick={() => editar(a)}>{a.label}</button>
                 <span className="it-info">{a.inclui || <i>sem descrição</i>}</span>
               </div>
               <div className="it-acoes">
-                <button type="button" className="btn sm" disabled={!editavel} onClick={() => { setNovo(null); setEdit({ chave: a.chave, label: a.label, inclui: a.inclui ?? '' }) }}>✎ Editar</button>
+                <button type="button" className="btn sm" disabled={!p.editavel} onClick={() => editar(a)}>✎ Editar</button>
                 <span title="Sem respostas: exclui. Com respostas: só tira do pop-up (o resultado continua contando).">
-                  <BotaoConfirmar disabled={!editavel} onConfirm={() => void remover(a)}>Remover</BotaoConfirmar>
+                  <BotaoConfirmar disabled={!p.editavel} onConfirm={() => void p.remover(a)}>Remover</BotaoConfirmar>
                 </span>
               </div>
             </div>
           ))}
-        {!ativas.length && <div className="empty">Nenhuma atividade da camada {camada} no pop-up. Clique em &quot;+ Nova atividade&quot;.</div>}
+        {!p.ativas.length && <div className="empty">Nenhuma atividade da camada {camada} no pop-up. Clique em &quot;+ Nova atividade&quot;.</div>}
       </div>
 
-      {inativas.length > 0 && (
+      {p.inativas.length > 0 && (
         <div className="it-sec">
-          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setVerInativas(v => !v)}>{verInativas ? 'ocultar' : 'ver'} removidas com histórico ({inativas.length})</button>
+          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setVerInativas(v => !v)}>{verInativas ? 'ocultar' : 'ver'} removidas com histórico ({p.inativas.length})</button>
           {verInativas && (
             <div className="it-lista">
-              {inativas.map(a => (
+              {p.inativas.map(a => (
                 <div key={a.chave} className="it-card off">
                   <div className="it-corpo">
                     <span className="it-nome" style={{ cursor: 'default' }}>{a.label}</span>
                     <span className="it-info">{a.inclui || <i>sem descrição</i>}</span>
                   </div>
                   <div className="it-acoes">
-                    <button type="button" className="btn sm" disabled={!editavel}
-                      onClick={() => void tentar(() => s.salvarC3(a.chave, { ativo: true, ordem: Math.max(0, ...daCamada.map(x => x.ordem)) + 1 }), `"${a.label}" voltou ao pop-up`)}>↺ Reativar</button>
+                    <button type="button" className="btn sm" disabled={!p.editavel} onClick={() => void p.reativar(a)}>↺ Reativar</button>
                   </div>
                 </div>
               ))}

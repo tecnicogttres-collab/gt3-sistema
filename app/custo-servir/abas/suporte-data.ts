@@ -20,6 +20,7 @@ async function todas<T>(q: (a: number, b: number) => PageRes<T>): Promise<T[]> {
 function ok<T>(r: { data: T; error: { message: string } | null }): T {
   if (r.error) {
     const m = r.error.message
+    if (/botao_popup/.test(m)) throw new Error('Rode a migração sql/custo-servir-atividade-botao.sql no Supabase para ligar atividades aos botões do pop-up.')
     if (/janelas/.test(m)) throw new Error('Rode a migração sql/custo-servir-amostragem-janelas.sql no Supabase para usar faixas de horário.')
     if (/espontanea|aberta_todos|opcoes/.test(m)) throw new Error('Rode a migração sql/custo-servir-extra-portal.sql no Supabase para usar o Extra portal.')
     throw new Error(m)
@@ -108,6 +109,9 @@ export function useSuporte(meuId: string) {
     return () => clearTimeout(t)
   }, [meuId, carregar])
 
+  // Vinculo atividade -> botao do pop-up (coluna cs_atividades.botao_popup) disponivel?
+  const vinculo = useMemo(() => ativs.some(a => 'botao_popup' in a), [ativs])
+
   const loteSel = useMemo(() => lotes.find(x => x.id === loteId) ?? lotes[0] ?? null, [lotes, loteId])
   const amSel = useMemo(() => amostragens.find(x => x.id === amId) ?? amostragens[0] ?? null, [amostragens, amId])
 
@@ -141,10 +145,10 @@ export function useSuporte(meuId: string) {
     ok(await supabase.from('cs_atividades').update(patch).eq('id', id))
     setAtivs(p => p.map(a => (a.id === id ? { ...a, ...patch } : a)))
   }, [supabase])
-  const adicionarAtividade = useCallback(async (nome: string, unidade: Atividade['unidade'], extra?: Partial<Pick<Atividade, 'fonte' | 'liga_por'>>) => {
+  const adicionarAtividade = useCallback(async (nome: string, unidade: Atividade['unidade'], extra?: Partial<Pick<Atividade, 'fonte' | 'liga_por' | 'botao_popup'>>) => {
     const chave = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now().toString(36).slice(-4)
     const ordem = Math.max(0, ...ativs.map(a => a.ordem)) + 1
-    const a = ok(await supabase.from('cs_atividades').insert({ chave, nome, unidade, ordem, ...(extra?.fonte ? { fonte: extra.fonte } : {}), ...(extra?.liga_por ? { liga_por: extra.liga_por } : {}) }).select('*').single()) as Atividade
+    const a = ok(await supabase.from('cs_atividades').insert({ chave, nome, unidade, ordem, ...(extra?.fonte ? { fonte: extra.fonte } : {}), ...(extra?.liga_por ? { liga_por: extra.liga_por } : {}), ...(extra?.botao_popup ? { botao_popup: extra.botao_popup } : {}) }).select('*').single()) as Atividade
     setAtivs(p => [...p, a])
   }, [supabase, ativs])
   const registrarMedAtiv = useCallback(async (atividade_id: string, ms: number, situacao: AtivMedicao['situacao'], motivo: string | null, contratante_cod: string | null = null, grupo = false) => {
@@ -258,7 +262,7 @@ export function useSuporte(meuId: string) {
   }, [supabase, podeEditar])
 
   return {
-    c3, c3Tabela, c2Editavel, adicionarC3, salvarC3, removerC3,
+    c3, c3Tabela, c2Editavel, vinculo, adicionarC3, salvarC3, removerC3,
     carregando, faltaSql, recarregar: carregar, ativs, meds, lotes, loteSel, setLoteId, linhas, amostragens, amSel, setAmId, amostras,
     recarregarAmostras, salvarAtividade, adicionarAtividade, excluirAtividade, registrarMedAtiv, alternarMedAtiv, excluirMedAtiv,
     importarLote, adicionarLinhas, atualizarLote, excluirLote, criarAmostragem, salvarAmostragem, excluirAmostragem, registrarAmostra,
