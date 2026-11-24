@@ -166,7 +166,6 @@ export default function AtasContratantesClient() {
   const [loadingAta, setLoadingAta] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
   const [editingAta, setEditingAta] = useState<Ata | null>(null)
-  const [copyingAta, setCopyingAta] = useState<Ata | null>(null)
   const [novaReuniaoAta, setNovaReuniaoAta] = useState<Ata | null>(null)
   const [openClientes, setOpenClientes] = useState<Set<string>>(new Set())
   const [openYears, setOpenYears] = useState<Set<string>>(new Set())
@@ -576,6 +575,19 @@ export default function AtasContratantesClient() {
     if (!empresa) return
     setEmailDirDraft(prev => [...prev, { nome: '', empresa, email: '' }])
     setNovaEmpresaInput('')
+  }
+
+  /** Cadastro rápido feito no editor da ata (participante digitado que não estava no diretório). */
+  async function cadastrarContato(c: ContatoDiretorio): Promise<boolean> {
+    try {
+      const res = await fetch('/api/atas-contratantes/email-config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c),
+      })
+      if (!res.ok) return false
+      const d = await res.json().catch(() => null) as { diretorio?: ContatoDiretorio[] } | null
+      if (d?.diretorio) setDiretorioContatos(d.diretorio)
+      return true
+    } catch { return false }
   }
 
   async function salvarEmailConfig() {
@@ -1014,14 +1026,11 @@ export default function AtasContratantesClient() {
                         {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <button
-                        onClick={() => setCopyingAta(selected)}
+                        onClick={() => setNovaReuniaoAta(selected)}
                         style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }}
-                        title="Criar nova ata a partir desta (sem tópicos finalizados)"
+                        title="Nova reunião com os tópicos em aberto desta ata: o último &quot;definiu-se&quot; de cada tópico vai para o histórico e fica à mostra"
                       >
                         ⊕ Nova a partir desta
-                      </button>
-                      <button onClick={() => setNovaReuniaoAta(selected)} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #10B981', background: '#fff', color: '#10B981', fontSize: 13, cursor: 'pointer' }}>
-                        Nova reunião
                       </button>
                       <button onClick={() => { setEditingAta(selected) }} style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #5B8DEF', background: '#fff', color: '#5B8DEF', fontSize: 13, cursor: 'pointer' }}>
                         Editar
@@ -1146,6 +1155,7 @@ export default function AtasContratantesClient() {
           enableNotifModal
           availableUsers={allUsers}
           diretorioContatos={diretorioContatos}
+          onNovoContato={cadastrarContato}
           autoNome={autoNome}
         />
       )}
@@ -1166,29 +1176,7 @@ export default function AtasContratantesClient() {
           enableNotifModal
           availableUsers={allUsers}
           diretorioContatos={diretorioContatos}
-        />
-      )}
-      {copyingAta && (
-        <AtasEditor
-          initial={{
-            ...(() => {
-              const data = new Date().toISOString().slice(0, 10)
-              const n = autoNome(copyingAta.cliente ?? '', data)
-              return { data, titulo: n.titulo, numeroAta: n.numero }
-            })(),
-            status: 'Rascunho',
-            // O texto de "definiu-se" vem junto, marcado com a data da ata de origem —
-            // é essa data que vai para o histórico, não a da ata nova.
-            conteudo: JSON.stringify(parseTopicos(copyingAta.conteudo ?? '').filter(t => !t.finalizado)
-              .map(t => t.descricao?.trim() ? { ...t, descricaoData: t.descricaoData || copyingAta.data } : t)),
-            cliente: copyingAta.cliente ?? '',
-            localReuniao: copyingAta.local_reuniao ?? '',
-            participantes: copyingAta.participantes ?? '',
-          }}
-          onSave={async (form) => { await handleCreate(form); setCopyingAta(null) }}
-          onClose={() => setCopyingAta(null)}
-          diretorioContatos={diretorioContatos}
-          autoNome={autoNome}
+          onNovoContato={cadastrarContato}
         />
       )}
       {novaReuniaoAta && (
@@ -1210,6 +1198,7 @@ export default function AtasContratantesClient() {
                     : (t.historico ?? []),
                   descricao: '',
                   descricaoData: undefined,
+                  descricaoSalva: false,
                 }))
             ),
             cliente: novaReuniaoAta.cliente ?? '',
@@ -1221,7 +1210,9 @@ export default function AtasContratantesClient() {
           enableNotifModal
           availableUsers={allUsers}
           diretorioContatos={diretorioContatos}
+          onNovoContato={cadastrarContato}
           autoNome={autoNome}
+          modo="continuacao"
         />
       )}
 

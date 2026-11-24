@@ -112,3 +112,39 @@ export async function PUT(req: NextRequest) {
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json(dados)
 }
+
+/** Cadastro rápido de UM contato no diretório, feito pelo editor da ata quando alguém digita um
+ *  participante que não existe lá. Qualquer autenticado pode (quem escreve a ata nem sempre é
+ *  gestor); só acrescenta — editar/remover continua no PUT, só gestor/admin. */
+export async function POST(req: NextRequest) {
+  const user = await getAuthUser()
+  if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const body = await req.json().catch(() => ({})) as { nome?: string; empresa?: string; email?: string }
+  const nome = String(body.nome ?? '').trim().replace(/\s+/g, ' ')
+  const empresa = String(body.empresa ?? '').trim()
+  const email = String(body.email ?? '').trim()
+  if (!nome || !empresa || !email) return Response.json({ error: 'Informe nome, empresa e e-mail' }, { status: 400 })
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: 'E-mail inválido' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const { data: atual, error: errLer } = await admin
+    .from('atas_contratantes_email_config').select('dados').eq('id', CONFIG_ID).maybeSingle()
+  if (errLer) return Response.json({ error: errLer.message }, { status: 500 })
+  const antes = (atual?.dados ?? {}) as Partial<EmailConfigDados>
+  const diretorio = Array.isArray(antes.diretorio) ? [...antes.diretorio] : []
+
+  // Mesmo nome já cadastrado: só atualiza empresa/e-mail (não duplica)
+  const chave = nome.toLowerCase()
+  const i = diretorio.findIndex(p => (p.nome ?? '').trim().replace(/\s+/g, ' ').toLowerCase() === chave)
+  const contato = { nome, empresa, email }
+  if (i >= 0) diretorio[i] = contato
+  else diretorio.push(contato)
+
+  const dados = { ...antes, diretorio }
+  const { error } = await admin
+    .from('atas_contratantes_email_config')
+    .upsert({ id: CONFIG_ID, dados, updated_at: new Date().toISOString() })
+  if (error) return Response.json({ error: error.message }, { status: 500 })
+  return Response.json({ diretorio })
+}

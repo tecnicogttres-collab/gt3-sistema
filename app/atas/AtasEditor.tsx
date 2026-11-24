@@ -233,7 +233,21 @@ const sectionTitle = (extra?: React.CSSProperties): React.CSSProperties => ({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AtasEditor({ initial, onSave, onClose, enableNotifModal, availableUsers, diretorioContatos, autoNome }: {
+/** Entrada mais recente do histórico do tópico (por data). */
+function ultimoHistorico(t: Topico): TopicoHistorico | null {
+  const h = [...(t.historico ?? [])].sort((a, b) => b.data.localeCompare(a.data))
+  return h[0] ?? null
+}
+
+/** Entradas manuais do histórico são texto puro (textarea); o campo "definiu-se" é HTML. */
+function textoParaHtml(texto: string): string {
+  if (/<[a-z][\s\S]*>/i.test(texto)) return texto
+  return texto.split('\n').map(l => l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')).join('<br>')
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export default function AtasEditor({ initial, onSave, onClose, enableNotifModal, availableUsers, diretorioContatos, autoNome, modo, onNovoContato }: {
   initial?: Partial<AtaEditorData>
   onSave: (data: AtaEditorData) => Promise<void>
   onClose: () => void
@@ -245,6 +259,12 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   /** Nome e número automáticos (Atas Contratantes, só em atas novas): recalculados ao mudar
    *  contratante ou data, até a pessoa digitar no campo por conta própria. */
   autoNome?: (cliente: string, data: string) => { titulo: string; numero: string }
+  /** "continuacao" = Nova a partir desta: o último "definiu-se" de cada tópico já veio para o
+   *  histórico e fica à mostra acima do campo, com o botão de copiar. */
+  modo?: 'continuacao'
+  /** Cadastra no diretório quem foi digitado em Participantes e não existe lá (Atas Contratantes).
+   *  Devolve false se não conseguiu salvar. */
+  onNovoContato?: (c: ContatoDiretorio) => Promise<boolean>
 }) {
   // Meta fields
   const [titulo,   setTitulo]   = useState(initial?.titulo          ?? '')
@@ -271,6 +291,8 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   const [addPartInputs, setAddPartInputs] = useState<Record<string, string>>({})
   /** Qual caixa de "+ nome…" está com o dropdown de sugestões aberto (chave = empresa do grupo). */
   const [sugestaoBoxAberta, setSugestaoBoxAberta] = useState<string | null>(null)
+  /** Cadastro rápido de quem foi digitado e não está no diretório. */
+  const [novoContato, setNovoContato] = useState<{ boxKey: string; nome: string; empresa: string; email: string; erro: string; salvando: boolean } | null>(null)
 
   // Tópicos
   const [topicos, setTopicos] = useState<Topico[]>(
@@ -309,8 +331,44 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   function addPartToCompany(empresa: string) {
     const nome = (addPartInputs[empresa] ?? '').trim()
     if (!nome) return
+    if (diretorioContatos && onNovoContato) {
+      // Já cadastrado com esse nome exato: entra com a empresa do cadastro
+      const existe = diretorioContatos.find(c => normalizaNomeBusca(c.nome) === normalizaNomeBusca(nome))
+      if (existe) { addParticipanteDoDiretorio(existe, empresa); return }
+      // Sem cadastro: pede nome completo, empresa e e-mail antes de incluir
+      setSugestaoBoxAberta(null)
+      setNovoContato({ boxKey: empresa, nome, empresa: empresa === 'GT3' ? 'GT3' : empresa, email: '', erro: '', salvando: false })
+      return
+    }
     setParticipantes(prev => [...prev, { nome, empresa }])
     setAddPartInputs(prev => ({ ...prev, [empresa]: '' }))
+  }
+
+  async function salvarNovoContato() {
+    if (!novoContato || !onNovoContato) return
+    const nome = novoContato.nome.trim().replace(/\s+/g, ' ')
+    const empresa = novoContato.empresa.trim()
+    const email = novoContato.email.trim()
+    if (!nome || !empresa || !email) { setNovoContato(n => n && { ...n, erro: 'Preencha nome completo, contratante/empresa e e-mail.' }); return }
+    if (!EMAIL_RE.test(email)) { setNovoContato(n => n && { ...n, erro: 'E-mail inválido.' }); return }
+    setNovoContato(n => n && { ...n, salvando: true, erro: '' })
+    const ok = await onNovoContato({ nome, empresa, email })
+    if (!ok) { setNovoContato(n => n && { ...n, salvando: false, erro: 'Não foi possível salvar o cadastro. Tente de novo.' }); return }
+    const boxKey = novoContato.boxKey
+    // Participante fica no grupo onde foi digitado (a empresa do cadastro vale para o e-mail)
+    const grupo = clientes.includes(empresa) ? empresa : boxKey
+    setParticipantes(prev => [...prev, { nome, empresa: grupo }])
+    setAddPartInputs(prev => ({ ...prev, [boxKey]: '' }))
+    setNovoContato(null)
+  }
+
+  /** Inclui só o nome, sem cadastrar (como era antes). */
+  function incluirSemCadastro() {
+    if (!novoContato) return
+    const nome = novoContato.nome.trim()
+    if (nome) setParticipantes(prev => [...prev, { nome, empresa: novoContato.boxKey }])
+    setAddPartInputs(prev => ({ ...prev, [novoContato.boxKey]: '' }))
+    setNovoContato(null)
   }
 
   function removePart(idx: number) {
@@ -400,6 +458,18 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
   /** Reabre o campo travado pra continuar editando o mesmo texto (sem arquivar nada). */
   function editarDescricao(topicId: string) {
     setTopicos(prev => prev.map(t => t.id === topicId ? { ...t, descricaoSalva: false } : t))
+  }
+
+  /** Copia a observação do último histórico para o campo "definiu-se" (somando ao que já tiver). */
+  function copiarUltimoHistorico(topicId: string) {
+    setTopicos(prev => prev.map(t => {
+      if (t.id !== topicId) return t
+      const h = ultimoHistorico(t)
+      if (!h) return t
+      const novo = textoParaHtml(h.texto)
+      const atual = t.descricao.trim()
+      return { ...t, descricao: atual ? `${t.descricao}<p></p>${novo}` : novo, descricaoData: atual ? (t.descricaoData ?? dataVal) : dataVal, descricaoSalva: false }
+    }))
   }
 
   function addHistoricoEntry(topicId: string, data: string, texto: string) {
@@ -755,6 +825,74 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
               )
             })()}
 
+            {/* ── Cadastro rápido de integrante sem cadastro ── */}
+            {novoContato && (() => {
+              const parecidos = sugestoesDiretorio(novoContato.nome).slice(0, 3)
+              const opcoesEmpresa = ['GT3', ...clientes]
+              return (
+                <div className="gt3-overlay-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseDown={e => { if (e.target === e.currentTarget && !novoContato.salvando) setNovoContato(null) }}>
+                  <div className="gt3-drop-in" style={{ background: '#fff', borderRadius: 14, padding: '22px 24px', width: 440, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1f2e', marginBottom: 2 }}>Novo integrante</div>
+                    <div style={{ fontSize: 12.5, color: '#5a6178', marginBottom: 14 }}>
+                      <strong>{novoContato.nome}</strong> ainda não tem cadastro. Complete rapidinho para ele entrar nos e-mails das atas.
+                    </div>
+
+                    {parecidos.length > 0 && (
+                      <div style={{ marginBottom: 14, padding: '8px 10px', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>Não seria alguém já cadastrado?</div>
+                        {parecidos.map((c, i) => (
+                          <button key={i} onClick={() => { addParticipanteDoDiretorio(c, novoContato.boxKey); setNovoContato(null) }}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 2px', fontSize: 13, color: '#1a1f2e' }}>
+                            <b>{c.nome}</b><span style={{ color: '#64748B' }}> — {c.empresa}</span> <span style={{ color: '#5B8DEF', fontSize: 11.5 }}>{c.email}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div>
+                        <span style={lbl}>Nome completo</span>
+                        <input autoFocus value={novoContato.nome} onChange={e => setNovoContato(n => n && { ...n, nome: e.target.value, erro: '' })} style={inp()} />
+                      </div>
+                      <div>
+                        <span style={lbl}>Contratante / empresa</span>
+                        <input list="gt3-ata-empresas" value={novoContato.empresa} onChange={e => setNovoContato(n => n && { ...n, empresa: e.target.value, erro: '' })} style={inp()} />
+                        <datalist id="gt3-ata-empresas">{opcoesEmpresa.map(o => <option key={o} value={o} />)}</datalist>
+                      </div>
+                      <div>
+                        <span style={lbl}>E-mail</span>
+                        <input type="email" value={novoContato.email} placeholder="nome@empresa.com.br"
+                          onChange={e => setNovoContato(n => n && { ...n, email: e.target.value, erro: '' })}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void salvarNovoContato() } }}
+                          style={inp()} />
+                      </div>
+                    </div>
+
+                    {novoContato.erro && <div style={{ marginTop: 10, fontSize: 12.5, color: '#DC2626' }}>{novoContato.erro}</div>}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 18 }}>
+                      <button onClick={incluirSemCadastro} disabled={novoContato.salvando}
+                        title="Entra só o nome na ata, sem e-mail (não recebe a ata por e-mail)"
+                        style={{ padding: '7px 10px', borderRadius: 7, border: 'none', background: 'transparent', color: '#64748B', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+                        Incluir sem cadastro
+                      </button>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => setNovoContato(null)} disabled={novoContato.salvando}
+                          style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid #CBD5E0', background: '#fff', color: '#5a6178', fontSize: 13, cursor: 'pointer' }}>
+                          Cancelar
+                        </button>
+                        <button onClick={() => void salvarNovoContato()} disabled={novoContato.salvando}
+                          style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: '#2A4F96', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: novoContato.salvando ? 0.6 : 1 }}>
+                          {novoContato.salvando ? 'Salvando…' : 'Cadastrar e incluir'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* ── Tópicos ── */}
             <div>
               <div style={{ ...sectionTitle(), borderBottom: '1px solid rgba(42,79,150,0.10)', paddingBottom: 8 }}>
@@ -817,6 +955,28 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                             </span>
                           ) : dataVal && <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(dataVal + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>}
                         </div>
+                        {/* Nova a partir desta: o que se definiu na última reunião, à mostra enquanto preenche */}
+                        {modo === 'continuacao' && (() => {
+                          const ult = ultimoHistorico(t)
+                          if (!ult) return null
+                          return (
+                            <div style={{ marginBottom: 8, padding: '9px 12px', background: '#F0F4FF', borderRadius: 8, border: '1px solid rgba(42,79,150,0.14)', borderLeft: `3px solid ${cor}` }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#5a6178' }}>
+                                  ↩ Última reunião ({new Date(ult.data + 'T12:00').toLocaleDateString('pt-BR')}) · já está no histórico
+                                </span>
+                                <button
+                                  onClick={() => copiarUltimoHistorico(t.id)}
+                                  title="Copia este texto para o campo abaixo, para você ajustar"
+                                  style={{ padding: '3px 10px', borderRadius: 6, border: `1px solid ${cor}55`, background: '#fff', color: cor, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                  ⧉ Copiar observação do último histórico
+                                </button>
+                              </div>
+                              <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.55 }} dangerouslySetInnerHTML={{ __html: textoParaHtml(ult.texto) }} />
+                            </div>
+                          )
+                        })()}
                         {t.descricaoSalva && t.descricao.trim() ? (
                           <div>
                             <div
@@ -921,6 +1081,15 @@ export default function AtasEditor({ initial, onSave, onClose, enableNotifModal,
                           >
                             📋 Histórico{(t.historico?.length ?? 0) > 0 ? ` (${t.historico!.length})` : ''}
                           </button>
+                          {modo !== 'continuacao' && (t.historico?.length ?? 0) > 0 && (
+                            <button
+                              onClick={() => copiarUltimoHistorico(t.id)}
+                              title="Copia a observação mais recente do histórico para o campo &quot;definiu-se&quot;"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(42,79,150,0.20)', background: '#fff', color: '#5B8DEF', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              ⧉ Copiar observação do último histórico
+                            </button>
+                          )}
                         </div>
 
                         {historyOpenId === t.id && (
