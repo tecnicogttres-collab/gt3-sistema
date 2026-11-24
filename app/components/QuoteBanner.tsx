@@ -92,7 +92,7 @@ async function fetchOrCreateTodayQuote(): Promise<Quote | null> {
 }
 
 const WEEKEND_BANNER = (
-  <div style={{
+  <div className="gt3-frase" style={{
     background: '#1E3A6E',
     padding: '7px 32px',
     display: 'flex',
@@ -124,7 +124,7 @@ export default function QuoteBanner() {
   if (!quote) return null
 
   return (
-    <div style={{
+    <div className="gt3-frase" style={{
       background: '#1E3A6E',
       padding: '8px 32px',
       display: 'flex',

@@ -110,6 +110,7 @@ export default function Sidebar({ collapsed, onToggle, onHoverEnter, onHoverLeav
 
   return (
     <aside
+      className="gt3-sidebar"
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
       style={{

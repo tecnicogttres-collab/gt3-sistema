@@ -7,6 +7,7 @@ import { useModules } from './components/ModulesContext'
 import type { Role } from './lib/modules'
 import DashboardSidebar from './dashboard/DashboardSidebar'
 import DashboardModuleGrid from './components/DashboardModuleGrid'
+import { LateralTema } from './components/tema/DecoracoesTema'
 
 function greeting(profile: ReturnType<typeof useUser>['profile']): string {
   const first = profile?.nome?.trim().split(' ')[0] || ''
@@ -101,7 +102,9 @@ export default function DashboardPage() {
   )
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start', paddingLeft: 216 }}>
+    <div style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start', paddingLeft: 216 }}>
+      {/* Natal: árvore · Ano Novo: taças — na faixa livre à esquerda */}
+      <LateralTema />
       {/* Main content — quebra os painéis laterais para baixo quando não houver largura */}
       <div style={{ flex: '1 1 560px', minWidth: 0, maxWidth: 960 }}>
         {avisoFerias && (
@@ -159,7 +162,7 @@ export default function DashboardPage() {
           </div>
         )}
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1E253D', margin: 0 }}>
+          <h1 className="gt3-saudacao-tema" style={{ fontSize: 20, fontWeight: 700, color: '#1E253D', margin: 0 }}>
             {greeting(profile)}
           </h1>
           <p style={{ fontSize: 13, color: '#6B7A99', marginTop: 4 }}>

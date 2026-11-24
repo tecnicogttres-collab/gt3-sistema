@@ -26,6 +26,8 @@ import LembreteNotificacao from './LembreteNotificacao'
 import PdiCriadoNotificacao from './PdiCriadoNotificacao'
 import QuoteBanner from './QuoteBanner'
 import IntroScreen, { shouldShowIntro } from './IntroScreen'
+import { useTemaSazonal } from './tema/TemaSazonal'
+import { DecoracaoTopo, Gorro } from './tema/DecoracoesTema'
 import { displayName } from './UserContext'
 
 function useBreadcrumb(pathname: string): string {
@@ -219,7 +221,7 @@ function UserMenu({ name, onSignOut, onAlterarSenha }: { name: string; onSignOut
       onMouseLeave={() => setOpen(false)}
     >
       {/* Trigger */}
-      <div style={{
+      <div className="gt3-user-trigger" style={{
         display: 'flex', alignItems: 'center', gap: 6,
         fontSize: 13, fontWeight: 500, color: '#1E293B',
         padding: '4px 10px', borderRadius: 6, cursor: 'default', userSelect: 'none',
@@ -444,6 +446,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const splitActive = split.open && !!split.path && !!MODULE_COMPONENT_MAP[split.path]
 
   const [introVisible, setIntroVisible] = useState(false)
+  const temaSazonal = useTemaSazonal()
 
   useLayoutEffect(() => {
     if (shouldShowIntro()) setIntroVisible(true)
@@ -782,7 +785,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const fullName = profile?.nome?.trim() || profile?.usuario?.trim() || '—'
 
   if (introVisible) {
-    return <IntroScreen name={profile ? displayName(profile).split(' ')[0] : ''} isBirthday={isBirthdayToday} onDone={() => setIntroVisible(false)} />
+    return <IntroScreen name={profile ? displayName(profile).split(' ')[0] : ''} isBirthday={isBirthdayToday} tema={temaSazonal} onDone={() => setIntroVisible(false)} />
   }
 
   function dismissTopPrio() {
@@ -916,7 +919,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           width: splitActive ? `${(1 - split.ratio) * 100}%` : undefined,
           minWidth: 0, overflow: 'hidden',
         }}>
-          <header style={{
+          <header className="gt3-header" style={{
             backgroundColor: '#fff', borderBottom: isBirthdayToday ? 'none' : '1px solid #E2E8F0',
             padding: '10px 24px', display: 'flex', alignItems: 'center',
             justifyContent: 'space-between', flexShrink: 0, gap: 12,
@@ -924,6 +927,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 onClick={() => router.back()}
+                className="gt3-voltar"
                 title="Voltar"
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -948,6 +952,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <UserMenu name={isBirthdayToday ? `${fullName} 🎂` : fullName} onSignOut={signOut} onAlterarSenha={() => router.push('/perfil')} />
             </div>
           </header>
+
+          <DecoracaoTopo dashboard={pathname === '/'} />
 
           {isBirthdayToday && (
             <div style={{
@@ -1112,6 +1118,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {/* Trigger pill — visible when sidebar is hidden */}
             <div
               onMouseEnter={() => setHoverVisible(true)}
+              className="gt3-pill"
               style={{
                 position: 'absolute',
                 left: 0,
@@ -1142,6 +1149,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 lineHeight: 1,
               }}>GT3</span>
               {isBirthdayToday && <span style={{ fontSize: 13, lineHeight: 1 }}>🎂</span>}
+              <Gorro className="gt3-pill-gorro" size={26} />
             </div>
 
             {/* Sidebar overlay — slides in on hover */}

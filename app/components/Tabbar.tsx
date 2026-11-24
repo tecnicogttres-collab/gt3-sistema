@@ -58,6 +58,7 @@ export default function Tabbar() {
 
   return (
     <div
+      className="gt3-tabbar"
       style={{
         display: 'flex',
         alignItems: 'flex-end',

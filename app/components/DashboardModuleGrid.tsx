@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Module } from '../lib/modules'
 import { useUser } from './UserContext'
 import { createClient } from '../lib/supabase'
+import { useTemaSazonal } from './tema/TemaSazonal'
+import { Gorro } from './tema/DecoracoesTema'
+import { estourarChampagne } from './tema/champagne'
 
 type SortMode = 'padrao' | 'az' | 'za' | 'personalizado'
 
@@ -33,6 +36,7 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
 }) {
   const { profile } = useUser()
   const supabase = useMemo(() => createClient(), [])
+  const tema = useTemaSazonal()
 
   const [sortMode, setSortMode] = useState<SortMode>('padrao')
   const [ordem, setOrdem] = useState<string[]>([])
@@ -259,6 +263,7 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
             return (
               <div
                 key={mod.id}
+                className={tema === 'natal' && !reordering ? 'gt3-card-tema' : undefined}
                 style={{ position: 'relative' }}
                 draggable={reordering}
                 onDragStart={reordering ? (e: React.DragEvent) => {
@@ -270,6 +275,7 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
                 onDrop={reordering ? (e: React.DragEvent) => e.preventDefault() : undefined}
                 onDragEnd={reordering ? () => setDragId(null) : undefined}
               >
+                {tema === 'natal' && !reordering && <Gorro />}
                 {hasNotif && !reordering && (
                   <span style={{
                     position: 'absolute', top: 10, right: 10, zIndex: 1,
@@ -281,7 +287,10 @@ export default function DashboardModuleGrid({ modules, moduleNotifs }: {
                 {reordering ? (
                   <div className="module-card-link">{cardInner}</div>
                 ) : (
-                  <Link href={mod.path} className="module-card-link">{cardInner}</Link>
+                  <Link href={mod.path} className="module-card-link"
+                    onClick={tema === 'anonovo' ? (e: React.MouseEvent) => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey) estourarChampagne(e.clientX, e.clientY) } : undefined}>
+                    {cardInner}
+                  </Link>
                 )}
               </div>
             )

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { TemaSazonal } from '../lib/tema-sazonal'
+import IntroTema from './tema/IntroTema'
 
 const INTRO_KEY = 'gt3-intro-v1'
 
@@ -69,7 +71,13 @@ function buildConfete(): Confete[] {
   return pieces
 }
 
-export default function IntroScreen({ name, isBirthday, onDone }: { name: string; isBirthday?: boolean; onDone?: () => void }) {
+export default function IntroScreen({ name, isBirthday, tema, onDone }: { name: string; isBirthday?: boolean; tema?: TemaSazonal | null; onDone?: () => void }) {
+  // Aniversário tem prioridade sobre o tema da época
+  if (!isBirthday && tema) return <IntroTema tema={tema} name={name} onDone={() => { markIntroShown(); onDone?.() }} />
+  return <IntroPadrao name={name} isBirthday={isBirthday} onDone={onDone} />
+}
+
+function IntroPadrao({ name, isBirthday, onDone }: { name: string; isBirthday?: boolean; onDone?: () => void }) {
   const [phase, setPhase] = useState<'in' | 'text' | 'exit' | 'done'>('in')
   const [cols] = useState<Col[]>(buildColumns)
   const [confete] = useState<Confete[]>(buildConfete)
