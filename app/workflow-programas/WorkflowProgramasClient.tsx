@@ -1306,6 +1306,10 @@ export default function WorkflowProgramasClient() {
   const [modalContratanteNovo, setModalContratanteNovo] = useState(false)
   const [modalItemEdit, setModalItemEdit] = useState<ChecklistItem | null>(null)
   const [modalItemNovo, setModalItemNovo] = useState(false)
+  /** Contratantes marcadas no modal do item (em quais checklists ele entra). */
+  const [modalItemContrs, setModalItemContrs] = useState<string[]>([])
+  /** Modal "Exportar checklists" (tela Itens de checklist). */
+  const [exportChk, setExportChk] = useState<{ ids: string[]; formato: 'xlsx' | 'md' } | null>(null)
   const [modalTextoEdit, setModalTextoEdit] = useState<TextoEmail | null>(null)
   const [modalTextoNovo, setModalTextoNovo] = useState(false)
   const [modalReprovacaoEdit, setModalReprovacaoEdit] = useState<TextoReprovacao | null>(null)
@@ -3074,6 +3078,72 @@ render();
     showToast('Checklist exportado')
   }
 
+  /** Checklists em Markdown — feito para colar/anexar numa conversa com o Claude e atualizar a
+   *  base de avaliação: cada item com critério, se reprova/orienta, condição, respostas e o texto
+   *  completo que entra no parecer. */
+  function exportarChecklistMarkdown(ids: string[]) {
+    if (!catalog) return
+    const lista = catalog.contratantes.filter(c => ids.includes(c.id))
+    if (!lista.length) { showToast('Marque ao menos uma contratante'); return }
+    const ordemCatalogo = new Map(catalog.itens.map((i, idx) => [i.id, idx]))
+    const plano = (html?: string) => htmlToPlainText(html || '').replace(/\n/g, '\n  > ')
+    const rotuloValor = (pai: ChecklistItem, valor: string) =>
+      pai.tipo === 'opcoes' ? (pai.opcoes.find(o => o.id === valor)?.label || valor) : (STATUS_LABELS[valor as Exclude<StatusResp, ''>] || valor)
+    const linhas: string[] = [
+      '# Checklists de avaliação — Workflow Programas (GT3)',
+      '',
+      `Gerado em ${new Date().toLocaleString('pt-BR')} · ${lista.length} contratante(s).`,
+      '',
+      'Como ler: cada contratante tem os itens verificados na análise dos programas (PGR, PCMSO, LTCAT e itens gerais).',
+      '"Reprova" = marcar ✕ reprova o cadastro; "Orienta" = o cadastro segue aprovado e o texto entra como orientativo.',
+      '',
+    ]
+    lista.forEach(c => {
+      linhas.push(`## ${nomeC(c)}`, '')
+      if (c.obs) linhas.push(`Observação da contratante: ${c.obs}`, '')
+      const itens = c.itens
+        .map(l => ({ item: getI(l.itemId), textoLink: l.textoId }))
+        .filter((x): x is { item: ChecklistItem; textoLink: string | null } => !!x.item)
+        .sort((x, y) => DOC_ORDER.indexOf(x.item.documento) - DOC_ORDER.indexOf(y.item.documento)
+          || (ordemCatalogo.get(x.item.id) ?? 0) - (ordemCatalogo.get(y.item.id) ?? 0))
+      DOC_ORDER.forEach(doc => {
+        const doDoc = itens.filter(x => x.item.documento === doc)
+        if (!doDoc.length) return
+        linhas.push(`### ${doc === 'GERAL' ? 'Itens gerais' : doc}`, '')
+        doDoc.forEach(({ item: i, textoLink }, n) => {
+          const pai = i.condicaoItemId && i.condicaoValor ? getI(i.condicaoItemId) : undefined
+          linhas.push(`${n + 1}. **${i.titulo}**`)
+          if (i.descricao) linhas.push(`   - Critério: ${i.descricao}`)
+          if (i.tipo === 'opcoes') {
+            linhas.push(`   - Tipo: lista de opções${i.multiplaEscolha ? ' (múltipla escolha)' : ''} → variável {{${i.variavel}}}`)
+            i.opcoes.forEach(o => linhas.push(`   - Opção "${o.label}"${o.padrao ? ' (padrão)' : ''}: ${plano(o.corpo)}`))
+          } else {
+            linhas.push(`   - Ao marcar ✕: ${i.critico ? 'Reprova o cadastro' : 'Orienta (não reprova)'}`)
+            const resp = (i.statusOptions?.length ? i.statusOptions : DEFAULT_STATUS_OPTIONS).map(st => STATUS_LABELS[st as Exclude<StatusResp, ''>]).filter(Boolean).join(', ')
+            linhas.push(`   - Respostas possíveis: ${resp}`)
+          }
+          linhas.push(`   - Escopo: ${i.escopo === 'especifico' ? 'Específico desta(s) contratante(s)' : 'Base (todas)'}`)
+          if (pai) linhas.push(`   - Só aparece quando: "${pai.titulo}" = ${rotuloValor(pai, i.condicaoValor)}`)
+          const tOri = getT(textoLink || i.textoId)
+          if (tOri) linhas.push(`   - Texto orientativo — ${tOri.titulo}:\n  > ${plano(tOri.corpo)}`)
+          const tRep = getR(i.textoReprovacaoId)
+          if (tRep) linhas.push(`   - Texto de reprovação — ${tRep.titulo}:\n  > ${plano(tRep.corpo)}`)
+          const tRes = getT(i.textoRestricaoId)
+          if (tRes) linhas.push(`   - Texto de aprovação com restrição — ${tRes.titulo}:\n  > ${plano(tRes.corpo)}`)
+          const tApr = getT(i.textoAprovadoId)
+          if (tApr) linhas.push(`   - Texto quando conforme — ${tApr.titulo}:\n  > ${plano(tApr.corpo)}`)
+        })
+        linhas.push('')
+      })
+    })
+    const blob = new Blob([linhas.join('\n')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const el = document.createElement('a')
+    const nomeArquivo = lista.length === 1 ? `Checklist ${nomeC(lista[0]).replace(/[\\/:*?"<>|]/g, '-')}` : 'Checklists contratantes'
+    el.href = url; el.download = `${nomeArquivo}.md`; el.click(); URL.revokeObjectURL(url)
+    showToast('Checklist exportado em texto (.md)')
+  }
+
   // ── catálogo: contratantes ──
   function novaContratanteModal() {
     if (!catalog) return
@@ -3120,13 +3190,19 @@ render();
   // ── catálogo: itens ──
   function novoItemModal() {
     setModalItemNovo(true)
+    // Escopo padrão é Base: já vem marcado em todas as contratantes
+    setModalItemContrs(catalog ? catalog.contratantes.map(c => c.id) : [])
     setModalItemEdit({
       id: uid('i'), titulo: '', documento: 'PGR', descricao: '', escopo: 'base', textoId: '', critico: false,
       textoReprovacaoId: '', statusOptions: [...DEFAULT_STATUS_OPTIONS], textoRestricaoId: '', textoAprovadoId: '', condicaoItemId: '', condicaoValor: '',
       tipo: 'status', multiplaEscolha: false, opcoes: [], variavel: '', formatoLista: 'ul',
     })
   }
-  function editarItemModal(i: ChecklistItem) { setModalItemNovo(false); setModalItemEdit({ ...i }) }
+  function editarItemModal(i: ChecklistItem) {
+    setModalItemNovo(false)
+    setModalItemEdit({ ...i })
+    setModalItemContrs(catalog ? catalog.contratantes.filter(c => c.itens.some(l => l.itemId === i.id)).map(c => c.id) : [])
+  }
   function salvarItemModal() {
     if (!catalog || !modalItemEdit) return
     if (!modalItemEdit.titulo.trim()) { showToast('Informe o título do item'); return }
@@ -3141,15 +3217,19 @@ render();
       if (semTexto) { showToast(`A opção "${semTexto.label}" está sem texto — sem isso ela não aparece no parecer quando marcada`); return }
     }
     const next = { ...catalog }
-    if (modalItemNovo) {
-      next.itens = [...catalog.itens, modalItemEdit]
-      if (modalItemEdit.escopo === 'base') next.contratantes = catalog.contratantes.map(c => ({ ...c, itens: [...c.itens, { itemId: modalItemEdit.id, textoId: null }] }))
-    } else {
-      next.itens = catalog.itens.map(i => (i.id === modalItemEdit.id ? modalItemEdit : i))
-    }
+    if (modalItemNovo) next.itens = [...catalog.itens, modalItemEdit]
+    else next.itens = catalog.itens.map(i => (i.id === modalItemEdit.id ? modalItemEdit : i))
+    // Entra/sai dos checklists conforme as contratantes marcadas no próprio modal
+    const marcadas = new Set(modalItemContrs)
+    next.contratantes = catalog.contratantes.map(c => {
+      const tem = c.itens.some(l => l.itemId === modalItemEdit.id)
+      if (marcadas.has(c.id) && !tem) return { ...c, itens: [...c.itens, { itemId: modalItemEdit.id, textoId: null }] }
+      if (!marcadas.has(c.id) && tem) return { ...c, itens: c.itens.filter(l => l.itemId !== modalItemEdit.id) }
+      return c
+    })
     persistCatalog(next)
     setModalItemEdit(null)
-    showToast('Item salvo')
+    showToast(`Item salvo · em ${marcadas.size} checklist(s)`)
   }
   function delItem(id: string) {
     if (!catalog || !confirm('Excluir item? Ele sairá de todas as contratantes.')) return
@@ -3541,7 +3621,7 @@ render();
       )}
 
       {view === 'itens' && (
-        <VItens catalog={catalog} usos={usosCatalogo} getT={getT} getR={getR} onNovo={novoItemModal} onEditar={editarItemModal} onDel={delItem} onMover={moverItem} onAbrirTexto={abrirTexto} onNovaOpcao={abrirNovaOpcao} />
+        <VItens catalog={catalog} usos={usosCatalogo} getT={getT} getR={getR} onNovo={novoItemModal} onExportar={() => setExportChk({ ids: catalog.contratantes.map(c => c.id), formato: 'md' })} onEditar={editarItemModal} onDel={delItem} onMover={moverItem} onAbrirTexto={abrirTexto} onNovaOpcao={abrirNovaOpcao} />
       )}
 
       {view === 'textos' && textosSub === 'hub' && (
@@ -3685,9 +3765,48 @@ render();
         />
       )}
 
+      {/* ── Modal: Exportar checklists ── */}
+      {exportChk && catalog && (
+        <ModalShell title="Exportar checklists" saveLabel="⬇ Exportar" onClose={() => setExportChk(null)}
+          onSave={() => {
+            if (!exportChk.ids.length) { showToast('Marque ao menos uma contratante'); return }
+            if (exportChk.formato === 'md') exportarChecklistMarkdown(exportChk.ids)
+            else void exportarChecklistContratantes(exportChk.ids)
+            setExportChk(null)
+          }}>
+          <div style={{ fontSize: 12.5, color: MU, marginBottom: 12 }}>Sai com os itens como estão agora no catálogo (já com o que você acabou de incluir).</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+            <OpcaoCard ativo={exportChk.formato === 'md'} cor={P} fundo={PS} titulo="Texto para o Claude (.md)"
+              desc="Um arquivo só, com o critério, se reprova ou orienta e o texto completo de cada item. Ideal para anexar e atualizar a base de avaliação."
+              onClick={() => setExportChk(x => x && { ...x, formato: 'md' })} />
+            <OpcaoCard ativo={exportChk.formato === 'xlsx'} cor={OK} fundo={OKS} titulo="Planilha (Excel)"
+              desc="Uma aba por contratante, como o botão de Contratantes."
+              onClick={() => setExportChk(x => x && { ...x, formato: 'xlsx' })} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <b style={{ fontSize: 13 }}>Contratantes ({exportChk.ids.length} de {catalog.contratantes.length})</b>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setExportChk(x => x && { ...x, ids: catalog.contratantes.map(c => c.id) })} style={{ fontSize: 11.5, border: 'none', background: 'none', color: P, cursor: 'pointer', textDecoration: 'underline' }}>Todas</button>
+              <button type="button" onClick={() => setExportChk(x => x && { ...x, ids: [] })} style={{ fontSize: 11.5, border: 'none', background: 'none', color: MU, cursor: 'pointer', textDecoration: 'underline' }}>Nenhuma</button>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 4, border: `1px solid ${LINE}`, borderRadius: 8, padding: 8, maxHeight: 260, overflow: 'auto' }}>
+            {[...catalog.contratantes].sort((a, b) => nomeC(a).localeCompare(nomeC(b), 'pt-BR')).map(c => {
+              const on = exportChk.ids.includes(c.id)
+              return (
+                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer', padding: '3px 6px', borderRadius: 6, background: on ? PS : 'transparent' }}>
+                  <input type="checkbox" checked={on} onChange={() => setExportChk(x => x && { ...x, ids: on ? x.ids.filter(i => i !== c.id) : [...x.ids, c.id] })} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomeC(c)}</span>
+                </label>
+              )
+            })}
+          </div>
+        </ModalShell>
+      )}
+
       {/* ── Modal: Item ── */}
       {modalItemEdit && (
-        <ItemModal draft={modalItemEdit} catalog={catalog} usos={usosCatalogo} novo={modalItemNovo} onChange={setModalItemEdit} onSave={salvarItemModal} onClose={() => setModalItemEdit(null)} />
+        <ItemModal draft={modalItemEdit} catalog={catalog} usos={usosCatalogo} novo={modalItemNovo} contrsSel={modalItemContrs} onContrsSel={setModalItemContrs} onChange={setModalItemEdit} onSave={salvarItemModal} onClose={() => setModalItemEdit(null)} />
       )}
 
       {/* ── Modal: Texto ── */}
@@ -5469,9 +5588,9 @@ function TextoCell({ texto, tone, vazio = 'sem texto', onClick }: { texto: { tit
   )
 }
 
-function VItens({ catalog, usos, getT, getR, onNovo, onEditar, onDel, onMover, onAbrirTexto, onNovaOpcao }: {
+function VItens({ catalog, usos, getT, getR, onNovo, onExportar, onEditar, onDel, onMover, onAbrirTexto, onNovaOpcao }: {
   catalog: Catalog; usos: UsosCatalogo; getT: (id?: string | null) => TextoEmail | undefined; getR: (id?: string | null) => TextoReprovacao | undefined
-  onNovo: () => void; onEditar: (i: ChecklistItem) => void; onDel: (id: string) => void; onMover: (id: string, dir: -1 | 1) => void
+  onNovo: () => void; onExportar: () => void; onEditar: (i: ChecklistItem) => void; onDel: (id: string) => void; onMover: (id: string, dir: -1 | 1) => void
   onAbrirTexto: (item: ChecklistItem, campo: InspectorCampo) => void; onNovaOpcao: (itemId: string) => void
 }) {
   // Listas de opções abertas por um item (ex.: "Possui treinamentos?" → Treinamentos).
@@ -5517,7 +5636,10 @@ function VItens({ catalog, usos, getT, getR, onNovo, onEditar, onDel, onMover, o
           Catálogo único de verificações. Cada item diz <b>se reprova o cadastro ou só orienta</b> quando marcado ✕, e qual texto entra no parecer em cada resultado.
           A ordem aqui (setas) é a ordem em Nova análise.
         </div>
-        <Btn variant="pri" onClick={onNovo}>✚ Novo item</Btn>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <Btn onClick={onExportar} title="Baixar os checklists atualizados (Excel ou texto para enviar ao Claude)">⬇ Exportar checklists</Btn>
+          <Btn variant="pri" onClick={onNovo}>✚ Novo item</Btn>
+        </div>
       </div>
 
       <Card style={{ padding: '12px 14px', marginBottom: 14 }}>
@@ -5730,8 +5852,10 @@ function OpcaoCard({ ativo, cor, fundo, titulo, desc, onClick, children }: {
   )
 }
 
-function ItemModal({ draft, catalog, usos, novo, onChange, onSave, onClose }: {
-  draft: ChecklistItem; catalog: Catalog; usos: UsosCatalogo; novo: boolean; onChange: (i: ChecklistItem) => void; onSave: () => void; onClose: () => void
+function ItemModal({ draft, catalog, usos, novo, contrsSel, onContrsSel, onChange, onSave, onClose }: {
+  draft: ChecklistItem; catalog: Catalog; usos: UsosCatalogo; novo: boolean
+  contrsSel: string[]; onContrsSel: (ids: string[]) => void
+  onChange: (i: ChecklistItem) => void; onSave: () => void; onClose: () => void
 }) {
   function set<K extends keyof ChecklistItem>(k: K, v: ChecklistItem[K]) { onChange({ ...draft, [k]: v }) }
   const condItem = draft.condicaoItemId ? catalog.itens.find(x => x.id === draft.condicaoItemId) : undefined
@@ -5768,19 +5892,43 @@ function ItemModal({ draft, catalog, usos, novo, onChange, onSave, onClose }: {
       <Secao n={++n} titulo="Em quais contratantes aparece">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, alignItems: 'start' }}>
           <Field label="Escopo">
-            <select style={inputStyle} value={draft.escopo} onChange={e => set('escopo', e.target.value as Escopo)}>
+            <select style={inputStyle} value={draft.escopo} onChange={e => {
+              const esc = e.target.value as Escopo
+              set('escopo', esc)
+              // Item novo: Base marca todas; Específico começa sem nenhuma, para escolher
+              if (novo) onContrsSel(esc === 'base' ? catalog.contratantes.map(c => c.id) : [])
+            }}>
               <option value="base">Base — já vem marcado em contratante nova</option>
               <option value="especifico">Específico — só onde for marcado</option>
             </select>
           </Field>
           <div>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, marginBottom: 5, fontWeight: 600 }}>Exigido hoje por {contrs.length} contratante(s)</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {contrs.length
-                ? contrs.map(c => <Tag key={c.id}>{c.nome}{c.unidade ? ' — ' + c.unidade : ''}</Tag>)
-                : <span style={{ fontSize: 12, color: MU }}>{novo ? 'Depois de salvar, marque o item nas contratantes que o exigem.' : 'Nenhuma — este item não aparece em nenhuma análise.'}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: MU, fontWeight: 600 }}>
+                Entra no checklist de {contrsSel.length} de {catalog.contratantes.length} contratante(s)
+                {!novo && contrsSel.length !== contrs.length && <span style={{ color: DOURADO, textTransform: 'none', letterSpacing: 0 }}> · hoje: {contrs.length}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" onClick={() => onContrsSel(catalog.contratantes.map(c => c.id))} style={{ fontSize: 11.5, border: 'none', background: 'none', color: P, cursor: 'pointer', textDecoration: 'underline' }}>Todas</button>
+                <button type="button" onClick={() => onContrsSel([])} style={{ fontSize: 11.5, border: 'none', background: 'none', color: MU, cursor: 'pointer', textDecoration: 'underline' }}>Nenhuma</button>
+              </div>
             </div>
-            <div style={{ fontSize: 11.5, color: MU, marginTop: 5 }}>Para incluir ou retirar, edite a contratante em Contratantes.</div>
+            {catalog.contratantes.length === 0
+              ? <span style={{ fontSize: 12, color: MU }}>Nenhuma contratante cadastrada.</span>
+              : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 4, maxHeight: 190, overflow: 'auto', border: `1px solid ${LINE}`, borderRadius: 8, padding: 8 }}>
+                  {[...catalog.contratantes].sort((a, b) => (a.nome + a.unidade).localeCompare(b.nome + b.unidade, 'pt-BR')).map(c => {
+                    const on = contrsSel.includes(c.id)
+                    return (
+                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer', padding: '3px 6px', borderRadius: 6, background: on ? PS : 'transparent', color: TX }}>
+                        <input type="checkbox" checked={on} onChange={() => onContrsSel(on ? contrsSel.filter(x => x !== c.id) : [...contrsSel, c.id])} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}{c.unidade ? ' — ' + c.unidade : ''}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            {contrsSel.length === 0 && <div style={{ fontSize: 11.5, color: LARANJA, marginTop: 5 }}>Sem nenhuma marcada, o item não aparece em nenhuma análise.</div>}
           </div>
         </div>
       </Secao>
