@@ -26,9 +26,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   ])
 
   const cicloIds = (ciclos ?? []).map(c => c.id as string)
-  const { data: rascunhos } = cicloIds.length
-    ? await admin.from('pdi_rascunhos').select('ciclo_id, user_nome, texto, updated_at').in('ciclo_id', cicloIds)
-    : { data: [] }
+  // Pauta/anotações da conversa: agora vêm do Diário (anotações ligadas ao ciclo).
+  // Ciclo sem nenhuma no Diário cai no formato antigo (pdi_rascunhos).
+  const [{ data: rascAntigos }, { data: notasCiclo }] = cicloIds.length
+    ? await Promise.all([
+      admin.from('pdi_rascunhos').select('ciclo_id, user_nome, texto, updated_at').in('ciclo_id', cicloIds),
+      admin.from('pdi_anotacoes').select('ciclo_id, autor_nome, texto, created_at').in('ciclo_id', cicloIds).order('created_at'),
+    ])
+    : [{ data: [] }, { data: [] }]
+  const plano = (s: string) => s.replace(/<(br|\/div|\/p|\/li)\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+  const rascunhos = [
+    ...(notasCiclo ?? []).map(n => ({ ciclo_id: n.ciclo_id, user_nome: n.autor_nome as string | null, texto: plano(n.texto as string), updated_at: n.created_at as string })),
+    ...(rascAntigos ?? []).filter(r => !(notasCiclo ?? []).some(n => n.ciclo_id === r.ciclo_id)),
+  ]
 
   return Response.json({
     pdi: pdi ?? null,

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../lib/api-helpers'
 import { papelEfetivo } from '../../../../lib/ver-como'
+import { getPdiAcesso, logPdi, notificarPdi, PDI_NOTIFICACOES_LIGADAS } from '../../../../lib/pdi-acesso'
 
 async function getCallerAndRole() {
   const user = await getAuthUser()
@@ -24,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('pdi_acoes')
-    .select('id, pdi_id, competencia, desenvolver, acoes, resultados_esperados, inicio, termino, status, concluido_em, created_at, updated_at')
+    .select('id, pdi_id, competencia, desenvolver, acoes, resultados_esperados, inicio, termino, status, concluido_em, resultado_alcancado, evidencia, created_at, updated_at')
     .eq('pdi_id', id)
     .order('created_at')
 
@@ -60,19 +61,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  // Notify collaborator
-  const { data: colaborador } = await admin
-    .from('profiles')
-    .select('id')
-    .eq('pdi_slug', id)
-    .maybeSingle()
+  const ac = await getPdiAcesso(id)
+  if (ac) await logPdi(admin, { pdiId: id, acaoId: data.id, evento: 'Ação criada', detalhe: data.competencia, userId: ac.userId, nome: ac.nome })
 
-  if (colaborador?.id) {
-    await admin.from('pdi_notificacoes').insert({
-      pdi_id: id,
-      colaborador_id: colaborador.id,
-      visto: false,
-    })
+  // Notificação ao colaborador: passa pelo interruptor geral (desligado por enquanto)
+  if (PDI_NOTIFICACOES_LIGADAS) {
+    const { data: colaborador } = await admin.from('profiles').select('id').eq('pdi_slug', id).maybeSingle()
+    await notificarPdi(admin, { pdiId: id, colaboradorId: colaborador?.id })
   }
 
   return Response.json(data, { status: 201 })

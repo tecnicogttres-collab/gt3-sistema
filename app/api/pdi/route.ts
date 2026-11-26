@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../lib/supabase-admin'
 import { getAuthUser } from '../../lib/api-helpers'
 import { papelEfetivo } from '../../lib/ver-como'
+import { notificarPdi } from '../../lib/pdi-acesso'
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUser()
@@ -69,13 +70,8 @@ export async function POST(req: NextRequest) {
     data_fim: null,
   })
 
-  // 4. Create notification for collaborator
-  await admin.from('pdi_notificacoes').insert({
-    pdi_id: pdiId,
-    colaborador_id,
-    visto: false,
-    tipo: 'criado',
-  })
+  // 4. Notificação de PDI criado (interruptor geral de notificações do PDI, desligado por enquanto)
+  await notificarPdi(admin, { pdiId, colaboradorId: colaborador_id, tipo: 'criado' })
 
   return Response.json(pdi, { status: 201 })
 }

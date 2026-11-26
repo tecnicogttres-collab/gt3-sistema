@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '../../../../../lib/supabase-admin'
 import { getAuthUser } from '../../../../../lib/api-helpers'
 import { papelEfetivo } from '../../../../../lib/ver-como'
+import { notificarPdi } from '../../../../../lib/pdi-acesso'
 
 type Params = { params: Promise<{ id: string; cicloId: string }> }
 
@@ -109,22 +110,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
   }
 
-  // Notifica colaborador quando gestor salva avaliação diretiva
-  if (isGestorAdmin && body.avaliacao_diretiva !== undefined && colaboradorId) {
-    await admin.from('pdi_notificacoes').insert({
-      pdi_id: id,
-      colaborador_id: colaboradorId,
-      visto: false,
-    })
-  }
-
-  // Notifica colaborador quando gestor agenda/reagenda conversa
-  if (isGestorAdmin && body.data_conversa !== undefined && body.data_conversa !== null && colaboradorId) {
-    await admin.from('pdi_notificacoes').insert({
-      pdi_id: id,
-      colaborador_id: colaboradorId,
-      visto: false,
-    })
+  // Notifica colaborador quando gestor salva avaliação diretiva ou agenda/reagenda conversa
+  // (passa pelo interruptor geral de notificações do PDI, desligado por enquanto)
+  if (isGestorAdmin && (body.avaliacao_diretiva !== undefined || (body.data_conversa !== undefined && body.data_conversa !== null))) {
+    await notificarPdi(admin, { pdiId: id, colaboradorId })
   }
 
   return Response.json({ ...data, outros_fechados: outrosFechados })

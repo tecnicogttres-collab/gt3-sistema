@@ -8,6 +8,7 @@ import { MODULE_COMPONENT_MAP } from './moduleComponentMap'
 import Tabbar from './Tabbar'
 import CsTimerFloat from '../custo-servir/CsTimerFloat'
 import CsAmostraAviso from '../custo-servir/CsAmostraAviso'
+import PdiPopupAviso from '../pdi/PdiPopupAviso'
 import type { Role } from '../lib/modules'
 import { useUser } from './UserContext'
 import { useModules } from './ModulesContext'
@@ -1095,6 +1096,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <CsTimerFloat />
           {/* Custo de Servir: aviso da amostragem do trabalho (camada 3), só em amostragem ativa */}
           <CsAmostraAviso />
+          {/* PDI: pop-ups de acompanhamento configurados pela gestão no PDI da pessoa */}
+          <PdiPopupAviso />
 
           {pathname === '/' && (
             <div style={{
