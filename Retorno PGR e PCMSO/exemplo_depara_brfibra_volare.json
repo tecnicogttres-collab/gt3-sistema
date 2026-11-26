@@ -1,0 +1,668 @@
+{
+  "formato": "gt3.checklist.depara",
+  "versao": "1.0",
+  "geradoEm": "2026-10-28T19:25:00.000Z",
+  "ferramenta": "Claude (análise de PGR/PCMSO)",
+  "empresa": {
+    "razaoSocial": "BRFIBRA Telecomunicações Ltda",
+    "cnpj": "73.972.002/0028-36"
+  },
+  "checklists": [
+    "Volare"
+  ],
+  "documentos": [
+    {
+      "tipo": "PGR",
+      "arquivos": [
+        "1278147.pdf"
+      ],
+      "paginas": 303,
+      "paginasEscaneadas": 0,
+      "assinaturasDigitais": []
+    },
+    {
+      "tipo": "PCMSO",
+      "arquivos": [
+        "1278149.pdf"
+      ],
+      "paginas": 107,
+      "paginasEscaneadas": 0,
+      "assinaturasDigitais": []
+    }
+  ],
+  "respostas": [
+    {
+      "documento": "PGR",
+      "item": "CNPJ",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [
+        4
+      ],
+      "evidencia": "CNPJ 73.972.002/0028-36, igual ao do PCMSO. Confirmar no Portal."
+    },
+    {
+      "documento": "PGR",
+      "item": "PGR dentro da validade",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [
+        1,
+        44
+      ],
+      "evidencia": "Vigência de 06/05/2025 a 06/05/2027, datado de 06/05/2025."
+    },
+    {
+      "documento": "PGR",
+      "item": "Inventário contempla todas as funções",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Reprovação",
+      "origem": "automatica",
+      "paginas": [
+        45,
+        48,
+        55,
+        61,
+        62,
+        63,
+        65,
+        79
+      ],
+      "evidencia": "15 funções do PCMSO não constam no inventário do PGR.",
+      "motivo": "15 funções do PCMSO não constam no inventário do PGR.",
+      "textoReprovacao": "Diverge Portal",
+      "textoNaoConforme": ""
+    },
+    {
+      "documento": "PGR",
+      "item": "Treinamentos",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": true,
+      "resposta": null,
+      "valores": [
+        "NR 10",
+        "NR10 - SEP",
+        "NR 18",
+        "NR 33",
+        "NR 35"
+      ],
+      "origem": "automatica",
+      "paginas": [],
+      "evidencia": "Marcados pelas atividades descritas; NR10 - SEP sugerido (rede em postes públicos)."
+    },
+    {
+      "documento": "PGR",
+      "item": "Fatores de risco psicossociais (NR-01)",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": true,
+      "resposta": "Reprovação",
+      "origem": "automatica",
+      "paginas": [
+        49,
+        274
+      ],
+      "evidencia": "Estresse aparece só como risco ergonômico. Item não crítico: vira orientação.",
+      "motivo": "Estresse aparece só como risco ergonômico. Item não crítico: vira orientação.",
+      "textoReprovacao": "",
+      "textoNaoConforme": "Riscos psicossociais não contemplados"
+    },
+    {
+      "documento": "PGR",
+      "item": "Plano de ação com prazos e responsáveis",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [
+        43
+      ],
+      "evidencia": "Plano de ação presente."
+    },
+    {
+      "documento": "PGR",
+      "item": "Assinatura do responsável da empresa",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [
+        44
+      ],
+      "evidencia": "Assinatura digital (DocuSign)."
+    },
+    {
+      "documento": "PGR",
+      "item": "Local de assinatura - aprovado c/restrição",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": false,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "PGR",
+      "item": "Aditivo de indicação de frente de trabalho",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Específico",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Reprovação",
+      "origem": "automatica",
+      "paginas": [
+        4,
+        5,
+        6
+      ],
+      "evidencia": "PGR contempla só o estabelecimento de Porto Alegre, sem menção à Volare.",
+      "motivo": "PGR contempla só o estabelecimento de Porto Alegre, sem menção à Volare.",
+      "textoReprovacao": "Frente de serviço",
+      "textoNaoConforme": ""
+    },
+    {
+      "documento": "PGR",
+      "item": "Psicossociais Marcopolo",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Específico",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Reprovação",
+      "origem": "automatica",
+      "paginas": [
+        49,
+        274
+      ],
+      "evidencia": "Nenhum fator psicossocial no inventário; sem cópia do inventário Marcopolo.",
+      "motivo": "Nenhum fator psicossocial no inventário; sem cópia do inventário Marcopolo.",
+      "textoReprovacao": "S / Psicossociais Marcopolo - reprovação",
+      "textoNaoConforme": ""
+    },
+    {
+      "documento": "PGR",
+      "item": "Local de assinatura - reprovação",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": false,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "PGR",
+      "item": "Possui treinamentos específicos?",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [],
+      "evidencia": "Atividades com eletricidade, altura, espaço confinado e obra."
+    },
+    {
+      "documento": "PCMSO",
+      "item": "CNPJ",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [
+        6,
+        43
+      ],
+      "evidencia": "CNPJ 73.972.002/0028-36, igual ao do PGR. Confirmar no Portal."
+    },
+    {
+      "documento": "PCMSO",
+      "item": "PCMSO dentro da validade",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [
+        6
+      ],
+      "evidencia": "Dentro da validade."
+    },
+    {
+      "documento": "PCMSO",
+      "item": "Funções compatíveis com PGR",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Reprovação",
+      "origem": "automatica",
+      "paginas": [
+        45,
+        48,
+        55,
+        61,
+        62,
+        63,
+        65,
+        79
+      ],
+      "evidencia": "As mesmas 15 funções não constam no PGR.",
+      "motivo": "As mesmas 15 funções não constam no PGR.",
+      "textoReprovacao": "Diverge PGR",
+      "textoNaoConforme": ""
+    },
+    {
+      "documento": "PCMSO",
+      "item": "Exames por função",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Conforme",
+      "origem": "automatica",
+      "paginas": [
+        45,
+        54
+      ],
+      "evidencia": "Exames definidos por função."
+    },
+    {
+      "documento": "PCMSO",
+      "item": "Assinatura do responsável da empresa",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": "Reprovação",
+      "origem": "automatica",
+      "paginas": [
+        43
+      ],
+      "evidencia": "Campo da empresa em branco; só o médico assinou.",
+      "motivo": "Campo da empresa em branco; só o médico assinou.",
+      "textoReprovacao": "Página específica",
+      "textoNaoConforme": ""
+    },
+    {
+      "documento": "PCMSO",
+      "item": "Local de assinatura - reprovação",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": true,
+      "resposta": "Página específica",
+      "origem": "automatica",
+      "paginas": [
+        43
+      ],
+      "evidencia": "Campo de assinatura da empresa na página 43."
+    },
+    {
+      "documento": "PCMSO",
+      "item": "Local de assinatura - Aprovado c/restrição",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": false,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "LTCAT",
+      "item": "CNPJ",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "LTCAT",
+      "item": "Inventário de Riscos (Previdência Social)",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "LTCAT",
+      "item": "Funções conforme PGR",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "LTCAT",
+      "item": "Local de assinatura",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": false,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "LTCAT",
+      "item": "Assinatura da empresa",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": true,
+      "visivel": true,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "GERAL",
+      "item": "Funcionários verificados (revisão ou GT0210)",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": true,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "GERAL",
+      "item": "Visão geral do cadastro da empresa",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": true,
+      "resposta": null,
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    },
+    {
+      "documento": "GERAL",
+      "item": "Frente(s) do cadastro pendente(s)",
+      "checklists": [
+        "Volare"
+      ],
+      "escopo": "Base",
+      "critico": false,
+      "visivel": false,
+      "resposta": null,
+      "valores": [],
+      "origem": "pendente",
+      "paginas": [],
+      "evidencia": ""
+    }
+  ],
+  "pendentes": [
+    {
+      "documento": "LTCAT",
+      "item": "CNPJ"
+    },
+    {
+      "documento": "LTCAT",
+      "item": "Inventário de Riscos (Previdência Social)"
+    },
+    {
+      "documento": "LTCAT",
+      "item": "Funções conforme PGR"
+    },
+    {
+      "documento": "LTCAT",
+      "item": "Assinatura da empresa"
+    },
+    {
+      "documento": "GERAL",
+      "item": "Funcionários verificados (revisão ou GT0210)"
+    },
+    {
+      "documento": "GERAL",
+      "item": "Visão geral do cadastro da empresa"
+    }
+  ],
+  "reprovacoes": {
+    "PGR": "28/10/2026 16:25 - Favor rever os seguintes itens:\n- inventário de riscos, que não contempla as seguintes funções que constam no PCMSO: Analista de Projetos e Coordenador Implantação (Administrativo, PCMSO p. 45); Supervisor de Atendimento CGIP (Recursos Humanos, p. 48); Diretor Relacionamento Internacional e Eletricista Aprendiz (Jurídico, p. 55); VP Administrativo Financeiro e VP Comercial (TI, p. 61); Coord. Contas a Receber (Help Desk, p. 62); Suporte em Redes Júnior, Pleno e Sênior (Soluções de Rede, p. 63); Líder Call Center, Líder de Conservação, Líder de Equipe, Líder de Suporte e Líder Operacional (OMC, p. 65); Coord. Soluções de Rede (GTR Regional, p. 79). Observação: o PCMSO (página 6) cita um PGR elaborado em maio de 2026, e o PGR enviado é de 06/05/2025 (páginas 1 e 44). Se houver versão atualizada, favor enviá-la.\n- indicação da frente de trabalho na Volare (aditivo): o PGR contempla somente o estabelecimento de Porto Alegre (páginas 4 a 6), sem menção à Volare nem descrição do local de execução dos serviços na contratante.\n- fatores de risco psicossociais exigidos pela Marcopolo/Volare (conforme inventário de riscos da Marcopolo): não constam no inventário de riscos do PGR. O estresse aparece apenas como risco ergonômico (ex.: páginas 49 e 274).",
+    "PCMSO": "28/10/2026 16:25 - Favor rever os seguintes itens:\n- assinatura do responsável da empresa, que não consta no documento (campo em branco na página 43; somente o médico assinou).\n- funções que não constam no inventário de riscos do PGR: Analista de Projetos e Coordenador Implantação (Administrativo, PCMSO p. 45); Supervisor de Atendimento CGIP (Recursos Humanos, p. 48); Diretor Relacionamento Internacional e Eletricista Aprendiz (Jurídico, p. 55); VP Administrativo Financeiro e VP Comercial (TI, p. 61); Coord. Contas a Receber (Help Desk, p. 62); Suporte em Redes Júnior, Pleno e Sênior (Soluções de Rede, p. 63); Líder Call Center, Líder de Conservação, Líder de Equipe, Líder de Suporte e Líder Operacional (OMC, p. 65); Coord. Soluções de Rede (GTR Regional, p. 79). Rever a compatibilidade com o PGR.",
+    "LTCAT": ""
+  },
+  "orientacoes": [
+    "PGR · Fatores de risco psicossociais (NR-01): riscos psicossociais não contemplados",
+    "PGR · Treinamentos: NR10 - SEP sugerido (rede de fibra em postes da rede pública)"
+  ],
+  "funcoes": [
+    {
+      "pgr": null,
+      "pcmso": "ANALISTA DE PROJETOS",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        45
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "COORDENADOR IMPLANTAÇÃO",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        45
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "COORD. SOLUÇÕES DE REDE",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        79
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "COORD. CONTAS A RECEBER",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        62
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "DIRETOR RELACIONAMENTO INTERNACIONAL",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        55
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "ELETRICISTA APRENDIZ",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        55
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "LÍDER CALL CENTER",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        65
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "LÍDER DE CONSERVAÇÃO",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        65
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "LÍDER DE EQUIPE",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        65
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "LÍDER DE SUPORTE",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        65
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "LÍDER OPERACIONAL",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        65
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "SUPERVISOR DE ATENDIMENTO CGIP",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        48
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "SUPORTE EM REDES JÚNIOR, PLENO E SÊNIOR",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        63
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "VP ADMINISTRATIVO FINANCEIRO",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        61
+      ]
+    },
+    {
+      "pgr": null,
+      "pcmso": "VP COMERCIAL",
+      "situacao": "so_pcmso",
+      "paginasPgr": [],
+      "paginasPcmso": [
+        61
+      ]
+    }
+  ],
+  "observacoes": [
+    "O PCMSO diz que usou o PGR do Eng. Eduardo Kaczynski de maio de 2026 (PCMSO p. 6), mas o PGR enviado é de 06/05/2025 (PGR p. 1,44). Isso explica as 15 funções a mais no PCMSO. Vale pedir a versão atualizada do PGR.",
+    "O PGR diz que a filial tem 0 funcionários (PGR p. 4,5); o PCMSO fala em 846 (PCMSO p. 6). Conferir no Portal os funcionários e funções cadastrados para a Volare.",
+    "O PGR prevê reavaliação no mínimo anual (PGR p. 43), e não há revisão registrada desde 05/2025.",
+    "O PCMSO traz \"Fatores Psicossociais: pressão no trabalho\" em todas as funções (PCMSO p. 45,54), risco que não existe no PGR. Ao incluir os psicossociais no PGR, os dois ficam alinhados.",
+    "NR10 - SEP sugerida pela atividade: passagem de fibra em postes de rede pública (PGR p. 53,78,82).",
+    "As páginas 8 a 10 do PCMSO são certificados e a carteira do médico (imagem) (PCMSO p. 8–10). Não afetam a análise."
+  ]
+}

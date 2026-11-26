@@ -1,0 +1,348 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Mapa da Atribuição por Contratante</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><style>
+/* Layout: tela cheia; barra de ferramentas no topo, quadro com pan/zoom, barra do item selecionado embaixo. Árvore da esquerda para a direita */
+:root{
+  --bg:#FFFFFF; --ink:#1A2540; --muted:#5B6684; --line:#C9D7EF; --edge:#2A4F96; --tint:#EEF3FB;
+  --block:#C2412D; --block-bg:#FDF1EE; --count:#1F8A5B; --count-bg:#EDF8F2; --gold:#D1AE6E;
+  --grid:#EEF2F8;
+  --font-ui:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.app{height:100%;display:flex;flex-direction:column}
+.top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:2px solid var(--edge)}
+.top h1{margin:0;font-size:17px;font-weight:800;line-height:1.2}
+.top small{display:block;color:var(--muted);font-size:12px;font-weight:500}
+.tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{border:1.5px solid var(--edge);background:var(--bg);color:var(--edge);font-weight:600;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--tint)}
+.btn.solid{background:var(--edge);color:#FFFFFF}
+.btn.danger{border-color:var(--block);color:var(--block)}
+.btn.danger.armed{background:var(--block);color:#FFFFFF}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.save{background:var(--gold);border:2px solid #B8924E;color:var(--ink);font-weight:800;font-size:14px;padding:7px 14px;display:inline-flex;align-items:center;gap:7px;box-shadow:0 3px 10px rgb(209 174 110 / .45);animation:glow 2.4s ease-in-out 3}
+.btn.save:hover{background:#C99F55}
+.btn.save svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.sep{width:1.5px;height:26px;background:var(--line);margin:0 2px}
+@keyframes glow{0%,100%{box-shadow:0 3px 10px rgb(209 174 110 / .45)}50%{box-shadow:0 0 0 6px rgb(209 174 110 / .35)}}
+@media (prefers-reduced-motion:reduce){.btn.save{animation:none}}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);padding-block:6px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:4px;border:2px solid}
+.viewport{flex:1;position:relative;overflow:hidden;touch-action:none;cursor:grab;background-color:var(--bg);background-image:radial-gradient(var(--grid) 1.2px,transparent 1.2px);background-size:22px 22px}
+.viewport.panning{cursor:grabbing}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0}
+svg.links{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.node{position:absolute;width:240px;border:2px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 12px 10px;cursor:pointer;user-select:none;box-shadow:0 1px 2px rgb(26 37 64 / .06);line-height:1.35}
+.node .ey{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;margin-bottom:2px}
+.node .tx{font-size:13.5px;font-weight:500;white-space:pre-wrap;word-wrap:break-word;outline:none}
+.node .tag{position:absolute;top:-11px;left:10px;font-size:11px;font-weight:800;padding:0 8px;border-radius:99px;border:1.5px solid currentColor;background:var(--bg);line-height:18px}
+.node.root{background:var(--edge);border-color:var(--edge);color:#FFFFFF}
+.node.root .tx{font-weight:800;font-size:15px}
+.node.branch{border-color:var(--edge);background:var(--tint)}
+.node.branch .tx{font-weight:800;font-size:14.5px;color:var(--edge)}
+.node.decision{border-color:var(--edge)}
+.node.decision .ey{color:var(--edge)}
+.node.block{border-color:var(--block);background:var(--block-bg)}
+.node.block .ey{color:var(--block)}
+.node.count{border-color:var(--count);background:var(--count-bg)}
+.node.count .ey{color:var(--count)}
+.node.info .ey{color:var(--muted)}
+.node.sel{box-shadow:0 0 0 3px var(--gold)}
+.node.editing{cursor:text;user-select:text}
+.node.editing .tx{background:#FFFDF5;border-radius:4px;box-shadow:0 0 0 1px var(--gold)}
+.tag.t-sim{color:var(--count)} .tag.t-nao{color:var(--block)} .tag.t-x{color:var(--edge)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:2px solid var(--edge);background:var(--bg);padding-top:10px;padding-bottom:max(10px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.bar .hint{color:var(--muted);font-size:12.5px}
+.bar label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);font-weight:600}
+.bar select,.bar input{border:1.5px solid var(--edge);border-radius:8px;padding:5px 8px;background:var(--bg)}
+.bar input{width:90px}
+.dlg{position:fixed;inset:0;background:rgb(26 37 64 / .35);display:grid;place-items:center;z-index:30;padding:16px}
+.dlg .card{background:var(--bg);border:2px solid var(--edge);border-radius:12px;padding:18px;width:min(640px,100%);display:flex;flex-direction:column;gap:10px}
+.dlg h2{margin:0;font-size:16px}
+.dlg p{margin:0;color:var(--muted);font-size:13px}
+.dlg textarea{width:100%;height:240px;border:1.5px solid var(--edge);border-radius:8px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:12px;resize:vertical}
+.row{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#FFFFFF;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;z-index:40}
+@media (max-width:640px){.top h1{font-size:15px}.btn{padding:5px 9px;font-size:12.5px}}
+</style></head><body><div class="app">
+  <div class="top">
+    <div><h1>Para qual contratante conta a avaliação?</h1><small>GT3 · lógica do relatório EFIDOCEMP-201 · mapa editável</small></div>
+    <div class="tools">
+      <button class="btn save" id="saveHtml" title="Ctrl+S"><svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"></path><path d="M8 3v5h8V3M8 21v-7h8v7"></path></svg>Salvar em HTML</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="btn" id="undo" title="Ctrl+Z">Desfazer</button>
+      <button class="btn" id="layout">Reorganizar</button>
+      <button class="btn" id="zout" aria-label="Diminuir zoom">−</button>
+      <button class="btn" id="zin" aria-label="Aumentar zoom">+</button>
+      <button class="btn" id="fit">Ajustar à tela</button>
+      <button class="btn" id="exp">Exportar</button>
+      <button class="btn" id="imp">Importar</button>
+      <button class="btn danger" id="reset">Restaurar modelo</button>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="border-color:var(--edge);background:var(--tint)"></i>Ramo</span>
+    <span><i style="border-color:var(--edge)"></i>Decisão</span>
+    <span><i style="border-color:var(--block);background:var(--block-bg)"></i>Bloqueia</span>
+    <span><i style="border-color:var(--count);background:var(--count-bg)"></i>Conta</span>
+    <span><i style="border-color:var(--line)"></i>Informação</span>
+    <span>Duplo clique edita · arraste move o item com os filhos · arraste o fundo para navegar</span>
+  </div>
+  <div class="viewport" id="vp"><div class="stage" id="stage"><svg class="links" id="links"></svg></div></div>
+  <div class="bar" id="bar"></div>
+</div>
+<div class="toast" id="toast" hidden=""></div>
+<div class="dlg" id="dlg" hidden=""></div><script>window.__GT3_MAP__={"nodes":[{"id":"nmw3u06270","parent":null,"text":"Avaliação de documento: para qual contratante conta?","type":"root","tag":"","x":0,"y":862},{"id":"nmw3u06271","parent":"nmw3u06270","text":"Documento de empresa","type":"branch","tag":"","x":290,"y":210},{"id":"nmw3u06272","parent":"nmw3u06271","text":"Cód. GT0010 preenchido?","type":"decision","tag":"","x":580,"y":203},{"id":"nmw3u06273","parent":"nmw3u06272","text":"Requisito do GT0010 (por Contrato de Serviço ou por Contratante)","type":"info","tag":"Sim","x":870,"y":9},{"id":"nmw3u06274","parent":"nmw3u06273","text":"100% para o contratante do GT0010.\nCada requisito é uma avaliação própria.","type":"count","tag":"","x":1160,"y":0},{"id":"nmw3u06275","parent":"nmw3u06272","text":"Requisito comum: questionário (grau de risco) ou GT0100 manual","type":"info","tag":"Não","x":870,"y":252},{"id":"nmw3u06276","parent":"nmw3u06275","text":"Para cada contratante: está vinculado no GT0120?","type":"decision","tag":"","x":1160,"y":261},{"id":"nmw3u06277","parent":"nmw3u06276","text":"Não entra na conta","type":"block","tag":"Não","x":1450,"y":133},{"id":"nmw3u06278","parent":"nmw3u06276","text":"Vinculação ativa na data da avaliação?","type":"decision","tag":"Sim","x":1450,"y":300},{"id":"nmw3u06279","parent":"nmw3u06278","text":"Bloqueia: vinculação desativada","type":"block","tag":"Não","x":1740,"y":212},{"id":"nmw3u0627a","parent":"nmw3u06278","text":"Documento está nos Ignorados do GT0120 para esse contratante?","type":"decision","tag":"Sim","x":1740,"y":331},{"id":"nmw3u0627b","parent":"nmw3u0627a","text":"Bloqueia a análise para esse contratante","type":"block","tag":"Sim","x":2030,"y":291},{"id":"nmw3u0627c","parent":"nmw3u0627a","text":"Contratante válido: entra na divisão igual","type":"count","tag":"Não","x":2030,"y":388},{"id":"nmw3u0627d","parent":"nmw3u06270","text":"Documento de pessoa","type":"branch","tag":"","x":290,"y":753},{"id":"nmw3u0627e","parent":"nmw3u0627d","text":"Cód. GT0010 preenchido?","type":"decision","tag":"","x":580,"y":697},{"id":"nmw3u0627f","parent":"nmw3u0627e","text":"Requisito do GT0010. Só incide se a pessoa tem turno desse contratante no GT0130.","type":"info","tag":"Sim","x":870,"y":485},{"id":"nmw3u0627g","parent":"nmw3u0627f","text":"100% para o contratante do GT0010.\nEx.: Ordem de Serviço da BSA.","type":"count","tag":"","x":1160,"y":485},{"id":"nmw3u0627h","parent":"nmw3u0627e","text":"Requisito comum: função (o ASO sempre vem daqui) ou GT0100 manual","type":"info","tag":"Não","x":870,"y":737},{"id":"nmw3u0627i","parent":"nmw3u0627h","text":"Para cada contratante: a pessoa tem turno ativo no GT0130?","type":"decision","tag":"","x":1160,"y":746},{"id":"nmw3u0627j","parent":"nmw3u0627i","text":"Bloqueia: não trabalha para esse contratante","type":"block","tag":"Não","x":1450,"y":600},{"id":"nmw3u0627k","parent":"nmw3u0627i","text":"Vinculação ativa no GT0120?","type":"decision","tag":"Sim","x":1450,"y":803},{"id":"nmw3u0627l","parent":"nmw3u0627k","text":"Bloqueia, mesmo com o turno ativo no GT0130","type":"block","tag":"Não","x":1740,"y":697},{"id":"nmw3u0627m","parent":"nmw3u0627k","text":"Documento está nos Ignorados do GT0120 para esse contratante?","type":"decision","tag":"Sim","x":1740,"y":834},{"id":"nmw3u0627n","parent":"nmw3u0627m","text":"Bloqueia a análise para esse contratante","type":"block","tag":"Sim","x":2030,"y":794},{"id":"nmw3u0627o","parent":"nmw3u0627m","text":"Contratante válido: entra na divisão igual","type":"count","tag":"Não","x":2030,"y":891},{"id":"nmw3u0627p","parent":"nmw3u0627d","text":"Item de presença (por Treinamento/Contratante)","type":"info","tag":"","x":580,"y":988},{"id":"nmw3u0627q","parent":"nmw3u0627p","text":"Não conta: não é envio de documento","type":"block","tag":"","x":870,"y":988},{"id":"nmw3u0627r","parent":"nmw3u06270","text":"Depois de definir os contratantes válidos","type":"branch","tag":"","x":290,"y":1264},{"id":"nmw3u0627s","parent":"nmw3u0627r","text":"Divisão igual entre eles.\nEx.: ASO de 1 min para 4 contratantes = 15 s para cada.","type":"info","tag":"","x":580,"y":1085},{"id":"nmw3u0627t","parent":"nmw3u0627r","text":"Tempo = minutos cronometrados do documento no grupo de critério do contratante","type":"info","tag":"","x":580,"y":1200},{"id":"nmw3u0627u","parent":"nmw3u0627r","text":"Documento reprovado usa o tempo de reprovado","type":"info","tag":"","x":580,"y":1333},{"id":"nmw3u0627v","parent":"nmw3u0627r","text":"Soma por contratante = custo de servir no módulo","type":"count","tag":"","x":580,"y":1430},{"id":"nmw3u0627w","parent":"nmw3u06270","text":"Cadastro da empresa","type":"branch","tag":"","x":290,"y":1646},{"id":"nmw3u0627x","parent":"nmw3u0627w","text":"Um CNPJ pode ter vários cadastros.\nEx.: GLOW BR LIMP SERV ESPECIALIZ - OPEN TECH, UNIMED FEDERACAO, LEVMED SAUDE, BOMBEIROS UNIMED JOINVILLE, UPA UNIVATES, SAMU","type":"info","tag":"","x":580,"y":1527},{"id":"nmw3u0627y","parent":"nmw3u0627w","text":"O Cód. cadastro separa cada unidade no relatório","type":"info","tag":"","x":580,"y":1733}],"savedAt":1793900440660};</script><script>
+(function(){
+const SRC=document.currentScript?document.currentScript.textContent:'';
+const SKEL=[...document.querySelectorAll('.app,#toast,#dlg')].map(e=>e.outerHTML).join('\n');
+const CSS=[...document.querySelectorAll('style')].map(x=>x.textContent).join('\n');
+const KEY='gt3-mapa-atribuicao-v1', COLW=290, GAP=22, W=240;
+const TYPES={root:'Início',branch:'Ramo',decision:'Decisão',block:'Bloqueia',count:'Conta',info:'Informação'};
+let uid=0; const nid=()=> 'n'+Date.now().toString(36)+(uid++).toString(36);
+
+function N(text,type,tag,kids){return {text,type,tag:tag||'',kids:kids||[]}}
+const SPEC=N('Avaliação de documento: para qual contratante conta?','root','',[
+  N('Documento de empresa','branch','',[
+    N('Cód. GT0010 preenchido?','decision','',[
+      N('Requisito do GT0010 (por Contrato de Serviço ou por Contratante)','info','Sim',[
+        N('100% para o contratante do GT0010.\nCada requisito é uma avaliação própria.','count')]),
+      N('Requisito comum: questionário (grau de risco) ou GT0100 manual','info','Não',[
+        N('Para cada contratante: está vinculado no GT0120?','decision','',[
+          N('Não entra na conta','block','Não'),
+          N('Vinculação ativa na data da avaliação?','decision','Sim',[
+            N('Bloqueia: vinculação desativada','block','Não'),
+            N('Documento está nos Ignorados do GT0120 para esse contratante?','decision','Sim',[
+              N('Bloqueia a análise para esse contratante','block','Sim'),
+              N('Contratante válido: entra na divisão igual','count','Não')])])])])])]),
+  N('Documento de pessoa','branch','',[
+    N('Cód. GT0010 preenchido?','decision','',[
+      N('Requisito do GT0010. Só incide se a pessoa tem turno desse contratante no GT0130.','info','Sim',[
+        N('100% para o contratante do GT0010.\nEx.: Ordem de Serviço da BSA.','count')]),
+      N('Requisito comum: função (o ASO sempre vem daqui) ou GT0100 manual','info','Não',[
+        N('Para cada contratante: a pessoa tem turno ativo no GT0130?','decision','',[
+          N('Bloqueia: não trabalha para esse contratante','block','Não'),
+          N('Vinculação ativa no GT0120?','decision','Sim',[
+            N('Bloqueia, mesmo com o turno ativo no GT0130','block','Não'),
+            N('Documento está nos Ignorados do GT0120 para esse contratante?','decision','Sim',[
+              N('Bloqueia a análise para esse contratante','block','Sim'),
+              N('Contratante válido: entra na divisão igual','count','Não')])])])])]),
+    N('Item de presença (por Treinamento/Contratante)','info','',[
+      N('Não conta: não é envio de documento','block')])]),
+  N('Depois de definir os contratantes válidos','branch','',[
+    N('Divisão igual entre eles.\nEx.: ASO de 1 min para 4 contratantes = 15 s para cada.','info'),
+    N('Tempo = minutos cronometrados do documento no grupo de critério do contratante','info'),
+    N('Documento reprovado usa o tempo de reprovado','info'),
+    N('Soma por contratante = custo de servir no módulo','count')]),
+  N('Cadastro da empresa','branch','',[
+    N('Um CNPJ pode ter vários cadastros.\nEx.: GLOW BR LIMP SERV ESPECIALIZ - OPEN TECH, UNIMED FEDERACAO, LEVMED SAUDE, BOMBEIROS UNIMED JOINVILLE, UPA UNIVATES, SAMU','info'),
+    N('O Cód. cadastro separa cada unidade no relatório','info')])
+]);
+function flatten(spec){const out=[];(function walk(n,parent){const id=nid();out.push({id,parent,text:n.text,type:n.type,tag:n.tag,x:0,y:0});n.kids.forEach(k=>walk(k,id))})(spec,null);return out}
+
+let M=null, sel=null, editing=null, view={x:30,y:30,z:1}, hist=[];
+let stamp=0;
+try{const raw=localStorage.getItem(KEY);if(raw){const d=JSON.parse(raw);if(Array.isArray(d.nodes)){M=d.nodes;stamp=d.savedAt||0}}}catch(e){}
+const EMB=window.__GT3_MAP__;
+if(EMB&&Array.isArray(EMB.nodes)&&(!M||(EMB.savedAt||0)>stamp))M=EMB.nodes;
+let needLayout=false;
+if(!M){M=flatten(SPEC);needLayout=true}
+
+const vp=document.getElementById('vp'), stage=document.getElementById('stage'), svg=document.getElementById('links'), bar=document.getElementById('bar');
+const byId=id=>M.find(n=>n.id===id);
+const kids=id=>M.filter(n=>n.parent===id);
+function sub(id){const o=[id];kids(id).forEach(k=>o.push(...sub(k.id)));return o}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({nodes:M,savedAt:Date.now()}))}catch(e){}}
+function push(){hist.push(JSON.stringify(M));if(hist.length>40)hist.shift();document.getElementById('undo').disabled=false}
+function toast(t){const el=document.getElementById('toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,1800)}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function tagClass(t){const v=(t||'').trim().toLowerCase();return v==='sim'?'t-sim':(v==='não'||v==='nao')?'t-nao':'t-x'}
+
+function render(){
+  stage.querySelectorAll('.node').forEach(e=>e.remove());
+  M.forEach(n=>{
+    const el=document.createElement('div');
+    el.className='node '+n.type+(n.id===sel?' sel':'');el.dataset.id=n.id;el.tabIndex=0;
+    el.style.left=n.x+'px';el.style.top=n.y+'px';
+    el.innerHTML=(n.tag?`<span class="tag ${tagClass(n.tag)}">${esc(n.tag)}</span>`:'')+(n.type!=='root'&&n.type!=='branch'?`<div class="ey">${TYPES[n.type]}</div>`:'')+`<div class="tx">${esc(n.text)}</div>`;
+    stage.appendChild(el);
+  });
+  links();renderBar();
+}
+function el(id){return stage.querySelector(`.node[data-id="${id}"]`)}
+function links(){
+  let d='',maxX=0,maxY=0,paths=[];
+  M.forEach(n=>{const e=el(n.id);if(!e)return;maxX=Math.max(maxX,n.x+e.offsetWidth);maxY=Math.max(maxY,n.y+e.offsetHeight);
+    if(!n.parent)return;const p=byId(n.parent),pe=el(n.parent);if(!p||!pe)return;
+    const x1=p.x+pe.offsetWidth,y1=p.y+pe.offsetHeight/2,x2=n.x,y2=n.y+e.offsetHeight/2,mx=(x1+x2)/2;
+    const col=n.type==='block'?'var(--block)':n.type==='count'?'var(--count)':'#8FA6CF';
+    paths.push(`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${col}" stroke-width="2"/>`)});
+  svg.setAttribute('width',maxX+50);svg.setAttribute('height',maxY+50);svg.innerHTML=paths.join('');
+}
+function layout(){
+  const h={};M.forEach(n=>{const e=el(n.id);h[n.id]=e?e.offsetHeight:60});
+  const sh={};function S(id){const k=kids(id);const ks=k.reduce((a,c)=>a+S(c.id),0)+Math.max(0,k.length-1)*GAP;return sh[id]=Math.max(h[id],ks)}
+  const roots=M.filter(n=>!n.parent||!byId(n.parent));let top=0;
+  roots.forEach(r=>{S(r.id);place(r.id,0,top);top+=sh[r.id]+GAP*3});
+  function place(id,depth,t){const n=byId(id),k=kids(id);n.x=depth*COLW;n.y=Math.round(t+sh[id]/2-h[id]/2);
+    const ks=k.reduce((a,c)=>a+sh[c.id],0)+Math.max(0,k.length-1)*GAP;let y=t+(sh[id]-ks)/2;k.forEach(c=>{place(c.id,depth+1,y);y+=sh[c.id]+GAP})}
+  M.forEach(n=>{const e=el(n.id);if(e){e.style.left=n.x+'px';e.style.top=n.y+'px'}});links();
+}
+function apply(){stage.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.z})`}
+function fit(){let mx=0,my=0;M.forEach(n=>{const e=el(n.id);mx=Math.max(mx,n.x+(e?e.offsetWidth:W));my=Math.max(my,n.y+(e?e.offsetHeight:60))});
+  const r=vp.getBoundingClientRect();view.z=Math.max(.25,Math.min(1,(r.width-40)/mx,(r.height-40)/my));view.x=(r.width-mx*view.z)/2;view.y=Math.max(20,(r.height-my*view.z)/2);apply()}
+function zoom(f,cx,cy){const r=vp.getBoundingClientRect();cx=cx??r.width/2;cy=cy??r.height/2;const z=Math.max(.2,Math.min(2.2,view.z*f));view.x=cx-(cx-view.x)*(z/view.z);view.y=cy-(cy-view.y)*(z/view.z);view.z=z;apply()}
+
+function renderBar(){
+  const n=sel&&byId(sel);
+  if(!n){bar.innerHTML='<span class="hint">Selecione um item para adicionar filhos, mudar o tipo, colocar rótulo (Sim / Não) ou excluir. Atalhos: Tab adiciona filho, Enter adiciona irmão, F2 edita, Delete exclui.</span>';return}
+  bar.innerHTML=`<button class="btn solid" data-a="child">+ Filho</button>
+  <button class="btn" data-a="sib" ${n.parent?'':'disabled'}>+ Irmão</button>
+  <button class="btn" data-a="edit">Editar texto</button>
+  <label for="selType">Tipo<select id="selType">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${k===n.type?'selected':''}>${v}</option>`).join('')}</select></label>
+  <label for="selTag">Rótulo<input id="selTag" type="text" value="${esc(n.tag)}" placeholder="Sim / Não"></label>
+  <button class="btn danger" data-a="del" ${n.parent?'':'disabled'}>Excluir</button>
+  <span class="hint">${sub(n.id).length>1?`Excluir remove também ${sub(n.id).length-1} item(ns) abaixo.`:''}</span>`;
+}
+function select(id){sel=id;stage.querySelectorAll('.node').forEach(e=>e.classList.toggle('sel',e.dataset.id===id));renderBar()}
+function add(parentId,afterId){
+  push();const p=byId(parentId);const n={id:nid(),parent:parentId,text:'Novo item',type:'info',tag:'',x:p.x+COLW,y:p.y};
+  const sibs=kids(parentId);if(sibs.length){const last=afterId?byId(afterId):sibs[sibs.length-1];const e=el(last.id);n.y=last.y+(e?e.offsetHeight:60)+GAP}
+  if(afterId){const i=M.indexOf(byId(afterId));M.splice(i+1,0,n)}else M.push(n);
+  save();render();select(n.id);startEdit(n.id);
+}
+function del(id){push();const ids=new Set(sub(id));const n=byId(id);M=M.filter(x=>!ids.has(x.id));sel=n.parent;save();render();toast('Item excluído. Use Desfazer se precisar.')}
+function startEdit(id){
+  const e=el(id);if(!e)return;editing=id;e.classList.add('editing');const tx=e.querySelector('.tx');tx.contentEditable='true';tx.focus();
+  const r=document.createRange();r.selectNodeContents(tx);const s=getSelection();s.removeAllRanges();s.addRange(r);
+}
+function endEdit(){
+  if(!editing)return;const e=el(editing),n=byId(editing);editing=null;if(!e||!n)return;
+  const tx=e.querySelector('.tx');const v=tx.innerText.replace(/\n{3,}/g,'\n\n').trim();tx.contentEditable='false';e.classList.remove('editing');
+  if(v&&v!==n.text){push();n.text=v;save()}tx.textContent=n.text;links();
+}
+
+/* ponteiro: arrastar item (com filhos) ou fundo */
+let drag=null;
+vp.addEventListener('pointerdown',ev=>{
+  if(ev.button!==0)return;
+  const ne=ev.target.closest('.node');
+  if(ne&&ne.classList.contains('editing'))return;
+  if(editing)endEdit();
+  if(ne){const id=ne.dataset.id;select(id);const ids=sub(id);drag={mode:'node',id,ids,sx:ev.clientX,sy:ev.clientY,start:ids.map(i=>{const n=byId(i);return [n.x,n.y]}),moved:false}}
+  else{select(null);drag={mode:'pan',sx:ev.clientX,sy:ev.clientY,vx:view.x,vy:view.y};vp.classList.add('panning')}
+  vp.setPointerCapture(ev.pointerId);
+});
+vp.addEventListener('pointermove',ev=>{
+  if(!drag)return;const dx=ev.clientX-drag.sx,dy=ev.clientY-drag.sy;
+  if(drag.mode==='pan'){view.x=drag.vx+dx;view.y=drag.vy+dy;apply();return}
+  if(!drag.moved&&Math.hypot(dx,dy)<4)return;
+  if(!drag.moved){push();drag.moved=true}
+  drag.ids.forEach((i,k)=>{const n=byId(i);n.x=Math.round(drag.start[k][0]+dx/view.z);n.y=Math.round(drag.start[k][1]+dy/view.z);const e=el(i);if(e){e.style.left=n.x+'px';e.style.top=n.y+'px'}});links();
+});
+const endDrag=()=>{if(drag&&drag.mode==='node'&&drag.moved)save();drag=null;vp.classList.remove('panning')};
+vp.addEventListener('pointerup',endDrag);vp.addEventListener('pointercancel',endDrag);
+vp.addEventListener('dblclick',ev=>{const ne=ev.target.closest('.node');if(ne){select(ne.dataset.id);startEdit(ne.dataset.id)}});
+vp.addEventListener('wheel',ev=>{ev.preventDefault();const r=vp.getBoundingClientRect();
+  if(ev.ctrlKey||ev.metaKey)zoom(ev.deltaY<0?1.1:1/1.1,ev.clientX-r.left,ev.clientY-r.top);else{view.x-=ev.deltaX;view.y-=ev.deltaY;apply()}},{passive:false});
+stage.addEventListener('keydown',ev=>{
+  if(!editing||!ev.target.classList.contains('tx'))return;
+  if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();endEdit();el(sel)?.focus()}
+  if(ev.key==='Escape'){const n=byId(editing);ev.target.textContent=n.text;endEdit()}
+});
+stage.addEventListener('focusout',ev=>{if(editing&&ev.target.classList&&ev.target.classList.contains('tx'))endEdit()});
+document.addEventListener('keydown',ev=>{
+  if(editing||ev.target.closest('input,select,textarea'))return;
+  if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();undo();return}
+  if(!sel)return;const n=byId(sel);
+  if(ev.key==='Tab'){ev.preventDefault();add(sel)}
+  else if(ev.key==='Enter'&&n.parent){ev.preventDefault();add(n.parent,sel)}
+  else if(ev.key==='F2'){ev.preventDefault();startEdit(sel)}
+  else if((ev.key==='Delete'||ev.key==='Backspace')&&n.parent){ev.preventDefault();del(sel)}
+});
+
+let armT=null;
+bar.addEventListener('click',ev=>{
+  const b=ev.target.closest('[data-a]');if(!b||!sel)return;const a=b.dataset.a,n=byId(sel);
+  if(a==='child')add(sel);
+  if(a==='sib'&&n.parent)add(n.parent,sel);
+  if(a==='edit')startEdit(sel);
+  if(a==='del'){if(sub(sel).length>1&&!b.classList.contains('armed')){b.classList.add('armed');b.textContent='Confirmar exclusão';clearTimeout(armT);armT=setTimeout(()=>{b.classList.remove('armed');b.textContent='Excluir'},3000);return}del(sel)}
+});
+bar.addEventListener('change',ev=>{
+  if(!sel)return;const n=byId(sel);
+  if(ev.target.id==='selType'){push();n.type=ev.target.value;save();render();select(sel)}
+  if(ev.target.id==='selTag'){push();n.tag=ev.target.value.trim();save();render();select(sel)}
+});
+
+function undo(){if(!hist.length)return;M=JSON.parse(hist.pop());if(sel&&!byId(sel))sel=null;save();render();document.getElementById('undo').disabled=!hist.length;toast('Desfeito')}
+document.getElementById('undo').onclick=undo;
+document.getElementById('layout').onclick=()=>{push();layout();save();fit();toast('Mapa reorganizado')};
+document.getElementById('zin').onclick=()=>zoom(1.15);
+document.getElementById('zout').onclick=()=>zoom(1/1.15);
+document.getElementById('fit').onclick=fit;
+let resetArm=false,resetT=null;
+document.getElementById('reset').onclick=e=>{const b=e.currentTarget;
+  if(!resetArm){resetArm=true;b.classList.add('armed');b.textContent='Confirmar: apagar edições';clearTimeout(resetT);resetT=setTimeout(()=>{resetArm=false;b.classList.remove('armed');b.textContent='Restaurar modelo'},3000);return}
+  resetArm=false;b.classList.remove('armed');b.textContent='Restaurar modelo';push();M=flatten(SPEC);sel=null;render();layout();save();fit();toast('Modelo restaurado')};
+
+const dlg=document.getElementById('dlg');
+function openDlg(html){dlg.innerHTML=`<div class="card">${html}</div>`;dlg.hidden=false}
+dlg.addEventListener('click',ev=>{if(ev.target===dlg||ev.target.dataset.close!==undefined)dlg.hidden=true});
+document.getElementById('exp').onclick=()=>{
+  const json=JSON.stringify({nodes:M},null,1);
+  openDlg(`<h2>Exportar mapa</h2><p>Copie o texto e guarde num arquivo ou mensagem. Depois, use Importar para recuperar ou levar o mapa para outro computador.</p><textarea id="expTxt" readonly>${esc(json)}</textarea><div class="row"><button class="btn" data-close>Fechar</button><button class="btn solid" id="cpy">Copiar</button></div>`);
+  document.getElementById('cpy').onclick=()=>{const t=document.getElementById('expTxt');const fb=()=>{t.focus();t.select();toast('Texto selecionado. Use Ctrl+C')};
+    try{navigator.clipboard.writeText(json).then(()=>toast('Copiado'),fb)}catch(e){fb()}};
+};
+document.getElementById('imp').onclick=()=>{
+  openDlg(`<h2>Importar mapa</h2><p>Cole aqui o texto exportado. O mapa atual será substituído, e Desfazer volta para ele.</p><textarea id="impTxt" placeholder='{"nodes":[...]}'></textarea><div class="row"><button class="btn" data-close>Cancelar</button><button class="btn solid" id="doImp">Importar</button></div>`);
+  document.getElementById('doImp').onclick=()=>{try{const d=JSON.parse(document.getElementById('impTxt').value);
+      if(!Array.isArray(d.nodes)||!d.nodes.every(n=>n.id&&typeof n.text==='string'))throw 0;
+      push();M=d.nodes.map(n=>({id:n.id,parent:n.parent||null,text:n.text,type:TYPES[n.type]?n.type:'info',tag:n.tag||'',x:+n.x||0,y:+n.y||0}));sel=null;save();render();dlg.hidden=true;fit();toast('Mapa importado')}
+    catch(e){toast('Texto inválido. Cole o conteúdo exportado por completo')}};
+};
+
+/* Salvar em HTML: gera um arquivo independente com o mapa atual */
+function buildHtml(){
+  const data=JSON.stringify({nodes:M,savedAt:Date.now()}).replace(/</g,'\\u003c');
+  const font='<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">';
+  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>'+esc(document.title||'Mapa da Atribuição por Contratante')+'</title>'+font+'<style>'+CSS+'</style></head><body>'+SKEL+'<script>window.__GT3_MAP__='+data+';<\/script><script>'+SRC+'<\/script></body></html>';
+}
+function fileName(){const d=new Date(),z=n=>String(n).padStart(2,'0');return `mapa-atribuicao-contratante-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}.html`}
+function showCopy(html,name){
+  openDlg(`<h2>Salvar em HTML</h2><p>O salvamento direto não está disponível nesta tela. Copie o código, cole num arquivo de texto e salve com o nome <b>${esc(name)}</b>. Ao abrir o arquivo, o mapa aparece como está agora.</p><textarea id="htmlTxt" readonly>${esc(html)}</textarea><div class="row"><button class="btn" data-close>Fechar</button><button class="btn solid" id="cpyH">Copiar código</button></div>`);
+  document.getElementById('cpyH').onclick=()=>{const t=document.getElementById('htmlTxt');const fb=()=>{t.focus();t.select();toast('Texto selecionado. Use Ctrl+C')};
+    try{navigator.clipboard.writeText(html).then(()=>toast('Código copiado'),fb)}catch(e){fb()}};
+}
+let saving=false;
+async function saveHtml(){
+  if(saving)return;saving=true;if(editing)endEdit();
+  const html=buildHtml(),name=fileName();
+  try{
+    if(window.claude&&typeof window.claude.use==='function'){
+      let dl=null;try{dl=await window.claude.use('downloads')}catch(e){}
+      if(!dl){showCopy(html,name);return}
+      try{await dl.save({filename:name,data:html});toast('Arquivo HTML salvo')}
+      catch(e){const c=e&&e.code;if(c==='declined')toast('Salvamento cancelado');else if(c==='rate_limited')toast('Aguarde um instante e tente de novo');else showCopy(html,name)}
+      return;
+    }
+    const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);toast('Arquivo HTML salvo');
+  }catch(e){showCopy(html,name)}
+  finally{saving=false}
+}
+document.getElementById('saveHtml').onclick=saveHtml;
+document.addEventListener('keydown',ev=>{if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='s'){ev.preventDefault();saveHtml()}});
+
+document.getElementById('undo').disabled=true;
+render();
+const boot=()=>{if(needLayout){layout();save()}else links();fit()};
+(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(()=>requestAnimationFrame(boot));
+window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(fit,150)});
+})();
+</script></body></html>

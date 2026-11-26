@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDI Ana Paula Barros</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE trabalho: documento de PDI para Rodrigo e Marcio, sóbrio e escaneável
+   IDEA a ficha de desenvolvimento do próprio GT3 Sistema, com as mesmas cores
+   PICTURE painel de perfil: Eneagrama (9 barras), Animais (4 barras), MBTI (3 candidatos)
+   COLOUR fundo #F4F6FA, azul GT3 #2A4F96, dourado #D1AE6E para o que vai ao sistema
+   TYPE Plus Jakarta Sans 800 títulos + 400/500 texto
+   LAYOUT faixa azul com título e conclusão; painel de perfil em três colunas; no celular, empilha */
+:root{color-scheme:light dark;--bg:light-dark(#f4f6fa,#0e1422);--card:light-dark(#ffffff,#161e30);--ink:light-dark(#1b2333,#e6ebf5);--mut:light-dark(#5a6478,#a3aec4);--line:light-dark(#dfe4ee,#2a3550);--pri:light-dark(#2a4f96,#86a8ec);--prib:light-dark(#e8eefa,#1c2a49);--acc:light-dark(#a8822f,#e0c48e);--accb:light-dark(#fbf4e6,#2e2717);--hero:#1f3c78;--heroink:#f4f6fa;--warn:light-dark(#b5462a,#f08a6c)}
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{scroll-padding-top:70px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Plus Jakarta Sans",system-ui,sans-serif;overflow-x:clip}
+.w{max-width:1100px;margin:0 auto;padding:0 max(16px,4vw)}
+.hero{background:var(--hero);color:var(--heroink);padding:36px 0 30px}
+.hero h1{font-weight:800;font-size:clamp(30px,5vw,46px);line-height:1.05;letter-spacing:-.02em;margin:0 0 6px;text-wrap:balance}
+.hero .sub{opacity:.82;margin:0 0 18px;font-size:15px}
+.hero .concl{font-size:17px;max-width:72ch;margin:0 0 24px}
+.panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:16px}
+.pc h3{margin:0 0 2px;font-size:15px;font-weight:700}
+.pc .note{font-size:13px;opacity:.8;margin:0 0 12px}
+.br{display:grid;grid-template-columns:7.8em minmax(0,1fr) 2.6em;gap:8px;align-items:center;font-size:13px;margin:5px 0}
+.br .t{height:10px;background:rgba(255,255,255,.14);border-radius:5px;overflow:hidden}
+.br .f{height:100%;background:rgba(255,255,255,.5);border-radius:5px}
+.br.top .f{background:#d1ae6e}
+.br.top{font-weight:700}
+.br .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mb{display:flex;align-items:baseline;gap:12px;margin:10px 0}
+.mb b{font-size:28px;font-weight:800;letter-spacing:.02em;min-width:3.2em}
+.mb.top b{color:#d1ae6e}
+.mb span{font-size:13px;opacity:.85}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 0;font-size:13px}
+.tag{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.tag.sys{background:var(--accb);color:var(--acc);border:1px solid color-mix(in srgb,var(--acc) 40%,transparent)}
+.tag.int{background:var(--prib);color:var(--pri);border:1px solid color-mix(in srgb,var(--pri) 35%,transparent)}
+.hero .tag.sys{background:#d1ae6e;color:#1f3c78;border:0}
+.hero .tag.int{background:rgba(255,255,255,.14);color:#fff;border:0}
+nav.nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+nav .scroll{display:flex;gap:4px;overflow-x:auto;padding:8px 0;scrollbar-width:thin}
+nav a{flex:none;color:var(--ink);text-decoration:none;font-size:14px;font-weight:600;padding:8px 12px;border-radius:8px;white-space:nowrap}
+nav a:hover{background:var(--prib);color:var(--pri)}
+section{padding:34px 0 6px}
+h2{font-size:clamp(24px,3vw,30px);line-height:1.1;font-weight:800;letter-spacing:-.015em;margin:0 0 6px;color:var(--pri)}
+.h2row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.h2row h2{margin:0}
+h3{font-size:18px;margin:22px 0 8px}
+p{margin:0 0 12px;max-width:76ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+ul{margin:6px 0 0;padding-left:20px}
+li{margin:4px 0}
+.mut{color:var(--mut);font-size:14px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(10em,1fr));gap:12px;margin:8px 0 14px}
+.kpi div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kpi b{display:block;font-size:clamp(24px,3vw,30px);font-weight:800;color:var(--pri);line-height:1.1;white-space:nowrap}
+.kpi span{font-size:13px;color:var(--mut)}
+.rows .r{display:grid;grid-template-columns:5.5em minmax(0,1fr) 4.5em;gap:10px;align-items:center;margin:6px 0;font-size:14px}
+.rows .t{height:14px;background:var(--prib);border-radius:4px;overflow:hidden}
+.rows .f{height:100%;background:var(--pri);border-radius:4px}
+.rows .f.ref{background:color-mix(in srgb,var(--mut) 45%,transparent)}
+.rows .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font-size:13px;color:var(--mut);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.mbti-t{display:grid;grid-template-columns:minmax(0,13em) minmax(0,1fr);gap:0}
+.mbti-t>div{padding:12px 0;border-bottom:1px solid var(--line)}
+.mbti-t>div:nth-child(odd){font-weight:700;padding-right:16px}
+.act{border-left:4px solid var(--acc)}
+.act dl{display:grid;grid-template-columns:minmax(0,11em) minmax(0,1fr);gap:6px 14px;margin:10px 0 0}
+.act dt{font-weight:600;color:var(--mut);font-size:14px}
+.act dd{margin:0}
+.act h3{margin:0}
+ol.rot li{margin:8px 0}
+.fld{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.fld .fh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.fld .fh b{font-size:15px}
+button{font:600 14px "Plus Jakarta Sans",sans-serif;min-height:40px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--pri);color:var(--pri)}
+button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.pri:hover{color:#fff;opacity:.9}
+.fld .txt{white-space:pre-wrap;margin-top:8px;font-size:15px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:13px;line-height:1.5;max-height:420px;overflow:auto;margin:10px 0 0}
+code{overflow-wrap:anywhere}
+.warnbox{background:var(--accb);border:1px solid color-mix(in srgb,var(--acc) 35%,transparent);border-radius:10px;padding:14px 16px;margin:12px 0}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+footer{padding:30px 0 50px;color:var(--mut);font-size:13px}
+@media(max-width:860px){.panel,.grid3{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:640px){.grid2{grid-template-columns:minmax(0,1fr)}.mbti-t{grid-template-columns:minmax(0,1fr)}.mbti-t>div:nth-child(odd){border-bottom:0;padding-bottom:0}.act dl{grid-template-columns:minmax(0,1fr)}.act dd{margin-bottom:8px}table{font-size:13px}th,td{padding:8px 6px}}
+@media(prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<header class="hero">
+<div class="w">
+<h1>PDI — Ana Paula Barros</h1>
+<p class="sub">Auxiliar Administrativo · na GT3 desde 21/09/2026 · experiência concluída · análise inicial, antes da primeira conversa · 26/11/2026</p>
+<p class="concl">As três fontes convergem para um perfil de <b>estrutura, cuidado e reserva</b>: Lobo 40% e Gato 28%, ISFJ com vantagem clara e Tipo 6 no topo do Eneagrama. Isso combina com o que se observa e com os elogios das referências do cadastro. O ponto central de desenvolvimento não é a timidez: é dar <b>estrutura ao papel de curinga</b>, porque várias frentes ao mesmo tempo é justamente o que mais exige de quem prefere rotina e previsibilidade.</p>
+<div class="panel">
+<div class="pc">
+<h3>Eneagrama</h3>
+<p class="note">Em ordem de pontuação · 6 à frente por 1 ponto</p>
+<div id="eneaBars"></div>
+</div>
+<div class="pc">
+<h3>Quatro animais</h3>
+<p class="note">Lobo dominante, Gato forte</p>
+<div id="animBars"></div>
+</div>
+<div class="pc">
+<h3>MBTI (funções cognitivas)</h3>
+<p class="note">ISFJ com 11 pontos de vantagem · F nos três</p>
+<div id="mbtiTop"></div>
+</div>
+</div>
+<div class="legend"><span class="tag sys">Vai para o sistema</span><span class="tag int">Uso interno (Rodrigo e Marcio)</span></div>
+</div>
+</header>
+
+<nav class="nav"><div class="w scroll">
+<a href="#contexto">Contexto</a><a href="#eneagrama">Eneagrama</a><a href="#animais">Animais</a><a href="#mbti">MBTI</a><a href="#cruzamento">Cruzamento</a><a href="#conclusoes">Conclusões</a><a href="#pdi">PDI proposto</a><a href="#roteiro">Roteiro da conversa</a><a href="#campos">Campos do sistema</a><a href="#importar">Importar</a>
+</div></nav>
+
+<main class="w">
+
+<section id="contexto">
+<div class="h2row"><h2>A. Contexto profissional</h2><span class="tag int">Uso interno</span></div>
+<div class="grid2">
+<div class="card">
+<h3 style="margin-top:0">Quem é, no trabalho</h3>
+<ul>
+<li>Auxiliar Administrativo desde 21/09/2026, cerca de dois meses de casa, com experiência concluída.</li>
+<li>Papel de <b>curinga</b> em formação: aprende o cadastro com José e Alexandra e o financeiro com a Mariane.</li>
+<li>Pelo PGR, a função prevê apoio administrativo e financeiro, atendimento, análise de documentos e cadastros, incluindo permissões de acesso, login e senha no Portal e orientação ao cliente.</li>
+<li>Está sendo bem avaliada pelo José e pela Alexandra. O elogio da Alexandra pesa, porque ela costuma ser exigente.</li>
+<li>Trajetória anterior ainda desconhecida. É uma pergunta para a primeira conversa.</li>
+</ul>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Como ela se apresenta no dia a dia</h3>
+<ul>
+<li>Reservada: raramente puxa conversa ou brincadeira, mas sempre conversa bem quando abordada e brinca quando alguém brinca.</li>
+<li>Querida e bem-humorada, sem restrições com ninguém.</li>
+<li>“Entrosa” menos que os demais. A causa ainda não está clara, e há quatro hipóteses, que podem se somar:
+<ul>
+<li><b>temperamento</b>: a introversão aparece no MBTI e no relato;</li>
+<li><b>adaptação</b>: dois meses de casa e cidade nova;</li>
+<li><b>o próprio papel</b>: muitas frentes exigem atenção constante e sobra pouco espaço para conversa;</li>
+<li><b>prudência</b>: o Tipo 6 tende a observar antes de se expor, até entender como as coisas funcionam.</li>
+</ul></li>
+</ul>
+</div>
+</div>
+<div class="warnbox">
+<b>Permanência:</b> ela se mudou para a região no início do ano e voltou a trabalhar por escolha, em busca de rotina e convívio. Para ela, o trabalho também é espaço de pertencimento. Pequenos gestos de inclusão, como chamar para o almoço, explicar “como as coisas funcionam aqui” e reconhecer o trabalho na frente dos outros, têm efeito grande na permanência.
+<br><b>Referências:</b> as três pessoas que a orientam têm estilos bem diferentes. Combinar entre elas o que cada uma ensina, e em que ordem, evita orientações conflitantes para quem está chegando, que é o tipo de situação que mais desgasta um perfil Tipo 6 e Lobo.
+<br><b>Ficaram fora deste material, de propósito:</b> idade, família e motivo da mudança. Não mudam a leitura profissional, e o PDI fica visível para ela.
+</div>
+</section>
+
+<section id="eneagrama">
+<div class="h2row"><h2>B. Eneagrama</h2><span class="tag int">Análise</span></div>
+<p>O Tipo 6 lidera com 19 pontos. Logo abaixo vem um <b>empate triplo</b> entre os Tipos 2, 8 e 9, todos com 18. Por isso os quatro aparecem com peso parecido. O perfil é mais diferenciado que a média: vai de 9 (Tipo 3) a 19. O Tipo 4 aparece em seguida, com 15, e o Tipo 3 bem abaixo de todos.</p>
+<div class="grid2">
+<div class="card">
+<h3 style="margin-top:0">Tipo 6 · Lealista — 19/25</h3>
+<p class="mut">O resultado sugere identificação com:</p>
+<ul><li>Lealdade e senso de responsabilidade.</li><li>Atenção a riscos e preferência por confirmar antes de agir.</li><li>Busca de segurança em regras claras e pessoas de confiança.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> cuidado com permissões de acesso, dados de cadastro e valores no financeiro, onde errar tem custo. Na adaptação, pode pedir muitas confirmações ou guardar dúvidas até ter certeza de que pode perguntar.</p>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Tipo 2 · Ajudante — 18/25 <span class="mut">(empate)</span></h3>
+<ul><li>Disponibilidade para ajudar.</li><li>Atenção às necessidades dos outros.</li><li>Satisfação em ser útil.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> atendimento cordial ao prestador no primeiro contato com o Portal. Combina com o papel de curinga, que existe para cobrir os outros. Risco: aceitar pedidos de várias frentes sem dizer que não cabe tudo.</p>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Tipo 8 · Confrontador — 18/25 <span class="mut">(empate)</span></h3>
+<ul><li>Firmeza e autonomia.</li><li>Franqueza quando algo parece errado.</li><li>Proteção de si e dos outros diante de injustiça.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> é o traço menos visível hoje. Pode aparecer quando ela estiver segura no processo, por exemplo ao sustentar uma orientação para o prestador. É um ponto a observar nos próximos meses.</p>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Tipo 9 · Pacifista — 18/25 <span class="mut">(empate)</span></h3>
+<ul><li>Calma e busca de harmonia.</li><li>Facilidade de convivência.</li><li>Tendência a evitar conflito e a se acomodar ao ritmo dos outros.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> presença tranquila e sem atritos. Risco: adiar o aviso de um problema ou de excesso de demandas para não gerar desconforto.</p>
+</div>
+</div>
+<div class="card">
+<b>Convergências e tensões.</b> Os Tipos 6, 2 e 9 convergem para um perfil leal, prestativo e conciliador, coerente com o que se observa. A tensão está no Tipo 8, empatado com os outros dois: firmeza e evitar conflito convivem no mesmo resultado. Na prática, é provável que ela seja calma na maior parte do tempo e firme quando algo cruzar um limite. O Tipo 4 (15) sugere sensibilidade e vida interior mais intensas do que ela mostra. O Tipo 3 baixo (9) indica pouca motivação por visibilidade e status, o que combina com não buscar holofote.
+</div>
+</section>
+
+<section id="animais">
+<div class="h2row"><h2>C. Quatro animais</h2><span class="tag int">Análise</span></div>
+<div class="scroll"><table>
+<thead><tr><th>Animal</th><th style="text-align:right">%</th><th>Ponto forte</th><th>Em excesso</th><th>Peso no conjunto</th></tr></thead>
+<tbody>
+<tr><td><b>Lobo</b></td><td class="n">40</td><td>Organização, detalhe, procedimento, planejamento</td><td>Insegurança quando a tarefa muda sem roteiro</td><td>Dominante. Define o estilo de trabalho.</td></tr>
+<tr><td><b>Gato</b></td><td class="n">28</td><td>Relacionamento, harmonia, cuidado com as pessoas</td><td>Evitar desgaste e exposição</td><td>Forte. Explica a cordialidade e a preferência por relações próximas.</td></tr>
+<tr><td><b>Tubarão</b></td><td class="n">20</td><td>Ação, objetividade, decisão</td><td>Pressa sob cobrança</td><td>Moderado. Aparece quando a tarefa está clara.</td></tr>
+<tr><td><b>Águia</b></td><td class="n">12</td><td>Visão do todo, ideias, mudança</td><td>—</td><td>Baixo. Prefere dominar antes de propor.</td></tr>
+</tbody></table></div>
+<p style="margin-top:12px"><b>Na rotina da GT3.</b> Lobo e Gato somam 68%: é o perfil de quem faz o processo direito e cuida de quem está do outro lado. Para cadastro e orientação inicial do prestador, é um bom encaixe. O ponto de atenção é o papel de curinga. O Lobo rende melhor com uma rotina por vez, e o curinga troca de frente o tempo todo. Por isso a primeira ação do PDI é estruturar as frentes, não pedir mais iniciativa.</p>
+</section>
+
+<section id="mbti">
+<div class="h2row"><h2>D. MBTI — análise aprofundada</h2><span class="tag int">Análise</span></div>
+<div class="warnbox">Mesmo teste por funções cognitivas. Desta vez o resultado é mais definido do que o da Caroline: <b>ISFJ 88</b>, INFP 77 e ESFJ 74. O <b>F</b> aparece nos três tipos, e <b>I, S e J</b> em dois de três. O comportamento observado coincide com a introversão. Se houver o link do resultado com a pontuação por função, dá para confirmar o peso de Si (memória de procedimento) e Fe (atenção ao clima).</div>
+<div class="card mbti-t">
+<div>1. Processamento de informação</div><div>Concreto e detalhado: dados de cadastro, CNPJ, permissões, valores e vencimentos. Guarda bem a sequência de um procedimento depois que a entende. A segunda opção, INFP, sugere também um lado de valores pessoais por trás dessa atenção.</div>
+<div>2. Tomada de decisão</div><div>Sentimento (F) estável nos três tipos: considera o impacto nas pessoas, seja o prestador que precisa ser liberado ou a colega que depende da tarefa. Combinado ao J, segue o procedimento combinado. Em caso novo, prefere confirmar antes.</div>
+<div>3. Organização e processos</div><div>Preferência por rotina, planejamento e previsibilidade, reforçada pelo Lobo 40%. Mudança de processo funciona quando vem antecipada e explicada.</div>
+<div>4. Comunicação e relacionamento</div><div>Calorosa no contato individual, reservada em grupo. Escuta bem. Tende a não discordar abertamente e a não iniciar conversas, mas responde bem quando abordada. Por escrito e com prestador, a tendência é ser cordial e cuidadosa.</div>
+<div>5. Pressão e imprevistos</div><div>Sob muitas demandas simultâneas, a tendência é absorver em silêncio e tentar dar conta de tudo. Cobrança dura ou pública pode levá-la a se retrair. O sinal de alerta é ficar mais quieta do que o habitual, não reclamar.</div>
+<div>6. Ambiente favorável</div><div>Uma referência clara por frente, roteiro escrito, rotina previsível, contato próximo e reconhecimento concreto do que faz bem.</div>
+<div>7. Contribuições para a GT3</div><div>Cadastro de empresas e permissões no Portal, orientação inicial do prestador, rotinas financeiras estruturadas e, com o tempo, cobertura de férias e ausências das frentes que dominar.</div>
+<div>8. Atenção e risco de inadequação</div><div>Várias frentes sem estrutura, orientações conflitantes, conflito frequente como atividade principal e exposição em grupo. Mal alocada, a tendência é perder segurança e se fechar, não protestar, o que torna o problema menos visível.</div>
+<div>9. Desenvolvimento</div><div>Autonomia por frente, hábito de sinalizar dúvidas e prioridades no mesmo dia, e visão do processo de ponta a ponta. A visibilidade vem como consequência: trazer pontos da própria frente na reunião, sem forçar exposição.</div>
+<div>10. Liderança</div><div>Check-in curto e regular, com perguntas abertas. Feedback em particular, com exemplo concreto. Antecipar mudanças. Não confundir quietude com desinteresse nem com ausência de dúvidas.</div>
+<div>11. Síntese para a GT3</div><div>Uma auxiliar cuidadosa e confiável, com bom encaixe para cadastro e apoio financeiro, que já conquistou as referências em dois meses. O que mais define o desempenho dela agora é a estrutura do papel: com frentes, roteiros e referências claros, a tendência é se tornar uma curinga segura.</div>
+</div>
+</section>
+
+<section id="cruzamento">
+<div class="h2row"><h2>E. Cruzamento dos instrumentos</h2><span class="tag int">Análise</span></div>
+<div class="grid2">
+<div class="card"><h3 style="margin-top:0">Aparece em mais de uma fonte</h3><ul>
+<li><b>Estrutura e cuidado com procedimento:</b> Lobo 40, Tipo 6, S/J no ISFJ.</li>
+<li><b>Cuidado com as pessoas:</b> Tipo 2, Gato 28, F nos três tipos MBTI e o relato de que é querida.</li>
+<li><b>Reserva:</b> I em dois dos três tipos, Tipo 9 e o relato do dia a dia.</li></ul></div>
+<div class="card"><h3 style="margin-top:0">Divergências</h3><ul>
+<li>O Tipo 8 (18) indica firmeza, que ainda não aparece no comportamento. Pode ser fase de adaptação.</li>
+<li>O Tipo 4 (15) e o INFP como segundo tipo sugerem uma sensibilidade maior do que ela mostra.</li>
+<li>ESFJ em terceiro, um tipo extrovertido. A introversão não é absoluta: ela se abre quando a relação está construída.</li></ul></div>
+<div class="card"><h3 style="margin-top:0">Relatado, mas não explicado pelos testes</h3><ul>
+<li>A causa da reserva: temperamento, adaptação, papel ou prudência.</li>
+<li>A trajetória profissional anterior.</li></ul></div>
+<div class="card"><h3 style="margin-top:0">Investigar na conversa</h3><ul>
+<li>Com o que trabalhava antes, e o que trouxe dessa experiência?</li>
+<li>Prefere ser curinga ou se especializar em uma frente?</li>
+<li>Como lida quando recebe orientações diferentes de pessoas diferentes?</li>
+<li>O resultado dos testes faz sentido para ela?</li></ul></div>
+</div>
+</section>
+
+<section id="conclusoes">
+<div class="h2row"><h2>F a L. Conclusões</h2><span class="tag sys">Base dos campos do sistema</span></div>
+<div class="grid3" id="concl"></div>
+<div class="card" style="border-left:4px solid var(--pri)">
+<h3 style="margin-top:0">L. Três pontos de atenção prioritários</h3>
+<ol>
+<li><b>Estruturar o papel de curinga.</b> Mapa de tarefas por frente, uma referência por frente e blocos fixos nesta fase. É a condição para ela render.</li>
+<li><b>Canal de dúvidas que não depende dela.</b> O check-in curto e regular evita que a reserva vire dúvida guardada ou sobrecarga silenciosa.</li>
+<li><b>Pertencimento.</b> Integração e reconhecimento são o que mais pesa para a permanência dela agora. Integrar não é empurrá-la para a exposição.</li>
+</ol>
+</div>
+</section>
+
+<section id="pdi">
+<div class="h2row"><h2>PDI proposto</h2><span class="tag sys">Vai para o sistema após validar</span></div>
+<p>Três ações, para usar como pauta da primeira conversa. Confirme com ela, ajuste e só então defina as datas. A sugestão é revisar em três meses.</p>
+<div id="acoes"></div>
+</section>
+
+<section id="roteiro">
+<div class="h2row"><h2>Roteiro da primeira conversa</h2><span class="tag int">Para o Marcio e você</span></div>
+<div class="card"><ol class="rot">
+<li>Como estão sendo esses dois meses? O que você mais gostou e o que foi mais difícil?</li>
+<li>Antes de vir para cá, com o que você trabalhava? O que trouxe dessa experiência?</li>
+<li>Como está sendo dividir o tempo entre cadastro e financeiro? Em que momento fica confuso?</li>
+<li>Quando surge uma dúvida, para quem você pergunta? Fica à vontade para perguntar?</li>
+<li>Que tarefas você já faz sozinha? Quais ainda precisa de alguém junto?</li>
+<li>Já recebeu orientações diferentes de pessoas diferentes? Como resolveu?</li>
+<li>Como você prefere receber feedback?</li>
+<li>O que te ajudaria a se sentir mais parte da equipe? (Abrir espaço, sem pressionar.)</li>
+<li>Onde você se vê daqui a um ano na GT3? Prefere continuar curinga ou se especializar? (Base para a Ambição.)</li>
+<li>O resultado dos testes faz sentido para você?</li>
+<li>Apresentar a escala de 1 a 5 e combinar quais competências se aplicam ao papel dela. PGR/PCMSO/LTCAT e Doc veículo provavelmente não se aplicam agora.</li>
+</ol>
+<p class="mut" style="margin:10px 0 0">Escala: 1 não possui conhecimento · 2 sabe o básico · 3 realiza em condições normais, com alguma assistência · 4 faz em qualquer condição, sem acompanhamento · 5 domina e compartilha.</p>
+</div>
+</section>
+
+<section id="campos">
+<div class="h2row"><h2>Campos para o sistema</h2><span class="tag sys">Visível para a colaboradora</span></div>
+<p>Texto pronto para colar campo a campo, caso você não use a importação. É o mesmo conteúdo do JSON.</p>
+<div id="fields"></div>
+</section>
+
+<section id="importar">
+<div class="h2row"><h2>Importar via VS Code</h2><span class="tag int">Técnico</span></div>
+<p>1. Salve o arquivo <code>pdi_ana_paula.json</code> (enviado na conversa) na raiz do projeto <code>gt3-sistema</code>. 2. Cole o prompt abaixo no Claude Code.</p>
+<div class="fld"><div class="fh"><b>Prompt para o Claude Code</b><button type="button" class="pri" data-copy="prompt">Copiar prompt</button></div>
+<pre id="prompt">Quero importar o PDI da colaboradora Ana Paula Barros a partir do arquivo pdi_ana_paula.json, que está na raiz do projeto. Siga o mesmo mapeamento usado na importação anterior (pdi_caroline.json), se já existir.
+
+1. Antes de gravar, leia o código do módulo PDI e as tabelas relacionadas no Supabase e me mostre o mapeamento entre as chaves do JSON e as colunas.
+2. A colaboradora JÁ EXISTE no módulo (Auxiliar Administrativo, início 21/09/2026). Atualize o registro dela; não crie outro.
+3. Importe: eneagrama (ranking, pontos fortes, pontos de atenção, como desenvolver), animais (animal, percentual, ponto forte, tendência), mbti (tipo, núcleo, veredito, estilo de decisão, curva de aprendizado, impacto no clima) e conclusões (forças visíveis, pontos de atenção, onde agrega mais, pode apoiar bem, como liderar, riscos se mal alocado). Se algum desses campos já tiver conteúdo, mostre o que existe e pergunte antes de sobrescrever.
+4. Eneagrama: grave e exiba o ranking SEMPRE em ordem de pontuação (maior primeiro). Há empate triplo na 2ª posição (Tipos 2, 8 e 9, todos 18): desempate pelo número do tipo. Se o modelo aceitar mais de 3 posições, grave as 4. Se não, grave Tipo 6, Tipo 2 e Tipo 8; o empate já está descrito em pontosAtencao.
+5. MBTI: grave "ISFJ" no tipo. Se existir campo para alternativas, registre INFP 77 e ESFJ 74; se não existir, não crie campo novo.
+6. planoAcoes: NÃO importe agora. Só me pergunte, ao final, se quero importar as 3 ações com status "Não iniciado" e sem datas.
+7. Não altere o Ciclo 1 existente nem dados de outros colaboradores.
+8. Não altere schema nem crie migrations sem me mostrar antes.
+9. Ao final, mostre um resumo do que foi gravado e como conferir na tela do PDI.</pre></div>
+<div class="fld"><div class="fh"><b>JSON (mesmo conteúdo do arquivo)</b><button type="button" data-copy="json">Copiar JSON</button></div>
+<pre id="json"></pre></div>
+</section>
+</main>
+<div class="w"><footer>Material de apoio ao desenvolvimento. Os testes são instrumentos de reflexão, não diagnóstico; a observação do dia a dia tem peso central. Leitura a validar na primeira conversa.</footer></div>
+<div class="toast" id="toast" role="status"></div>
+<script type="application/json" id="data">{
+  "_meta": {
+    "gerado_em": "2026-11-26",
+    "fonte": "Análise inicial (testes + relato do Rodrigo). Sem relatórios de produção. Ainda sem conversa de PDI.",
+    "observacoes_importacao": [
+      "Colaboradora JÁ EXISTE no módulo PDI (Ana Paula Barros, Auxiliar Administrativo, início 21/09/2026): atualizar o registro, não criar outro.",
+      "Eneagrama: manter a ordem por pontuação (maior primeiro). Empate triplo na 2ª posição (Tipos 2, 8 e 9, todos 18/25): desempatar pelo número do tipo.",
+      "MBTI: ISFJ com vantagem clara (88), seguido de INFP (77) e ESFJ (74).",
+      "Plano de ações é PROPOSTA para validar na primeira conversa: importar com status 'Não iniciado' e sem datas, ou só depois da conversa.",
+      "Ciclo 1 já existe sem competências: não alterar. Várias das 11 competências não se aplicam ao papel dela (PGR/PCMSO/LTCAT, Doc veículo); definir na conversa quais pontuar."
+    ],
+    "testes": {
+      "eneagrama_completo_ordenado": [
+        { "tipo": 6, "nome": "Tipo 6 - O Lealista (Questionador)", "pontuacao": 19 },
+        { "tipo": 2, "nome": "Tipo 2 - O Ajudante (Prestativo)", "pontuacao": 18 },
+        { "tipo": 8, "nome": "Tipo 8 - O Confrontador (Desafiador)", "pontuacao": 18 },
+        { "tipo": 9, "nome": "Tipo 9 - O Pacifista (Preservador)", "pontuacao": 18 },
+        { "tipo": 4, "nome": "Tipo 4 - O Individualista (Intenso)", "pontuacao": 15 },
+        { "tipo": 1, "nome": "Tipo 1 - O Reformador (Perfeccionista)", "pontuacao": 13 },
+        { "tipo": 5, "nome": "Tipo 5 - O Observador (Investigador)", "pontuacao": 12 },
+        { "tipo": 7, "nome": "Tipo 7 - O Entusiasta (Sonhador)", "pontuacao": 12 },
+        { "tipo": 3, "nome": "Tipo 3 - O Realizador (Bem-Sucedido)", "pontuacao": 9 }
+      ],
+      "animais_fonte": "personalidades.mobi",
+      "mbti_fonte": "michaelcaloz.com (teste por funções cognitivas; tela final sem pontuação por função)"
+    }
+  },
+  "colaborador": {
+    "nome": "Ana Paula Barros",
+    "cargo": "Auxiliar Administrativo",
+    "inicio": "2026-09-21"
+  },
+  "planoAcoes": [
+    {
+      "competencia": "Domínio das frentes de trabalho (curinga)",
+      "oQueDesenvolver": "Dominar com autonomia as rotinas básicas de cada frente (cadastro e financeiro), seguindo uma sequência clara de aprendizagem.",
+      "acoes": "Montar com as referências um mapa das tarefas de cada frente e a ordem em que serão aprendidas. Definir uma referência por frente (cadastro: José e Alexandra; financeiro: Mariane) e, nesta fase, dias ou blocos fixos para cada frente. Registrar o passo a passo em um checklist próprio conforme aprende.",
+      "resultadosEsperados": "Executar sem acompanhamento as tarefas básicas de cada frente até o fim do trimestre. Indicador: tarefas do mapa marcadas como autônomas e correções apontadas pelas referências.",
+      "inicio": null,
+      "termino": null,
+      "status": "Não iniciado"
+    },
+    {
+      "competencia": "Comunicação e sinalização de dúvidas",
+      "oQueDesenvolver": "Trazer dúvidas, travas e excesso de demandas no momento em que acontecem, sem esperar uma oportunidade.",
+      "acoes": "Fazer um check-in semanal de 10 a 15 minutos com a referência de cada frente. Manter uma lista de dúvidas do dia e esclarecê-la antes do fim do expediente. Avisar no mesmo dia quando duas frentes disputarem prioridade.",
+      "resultadosEsperados": "Dúvidas resolvidas rapidamente e prioridades combinadas, sem retrabalho por informação que ficou guardada. Indicador: retrabalho por dúvida não esclarecida e retorno das referências.",
+      "inicio": null,
+      "termino": null,
+      "status": "Não iniciado"
+    },
+    {
+      "competencia": "Visão do processo GT3",
+      "oQueDesenvolver": "Entender como o cadastro se liga ao restante do processo: requisitos do contratante, avaliação dos documentos e liberação no Portal.",
+      "acoes": "Acompanhar, em uma sessão curta com a área de avaliação, o caminho de duas ou três empresas que ela cadastrou até a liberação. Quando houver algo relevante da sua frente, trazer o ponto na reunião semanal.",
+      "resultadosEsperados": "Conseguir orientar o prestador sobre os próximos passos depois do cadastro. Indicador: orientações mais completas no primeiro contato e menos retornos de dúvidas sobre o fluxo.",
+      "inicio": null,
+      "termino": null,
+      "status": "Não iniciado"
+    }
+  ],
+  "eneagrama": {
+    "ranking": [
+      { "posicao": 1, "tipo": "Tipo 6 - O Lealista (Questionador)", "pontuacao": 19, "maximo": 25 },
+      { "posicao": 2, "tipo": "Tipo 2 - O Ajudante (Prestativo)", "pontuacao": 18, "maximo": 25, "empate": true },
+      { "posicao": 2, "tipo": "Tipo 8 - O Confrontador (Desafiador)", "pontuacao": 18, "maximo": 25, "empate": true },
+      { "posicao": 2, "tipo": "Tipo 9 - O Pacifista (Preservador)", "pontuacao": 18, "maximo": 25, "empate": true }
+    ],
+    "pontosFortes": [
+      "Lealdade, responsabilidade e atenção a riscos: tende a conferir antes de agir (Tipo 6).",
+      "Disponibilidade para ajudar e cuidado no atendimento (Tipo 2).",
+      "Combinação de calma (Tipo 9) com firmeza quando necessário (Tipo 8)."
+    ],
+    "pontosAtencao": [
+      "Na fase de adaptação, a prudência pode virar pedido de confirmação para muitas coisas ou dúvidas guardadas para não incomodar.",
+      "A tendência a evitar conflito (Tipo 9) pode adiar o aviso de um problema ou de excesso de demandas.",
+      "Empate triplo na 2ª posição (Tipos 2, 8 e 9, todos 18/25), apenas um ponto abaixo do Tipo 6: leitura a confirmar na conversa."
+    ],
+    "comoDesenvolver": [
+      "Ter um canal fixo e curto para tirar dúvidas com cada referência, sem depender de oportunidade.",
+      "Sinalizar no mesmo dia quando algo trava ou quando há demandas demais de frentes diferentes.",
+      "Registrar o passo a passo de cada frente conforme aprende, transformando dúvidas em checklist próprio."
+    ]
+  },
+  "animais": [
+    {
+      "animal": "Lobo",
+      "percentual": 40,
+      "pontoForte": "Organização, atenção a detalhes e respeito a procedimentos: base para cadastros, permissões de acesso e rotinas financeiras.",
+      "tendencia": "Traço dominante. Funciona melhor com processo claro; trocas frequentes de tarefa sem roteiro podem gerar insegurança."
+    },
+    {
+      "animal": "Gato",
+      "percentual": 28,
+      "pontoForte": "Cordialidade, harmonia e cuidado com as pessoas: favorece o primeiro contato com empresas novas.",
+      "tendencia": "Segundo traço mais forte. Prefere relações próximas e de confiança à exposição em grupo."
+    },
+    {
+      "animal": "Tubarão",
+      "percentual": 20,
+      "pontoForte": "Capacidade de agir e resolver quando a tarefa está clara.",
+      "tendencia": "Influência moderada. No início, tende a não tomar a frente por iniciativa própria."
+    },
+    {
+      "animal": "Águia",
+      "percentual": 12,
+      "pontoForte": "Visão do todo presente, mas secundária.",
+      "tendencia": "Menor inclinação a propor mudanças: prefere dominar o processo antes de sugerir melhorias."
+    }
+  ],
+  "mbti": {
+    "tipo": "ISFJ",
+    "indice": 88,
+    "alternativas": [
+      { "tipo": "INFP", "indice": 77 },
+      { "tipo": "ESFJ", "indice": 74 }
+    ],
+    "nucleo": "Resultado com vantagem clara para ISFJ (88), seguido de INFP (77) e ESFJ (74). O traço comum aos três é Sentimento (F): decisões que consideram as pessoas envolvidas. Introversão, Sensação e Julgamento aparecem em dois dos três. Leitura: atenção ao concreto, memória para procedimentos, senso de dever e cuidado com o outro, com preferência por rotina e previsibilidade.",
+    "veredito": "Perfil compatível com funções de apoio estruturado, como cadastro, permissões de acesso e rotinas financeiras, e com atendimento cordial. O comportamento observado (reservada, mas sempre receptiva e bem-humorada quando abordada) coincide com a introversão do resultado. Ponto a observar: o papel de curinga, com várias frentes, pede mais estrutura do que o habitual para quem prefere rotina.",
+    "estiloDecisao": "Decide com base no procedimento conhecido e no impacto para as pessoas. Quando o caso é novo, tende a confirmar antes de decidir. Precisa saber com clareza o que pode resolver sozinha e o que deve levar à referência.",
+    "curvaAprendizado": "Aprende pela repetição prática, com exemplo e roteiro, e guarda bem os procedimentos depois que entende a sequência. Evolui melhor com uma frente de cada vez e uma pessoa de referência por frente do que com orientações simultâneas de várias pessoas.",
+    "impactoClima": "Contribui com cordialidade e bom humor nas interações. Não costuma iniciar conversas em grupo, mas responde bem quando abordada. Tende a ser uma presença estável e tranquila na equipe."
+  },
+  "conclusoes": {
+    "forcasVisiveis": [
+      "Boa avaliação inicial das referências do cadastro nos primeiros dois meses, com experiência concluída.",
+      "Cordialidade e bom humor em todas as interações.",
+      "Perfil organizado e cuidadoso, adequado a cadastros, permissões de acesso e rotinas financeiras.",
+      "Senso de responsabilidade e atenção a riscos antes de agir."
+    ],
+    "pontosAtencao": [
+      "Ainda em adaptação a um papel com várias frentes (cadastro e financeiro), que exige trocas frequentes de contexto.",
+      "A tendência a não iniciar contato pode atrasar dúvidas e avisos importantes.",
+      "Visibilidade do próprio trabalho ainda baixa para quem não trabalha diretamente com ela."
+    ],
+    "ondeAgregaMais": [
+      "Cadastro de empresas, permissões de acesso, login e senha no Portal de Terceiros.",
+      "Orientação individual de prestadores no primeiro uso do Portal.",
+      "Rotinas financeiras estruturadas (notas, boletos, controle) em apoio à Mariane."
+    ],
+    "podeApoiarBem": [
+      "Cobertura de férias e ausências nas frentes que já dominar.",
+      "Organização de checklists das rotinas de cadastro e financeiro."
+    ],
+    "comoLiderar": [
+      "Uma referência por frente, com combinação prévia entre as referências sobre o que cada uma ensina.",
+      "Check-in curto e regular (10 a 15 minutos por semana), com perguntas abertas, sem esperar que ela traga as dúvidas.",
+      "Feedback em particular, concreto e com reconhecimento do que ela já faz bem.",
+      "Antecipar mudanças de frente ou de rotina, explicando o motivo."
+    ],
+    "riscosMalAlocado": [
+      "Muitas frentes ao mesmo tempo, sem roteiro e com orientações de várias pessoas.",
+      "Atendimento com conflito frequente ou cobrança direta como atividade principal antes de estar segura no processo.",
+      "Exposição em grupo como forma principal de avaliação ou feedback."
+    ]
+  }
+}
+</script>
+<script>
+{
+const D=JSON.parse(document.getElementById("data").textContent);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const all=[...D._meta.testes.eneagrama_completo_ordenado].sort((a,b)=>b.pontuacao-a.pontuacao||a.tipo-b.tipo);
+const short={1:"Reformador",2:"Ajudante",3:"Realizador",4:"Individualista",5:"Observador",6:"Lealista",7:"Entusiasta",8:"Confrontador",9:"Pacifista"};
+const tops=new Set(D.eneagrama.ranking.map(r=>parseInt(r.tipo.replace(/\D+/,""),10)));
+document.getElementById("eneaBars").innerHTML=all.map(e=>`<div class="br${tops.has(e.tipo)?" top":""}"><span>${e.tipo} ${short[e.tipo]}</span><div class="t"><div class="f" style="width:${e.pontuacao/25*100}%"></div></div><span class="v">${e.pontuacao}</span></div>`).join("");
+document.getElementById("animBars").innerHTML=D.animais.map((a,i)=>`<div class="br${i===0?" top":""}"><span>${esc(a.animal)}</span><div class="t"><div class="f" style="width:${a.percentual/60*100}%"></div></div><span class="v">${a.percentual}%</span></div>`).join("");
+const M=D.mbti;
+document.getElementById("mbtiTop").innerHTML=[{tipo:M.tipo,indice:M.indice},...M.alternativas].map((m,i)=>`<div class="mb${i===0?" top":""}"><b>${esc(m.tipo)}</b><span>índice ${esc(m.indice)}</span></div>`).join("");
+const C=D.conclusoes;
+const cl=[["F. Pontos fortes",C.forcasVisiveis],["G. Pontos de atenção",C.pontosAtencao],["H. Riscos se mal alocada",C.riscosMalAlocado],["I. Onde agrega mais",C.ondeAgregaMais.concat(C.podeApoiarBem.map(x=>"Pode apoiar: "+x))],["J. Como liderar",C.comoLiderar],["K. Como desenvolver",D.eneagrama.comoDesenvolver]];
+document.getElementById("concl").innerHTML=cl.map(([t,l])=>`<div class="card"><h3 style="margin-top:0">${t}</h3><ul>${l.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join("");
+const ev=["Papel de curinga em formação (cadastro com José e Alexandra, financeiro com Mariane). Lobo 40% e ISFJ indicam que ela rende mais com rotina e roteiro; o papel pede trocas frequentes de frente.","Ela é reservada e não costuma iniciar conversa, mas é sempre receptiva quando abordada. Com Tipo 6 e Tipo 9 altos, existe o risco de guardar dúvidas e de absorver demandas em silêncio.","Dois meses de casa, atuando no início do fluxo (cadastro). Entender o caminho até a liberação melhora a orientação ao prestador e dá a ela um ponto concreto para trazer à equipe."];
+document.getElementById("acoes").innerHTML=D.planoAcoes.map((a,i)=>`<div class="card act"><h3>${i+1}. ${esc(a.competencia)}</h3><dl><dt>Evidência</dt><dd>${esc(ev[i])}</dd><dt>O que desenvolver</dt><dd>${esc(a.oQueDesenvolver)}</dd><dt>Ações</dt><dd>${esc(a.acoes)}</dd><dt>Resultados e indicador</dt><dd>${esc(a.resultadosEsperados)}</dd><dt>Prazo</dt><dd>Início na data da conversa; revisão em 3 meses</dd><dt>Acompanhamento</dt><dd>Registrar nas anotações do ciclo: data, o que avançou e o próximo passo</dd></dl></div>`).join("");
+const L=l=>l.map(x=>"• "+x).join("\n");
+const F=[
+["Eneagrama · Ranking",D.eneagrama.ranking.map(r=>`${r.posicao}. ${r.tipo} — ${r.pontuacao}/${r.maximo}${r.empate?" (empate)":""}`).join("\n")],
+["Eneagrama · Pontos fortes",L(D.eneagrama.pontosFortes)],
+["Eneagrama · Pontos de atenção",L(D.eneagrama.pontosAtencao)],
+["Eneagrama · Como desenvolver",L(D.eneagrama.comoDesenvolver)],
+...D.animais.map(a=>[`Animais · ${a.animal} (${a.percentual}%)`,`Ponto forte: ${a.pontoForte}\nTendência: ${a.tendencia}`]),
+["MBTI · Tipo",M.tipo],["MBTI · Núcleo",M.nucleo],["MBTI · Veredito",M.veredito],["MBTI · Estilo de decisão",M.estiloDecisao],["MBTI · Curva de aprendizado",M.curvaAprendizado],["MBTI · Impacto no clima",M.impactoClima],
+["Conclusões · Forças visíveis",L(C.forcasVisiveis)],["Conclusões · Pontos de atenção",L(C.pontosAtencao)],["Conclusões · Onde agrega mais",L(C.ondeAgregaMais)],["Conclusões · Pode apoiar bem",L(C.podeApoiarBem)],["Conclusões · Como liderar",L(C.comoLiderar)],["Conclusões · Riscos se mal alocado",L(C.riscosMalAlocado)],
+...D.planoAcoes.map((a,i)=>[`Plano de ações ${i+1} · ${a.competencia}`,`Competência: ${a.competencia}\nO que desenvolver: ${a.oQueDesenvolver}\nAções: ${a.acoes}\nResultados esperados: ${a.resultadosEsperados}\nStatus: ${a.status}`])
+];
+const fw=document.getElementById("fields");
+F.forEach(([t,v],i)=>{const d=document.createElement("div");d.className="fld";d.innerHTML=`<div class="fh"><b></b><button type="button" data-f="${i}">Copiar</button></div><div class="txt"></div>`;d.querySelector("b").textContent=t;d.querySelector(".txt").textContent=v;fw.appendChild(d)});
+document.getElementById("json").textContent=JSON.stringify(D,null,2);
+const toast=m=>{const t=document.getElementById("toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1800)};
+const cp=async(txt,el)=>{try{await navigator.clipboard.writeText(txt);toast("Copiado")}catch(e){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);toast("Selecionado: use Ctrl+C")}};
+document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.f!==undefined){const i=+b.dataset.f;cp(F[i][1],b.closest(".fld").querySelector(".txt"))}else if(b.dataset.copy){const el=document.getElementById(b.dataset.copy);cp(el.textContent,el)}});
+}
+</script>
+</body>
+</html>

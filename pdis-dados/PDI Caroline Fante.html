@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDI Caroline Fante</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE trabalho: documento de PDI para Rodrigo e Marcio, sóbrio e escaneável
+   IDEA a ficha de desenvolvimento do próprio GT3 Sistema, com as mesmas cores
+   PICTURE painel de perfil: Eneagrama (9 barras), Animais (4 barras), MBTI (3 candidatos)
+   COLOUR fundo #F4F6FA, azul GT3 #2A4F96, dourado #D1AE6E para o que vai ao sistema
+   TYPE Plus Jakarta Sans 800 títulos + 400/500 texto
+   LAYOUT faixa azul com título e conclusão; painel de perfil em três colunas; no celular, empilha */
+:root{color-scheme:light dark;--bg:light-dark(#f4f6fa,#0e1422);--card:light-dark(#ffffff,#161e30);--ink:light-dark(#1b2333,#e6ebf5);--mut:light-dark(#5a6478,#a3aec4);--line:light-dark(#dfe4ee,#2a3550);--pri:light-dark(#2a4f96,#86a8ec);--prib:light-dark(#e8eefa,#1c2a49);--acc:light-dark(#a8822f,#e0c48e);--accb:light-dark(#fbf4e6,#2e2717);--hero:#1f3c78;--heroink:#f4f6fa;--warn:light-dark(#b5462a,#f08a6c)}
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{scroll-padding-top:70px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Plus Jakarta Sans",system-ui,sans-serif;overflow-x:clip}
+.w{max-width:1100px;margin:0 auto;padding:0 max(16px,4vw)}
+.hero{background:var(--hero);color:var(--heroink);padding:36px 0 30px}
+.hero h1{font-weight:800;font-size:clamp(30px,5vw,46px);line-height:1.05;letter-spacing:-.02em;margin:0 0 6px;text-wrap:balance}
+.hero .sub{opacity:.82;margin:0 0 18px;font-size:15px}
+.hero .concl{font-size:17px;max-width:72ch;margin:0 0 24px}
+.panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:16px}
+.pc h3{margin:0 0 2px;font-size:15px;font-weight:700}
+.pc .note{font-size:13px;opacity:.8;margin:0 0 12px}
+.br{display:grid;grid-template-columns:7.8em minmax(0,1fr) 2.6em;gap:8px;align-items:center;font-size:13px;margin:5px 0}
+.br .t{height:10px;background:rgba(255,255,255,.14);border-radius:5px;overflow:hidden}
+.br .f{height:100%;background:rgba(255,255,255,.5);border-radius:5px}
+.br.top .f{background:#d1ae6e}
+.br.top{font-weight:700}
+.br .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mb{display:flex;align-items:baseline;gap:12px;margin:10px 0}
+.mb b{font-size:28px;font-weight:800;letter-spacing:.02em;min-width:3.2em}
+.mb.top b{color:#d1ae6e}
+.mb span{font-size:13px;opacity:.85}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 0;font-size:13px}
+.tag{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.tag.sys{background:var(--accb);color:var(--acc);border:1px solid color-mix(in srgb,var(--acc) 40%,transparent)}
+.tag.int{background:var(--prib);color:var(--pri);border:1px solid color-mix(in srgb,var(--pri) 35%,transparent)}
+.hero .tag.sys{background:#d1ae6e;color:#1f3c78;border:0}
+.hero .tag.int{background:rgba(255,255,255,.14);color:#fff;border:0}
+nav.nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+nav .scroll{display:flex;gap:4px;overflow-x:auto;padding:8px 0;scrollbar-width:thin}
+nav a{flex:none;color:var(--ink);text-decoration:none;font-size:14px;font-weight:600;padding:8px 12px;border-radius:8px;white-space:nowrap}
+nav a:hover{background:var(--prib);color:var(--pri)}
+section{padding:34px 0 6px}
+h2{font-size:clamp(24px,3vw,30px);line-height:1.1;font-weight:800;letter-spacing:-.015em;margin:0 0 6px;color:var(--pri)}
+.h2row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.h2row h2{margin:0}
+h3{font-size:18px;margin:22px 0 8px}
+p{margin:0 0 12px;max-width:76ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+ul{margin:6px 0 0;padding-left:20px}
+li{margin:4px 0}
+.mut{color:var(--mut);font-size:14px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(10em,1fr));gap:12px;margin:8px 0 14px}
+.kpi div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kpi b{display:block;font-size:clamp(24px,3vw,30px);font-weight:800;color:var(--pri);line-height:1.1;white-space:nowrap}
+.kpi span{font-size:13px;color:var(--mut)}
+.rows .r{display:grid;grid-template-columns:5.5em minmax(0,1fr) 4.5em;gap:10px;align-items:center;margin:6px 0;font-size:14px}
+.rows .t{height:14px;background:var(--prib);border-radius:4px;overflow:hidden}
+.rows .f{height:100%;background:var(--pri);border-radius:4px}
+.rows .f.ref{background:color-mix(in srgb,var(--mut) 45%,transparent)}
+.rows .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font-size:13px;color:var(--mut);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.mbti-t{display:grid;grid-template-columns:minmax(0,13em) minmax(0,1fr);gap:0}
+.mbti-t>div{padding:12px 0;border-bottom:1px solid var(--line)}
+.mbti-t>div:nth-child(odd){font-weight:700;padding-right:16px}
+.act{border-left:4px solid var(--acc)}
+.act dl{display:grid;grid-template-columns:minmax(0,11em) minmax(0,1fr);gap:6px 14px;margin:10px 0 0}
+.act dt{font-weight:600;color:var(--mut);font-size:14px}
+.act dd{margin:0}
+.act h3{margin:0}
+ol.rot li{margin:8px 0}
+.fld{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.fld .fh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.fld .fh b{font-size:15px}
+button{font:600 14px "Plus Jakarta Sans",sans-serif;min-height:40px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--pri);color:var(--pri)}
+button:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.pri:hover{color:#fff;opacity:.9}
+.fld .txt{white-space:pre-wrap;margin-top:8px;font-size:15px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:13px;line-height:1.5;max-height:420px;overflow:auto;margin:10px 0 0}
+code{overflow-wrap:anywhere}
+.warnbox{background:var(--accb);border:1px solid color-mix(in srgb,var(--acc) 35%,transparent);border-radius:10px;padding:14px 16px;margin:12px 0}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+footer{padding:30px 0 50px;color:var(--mut);font-size:13px}
+@media(max-width:860px){.panel,.grid3{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:640px){.grid2{grid-template-columns:minmax(0,1fr)}.mbti-t{grid-template-columns:minmax(0,1fr)}.mbti-t>div:nth-child(odd){border-bottom:0;padding-bottom:0}.act dl{grid-template-columns:minmax(0,1fr)}.act dd{margin-bottom:8px}table{font-size:13px}th,td{padding:8px 6px}}
+@media(prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<header class="hero">
+<div class="w">
+<h1>PDI — Caroline Scarmin Fante</h1>
+<p class="sub">Analista de Serviços JR · na GT3 desde 10/08/2026 · análise inicial, antes da primeira conversa · 26/11/2026</p>
+<p class="concl">O sinal mais forte, e que aparece em todas as fontes, é o de <b>estrutura e precisão</b>: Lobo 48%, histórico em departamento pessoal e, nas revisões de outubro e novembro, <b>5 correções em 2.091 avaliações</b>, nenhuma depois de 19/10. O principal tema de desenvolvimento é ampliar o repertório para documentos mais interpretativos com <b>critério contextual</b> desde já, antes que a leitura literal da regra vire hábito.</p>
+<div class="panel">
+<div class="pc">
+<h3>Eneagrama</h3>
+<p class="note">Em ordem de pontuação · 7 dos 9 tipos entre 13 e 15</p>
+<div id="eneaBars"></div>
+</div>
+<div class="pc">
+<h3>Quatro animais</h3>
+<p class="note">Lobo claramente dominante</p>
+<div id="animBars"></div>
+</div>
+<div class="pc">
+<h3>MBTI (funções cognitivas)</h3>
+<p class="note">Três tipos próximos: estável é I + T</p>
+<div class="mb top"><b>ISTP</b><span>índice 71</span></div>
+<div class="mb"><b>INTJ</b><span>índice 68</span></div>
+<div class="mb"><b>ISTJ</b><span>índice 68</span></div>
+</div>
+</div>
+<div class="legend"><span class="tag sys">Vai para o sistema</span><span class="tag int">Uso interno (Rodrigo e Marcio)</span></div>
+</div>
+</header>
+
+<nav class="nav"><div class="w scroll">
+<a href="#contexto">Contexto</a><a href="#eneagrama">Eneagrama</a><a href="#animais">Animais</a><a href="#mbti">MBTI</a><a href="#cruzamento">Cruzamento</a><a href="#conclusoes">Conclusões</a><a href="#pdi">PDI proposto</a><a href="#roteiro">Roteiro da conversa</a><a href="#campos">Campos do sistema</a><a href="#importar">Importar</a>
+</div></nav>
+
+<main class="w">
+
+<section id="contexto">
+<div class="h2row"><h2>A. Contexto profissional</h2><span class="tag int">Uso interno</span></div>
+<div class="grid2">
+<div class="card">
+<h3 style="margin-top:0">Quem é, no trabalho</h3>
+<ul>
+<li>Analista de Serviços JR desde 10/08/2026, cerca de três meses e meio de casa.</li>
+<li>Formação em RH. Experiência anterior mais de DP que de RH, numa empresa de serviços de saúde: escalas de enfermagem, cálculo de folha e controle de ponto.</li>
+<li>Na GT3, atua com Marina e Daiana em documentos de empresa, principalmente guias mensais e certidões.</li>
+<li>Pelo PGR, a função JR prevê análise básica de documentos de empresa e atribuição de grau de risco a faltantes ou irregulares para decisão gerencial.</li>
+<li>Relata que a rotina daqui é “da água pro vinho” em relação ao emprego anterior, onde era acionada à noite e nos fins de semana.</li>
+<li>Relatada como bem-humorada, querida pela equipe, sem restrições com ninguém, e que questiona profissionalmente alguns itens.</li>
+</ul>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Produção no sistema (ago a out/2026)</h3>
+<div class="kpi">
+<div><b>4.211</b><span>avaliações em 57 dias</span></div>
+<div><b>68</b><span>tipos de documento</span></div>
+</div>
+<p class="mut" style="margin-bottom:4px">Avaliações por dia trabalhado</p>
+<div class="rows">
+<div class="r"><span>Ago</span><div class="t"><div class="f" style="width:41.6%"></div></div><span class="v">69,5</span></div>
+<div class="r"><span>Set</span><div class="t"><div class="f" style="width:42.6%"></div></div><span class="v">71,2</span></div>
+<div class="r"><span>Out</span><div class="t"><div class="f" style="width:47.6%"></div></div><span class="v">79,6</span></div>
+<div class="r mut"><span>Marina</span><div class="t"><div class="f ref" style="width:76.6%"></div></div><span class="v">128</span></div>
+<div class="r mut"><span>Daiana</span><div class="t"><div class="f ref" style="width:100%"></div></div><span class="v">167</span></div>
+</div>
+<p class="mut" style="margin-top:10px">Marina e Daiana aparecem só como referência da área, no mesmo período. Elas têm de três a quatro anos de casa a mais: não é meta nem comparação de desempenho.</p>
+</div>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Revisões das avaliações dela (02/10 a 24/11)</h3>
+<div class="kpi">
+<div><b>2.091</b><span>avaliações já revisadas</span></div>
+<div><b>5</b><span>correções (0,24%)</span></div>
+<div><b>0</b><span>correções depois de 19/10, em 1.144 revisões</span></div>
+<div><b>24</b><span>ainda sem revisão</span></div>
+</div>
+<p>A Marina revisou 95% das avaliações e a Daiana o restante. As cinco correções foram todas entre 09/10 e 19/10:</p>
+<div class="scroll"><table>
+<thead><tr><th>Data</th><th>Documento</th><th>Decisão dela</th><th>Nota da revisão</th></tr></thead>
+<tbody>
+<tr><td>09/10</td><td>Certidão Municipal</td><td>Aprovou</td><td>Verificar a data de aprovação</td></tr>
+<tr><td>13/10</td><td>Certidão Estadual</td><td>Reprovou</td><td>Verificar a reprovação</td></tr>
+<tr><td>14/10</td><td>DCTFWeb</td><td>Aprovou</td><td>Verificar a data de aprovação</td></tr>
+<tr><td>16/10</td><td>Certidão Estadual</td><td>Reprovou</td><td>Verificar documento</td></tr>
+<tr><td>19/10</td><td>CNPJ</td><td>Aprovou</td><td>Solicitar documento atualizado</td></tr>
+</tbody></table></div>
+<p style="margin-top:12px">Dois tipos de ajuste: detalhe de procedimento (data de aprovação, documento desatualizado) e duas reprovações de certidão estadual que não se confirmaram. São poucos casos para falar em padrão, mas o segundo tipo conversa com o tema do critério literal e vale citar na conversa como exemplo.</p>
+<p style="margin:0"><b>Novembro: revisão por amostragem e mudança de foco (confirmado).</b> As revisões caíram para 8 a 39 por semana. Das 100 avaliações revisadas no mês, 78 são documentos de interpretação: alvará (23), contrato de serviço (23), CNPJ (17) e contrato social (15). Os dois últimos servem para conferir se a atividade da empresa cobre o serviço. Mesmo nesse terreno mais difícil, não houve nenhuma correção.</p>
+</div>
+<div class="card">
+<h3 style="margin-top:0">O que os dados mostram e o que não mostram</h3>
+<ul>
+<li><b>Curva de aprendizagem saudável.</b> O volume diário subiu 15% entre agosto e outubro. A variedade também cresceu: 37 tipos de documento em agosto, 19 novos em setembro e 12 em outubro.</li>
+<li><b>Documentos de folha já estão sob controle.</b> Entre 5 e 13/10 ela avaliou 119 holerites e cartões ponto, com 5 reprovações e nenhuma correção na revisão. É onde a experiência em DP pesa a favor.</li>
+<li><b>As reprovações foram confirmadas pela revisão.</b> As maiores proporções de reprovação estão nos documentos mais interpretativos: apólice (10 de 18), certidão do MPT (7 de 15) e APR (7 de 16). A revisão concordou com ela. Isso mostra alinhamento com o critério atual da área, mas não testa a flexibilização contextual, que é justamente um tema em discussão na equipe.</li>
+<li><b>Os dois relatórios contam de jeitos diferentes.</b> O de eficiência mostra 1,3% de reprovações. No de revisão, 17% das decisões dela são reprovação. Usei cada um só para comparar com ele mesmo.</li>
+<li><b>O que os relatórios não medem:</b> a complexidade de cada documento e a qualidade da comunicação com o prestador.</li>
+</ul>
+</div>
+<div class="warnbox">
+<b>Ficaram fora deste material, de propósito:</b> idade, família, aparência e hábitos pessoais. Não mudam a leitura profissional, e o PDI fica visível para ela.
+<br><b>Clima (só para vocês):</b> ela chegou numa área em que trabalha lado a lado com duas colegas do grupo mais próximo e, até aqui, não tem restrições com ninguém. A integração com a área vai acontecer naturalmente por ali. O que ajuda a mantê-la fora das divisões é ter espaços próprios: a conversa de PDI, a reunião semanal e acesso direto à liderança para levar dúvidas.
+</div>
+</section>
+
+<section id="eneagrama">
+<div class="h2row"><h2>B. Eneagrama</h2><span class="tag int">Análise</span></div>
+<p>Três posições com uma particularidade: <b>empate no terceiro lugar</b> (Tipo 1 e Tipo 7, ambos 14). O perfil também é pouco diferenciado: sete dos nove tipos ficaram entre 13 e 15. Por isso o Eneagrama recebe peso menor nesta análise. O que se destaca é o Tipo 2, dois pontos acima do segundo colocado, e o Tipo 4 bem abaixo dos demais (8).</p>
+<div class="grid2">
+<div class="card">
+<h3 style="margin-top:0">Tipo 2 · Ajudante — 17/25</h3>
+<p class="mut">O resultado sugere identificação com:</p>
+<ul><li>Disponibilidade para ajudar e ser útil.</li><li>Atenção às relações e ao clima.</li><li>Valorização de ser reconhecida pelo que faz pelos outros.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> trato cordial com prestadores e disposição para apoiar colegas. Risco de dizer sim a demandas paralelas no pico do mês e perder o foco da conferência.</p>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Tipo 8 · Confrontador — 15/25</h3>
+<p class="mut">O resultado sugere identificação com:</p>
+<ul><li>Franqueza e firmeza para se posicionar.</li><li>Preferência por autonomia e controle sobre o próprio trabalho.</li><li>Pouca paciência com o que parece injusto ou sem lógica.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> combina com o relato de que “questiona profissionalmente”. É útil para sustentar uma reprovação diante do prestador. Sob pressão, pode deixar a comunicação escrita mais dura.</p>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Tipo 1 · Reformador — 14/25 <span class="mut">(empate)</span></h3>
+<ul><li>Senso de certo e errado.</li><li>Atenção a padrão e correção.</li><li>Autocobrança pela qualidade.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> reforça o rigor na conferência. Em excesso, pode ler qualquer flexibilização como “erro”, tema recorrente da área.</p>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Tipo 7 · Entusiasta — 14/25 <span class="mut">(empate)</span></h3>
+<ul><li>Leveza e bom humor.</li><li>Gosto por variedade e novidade.</li><li>Tendência a evitar o lado pesado das situações.</li></ul>
+<p style="margin-top:10px"><b>Na GT3:</b> é o lado que aparece no relato (brincadeiras, clima leve). Pode tornar a rotina repetitiva menos estimulante, o que reforça a ideia de ampliar o repertório aos poucos.</p>
+</div>
+</div>
+<div class="card">
+<b>Convergências e tensões.</b> Os Tipos 2 e 8 juntos podem produzir uma <b>firmeza cordial</b>: ela consegue dizer não ao prestador sem perder o vínculo. Há duas tensões: entre cuidar (2) e confrontar (8), e entre rigor (1) e leveza (7). Não são defeitos. São pontos em que o comportamento varia conforme a pressão do dia. O Tipo 4 baixo sugere uma relação mais prática do que introspectiva com o trabalho, mas é só uma hipótese.
+</div>
+</section>
+
+<section id="animais">
+<div class="h2row"><h2>C. Quatro animais</h2><span class="tag int">Análise</span></div>
+<div class="scroll"><table>
+<thead><tr><th>Animal</th><th style="text-align:right">%</th><th>Ponto forte</th><th>Em excesso</th><th>Peso no conjunto</th></tr></thead>
+<tbody>
+<tr><td><b>Lobo</b></td><td class="n">48</td><td>Organização, detalhe, procedimento, planejamento</td><td>Leitura literal da regra; desconforto com casos fora do manual</td><td>Dominante. É o maior Lobo da equipe e define o estilo de trabalho.</td></tr>
+<tr><td><b>Gato</b></td><td class="n">20</td><td>Relacionamento, harmonia, trabalho em equipe</td><td>Evitar desgaste em conversas difíceis</td><td>Moderado. Sustenta o lado cordial.</td></tr>
+<tr><td><b>Tubarão</b></td><td class="n">20</td><td>Ação, objetividade, decisão</td><td>Pressa sob prazo</td><td>Moderado. Dá ritmo sem dominar.</td></tr>
+<tr><td><b>Águia</b></td><td class="n">12</td><td>Visão do todo, ideias, mudança</td><td>—</td><td>Baixo. Menor inclinação espontânea a propor mudanças.</td></tr>
+</tbody></table></div>
+<p style="margin-top:12px"><b>Na rotina da GT3.</b> Lobo 48% é o perfil esperado para guias mensais e certidões: conferir campo a campo, seguir o manual e cumprir o prazo. O mesmo traço, em excesso, é o que gera a avaliação “preto no branco”. Esse tema já aparece no PDI da Marina e da Daiana, mas nela ainda está em formação, o que é uma vantagem. Gato e Tubarão empatados em 20% indicam equilíbrio entre se relacionar e agir. A Águia baixa não contradiz o “questiona itens”: questionar um critério é diferente de propor um processo novo.</p>
+</section>
+
+<section id="mbti">
+<div class="h2row"><h2>D. MBTI — análise aprofundada</h2><span class="tag int">Análise</span></div>
+<div class="warnbox">O teste (michaelcaloz.com) mede funções cognitivas e devolveu três tipos próximos: <b>ISTP 71, INTJ 68 e ISTJ 68</b>. Comum aos três: <b>I</b> e <b>T</b>. S aparece em dois. J e P ficaram indefinidos. A tela enviada não traz a pontuação por função. Se houver o link do resultado, dá para refinar a leitura. Divergência registrada: o teste indica introversão, e o relato descreve uma pessoa sociável e brincalhona. Prevalece o comportamento observado. No MBTI, introversão fala de como a pessoa processa e recupera energia, não de quanto ela conversa.</div>
+<div class="card mbti-t">
+<div>1. Processamento de informação</div><div>Preferência provável por fatos e dados concretos: valores, datas, competência e CNPJ da guia. É o modo de leitura que a conferência mensal exige. Pela proximidade com ISTJ, deve guardar bem procedimentos; pela proximidade com ISTP, deve ser boa em achar a solução prática de um caso.</div>
+<div>2. Tomada de decisão</div><div>Pensamento (T) estável nos três tipos: decide por critério objetivo e coerência. A atenção vai para o outro lado da balança: o impacto da decisão para o prestador e para o contratante. Esse peso precisa ser ensinado como critério técnico, e não como “ser mais flexível”.</div>
+<div>3. Organização e processos</div><div>J ou P indefinido no teste, mas Lobo 48% e o histórico de escalas e fechamento de folha indicam conforto com rotina, prazo e padrão. Mudanças de processo funcionam melhor quando chegam com o motivo explicado.</div>
+<div>4. Comunicação e relacionamento</div><div>Direta e objetiva no conteúdo (T, Tipo 8), cordial e bem-humorada na forma (Tipo 2, relato). Expressa discordância. Por escrito, sem o tom de voz, a objetividade pode soar seca.</div>
+<div>5. Pressão e imprevistos</div><div>Já tem repertório de pressão real: fechamento de folha e acionamentos fora de hora. Pode-se esperar que mantenha o procedimento sob urgência. O risco é encurtar a comunicação e a justificativa nos dias de pico.</div>
+<div>6. Ambiente favorável</div><div>Critério claro, manual atualizado, horário previsível (ela valoriza isso explicitamente), autonomia crescendo por etapas e feedback com caso concreto.</div>
+<div>7. Contribuições para a GT3</div><div>Guias mensais e certidões. Holerite, cartão ponto e tudo o que for ligado à folha, porque ela entende de onde vem o documento. Possivelmente também tira dúvidas da equipe sobre a lógica de encargos (a confirmar).</div>
+<div>8. Atenção e risco de inadequação</div><div>Literalidade em casos fora do padrão. Desconforto com ambiguidade sem critério. Se a colocarem em atividades muito abertas ou com regra mudando o tempo todo, a tendência é perder segurança e ritmo.</div>
+<div>9. Desenvolvimento</div><div>Ampliar o repertório de documentos. Construir critério de criticidade (impeditivo, relevante, baixo impacto). Entender o processo GT3 do cadastro à liberação. Começar cedo a compartilhar o conhecimento de DP, que é o que leva ao nível 5 da escala.</div>
+<div>10. Liderança</div><div>Explicar o porquê junto com o quê. Feedback em particular, objetivo e com exemplo. Revisão por amostragem que diminui com o tempo. Dar canal para os questionamentos dela, para que virem padronização e não desabafo de corredor.</div>
+<div>11. Síntese para a GT3</div><div>Uma conferente com base sólida em folha, estilo estruturado e convivência fácil. Deve render melhor com critério claro e autonomia por etapas. O que define se ela vai virar referência é a capacidade de pesar o contexto, e essa é a hora de formar esse hábito.</div>
+</div>
+</section>
+
+<section id="cruzamento">
+<div class="h2row"><h2>E. Cruzamento dos instrumentos</h2><span class="tag int">Análise</span></div>
+<div class="grid2">
+<div class="card"><h3 style="margin-top:0">Aparece em mais de uma fonte</h3><ul>
+<li><b>Estrutura e precisão:</b> Lobo 48, Tipo 1, S/J em dois dos três tipos MBTI, histórico em DP, evolução estável no sistema e 0,24% de correções na revisão.</li>
+<li><b>Cordialidade:</b> Tipo 2 no topo, Gato 20 e relato de bom humor.</li>
+<li><b>Franqueza:</b> Tipo 8, T no MBTI e o relato de que questiona itens.</li></ul></div>
+<div class="card"><h3 style="margin-top:0">Divergências</h3><ul>
+<li>Introversão no MBTI × relato sociável. Prevalece o relato.</li>
+<li>O Tipo 7 aparece no humor e não na Águia: é o lado da leveza, não o das ideias.</li>
+<li>MBTI sem tipo definido: não usar as letras como rótulo.</li></ul></div>
+<div class="card"><h3 style="margin-top:0">Relatado, mas não explicado pelos testes</h3><ul>
+<li>O valor que ela dá à jornada previsível. Vem da história de trabalho, não da personalidade, e é um fator de permanência.</li>
+<li>A velocidade com que zerou as correções na revisão (nenhuma depois de 19/10). Os testes indicam estrutura, mas não explicam o ritmo de aprendizagem. É provável que pese a experiência anterior.</li></ul></div>
+<div class="card"><h3 style="margin-top:0">Investigar na conversa</h3><ul>
+<li>Que itens ela questiona, como e para quem?</li>
+<li>O que faz quando o manual não cobre o caso?</li>
+<li>O quanto domina eSocial, FGTS Digital e DCTFWeb do lado de quem gera a guia?</li>
+<li>O que ela acha do próprio resultado nos testes?</li></ul></div>
+</div>
+</section>
+
+<section id="conclusoes">
+<div class="h2row"><h2>F a L. Conclusões</h2><span class="tag sys">Base dos campos do sistema</span></div>
+<div class="grid3" id="concl"></div>
+<div class="card" style="border-left:4px solid var(--pri)">
+<h3 style="margin-top:0">L. Três pontos de atenção prioritários</h3>
+<ol>
+<li><b>Critério contextual desde já.</b> É o tema que mais pesa na área. Nela ainda está em formação, então é mais barato construir agora do que corrigir depois.</li>
+<li><b>Repertório com trilha.</b> Novos documentos um de cada vez, começando pelos de folha, com revisão que diminui. Evita sobrecarga e aproveita o que ela já sabe.</li>
+<li><b>Canal para os questionamentos.</b> Levar à reunião o que hoje ela questiona no dia a dia, para que as dúvidas virem padronização.</li>
+</ol>
+</div>
+</section>
+
+<section id="pdi">
+<div class="h2row"><h2>PDI proposto</h2><span class="tag sys">Vai para o sistema após validar</span></div>
+<p>São três ações, porque ela ainda não teve a primeira conversa. Elas servem de pauta: confirmar com ela, ajustar e só então definir as datas. A sugestão é revisar em três meses.</p>
+<div id="acoes"></div>
+</section>
+
+<section id="roteiro">
+<div class="h2row"><h2>Roteiro da primeira conversa</h2><span class="tag int">Para o Marcio e você</span></div>
+<div class="card"><ol class="rot">
+<li>Como foram esses três meses? O que foi mais fácil e o que foi mais difícil de aprender?</li>
+<li>No treinamento, o que ajudou e o que faltou? Como foi ter tudo revisado em outubro? (Vale reconhecer o resultado: 5 correções em mais de 2 mil avaliações.)</li>
+<li>Que documentos você se sente segura para avaliar sozinha? Quais ainda geram dúvida?</li>
+<li>Da experiência em DP, o que mais você usa aqui? (folha, ponto, encargos, eSocial, DCTFWeb)</li>
+<li>Já aconteceu de o manual não dar conta de um caso? Como você decidiu?</li>
+<li>Na conferência de atividade (contrato social e CNPJ), como você decide quando o objeto social ou o CNAE não batem exatamente com o serviço? Peça um caso concreto. É o melhor exemplo para falar de critério contextual.</li>
+<li>Quando você discorda de um critério, para quem leva? Sente que tem espaço para isso?</li>
+<li>Como você prefere receber feedback?</li>
+<li>Onde você se vê daqui a um ano na GT3? (base para a Ambição)</li>
+<li>O resultado dos testes faz sentido para você? (validar principalmente o MBTI, que ficou sem tipo definido)</li>
+<li>Apresentar a escala de 1 a 5, pedir a autoavaliação e a ambição, e o Marcio registra a Diretiva.</li>
+</ol>
+<p class="mut" style="margin:10px 0 0">Escala: 1 não possui conhecimento · 2 sabe o básico · 3 realiza em condições normais, com alguma assistência · 4 faz em qualquer condição, sem acompanhamento · 5 domina e compartilha.</p>
+</div>
+</section>
+
+<section id="campos">
+<div class="h2row"><h2>Campos para o sistema</h2><span class="tag sys">Visível para a colaboradora</span></div>
+<p>Texto pronto para colar campo a campo, caso você não use a importação. É o mesmo conteúdo do JSON.</p>
+<div id="fields"></div>
+</section>
+
+<section id="importar">
+<div class="h2row"><h2>Importar via VS Code</h2><span class="tag int">Técnico</span></div>
+<p>1. Salve o arquivo <code>pdi_caroline.json</code> (enviado na conversa) na raiz do projeto <code>gt3-sistema</code>. 2. Cole o prompt abaixo no Claude Code. Ele vai inspecionar o schema e mostrar o que vai gravar antes de gravar.</p>
+<div class="fld"><div class="fh"><b>Prompt para o Claude Code</b><button type="button" class="pri" data-copy="prompt">Copiar prompt</button></div>
+<pre id="prompt">Quero importar o PDI de uma nova colaboradora a partir do arquivo pdi_caroline.json, que está na raiz do projeto.
+
+1. Antes de gravar qualquer coisa, leia o código do módulo PDI (componentes, tipos e a função que gera o export em PDF) e as tabelas relacionadas no Supabase. Monte o mapeamento entre as chaves do JSON e as colunas/tabelas e me mostre esse mapeamento.
+2. A colaboradora "Caroline Scarmin Fante" (Analista de Serviços JR, início 2026-08-10) ainda não existe no módulo: crie o registro do mesmo jeito que os demais colaboradores são criados.
+3. Importe: eneagrama (ranking, pontos fortes, pontos de atenção, como desenvolver), animais (animal, percentual, ponto forte, tendência), mbti (tipo, núcleo, veredito, estilo de decisão, curva de aprendizado, impacto no clima) e conclusões (forças visíveis, pontos de atenção, onde agrega mais, pode apoiar bem, como liderar, riscos se mal alocado).
+4. Eneagrama: o ranking deve ficar SEMPRE em ordem de pontuação (maior primeiro), na gravação e na exibição. Há empate na 3ª posição (Tipo 1 e Tipo 7): em empate, desempate pelo número do tipo. Se o modelo de dados aceitar mais de 3 posições, grave as 4. Se não, grave o Tipo 1 em 3º; o empate já está descrito em pontosAtencao. Se a tela do PDI exibir o ranking em outra ordem (por número do tipo ou ordem de inserção), ajuste a exibição para ordenar por pontuação decrescente, para todos os colaboradores, e me mostre a alteração antes de salvar.
+5. MBTI: grave "ISTP" no tipo. Se existir campo para observação ou alternativas, registre INTJ 68 e ISTJ 68; se não existir, não crie campo novo.
+6. planoAcoes: NÃO importe agora. Só me pergunte, ao final, se quero importar as 3 ações com status "Não iniciado" e sem datas.
+7. Não crie ciclo de avaliação e não altere dados de outros colaboradores.
+8. Não altere schema nem crie migrations sem me mostrar antes. Se algum campo do JSON não tiver lugar no modelo atual, liste e pergunte.
+9. Ao final, mostre um resumo do que foi gravado e como conferir na tela do PDI.</pre></div>
+<div class="fld"><div class="fh"><b>JSON (mesmo conteúdo do arquivo)</b><button type="button" data-copy="json">Copiar JSON</button></div>
+<pre id="json"></pre></div>
+</section>
+</main>
+<div class="w"><footer>Material de apoio ao desenvolvimento. Os testes são instrumentos de reflexão, não diagnóstico; a observação do dia a dia tem peso central. Leitura a validar na primeira conversa.</footer></div>
+<div class="toast" id="toast" role="status"></div>
+<script type="application/json" id="data">{
+  "_meta": {
+    "gerado_em": "2026-11-26",
+    "fonte": "Análise inicial (testes + relato do Rodrigo + relatório de avaliações ago–out/2026 + relatório de revisões 02/10 a 24/11/2026). Ainda sem conversa de PDI.",
+    "observacoes_importacao": [
+      "Colaboradora ainda não existe no módulo PDI: criar o registro antes de importar.",
+      "Eneagrama: manter a ordem por pontuação (maior primeiro), tanto no ranking quanto em qualquer lista completa. Empate na 3ª posição (Tipo 1 e Tipo 7, ambos 14/25): em empate, desempatar pelo número do tipo.",
+      "MBTI: três tipos próximos no teste (ISTP 71, INTJ 68, ISTJ 68). Gravar ISTP como tipo e manter os outros dois no texto do núcleo.",
+      "Plano de ações é PROPOSTA para validar na primeira conversa: importar com status 'Não iniciado' e sem datas, ou só depois da conversa.",
+      "Avaliação 1–5 (Diretiva/Auto/Ambição) não tem dados: criar o ciclo na data da conversa."
+    ],
+    "testes": {
+      "eneagrama_completo_ordenado": [
+        { "tipo": 2, "nome": "Tipo 2 - O Ajudante (Prestativo)", "pontuacao": 17 },
+        { "tipo": 8, "nome": "Tipo 8 - O Confrontador (Desafiador)", "pontuacao": 15 },
+        { "tipo": 1, "nome": "Tipo 1 - O Reformador (Perfeccionista)", "pontuacao": 14 },
+        { "tipo": 7, "nome": "Tipo 7 - O Entusiasta (Sonhador)", "pontuacao": 14 },
+        { "tipo": 3, "nome": "Tipo 3 - O Realizador (Bem-Sucedido)", "pontuacao": 13 },
+        { "tipo": 5, "nome": "Tipo 5 - O Observador (Investigador)", "pontuacao": 13 },
+        { "tipo": 6, "nome": "Tipo 6 - O Lealista (Questionador)", "pontuacao": 13 },
+        { "tipo": 9, "nome": "Tipo 9 - O Pacifista (Preservador)", "pontuacao": 13 },
+        { "tipo": 4, "nome": "Tipo 4 - O Individualista (Intenso)", "pontuacao": 8 }
+      ],
+      "animais_fonte": "personalidades.mobi",
+      "mbti_fonte": "michaelcaloz.com (teste por funções cognitivas; tela final sem pontuação por função)"
+    },
+    "revisoes": {
+      "periodo": "2026-10-02 a 2026-11-24",
+      "avaliacoes_na_revisao": 2115,
+      "revisadas": 2091,
+      "erros_corrigidos": 5,
+      "pendentes_de_revisao": 24
+    }
+  },
+  "colaborador": {
+    "nome": "Caroline Scarmin Fante",
+    "cargo": "Analista de Serviços JR",
+    "inicio": "2026-08-10"
+  },
+  "planoAcoes": [
+    {
+      "competencia": "Domínio de documentos de empresa",
+      "oQueDesenvolver": "Consolidar os documentos de interpretação iniciados em novembro (contrato social e CNPJ para conferência da atividade da empresa, alvará e contrato de serviço) e, na sequência, ampliar para os menos frequentes: apólice, APR e certidões específicas. Guias, certidões e documentos de folha já são avaliados com autonomia.",
+      "acoes": "Incluir um novo tipo de documento a cada duas semanas, com orientação da Marina ou da Daiana e revisão por amostragem nas duas primeiras semanas de cada tipo. Na conferência de atividade, registrar nos casos de dúvida a atividade exigida pelo serviço e a que consta no contrato social/CNPJ, e discutir com a revisora antes de decidir.",
+      "resultadosEsperados": "Avaliar com autonomia os documentos de interpretação até o fim do trimestre. Indicador: tipos de documento avaliados sem revisão e correções apontadas na amostragem (referência: 5 correções em 2.091 avaliações revisadas entre outubro e novembro, nenhuma desde 19/10).",
+      "inicio": null,
+      "termino": null,
+      "status": "Não iniciado"
+    },
+    {
+      "competencia": "Análise contextual de pendências",
+      "oQueDesenvolver": "Distinguir pendências impeditivas, relevantes e de baixo impacto, respeitando os critérios técnicos e a alçada de cada decisão.",
+      "acoes": "Levar à reunião semanal um caso por semana em que ficou em dúvida entre aprovar e reprovar, explicando o risco, o impacto para o contratante e o tratamento proposto. Começar pelos casos de conferência de atividade (o objeto social e o CNAE cobrem o serviço prestado?) e pelos documentos mais interpretativos (apólice, APR, certidão do MPT). Quando o caso não estiver previsto no manual, consultar antes de decidir.",
+      "resultadosEsperados": "Reprovações com justificativa clara e decisões consistentes em casos semelhantes. Indicador: qualidade das justificativas discutidas na reunião e retrabalho apontado nas revisões.",
+      "inicio": null,
+      "termino": null,
+      "status": "Não iniciado"
+    },
+    {
+      "competencia": "Visão do processo GT3",
+      "oQueDesenvolver": "Entender o caminho completo do terceiro: cadastro, requisitos de cada contratante, avaliação dos documentos e liberação no Portal.",
+      "acoes": "Fazer uma sessão curta com a área de cadastro para ver como nascem os requisitos (questionário inicial, requisitos específicos do contratante) e depois acompanhar dois ou três casos reais do cadastro até a liberação.",
+      "resultadosEsperados": "Conseguir explicar ao prestador por que o documento é exigido e para qual contratante. Indicador: respostas a prestadores mais completas e menos dúvidas internas sobre a origem dos requisitos.",
+      "inicio": null,
+      "termino": null,
+      "status": "Não iniciado"
+    }
+  ],
+  "eneagrama": {
+    "ranking": [
+      { "posicao": 1, "tipo": "Tipo 2 - O Ajudante (Prestativo)", "pontuacao": 17, "maximo": 25 },
+      { "posicao": 2, "tipo": "Tipo 8 - O Confrontador (Desafiador)", "pontuacao": 15, "maximo": 25 },
+      { "posicao": 3, "tipo": "Tipo 1 - O Reformador (Perfeccionista)", "pontuacao": 14, "maximo": 25, "empate": true },
+      { "posicao": 3, "tipo": "Tipo 7 - O Entusiasta (Sonhador)", "pontuacao": 14, "maximo": 25, "empate": true }
+    ],
+    "pontosFortes": [
+      "Disponibilidade para ajudar colegas e prestadores, com trato cordial (Tipo 2).",
+      "Franqueza para se posicionar e questionar quando algo não faz sentido tecnicamente (Tipo 8).",
+      "Senso de correção na conferência (Tipo 1), combinado com leveza no dia a dia (Tipo 7)."
+    ],
+    "pontosAtencao": [
+      "A vontade de ajudar pode levar a assumir demandas paralelas e fragmentar o foco nos períodos de maior volume.",
+      "A franqueza, sob pressão e por escrito, pode soar mais dura do que a intenção.",
+      "Resultado com pontuações próximas entre si (13 a 15 em sete dos nove tipos): leitura a confirmar na conversa. Empate entre Tipo 1 e Tipo 7 na 3ª posição."
+    ],
+    "comoDesenvolver": [
+      "Combinar com a liderança quais demandas paralelas assumir e quais encaminhar, para proteger a rotina de conferência.",
+      "Em respostas escritas a prestadores, usar uma estrutura fixa: o que está pendente, por que e o que enviar.",
+      "Levar os questionamentos técnicos para a reunião semanal, transformando dúvidas em critério padronizado para a equipe."
+    ]
+  },
+  "animais": [
+    {
+      "animal": "Lobo",
+      "percentual": 48,
+      "pontoForte": "Organização, atenção a detalhes e aderência a procedimentos: base sólida para guias mensais e certidões.",
+      "tendencia": "Traço dominante. Em excesso, pode levar a leitura muito literal da regra e desconforto com casos fora do padrão do manual."
+    },
+    {
+      "animal": "Gato",
+      "percentual": 20,
+      "pontoForte": "Relacionamento fácil, clima leve e boa integração com a equipe.",
+      "tendencia": "Influência moderada: sustenta o lado cordial sem dominar o perfil."
+    },
+    {
+      "animal": "Tubarão",
+      "percentual": 20,
+      "pontoForte": "Objetividade para agir e decidir quando há uma pendência a resolver.",
+      "tendencia": "Influência moderada. Sob pressão de prazo, pode priorizar a velocidade."
+    },
+    {
+      "animal": "Águia",
+      "percentual": 12,
+      "pontoForte": "Visão do todo presente, mas secundária.",
+      "tendencia": "Menor inclinação espontânea a propor mudanças. Tende a melhorar o que já existe a partir de dúvidas concretas."
+    }
+  ],
+  "mbti": {
+    "tipo": "ISTP",
+    "indice": 71,
+    "alternativas": [
+      { "tipo": "INTJ", "indice": 68 },
+      { "tipo": "ISTJ", "indice": 68 }
+    ],
+    "nucleo": "Resultado com três tipos muito próximos (ISTP 71, INTJ 68, ISTJ 68). O que se repete nos três é a preferência por Introversão (I) e Pensamento (T); Sensação (S) aparece em dois. A leitura mais segura: decisões apoiadas em critério lógico e verificável, atenção ao concreto e preferência por processar antes de expor. A preferência entre estrutura (J) e flexibilidade (P) não ficou definida.",
+    "veredito": "Perfil compatível com conferência documental objetiva, o que a revisão dos primeiros meses confirma: pouquíssimas correções e decisões alinhadas ao critério da área. O dia a dia (bom humor, convivência fácil com todos) mostra que a introversão aqui indica como ela processa decisões e recupera energia, não falta de sociabilidade. Ponto a observar: a lógica objetiva precisa vir acompanhada da leitura do impacto para prestador e contratante.",
+    "estiloDecisao": "Decide por critério: o documento atende ou não ao requisito, com base em dado verificável. Questiona quando a regra não parece fazer sentido técnico. Precisa de clareza sobre alçada e sobre quando uma pendência admite tratamento flexível.",
+    "curvaAprendizado": "Aprende fazendo, com casos reais e procedimento claro. A experiência anterior em departamento pessoal (folha, ponto, escalas) é base direta para guias, holerites e cartões ponto, que já avalia sem correções na revisão. Evolui bem quando novos tipos de documento entram um de cada vez, com revisão nas primeiras semanas.",
+    "impactoClima": "Contribui com bom humor e convivência fácil com toda a equipe. Os questionamentos técnicos que faz podem ajudar a revisar critérios quando levados aos espaços certos, como a reunião semanal e os manuais."
+  },
+  "conclusoes": {
+    "forcasVisiveis": [
+      "Precisão desde o início: nas revisões de outubro e novembro, 5 correções em 2.091 avaliações, todas na primeira quinzena de outubro.",
+      "Base prática em departamento pessoal (folha, ponto, escalas), ligada diretamente aos documentos que a GT3 analisa.",
+      "Organização e aderência a procedimento na conferência de guias mensais e certidões.",
+      "Evolução consistente: volume e variedade de documentos avaliados crescendo mês a mês.",
+      "Convivência fácil com toda a equipe e postura de questionar tecnicamente."
+    ],
+    "pontosAtencao": [
+      "Em fase de ampliação para documentos de interpretação: começou em novembro a conferência de atividade (contrato social e CNPJ); apólice, APR e certidões específicas ainda aparecem pouco.",
+      "Risco de aplicar o critério de forma literal em casos fora do padrão, sem pesar criticidade e impacto para prestador e contratante.",
+      "Comunicação objetiva que, por escrito e sob pressão, pode soar mais seca do que a intenção."
+    ],
+    "ondeAgregaMais": [
+      "Guias mensais (INSS, FGTS, DCTFWeb) e certidões.",
+      "Holerites, cartões ponto e demais documentos ligados à folha, pela experiência em DP.",
+      "Conferências que exigem atenção a detalhe e rotina com prazo."
+    ],
+    "podeApoiarBem": [
+      "Dúvidas da equipe sobre lógica de folha, ponto e encargos (a confirmar na conversa o quanto domina eSocial, FGTS Digital e DCTFWeb).",
+      "Revisão dos manuais de documentos de empresa, apontando onde o critério não está claro."
+    ],
+    "comoLiderar": [
+      "Expectativas claras por tipo de documento, com critério escrito do que é impeditivo, relevante ou de baixo impacto.",
+      "Feedback objetivo, com o caso concreto e o porquê do ajuste.",
+      "Autonomia gradual: cada novo tipo de documento começa com revisão por amostragem, que diminui conforme a segurança aumenta.",
+      "Espaço definido para os questionamentos técnicos (reunião semanal), transformando dúvidas em padronização."
+    ],
+    "riscosMalAlocado": [
+      "Atividades com muita ambiguidade e sem critério definido, em que a regra literal não resolve.",
+      "Muitos tipos de documento novos ao mesmo tempo, sem trilha de aprendizagem.",
+      "Demandas recorrentes fora do horário: ela destaca a previsibilidade da jornada como diferença importante em relação ao emprego anterior."
+    ]
+  }
+}
+</script>
+<script>
+{
+const D=JSON.parse(document.getElementById("data").textContent);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const all=[...D._meta.testes.eneagrama_completo_ordenado].sort((a,b)=>b.pontuacao-a.pontuacao||a.tipo-b.tipo);
+const short={1:"Reformador",2:"Ajudante",3:"Realizador",4:"Individualista",5:"Observador",6:"Lealista",7:"Entusiasta",8:"Confrontador",9:"Pacifista"};
+const tops=new Set(D.eneagrama.ranking.map(r=>parseInt(r.tipo.replace(/\D+/,""),10)));
+document.getElementById("eneaBars").innerHTML=all.map(e=>`<div class="br${tops.has(e.tipo)?" top":""}"><span>${e.tipo} ${short[e.tipo]}</span><div class="t"><div class="f" style="width:${e.pontuacao/25*100}%"></div></div><span class="v">${e.pontuacao}</span></div>`).join("");
+document.getElementById("animBars").innerHTML=D.animais.map((a,i)=>`<div class="br${i===0?" top":""}"><span>${esc(a.animal)}</span><div class="t"><div class="f" style="width:${a.percentual/60*100}%"></div></div><span class="v">${a.percentual}%</span></div>`).join("");
+const C=D.conclusoes;
+const cl=[["F. Pontos fortes",C.forcasVisiveis],["G. Pontos de atenção",C.pontosAtencao],["H. Riscos se mal alocada",C.riscosMalAlocado],["I. Onde agrega mais",C.ondeAgregaMais.concat(C.podeApoiarBem.map(x=>"Pode apoiar: "+x))],["J. Como liderar",C.comoLiderar],["K. Como desenvolver",D.eneagrama.comoDesenvolver]];
+document.getElementById("concl").innerHTML=cl.map(([t,l])=>`<div class="card"><h3 style="margin-top:0">${t}</h3><ul>${l.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join("");
+const ev=["Guias, certidões e folha consolidados em outubro (119 holerites e cartões ponto sem correção). Em novembro passou para documentos de interpretação: 78 das 100 avaliações revisadas foram alvará, contrato de serviço, CNPJ e contrato social, sem correção. Apólice, APR e certidão do MPT ainda aparecem pouco.","Lobo 48% e T no MBTI indicam tendência a critério literal. Esse tema já aparece na área. Duas das cinco correções da revisão foram reprovações de certidão estadual que não se confirmaram. Os documentos mais interpretativos têm as maiores proporções de reprovação.","JR há três meses e meio. Entender a origem do requisito sustenta a análise contextual e a comunicação com o prestador."];
+document.getElementById("acoes").innerHTML=D.planoAcoes.map((a,i)=>`<div class="card act"><h3>${i+1}. ${esc(a.competencia)}</h3><dl><dt>Evidência</dt><dd>${esc(ev[i])}</dd><dt>O que desenvolver</dt><dd>${esc(a.oQueDesenvolver)}</dd><dt>Ações</dt><dd>${esc(a.acoes)}</dd><dt>Resultados e indicador</dt><dd>${esc(a.resultadosEsperados)}</dd><dt>Prazo</dt><dd>Início na data da conversa; revisão em 3 meses</dd><dt>Acompanhamento</dt><dd>Registrar nas anotações do ciclo: data, o que avançou e o próximo passo</dd></dl></div>`).join("");
+const L=l=>l.map(x=>"• "+x).join("\n");
+const M=D.mbti;
+const F=[
+["Eneagrama · Ranking",D.eneagrama.ranking.map(r=>`${r.posicao}. ${r.tipo} — ${r.pontuacao}/${r.maximo}${r.empate?" (empate)":""}`).join("\n")],
+["Eneagrama · Pontos fortes",L(D.eneagrama.pontosFortes)],
+["Eneagrama · Pontos de atenção",L(D.eneagrama.pontosAtencao)],
+["Eneagrama · Como desenvolver",L(D.eneagrama.comoDesenvolver)],
+...D.animais.map(a=>[`Animais · ${a.animal} (${a.percentual}%)`,`Ponto forte: ${a.pontoForte}\nTendência: ${a.tendencia}`]),
+["MBTI · Tipo",M.tipo],["MBTI · Núcleo",M.nucleo],["MBTI · Veredito",M.veredito],["MBTI · Estilo de decisão",M.estiloDecisao],["MBTI · Curva de aprendizado",M.curvaAprendizado],["MBTI · Impacto no clima",M.impactoClima],
+["Conclusões · Forças visíveis",L(C.forcasVisiveis)],["Conclusões · Pontos de atenção",L(C.pontosAtencao)],["Conclusões · Onde agrega mais",L(C.ondeAgregaMais)],["Conclusões · Pode apoiar bem",L(C.podeApoiarBem)],["Conclusões · Como liderar",L(C.comoLiderar)],["Conclusões · Riscos se mal alocado",L(C.riscosMalAlocado)],
+...D.planoAcoes.map((a,i)=>[`Plano de ações ${i+1} · ${a.competencia}`,`Competência: ${a.competencia}\nO que desenvolver: ${a.oQueDesenvolver}\nAções: ${a.acoes}\nResultados esperados: ${a.resultadosEsperados}\nStatus: ${a.status}`])
+];
+const fw=document.getElementById("fields");
+F.forEach(([t,v],i)=>{const d=document.createElement("div");d.className="fld";d.innerHTML=`<div class="fh"><b></b><button type="button" data-f="${i}">Copiar</button></div><div class="txt"></div>`;d.querySelector("b").textContent=t;d.querySelector(".txt").textContent=v;fw.appendChild(d)});
+document.getElementById("json").textContent=JSON.stringify(D,null,2);
+const toast=m=>{const t=document.getElementById("toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1800)};
+const cp=async(txt,el)=>{try{await navigator.clipboard.writeText(txt);toast("Copiado")}catch(e){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);toast("Selecionado: use Ctrl+C")}};
+document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.f!==undefined){const i=+b.dataset.f;cp(F[i][1],b.closest(".fld").querySelector(".txt"))}else if(b.dataset.copy){const el=document.getElementById(b.dataset.copy);cp(el.textContent,el)}});
+}
+</script>
+</body>
+</html>

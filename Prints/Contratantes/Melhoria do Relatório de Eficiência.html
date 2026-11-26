@@ -1,0 +1,185 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Melhoria do Relatório de Eficiência</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: documento de solicitação em coluna única; blocos brancos com contorno azul GT3; tabelas largas roláveis */
+:root{
+  --bg:#FFFFFF; --ink:#1A2540; --muted:#5B6684; --line:#C9D7EF; --edge:#2A4F96; --tint:#EEF3FB;
+  --gold:#D1AE6E; --gold-ink:#6B5420; --new:#1F8A5B; --no:#C2412D;
+  --font-ui:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.55}
+.wrap{max-width:1040px;margin:0 auto;padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{margin:0;text-wrap:balance;line-height:1.2}
+p{margin:0;max-width:72ch}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--edge);padding-bottom:16px}
+header h1{font-size:28px;font-weight:800;letter-spacing:-.01em;margin-top:4px}
+header p{color:var(--muted);margin-top:6px}
+.meta{display:grid;grid-template-columns:auto auto;gap:2px 14px;font-size:13px}
+.meta dt{color:var(--muted)} .meta dd{margin:0;font-weight:600}
+.box{border:1.5px solid var(--edge);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.box h2{font-size:18px;font-weight:700;display:flex;gap:10px;align-items:baseline}
+.box h2 .n{font-family:var(--font-num);font-size:13px;color:var(--gold-ink)}
+.box.internal{border-style:dashed}
+.tag{font-size:11px;font-weight:700;letter-spacing:.04em;padding:1px 8px;border-radius:99px;border:1.5px solid currentColor;white-space:nowrap}
+.t-new{color:var(--new)} .t-keep{color:var(--muted)} .t-no{color:var(--no)} .t-blue{color:var(--edge)}
+.tbl{overflow-x:auto;border:1.5px solid var(--edge);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--edge);text-align:left;font-weight:700;padding:9px 10px;border-bottom:1.5px solid var(--edge);background:var(--tint);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.k{font-weight:700;white-space:nowrap}
+tr.hl td{background:color-mix(in srgb,var(--new) 6%,#FFFFFF)}
+.ex td{white-space:nowrap;font-size:12.5px}
+ul,ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;max-width:76ch}
+.rule{border-left:4px solid var(--edge);background:var(--tint);padding:12px 14px;border-radius:0 8px 8px 0}
+.note{font-size:13px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{border:1.5px solid var(--edge);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.card b{font-size:14px}
+th.nw{background:color-mix(in srgb,var(--new) 13%,#FFFFFF);color:var(--new)}
+td.nw{background:color-mix(in srgb,var(--new) 5%,#FFFFFF)}
+tr.pes td{border-top:0}
+.box h3{font-size:15px;font-weight:700;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:5px;border:1.5px solid var(--new);background:color-mix(in srgb,var(--new) 13%,#FFFFFF)}
+td.warn{color:var(--no);font-weight:600}
+.band{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.lbl{font-weight:800;letter-spacing:.1em;font-size:12px;padding:5px 12px;border-radius:6px;border:1.5px solid currentColor}
+.lbl.hoje{color:var(--muted);background:#F1F3F7}
+.lbl.des{color:var(--new);background:color-mix(in srgb,var(--new) 12%,#FFFFFF)}
+.box.hoje{border-color:var(--muted)}
+.box.des{border-color:var(--new);border-width:2px}
+.verdict{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.verdict div{border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px}
+.verdict b{display:block;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.box.hoje .verdict div{border-color:var(--muted)}
+.box.des .verdict div{border-color:var(--new)}
+.ok{color:var(--new);font-weight:700}.nok{color:var(--no);font-weight:700}
+@media (max-width:640px){.verdict{grid-template-columns:minmax(0,1fr)}}
+.q{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px}
+.q .n{font-family:var(--font-num);font-weight:600;color:var(--edge);border:1.5px solid var(--edge);border-radius:6px;height:26px;display:grid;place-items:center;font-size:12px}
+@media (max-width:640px){.grid2{grid-template-columns:minmax(0,1fr)}header h1{font-size:23px}}
+</style>
+
+<div class="wrap">
+<header>
+  <div>
+    <div class="eyebrow">GT3 Consultoria · Solicitação de melhoria</div>
+    <h1>Melhoria do Relatório de Eficiência</h1>
+    <p>Inclusão de colunas no relatório EFIDOCEMP-201 para identificar a qual contratante pertence cada documento avaliado.</p>
+  </div>
+  <dl class="meta">
+    <dt>Relatório</dt><dd class="mono">EFIDOCEMP-201</dd>
+    <dt>Nome atual</dt><dd>Eficiência – Documentos de Empresas / Pessoas</dd>
+    <dt>Solicitante</dt><dd>Rodrigo Balem</dd>
+    <dt>Data</dt><dd class="mono">05/11/2026</dd>
+  </dl>
+</header>
+
+<section class="box">
+  <h2><span class="n">1</span>Objetivo</h2>
+  <p>Hoje o relatório mostra data, documento, status, empresa ou pessoa e usuário avaliador. Ele não mostra para qual contratante o documento foi exigido. A GT3 precisa dessa informação para medir o volume de avaliações gerado por cada contratante.</p>
+  <p>A informação já existe no sistema, no GT0010, GT0100, GT0120 e GT0130. O pedido é levar ao relatório o prestador, os contratantes válidos, o código do contratante do GT0010 e os turnos do colaborador.</p>
+</section>
+
+<section class="box">
+  <h2><span class="n">2</span>Colunas do relatório</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Coluna</th><th>Situação</th><th>Conteúdo esperado</th></tr></thead>
+    <tbody><tr><td class="k">Data</td><td><span class="tag t-keep">Manter</span></td><td>Data da avaliação, como hoje.</td></tr><tr class="hl"><td class="k">Cód. documento</td><td><span class="tag t-new">Nova</span></td><td>Código do tipo de documento, como na GT0100 (ex.: 133, 124).</td></tr><tr><td class="k">Documento</td><td><span class="tag t-keep">Manter</span></td><td>Descrição do documento.</td></tr><tr><td class="k">Status</td><td><span class="tag t-keep">Manter</span></td><td>Aprovado ou reprovado.</td></tr><tr><td class="k">Empresa/Pessoa</td><td><span class="tag t-keep">Manter</span></td><td>Como hoje: nome da empresa ou, em documento de pessoa, nome do colaborador.</td></tr><tr class="hl"><td class="k">Cód. cadastro da empresa</td><td><span class="tag t-new">Nova</span></td><td>Código do cadastro (ex.: 817). Em documento de pessoa, o cadastro da empresa à qual ela pertence.</td></tr><tr class="hl"><td class="k">Razão social</td><td><span class="tag t-new">Nova</span></td><td>Razão social oficial do prestador, sem o nome da unidade, em todas as linhas, inclusive nos documentos de pessoa.</td></tr><tr class="hl"><td class="k">CNPJ</td><td><span class="tag t-new">Nova</span></td><td>CNPJ do prestador, em todas as linhas.</td></tr><tr class="hl"><td class="k">Cód. vinculação</td><td><span class="tag t-new">Nova</span></td><td>Contratantes com vinculação <b>ativa no GT0120 na data da avaliação</b>. Em documento de pessoa, a vinculação da pessoa. Separados por vírgula (ex.: 1, 9, 81). Ver regra 3.1.</td></tr><tr class="hl"><td class="k">Cód. ignorado GT0120</td><td><span class="tag t-new">Nova</span></td><td>Se o documento estiver na aba <b>Ignorados</b> do GT0120 para algum contratante, trazer o código desse contratante. Vazio quando nenhum contratante ignora o documento. Mais de um, separados por vírgula (ex.: 9). Ver regra 3.1.</td></tr><tr class="hl"><td class="k">Cód. contratante GT0010</td><td><span class="tag t-new">Nova</span></td><td>Código do contratante quando o requisito vier do GT0010 (na GT0100, por Contrato de Serviço ou por Contratante). Vazio quando vier do questionário, da função ou do GT0100. Ver regra 3.3.</td></tr><tr class="hl"><td class="k">Cód. turno GT0130</td><td><span class="tag t-new">Nova</span></td><td>Somente em documento de pessoa: turnos ativos do colaborador no GT0130 na data da avaliação, apenas de contratantes com vinculação ativa no GT0120. Separados por ponto e vírgula (ex.: 1; 17). Ver regra 3.2.</td></tr><tr><td class="k">Usuário</td><td><span class="tag t-keep">Manter</span></td><td>Usuário que fez a avaliação.</td></tr></tbody>
+  </table></div>
+</section>
+
+<section class="box">
+  <h2><span class="n">3</span>Regras de preenchimento</h2>
+  <div class="rule"><b>3.1 Vinculação válida.</b> O Cód. vinculação traz os contratantes com vinculação <b>ativa no GT0120</b> na data da avaliação. Quando o documento estiver na aba <b>Ignorados</b> do GT0120 para algum deles, o código desse contratante vem na coluna <b>Cód. ignorado GT0120</b>. Exemplo: a EMPRESA ABC está vinculada aos contratantes 1, 9 e 81, mas o 9 ignora certidões. Numa certidão, o Cód. vinculação mostra 1, 9, 81 e o Cód. ignorado mostra 9.</div>
+  <div class="rule"><b>3.2 Turnos do colaborador.</b> Em documento de pessoa, a coluna Cód. turno GT0130 traz os turnos ativos do colaborador na data da avaliação. O turno é o que define para qual contratante ele realmente trabalha. Só entram turnos de contratantes com vinculação ativa no GT0120: se o turno está ativo no GT0130, mas a vinculação foi desativada no GT0120, o turno não aparece.<br><br>Exemplo: o colaborador da EMPRESA ABC está vinculado a Marcopolo, Marcopolo São Cristóvão e BSA, mas só tem turno da BSA. A coluna mostra apenas o turno da BSA.<br><br><b>Observação:</b> os requisitos do GT0010 para pessoa só incidem quando existe turno daquele contratante. Por isso, quando uma Ordem de Serviço exigida pela BSA é avaliada, o Cód. contratante GT0010 já traz a BSA.</div>
+  <div class="rule"><b>3.3 Requisitos do GT0010.</b> Cada requisito lançado pelo GT0010 é uma avaliação própria, mesmo com o mesmo nome para contratantes diferentes. Exemplo: a Declaração de Treinamento APR (doc. 40) do Ademar Menin existe para Marcopolo Ana Rech e para Marcopolo São Cristóvão, e gera duas avaliações. O relatório deve trazer uma linha por avaliação, cada uma com o código do seu contratante.</div>
+  <div class="rule"><b>3.4 Cadastros separados do mesmo CNPJ.</b> Um mesmo CNPJ pode ter vários cadastros, um por unidade ou contrato. Exemplo: GLOW BR LIMP SERV ESPECIALIZ - OPEN TECH, - UNIMED FEDERACAO, - LEVMED SAUDE, - BOMBEIROS UNIMED JOINVILLE, - UPA UNIVATES e - SAMU. Cada cadastro precisa aparecer com seu próprio Cód. cadastro, mesmo quando o CNPJ for o mesmo.</div>
+</section>
+
+<section class="box hoje">
+  <div class="band"><span class="lbl hoje">HOJE</span><h2><span class="n">4</span>Como o relatório sai hoje</h2></div>
+  <div class="verdict">
+    <div><b>Colunas</b>5</div>
+    <div><b>Empresa do colaborador</b><span class="nok">Não aparece</span></div>
+    <div><b>Contratante do documento</b><span class="nok">Não dá para saber</span></div>
+  </div>
+  <div class="tbl"><table class="ex">
+    <thead><tr><th>Data</th><th>Documento</th><th>Status</th><th>Empresa/Pessoa</th><th>Usuário</th></tr></thead>
+    <tbody><tr><td class="mono">22/10/2026</td><td>PCMSO - PROGRAMA CONTROLE MÉDICO SAÚDE OCUPACIONAL</td><td>APROVADO</td><td>MOBITEC BRASIL LTDA</td><td>RODRIGO BALEM</td></tr><tr><td class="mono">27/10/2026</td><td>PCMSO - PROGRAMA CONTROLE MÉDICO SAÚDE OCUPACIONAL</td><td>REPROVADO</td><td>ARIS LIMPEZA E CONSERVACAO LTDA</td><td>RODRIGO BALEM</td></tr><tr><td class="mono">27/10/2026</td><td>PGR - PROGRAMA DE GERENCIAMENTO DE RISCO - BIENAL</td><td>REPROVADO</td><td>ARIS LIMPEZA E CONSERVACAO LTDA</td><td>RODRIGO BALEM</td></tr><tr><td class="mono">24/10/2026</td><td>RECIBO DCTFWEB - MENSAL</td><td>APROVADO</td><td>GUTEN APPETIT ALIMENT E SERV SA - VIA MARTE - SAPIRANGA</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td>FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO</td><td>APROVADO</td><td>VILLARE GASTRON EMPRES LTDA - ALX</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td>INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO</td><td>REPROVADO</td><td>PRATO FEITO  ALIMENT E SERV LTDA - PITT JOIA</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td>DETALHE DA GUIA EMITIDA - RELATÓRIO DO FGTS MENSAL</td><td>APROVADO</td><td>ALIMENTAR GASTR EMPRES LTDA - MARCOPOLO ANA RECH</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td>LAUDO DE ANÁLISE DA ÁGUA - ANUAL</td><td>APROVADO</td><td>ALIMENTAR GASTRON EMPRES LTDA -DASS 2 - ITABERABA</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">27/10/2026</td><td>CERTIFICADO DE HIGIENIZAÇÃO CAIXA D&#x27;ÁGUA - SEMESTRAL</td><td>REPROVADO</td><td>GUTEN APPETIT ALIMENT E SERV SA - RAMARIM - NOVA HARTZ</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">24/10/2026</td><td>CRF - CERTIFICADO DE REGULARIDADE DE FGTS - INFORMADA</td><td>APROVADO</td><td>VILLARE GASTRON EMPRES LTDA - PLASZOM - ORLEANS - UNID.1</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td>FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - HOSPITAL UNIMED</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">24/10/2026</td><td>RECIBO DCTFWEB - MENSAL</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - UNIMED FEDERACAO</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td>COMPROVANTE DEPOSITO + HOLERITE</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - BOMBEIROS UNIMED JOINVILLE</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td>COMPROVANTE DEPOSITO + HOLERITE</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - SAMU</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td>COMPROVANTE DEPOSITO + HOLERITE</td><td>APROVADO</td><td>GUTEN APPETIT ALIMENT E SERV SA - CALÇADOS SANDRA - RIOZINHO</td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">22/10/2026</td><td>CERTIDÃO DE TRIBUTOS MUNICIPAIS</td><td>APROVADO</td><td>EMPRESA ABC LTDA</td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">23/10/2026</td><td>DECLARACAO TREINAMENTO APR - DTA FINAL CFME APR EMPRESA</td><td>APROVADO</td><td>ADEMAR MENIN</td><td>GIANCARLO BISOL</td></tr><tr><td class="mono">23/10/2026</td><td>DECLARACAO TREINAMENTO APR - DTA FINAL CFME APR EMPRESA</td><td>APROVADO</td><td>ADEMAR MENIN</td><td>GIANCARLO BISOL</td></tr><tr><td class="mono">24/10/2026</td><td>ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL</td><td>APROVADO</td><td>ADEMAR MENIN</td><td>GIANCARLO BISOL</td></tr><tr><td class="mono">22/10/2026</td><td>ORDEM DE SERVICO SST - CF NR01</td><td>APROVADO</td><td>CARLOS EXEMPLO</td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">22/10/2026</td><td>ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL</td><td>APROVADO</td><td>CARLOS EXEMPLO</td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">23/10/2026</td><td>NR 35 - BASICO - TRABALHO EM ALTURA - 8H - BIENAL</td><td>REPROVADO</td><td>CARLOS EXEMPLO</td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">22/10/2026</td><td>ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL</td><td>APROVADO</td><td>MARIA EXEMPLO</td><td>CAMILA POSSAMAI</td></tr></tbody>
+  </table></div>
+  <p class="note">Repare nas quatro linhas da GLOW, que parecem empresas diferentes, e nas duas linhas iguais de DECLARACAO TREINAMENTO APR do Ademar Menin. Hoje não dá para saber que uma é da Marcopolo e a outra da São Cristóvão.</p>
+</section>
+
+<section class="box des">
+  <div class="band"><span class="lbl des">DESEJADO</span><h2><span class="n">5</span>Como o relatório deve sair</h2></div>
+  <div class="verdict">
+    <div><b>Colunas</b>13, das quais 8 novas</div>
+    <div><b>Empresa do colaborador</b><span class="ok">Cadastro, razão social e CNPJ</span></div>
+    <div><b>Contratante do documento</b><span class="ok">GT0010, vinculação, ignorados e turnos</span></div>
+  </div>
+  <div class="legend"><span><i></i>Coluna nova</span></div>
+  <div class="tbl"><table class="ex">
+    <thead><tr><th>Data</th><th class="nw">Cód. doc</th><th>Documento</th><th>Status</th><th>Empresa/Pessoa</th><th class="nw">Cód. cadastro</th><th class="nw">Razão social</th><th class="nw">CNPJ</th><th class="nw">Cód. vinculação</th><th class="nw">Cód. ignorado GT0120</th><th class="nw">Cód. GT0010</th><th class="nw">Cód. turno GT0130</th><th>Usuário</th></tr></thead>
+    <tbody><tr><td class="mono">22/10/2026</td><td class="nw mono">215</td><td>PCMSO - PROGRAMA CONTROLE MÉDICO SAÚDE OCUPACIONAL</td><td>APROVADO</td><td>MOBITEC BRASIL LTDA</td><td class="nw mono">2231</td><td class="nw">MOBITEC BRASIL LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">19, 21</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>RODRIGO BALEM</td></tr><tr><td class="mono">27/10/2026</td><td class="nw mono">215</td><td>PCMSO - PROGRAMA CONTROLE MÉDICO SAÚDE OCUPACIONAL</td><td>REPROVADO</td><td>ARIS LIMPEZA E CONSERVACAO LTDA</td><td class="nw mono">1987</td><td class="nw">ARIS LIMPEZA E CONSERVACAO LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>RODRIGO BALEM</td></tr><tr><td class="mono">27/10/2026</td><td class="nw mono">124</td><td>PGR - PROGRAMA DE GERENCIAMENTO DE RISCO - BIENAL</td><td>REPROVADO</td><td>ARIS LIMPEZA E CONSERVACAO LTDA</td><td class="nw mono">1987</td><td class="nw">ARIS LIMPEZA E CONSERVACAO LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>RODRIGO BALEM</td></tr><tr><td class="mono">24/10/2026</td><td class="nw mono">212</td><td>RECIBO DCTFWEB - MENSAL</td><td>APROVADO</td><td>GUTEN APPETIT ALIMENT E SERV SA - VIA MARTE - SAPIRANGA</td><td class="nw mono">3110</td><td class="nw">GUTEN APPETIT ALIMENT E SERV SA</td><td class="nw mono">aa.aaa.aaa/0001-aa</td><td class="nw mono">37</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td class="nw mono">115</td><td>FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO</td><td>APROVADO</td><td>VILLARE GASTRON EMPRES LTDA - ALX</td><td class="nw mono">3342</td><td class="nw">VILLARE GASTRON EMPRES LTDA</td><td class="nw mono">xx.xxx.xxx/0002-xx</td><td class="nw mono">45</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td class="nw mono">102</td><td>INSS + IRRF MENSAL - GUIA MAIS COMPROVANTE DE PAGTO</td><td>REPROVADO</td><td>PRATO FEITO  ALIMENT E SERV LTDA - PITT JOIA</td><td class="nw mono">2875</td><td class="nw">PRATO FEITO ALIMENT E SERV LTDA</td><td class="nw mono">xx.xxx.xxx/0003-xx</td><td class="nw mono">52</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td class="nw mono">103</td><td>DETALHE DA GUIA EMITIDA - RELATÓRIO DO FGTS MENSAL</td><td>APROVADO</td><td>ALIMENTAR GASTR EMPRES LTDA - MARCOPOLO ANA RECH</td><td class="nw mono">2650</td><td class="nw">ALIMENTAR GASTRON EMPRES LTDA</td><td class="nw mono">bb.bbb.bbb/0001-bb</td><td class="nw mono">1</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td class="nw mono">187</td><td>LAUDO DE ANÁLISE DA ÁGUA - ANUAL</td><td>APROVADO</td><td>ALIMENTAR GASTRON EMPRES LTDA -DASS 2 - ITABERABA</td><td class="nw mono">2661</td><td class="nw">ALIMENTAR GASTRON EMPRES LTDA</td><td class="nw mono">bb.bbb.bbb/0001-bb</td><td class="nw mono">63</td><td class="nw mono"></td><td class="nw mono">63</td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">27/10/2026</td><td class="nw mono">188</td><td>CERTIFICADO DE HIGIENIZAÇÃO CAIXA D&#x27;ÁGUA - SEMESTRAL</td><td>REPROVADO</td><td>GUTEN APPETIT ALIMENT E SERV SA - RAMARIM - NOVA HARTZ</td><td class="nw mono">3124</td><td class="nw">GUTEN APPETIT ALIMENT E SERV SA</td><td class="nw mono">aa.aaa.aaa/0001-aa</td><td class="nw mono">71</td><td class="nw mono"></td><td class="nw mono">71</td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">24/10/2026</td><td class="nw mono">110</td><td>CRF - CERTIFICADO DE REGULARIDADE DE FGTS - INFORMADA</td><td>APROVADO</td><td>VILLARE GASTRON EMPRES LTDA - PLASZOM - ORLEANS - UNID.1</td><td class="nw mono">3350</td><td class="nw">VILLARE GASTRON EMPRES LTDA</td><td class="nw mono">xx.xxx.xxx/0005-xx</td><td class="nw mono">58</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">21/10/2026</td><td class="nw mono">115</td><td>FGTS MENSAL - GUIA MAIS COMPROVANTE DE PAGTO</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - HOSPITAL UNIMED</td><td class="nw mono">3401</td><td class="nw">GLOW BR LIMP SERV ESPECIALIZ LTDA</td><td class="nw mono">cc.ccc.ccc/0001-cc</td><td class="nw mono">66</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">24/10/2026</td><td class="nw mono">212</td><td>RECIBO DCTFWEB - MENSAL</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - UNIMED FEDERACAO</td><td class="nw mono">3406</td><td class="nw">GLOW BR LIMP SERV ESPECIALIZ LTDA</td><td class="nw mono">cc.ccc.ccc/0001-cc</td><td class="nw mono">67</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td class="nw mono">221</td><td>COMPROVANTE DEPOSITO + HOLERITE</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - BOMBEIROS UNIMED JOINVILLE</td><td class="nw mono">3412</td><td class="nw">GLOW BR LIMP SERV ESPECIALIZ LTDA</td><td class="nw mono">cc.ccc.ccc/0001-cc</td><td class="nw mono">68</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td class="nw mono">221</td><td>COMPROVANTE DEPOSITO + HOLERITE</td><td>APROVADO</td><td>GLOW BR LIMP SERV ESPECIALIZ - SAMU</td><td class="nw mono">3418</td><td class="nw">GLOW BR LIMP SERV ESPECIALIZ LTDA</td><td class="nw mono">cc.ccc.ccc/0001-cc</td><td class="nw mono">69</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">20/10/2026</td><td class="nw mono">221</td><td>COMPROVANTE DEPOSITO + HOLERITE</td><td>APROVADO</td><td>GUTEN APPETIT ALIMENT E SERV SA - CALÇADOS SANDRA - RIOZINHO</td><td class="nw mono">3131</td><td class="nw">GUTEN APPETIT ALIMENT E SERV SA</td><td class="nw mono">aa.aaa.aaa/0001-aa</td><td class="nw mono">74</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono"></td><td>USUARIO AVALIACAO DOCS</td></tr><tr><td class="mono">22/10/2026</td><td class="nw mono">105</td><td>CERTIDÃO DE TRIBUTOS MUNICIPAIS</td><td>APROVADO</td><td>EMPRESA ABC LTDA</td><td class="nw mono">9001</td><td class="nw">EMPRESA ABC LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 9, 81</td><td class="nw mono">9</td><td class="nw mono"></td><td class="nw mono"></td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">23/10/2026</td><td class="nw mono">40</td><td>DECLARACAO TREINAMENTO APR - DTA FINAL CFME APR EMPRESA</td><td>APROVADO</td><td>ADEMAR MENIN</td><td class="nw mono">817</td><td class="nw">SERVICARGA TRANSPORTES E SERVICOS LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 9</td><td class="nw mono"></td><td class="nw mono">1</td><td class="nw mono">1; 17</td><td>GIANCARLO BISOL</td></tr><tr><td class="mono">23/10/2026</td><td class="nw mono">40</td><td>DECLARACAO TREINAMENTO APR - DTA FINAL CFME APR EMPRESA</td><td>APROVADO</td><td>ADEMAR MENIN</td><td class="nw mono">817</td><td class="nw">SERVICARGA TRANSPORTES E SERVICOS LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 9</td><td class="nw mono"></td><td class="nw mono">9</td><td class="nw mono">1; 17</td><td>GIANCARLO BISOL</td></tr><tr><td class="mono">24/10/2026</td><td class="nw mono">3</td><td>ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL</td><td>APROVADO</td><td>ADEMAR MENIN</td><td class="nw mono">817</td><td class="nw">SERVICARGA TRANSPORTES E SERVICOS LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 9</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono">1; 17</td><td>GIANCARLO BISOL</td></tr><tr><td class="mono">22/10/2026</td><td class="nw mono">190</td><td>ORDEM DE SERVICO SST - CF NR01</td><td>APROVADO</td><td>CARLOS EXEMPLO</td><td class="nw mono">9001</td><td class="nw">EMPRESA ABC LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 9, 81</td><td class="nw mono"></td><td class="nw mono">81</td><td class="nw mono">210</td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">22/10/2026</td><td class="nw mono">3</td><td>ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL</td><td>APROVADO</td><td>CARLOS EXEMPLO</td><td class="nw mono">9001</td><td class="nw">EMPRESA ABC LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 9, 81</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono">210</td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">23/10/2026</td><td class="nw mono">31</td><td>NR 35 - BASICO - TRABALHO EM ALTURA - 8H - BIENAL</td><td>REPROVADO</td><td>CARLOS EXEMPLO</td><td class="nw mono">9001</td><td class="nw">EMPRESA ABC LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 9, 81</td><td class="nw mono"></td><td class="nw mono">81</td><td class="nw mono">210</td><td>CAMILA POSSAMAI</td></tr><tr><td class="mono">22/10/2026</td><td class="nw mono">3</td><td>ASO - ATESTADO DE SAÚDE OCUPACIONAL - ANUAL</td><td>APROVADO</td><td>MARIA EXEMPLO</td><td class="nw mono">9001</td><td class="nw">EMPRESA ABC LTDA</td><td class="nw mono">xx.xxx.xxx/0001-xx</td><td class="nw mono">1, 81</td><td class="nw mono"></td><td class="nw mono"></td><td class="nw mono">2; 210</td><td>CAMILA POSSAMAI</td></tr></tbody>
+  </table></div>
+  <ul class="note">
+    <li>As duas declarações de APR do Ademar agora se distinguem pelo Cód. GT0010: 1 e 9.</li>
+    <li>O ASO sempre vem da função, por isso nunca tem Cód. GT0010. Quem define o contratante é o turno.</li>
+    <li>O Carlos está vinculado a 1, 9 e 81, mas só tem o turno 210, da BSA.</li>
+    <li>A Maria tem turno 17 ativo, mas a vinculação com o 9 está desativada no GT0120, por isso o 17 não aparece.</li>
+    <li>Na certidão da EMPRESA ABC, o Cód. ignorado traz 9: o contratante 9 ignora certidões no GT0120, então a avaliação se divide só entre 1 e 81.</li>
+    <li>As quatro unidades da GLOW BR LIMP SERV ESPECIALIZ (Hospital Unimed, Unimed Federação, Bombeiros Unimed Joinville e SAMU) têm o mesmo CNPJ (cc.ccc.ccc/0001-cc) e cadastros diferentes (3401, 3406, 3412 e 3418). A razão social vem sem o nome da unidade, e o Cód. cadastro separa cada uma. O mesmo vale para GUTEN APPETIT e ALIMENTAR GASTRON.</li>
+  </ul>
+  <p class="note">Sobre os dados: as linhas de empresa vêm do relatório de 28/10/2026, e as do Ademar Menin, da SERVICARGA. As linhas da EMPRESA ABC são um exemplo montado. Os turnos 1, 2 e 17 são reais. Cadastro, CNPJ, vinculação, ignorados, GT0010 e o turno 210 são fictícios, só para mostrar o formato.</p>
+</section>
+
+<section class="box">
+  <h2><span class="n">6</span>Formato e filtros</h2>
+  <ul>
+    <li>Exportação em <b>Excel (.xlsx) ou CSV</b>, uma linha por avaliação, sem quebra de página nem cabeçalho repetido.</li>
+    <li>Filtro por período de avaliação (data inicial e final).</li>
+    <li>Opção de excluir usuários de teste (ex.: TESTE PROCESSO).</li>
+    <li>Códigos múltiplos numa célula só: vinculação separada por vírgula, turnos por ponto e vírgula.</li>
+  </ul>
+</section>
+
+<section class="box internal">
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><h2><span class="n">7</span>Como a GT3 vai usar as colunas</h2><span class="tag t-blue">Uso interno</span></div>
+  <p>Cada avaliação é atribuída a um ou mais contratantes. Depois, o volume é multiplicado pelo tempo cronometrado do documento no balaio daquele contratante.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Cód. GT0010</th><th>Origem do requisito</th><th>Conta para</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Preenchido</td><td>GT0010 (por Contrato de Serviço ou por Contratante)</td><td><b>100%</b> para o contratante do Cód. GT0010. Cada requisito do GT0010 é uma avaliação própria.</td></tr>
+      <tr><td class="k">Vazio</td><td>Questionário, Função ou GT0100 manual</td><td>Dividido igualmente entre os contratantes válidos: em documento de empresa, os do Cód. vinculação menos os do Cód. ignorado; em documento de pessoa, os dos turnos, também menos os ignorados. O ASO sempre cai aqui, porque vem da função.</td></tr>
+      <tr><td class="k">Treinamento/Contratante</td><td>Presença</td><td><span class="tag t-no">Não conta</span> É item de presença, não de envio de documento. Se aparecer no relatório, sai pelo código do documento.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Tabela de turnos</h3>
+  <p class="note">Esta relação contratante × turno já existe no sistema. Os turnos são numerados sem repetir entre contratantes, então o código do turno basta para achar o contratante. Abaixo, uma parte do cadastro real.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Contratante</th><th>Nome contratante</th><th>Turno</th><th>Descrição turno</th></tr></thead>
+    <tbody><tr><td class="mono">1</td><td>MARCOPOLO S/A - ANA RECH</td><td class="mono">1</td><td>MARCOPOLO - PRIMEIRO TURNO</td></tr><tr><td class="mono">1</td><td>MARCOPOLO S/A - ANA RECH</td><td class="mono">2</td><td>MARCOPOLO - SEGUNDO TURNO</td></tr><tr><td class="mono">1</td><td>MARCOPOLO S/A - ANA RECH</td><td class="mono">3</td><td>MARCOPOLO - TERCEIRO TURNO</td></tr><tr><td class="mono">1</td><td>MARCOPOLO S/A - ANA RECH</td><td class="mono">4 a 13</td><td>EXCLUSIVO VIGILÂNCIA (vários horários)</td></tr><tr><td class="mono">9</td><td>MARCOPOLO SAO CRISTOVAO</td><td class="mono">17</td><td>SÃO CRISTOVÃO - PRIMEIRO TURNO</td></tr><tr><td class="mono">9</td><td>MARCOPOLO SAO CRISTOVAO</td><td class="mono">18</td><td>SÃO CRISTOVÃO - SEGUNDO TURNO</td></tr><tr><td class="mono">9</td><td>MARCOPOLO SAO CRISTOVAO</td><td class="mono">19</td><td>SÃO CRISTOVÃO - TERCEIRO TURNO</td></tr><tr><td class="mono">9</td><td>MARCOPOLO SAO CRISTOVAO</td><td class="mono">20 a 31</td><td>EXCLUSIVO VIGILÂNCIA (vários horários)</td></tr><tr><td class="mono">17</td><td>WEATHERFORD</td><td class="mono">32; 33</td><td>PRIMEIRO E SEGUNDO TURNO</td></tr><tr><td class="mono">19</td><td>MADAL PALFINGER S/A</td><td class="mono">34</td><td>MADAL PALFINGER - 7:30 AS 17:30</td></tr><tr><td class="mono">21</td><td>SULBRAS UCS - MATRIZ</td><td class="mono">35</td><td>SULBRAS ADM 7:20 AS 17:10</td></tr><tr class="hl"><td class="mono">81</td><td>BSA</td><td class="mono">210</td><td>Fictício: a BSA não aparece no print</td></tr></tbody>
+  </table></div>
+  <h3>Como as linhas do exemplo seriam contadas</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Linha</th><th>Regra aplicada</th><th>Conta para</th></tr></thead>
+    <tbody><tr><td class="k">Declaração treinamento APR · Ademar (1ª avaliação)</td><td class="mono">GT0010 1</td><td>100% Marcopolo</td></tr><tr><td class="k">Declaração treinamento APR · Ademar (2ª avaliação)</td><td class="mono">GT0010 9</td><td>100% Marcopolo São Cristóvão</td></tr><tr><td class="k">ASO · Ademar</td><td class="mono">Comum (função) · turnos 1; 17</td><td>½ Marcopolo · ½ Marcopolo São Cristóvão</td></tr><tr><td class="k">Ordem de Serviço · Carlos</td><td class="mono">GT0010 81</td><td>100% BSA</td></tr><tr><td class="k">ASO · Carlos</td><td class="mono">Comum (função) · turno 210</td><td>100% BSA, mesmo vinculado a três contratantes</td></tr><tr><td class="k">NR 35 · Carlos (reprovado)</td><td class="mono">GT0010 81</td><td>100% BSA, com o tempo de reprovado</td></tr><tr><td class="k">ASO · Maria</td><td class="mono">Comum (função) · turnos 2; 210</td><td>½ Marcopolo · ½ BSA. O turno 17 está ativo, mas a vinculação com o 9 foi desativada no GT0120, então não entra</td></tr><tr><td class="k">Certidão municipal · EMPRESA ABC</td><td class="mono">Comum · vinculação 1, 9, 81 · ignorado 9</td><td>½ Marcopolo · ½ BSA. O contratante 9 ignora certidões no GT0120</td></tr><tr><td class="k">Laudo da água · Alimentar Gastron</td><td class="mono">GT0010 63</td><td>100% contratante 63</td></tr><tr><td class="k">PGR · Aris (reprovado)</td><td class="mono">Comum · vinculação 1</td><td>100% Marcopolo, com o tempo de reprovado</td></tr></tbody>
+  </table></div>
+  <div class="grid2">
+    <div class="card"><span class="eyebrow">Exemplo GT0010</span><b>Doc. 134, origem São Cristóvão</b><span>1 avaliação inteira para o código 9. Nada para o código 1.</span></div>
+    <div class="card"><span class="eyebrow">Exemplo comum</span><b>ASO para 4 contratantes, 1 minuto de avaliação</b><span>15 segundos para cada contratante.</span></div>
+  </div>
+</section>
+</div>
+
+</body></html>

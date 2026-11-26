@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gt3.checklist.depara v1.0",
+  "type": "object",
+  "required": ["formato", "versao", "empresa", "checklists", "respostas"],
+  "properties": {
+    "formato": { "const": "gt3.checklist.depara" },
+    "versao": { "const": "1.0" },
+    "geradoEm": { "type": "string" },
+    "ferramenta": { "type": "string" },
+    "empresa": {
+      "type": "object",
+      "properties": { "razaoSocial": { "type": "string" }, "cnpj": { "type": "string" } }
+    },
+    "checklists": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "documentos": { "type": "array" },
+    "respostas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["documento", "item", "visivel"],
+        "properties": {
+          "documento": { "enum": ["PGR", "PCMSO", "LTCAT", "GERAL"] },
+          "item": { "type": "string" },
+          "checklists": { "type": "array", "items": { "type": "string" } },
+          "escopo": { "type": "string" },
+          "critico": { "type": "boolean" },
+          "visivel": { "type": "boolean" },
+          "resposta": { "type": ["string", "null"] },
+          "valores": { "type": "array", "items": { "type": "string" } },
+          "origem": { "enum": ["automatica", "usuario", "pendente"] },
+          "paginas": { "type": "array", "items": { "type": "integer" } },
+          "evidencia": { "type": "string" },
+          "motivo": { "type": "string" },
+          "textoReprovacao": { "type": "string" },
+          "textoNaoConforme": { "type": "string" }
+        }
+      }
+    },
+    "pendentes": { "type": "array" },
+    "reprovacoes": {
+      "type": "object",
+      "properties": { "PGR": { "type": "string" }, "PCMSO": { "type": "string" }, "LTCAT": { "type": "string" } }
+    },
+    "orientacoes": { "$ref": "#/$defs/listaPorDoc" },
+    "funcoes": { "type": "array" },
+    "observacoes": { "$ref": "#/$defs/listaPorDoc" }
+  },
+  "$defs": {
+    "listaPorDoc": {
+      "anyOf": [
+        { "type": "array", "items": { "type": "string" } },
+        {
+          "type": "object",
+          "properties": {
+            "PGR": { "type": "array", "items": { "type": "string" } },
+            "PCMSO": { "type": "array", "items": { "type": "string" } },
+            "LTCAT": { "type": "array", "items": { "type": "string" } },
+            "GERAL": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    }
+  }
+}
