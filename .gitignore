@@ -53,3 +53,6 @@ next-env.d.ts
 
 # configuração local do Claude Code (permissões da máquina, não versionar)
 .claude/settings.local.json
+
+# Ata de reunião de cliente (Word) — só local
+/ATA 10 -26 - MP AR - MP SC-Volare.docx
