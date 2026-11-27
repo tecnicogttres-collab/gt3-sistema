@@ -8,6 +8,7 @@ import type { PdiColaborador } from '../../data/pdis/types'
 import type { DbPdi, DbCicloScore } from './page'
 import PdiAgendaDrawer from './PdiAgendaDrawer'
 import PdiExportModal, { type PdiExportOpcao } from './PdiExportModal'
+import PdiTestesView, { type TesteLinha } from './PdiTestesView'
 
 const staticPdis = Object.values(allPdis) as PdiColaborador[]
 
@@ -478,6 +479,35 @@ function AvaliacoesAgregadasView() {
   )
 }
 
+function Toggle({ rotulo, ligado, onClick }: { rotulo: string; ligado: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit' }}>
+      <span style={{ fontSize: 13, fontWeight: 500, color: ligado ? '#2A4F96' : '#94A3B8' }}>{rotulo}</span>
+      <span style={{ width: 40, height: 22, borderRadius: 11, background: ligado ? '#2A4F96' : '#D1D5DB', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+        <span style={{ position: 'absolute', top: 3, left: ligado ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
+      </span>
+    </button>
+  )
+}
+
+function linhaEstatica(p: PdiColaborador): TesteLinha {
+  return {
+    id: p.id, nome: p.nome, funcao: p.funcao, arquivado: false,
+    eneagrama: p.perfilComportamental.eneagrama.ranking,
+    animais: p.perfilComportamental.animais,
+    mbti: p.perfilComportamental.mbti?.tipo || null,
+  }
+}
+
+function linhaDb(p: DbPdi): TesteLinha {
+  return {
+    id: p.id, nome: p.nome, funcao: p.funcao, arquivado: p.status === 'arquivado',
+    eneagrama: p.eneagrama?.ranking ?? [],
+    animais: p.animais ?? [],
+    mbti: p.conclusoes?._mbti_tipo || null,
+  }
+}
+
 export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis: DbPdi[]; ciclosScores: DbCicloScore[]; papel: string }) {
   const isGestorAdmin = ['gestor', 'admin'].includes(papel)
 
@@ -490,6 +520,7 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
   }
 
   const [showAvaliacoes, setShowAvaliacoes] = useState(false)
+  const [showTestes, setShowTestes] = useState(false)
   const [modal, setModal] = useState<ModalState>(MODAL_INIT)
   const [editModal, setEditModal] = useState<EditModalState>(EDIT_INIT)
   const [colabs, setColabs] = useState<Colab[]>([])
@@ -527,6 +558,12 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
       ? { id: x.pdi.id, nome: x.pdi.nome, funcao: x.pdi.funcao, estatico: x.pdi }
       : { id: x.pdi.id, nome: x.pdi.nome, funcao: x.pdi.funcao }),
     ...archivedDbPdis.map(p => ({ id: p.id, nome: p.nome, funcao: p.funcao, arquivado: true })),
+  ]
+
+  // Linhas da visão unificada de testes (Eneagrama, animais, MBTI)
+  const testesLinhas: TesteLinha[] = [
+    ...allActive.map(x => x.type === 'static' ? linhaEstatica(x.pdi) : linhaDb(x.pdi)),
+    ...archivedDbPdis.map(linhaDb),
   ]
 
   const inputStyle: React.CSSProperties = {
@@ -666,24 +703,8 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
         </div>
         {isGestorAdmin && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-            {/* Toggle Avaliações */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: showAvaliacoes ? '#2A4F96' : '#94A3B8' }}>Avaliações</span>
-              <div
-                onClick={() => setShowAvaliacoes(v => !v)}
-                style={{
-                  width: 40, height: 22, borderRadius: 11,
-                  background: showAvaliacoes ? '#2A4F96' : '#D1D5DB',
-                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
-                }}
-              >
-                <div style={{
-                  position: 'absolute', top: 3, left: showAvaliacoes ? 21 : 3,
-                  width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s',
-                }} />
-              </div>
-            </label>
+            <Toggle rotulo="Avaliações" ligado={showAvaliacoes} onClick={() => setShowAvaliacoes(v => !v)} />
+            <Toggle rotulo="Testes" ligado={showTestes} onClick={() => setShowTestes(v => !v)} />
             <button
               onClick={() => setExportOpen(true)}
               title="Exportar informações dos PDIs"
@@ -730,6 +751,9 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
 
       {isGestorAdmin && showAvaliacoes && <AvaliacoesAgregadasView />}
 
+      {isGestorAdmin && showTestes && <PdiTestesView linhas={testesLinhas} />}
+
+      {!(isGestorAdmin && showTestes) && <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {allActive.map(item => item.type === 'static'
           ? <StaticPdiCard
@@ -764,6 +788,7 @@ export default function PdiListClient({ dbPdis, ciclosScores, papel }: { dbPdis:
           </div>
         </div>
       )}
+      </>}
 
       {/* Create Modal */}
       {modal.open && (
